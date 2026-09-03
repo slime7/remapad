@@ -5,15 +5,14 @@
   "name": "remapad-ui",
   "title": "Remapad ESP32-S3 UI",
   "version": "0.1.0",
-  "target": "esp32s3",
   "engine": {
     "capabilities": {
-      "requires": ["text.glyphs.baked", "input.touch"],
-      "enhances": ["input.buttons", "input.analog.left", "input.analog.right"]
+      "requires": ["text.glyphs.baked"],
+      "enhances": ["input.touch", "input.buttons", "input.analog.left"]
     }
   },
   "app": {
-    "entry": "src/index.jsx",
+    "entry": "src/index.tsx",
     "output": "remapad-ui",
     "framework": "vue-vapor",
     "viewport": {

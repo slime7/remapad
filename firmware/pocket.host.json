@@ -1,0 +1,15 @@
+{
+  "$schema": "https://pocketjs.dev/schema/pocket-idf-host-1.json",
+  "version": 1,
+  "id": "remapad-s3",
+  "platform": "esp-idf",
+  "form": "takeover",
+  "tickHz": 60,
+  "display": {
+    "physicalViewport": [240, 280],
+    "logicalViewports": [[240, 280]],
+    "presentations": ["native"],
+    "rasterDensity": 1
+  },
+  "capabilities": ["text.glyphs.baked"]
+}

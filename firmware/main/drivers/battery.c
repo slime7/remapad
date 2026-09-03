@@ -1,4 +1,5 @@
 #include "battery.h"
+
 #include "esp_log.h"
 
 static const char *TAG = "driver_battery";
@@ -8,7 +9,7 @@ static bool s_is_charging = false;
 
 esp_err_t battery_init(void)
 {
-    ESP_LOGI(TAG, "电池电量采样驱动初始化完成");
+    ESP_LOGI(TAG, "电池采样驱动占位初始化");
     return ESP_OK;
 }
 

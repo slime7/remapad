@@ -1,3 +1,8 @@
 dependencies:
-  # 如需使用特定显示屏驱动组件，可在下方声明
-  # espressif/esp_lcd_st7789: "^1.1.4"
+  idf: ">=6.0,<6.2"
+  pocket-stack/pocketjs_package: "0.1.0"
+  pocket-stack/pocketjs_guest: "0.1.0"
+  pocket-stack/pocketjs_ui_core: "0.1.0"
+  pocket-stack/pocketjs_ui_qjs: "0.1.0"
+  pocket-stack/pocketjs_render_rgb565: "0.1.0"
+  pocket-stack/pocketjs_runner: "0.1.0"

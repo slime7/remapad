@@ -12,6 +12,8 @@ const DIST = path.join(ROOT, 'dist');
 const HOST_WEB = path.join(ROOT, 'node_modules/@pocketjs/framework/hosts/web');
 
 const PORT = 8130;
+const VIEWPORT_WIDTH = 240;
+const VIEWPORT_HEIGHT = 280;
 
 let sseClients = [];
 
@@ -35,9 +37,12 @@ function triggerBuild() {
   }
   isBuilding = true;
   console.log('[PocketJS Dev] Rebuilding app...');
-  const child = spawn('bun', [path.join(__dirname, 'build.mjs')], {
+  const child = spawn(process.execPath, [
+    path.join(__dirname, 'pocket.mjs'),
+    'compile',
+  ], {
+    cwd: ROOT,
     stdio: 'inherit',
-    shell: true,
   });
   child.on('close', (code) => {
     isBuilding = false;
@@ -61,6 +66,7 @@ fs.watch(SRC, { recursive: true }, (eventType, filename) => {
     triggerBuild();
   }, 200);
 });
+triggerBuild();
 const SIMULATOR_HTML = `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -129,8 +135,8 @@ const SIMULATOR_HTML = `<!doctype html>
       box-shadow: inset 0 2px 6px rgba(0,0,0,0.8);
     }
     #screen {
-      width: 240px;
-      height: 280px;
+      width: ${VIEWPORT_WIDTH}px;
+      height: ${VIEWPORT_HEIGHT}px;
       image-rendering: pixelated;
       background: #000;
       border-radius: 8px;
@@ -138,8 +144,8 @@ const SIMULATOR_HTML = `<!doctype html>
     }
     @media (min-width: 600px) {
       #screen {
-        width: 360px;
-        height: 420px;
+        width: ${VIEWPORT_WIDTH * 1.5}px;
+        height: ${VIEWPORT_HEIGHT * 1.5}px;
       }
     }
     .device-controls {
@@ -209,12 +215,12 @@ const SIMULATOR_HTML = `<!doctype html>
 <body>
   <header>
     <h1>PocketJS 嵌入式模拟器</h1>
-    <span class="badge"><span class="live-dot"></span>ESP32-S3 N16R8 · 240×280 (Vue Vapor)</span>
+    <span class="badge"><span class="live-dot"></span>ESP32-S3 N16R8 · ${VIEWPORT_WIDTH}×${VIEWPORT_HEIGHT} (Vue Vapor)</span>
   </header>
 
   <div class="device-shell">
     <div class="device-screen-bezel">
-      <canvas id="screen" width="240" height="280"></canvas>
+      <canvas id="screen" width="${VIEWPORT_WIDTH}" height="${VIEWPORT_HEIGHT}"></canvas>
     </div>
 
     <div class="device-controls">
@@ -228,7 +234,7 @@ const SIMULATOR_HTML = `<!doctype html>
     <div class="info-row"><span>帧率 (FPS)</span><strong id="stat-fps">--</strong></div>
     <div class="info-row"><span>样式系统</span><strong style="color:#38bdf8;">Tailwind + Baked Fonts</strong></div>
     <div class="info-row"><span>热重载 (Live Reload)</span><strong style="color:#10b981;">已就绪 (监听 ui/src)</strong></div>
-    <div class="info-row"><span>屏幕规格</span><strong>240 × 280 (RGB565 映射)</strong></div>
+    <div class="info-row"><span>屏幕规格</span><strong>${VIEWPORT_WIDTH} × ${VIEWPORT_HEIGHT} (RGB565 映射)</strong></div>
     <div style="margin-top:8px; border-top:1px solid #1e293b; padding-top:6px; color:#64748b;">
       💡 提示：点击屏幕上的按钮或按下键盘 <strong>Enter / Z</strong> 均可与应用互动。
     </div>
@@ -260,24 +266,24 @@ const SIMULATOR_HTML = `<!doctype html>
         const wasmBytes = await wasmRes.arrayBuffer();
 
         wasm = await createWasmUi(wasmBytes, {
-          width: 240,
-          height: 280,
+          width: ${VIEWPORT_WIDTH},
+          height: ${VIEWPORT_HEIGHT},
           rasterDensity: 1
         });
 
         globalThis.ui = wasm.ops;
         globalThis.frame = undefined;
 
-        // 加载包含 Tailwind 样式表与 baked 字体的 app.pak
-        statusEl.textContent = "加载字体与样式资产包 (app.pak)...";
-        const pakRes = await fetch("/dist/app.pak?t=" + Date.now());
+        // 加载包含 Tailwind 样式表与 baked 字体的 PAK 资产包
+        statusEl.textContent = "加载字体与样式资产包...";
+        const pakRes = await fetch("/dist/remapad-ui.pak?t=" + Date.now());
         if (pakRes.ok) {
           const pakBuf = await pakRes.arrayBuffer();
           globalThis.__pak = pakBuf;
         }
 
         statusEl.textContent = "加载应用代码 bundle...";
-        const appRes = await fetch("/dist/app.js?t=" + Date.now());
+        const appRes = await fetch("/dist/remapad-ui.js?t=" + Date.now());
         const appCode = await appRes.text();
         new Function(appCode)();
 
@@ -292,7 +298,7 @@ const SIMULATOR_HTML = `<!doctype html>
 
     function startLoop() {
       if (rafId) cancelAnimationFrame(rafId);
-      const imageData = ctx.createImageData(240, 280);
+      const imageData = ctx.createImageData(${VIEWPORT_WIDTH}, ${VIEWPORT_HEIGHT});
 
       function tick(now) {
         rafId = requestAnimationFrame(tick);
@@ -355,13 +361,13 @@ const SIMULATOR_HTML = `<!doctype html>
     }
 
     document.getElementById("btn-boot").addEventListener("click", () => {
-      queueTap(120, 250);
+      queueTap(${Math.floor(VIEWPORT_WIDTH / 2)}, ${VIEWPORT_HEIGHT - 30});
     });
 
     canvas.addEventListener("pointerdown", (e) => {
       const rect = canvas.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) * (240 / rect.width));
-      const y = Math.floor((e.clientY - rect.top) * (280 / rect.height));
+      const x = Math.floor((e.clientX - rect.left) * (${VIEWPORT_WIDTH} / rect.width));
+      const y = Math.floor((e.clientY - rect.top) * (${VIEWPORT_HEIGHT} / rect.height));
       queueTap(x, y);
     });
 
@@ -436,8 +442,8 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  if (url.pathname === '/dist/app.pak') {
-    const pakPath = path.join(DIST, 'app.pak');
+  if (url.pathname === '/dist/remapad-ui.pak') {
+    const pakPath = path.join(DIST, 'remapad-ui.pak');
     if (fs.existsSync(pakPath)) {
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
@@ -460,8 +466,8 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  if (url.pathname === '/dist/app.js') {
-    const appPath = path.join(DIST, 'app.js');
+  if (url.pathname === '/dist/remapad-ui.js') {
+    const appPath = path.join(DIST, 'remapad-ui.js');
     if (fs.existsSync(appPath)) {
       res.writeHead(200, {
         'Content-Type': 'application/javascript; charset=utf-8',

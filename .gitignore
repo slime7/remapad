@@ -10,6 +10,8 @@ compile_commands.json
 node_modules/
 dist/
 ui/dist/
+.pocket/
+ui/.pocket/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

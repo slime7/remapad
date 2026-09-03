@@ -6,6 +6,5 @@
     "jsx": "preserve",
     "checkJs": false
   },
-  "include": ["src/**/*", "pocket.config.js"]
+  "include": ["src/**/*"]
 }
-

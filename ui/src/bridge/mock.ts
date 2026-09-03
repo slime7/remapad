@@ -20,9 +20,7 @@ const state: MockHardwareState = {
   controller: 'pro-controller-2',
 };
 
-/**
- * 浏览器仿真环境下的虚拟外设响应分发器
- */
+/** 浏览器环境下的产品控制面协议 mock；不模拟 PocketJS UI binding。 */
 export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): void {
   const id = cmd.id;
 
@@ -31,7 +29,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       reply({
         t: 'ready',
         id,
-        chip: 'ESP32-S3 (Browser Wasm Mock)',
+        chip: 'ESP32-S3 (Browser Mock)',
         firmwareVersion: 'v0.1.0-sim',
         psramSize: 8 * 1024 * 1024,
       });
@@ -102,7 +100,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       reply({
         t: 'ready',
         id,
-        chip: 'ESP32-S3 (Reboot Sim)',
+        chip: 'ESP32-S3 (Reboot Mock)',
         firmwareVersion: 'v0.1.0-sim',
         psramSize: 8 * 1024 * 1024,
       });

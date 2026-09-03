@@ -1,5 +1,10 @@
 import { ref, watchEffect, onMounted } from 'vue';
-import { View, Text, Image } from '@pocketjs/framework/vue-vapor/components';
+import {
+  View,
+  Text,
+  Image,
+  type NodeMirror,
+} from '@pocketjs/framework/vue-vapor/components';
 import { animate } from '@pocketjs/framework/animation';
 import { TICKS_PER_SECOND } from '@pocketjs/framework/clock';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
@@ -17,7 +22,7 @@ const SPINNER_FRAMES = [
   'spinner-07.svg',
 ];
 
-function Stat(props) {
+function Stat(props: { label: string; value: string; cls: string }) {
   return (
     <View class="flex-col items-end">
       <Text class={props.cls}>{props.value}</Text>
@@ -26,9 +31,19 @@ function Stat(props) {
   );
 }
 
-export default function Hero(props = {}) {
+interface HeroProps {
+  actionLabel?: string;
+  deviceLabel?: string;
+  headline?: string;
+  onAction?: (count: number) => void;
+  presentationHz?: number;
+  runtimeLabel?: string;
+  spinnerFrameStep?: number;
+}
+
+export default function Hero(props: HeroProps = {}) {
   const count = ref(0);
-  let underline = null;
+  let underline: NodeMirror | null = null;
 
   watchEffect(() => {
     const completedCount = count.value;
@@ -59,7 +74,7 @@ export default function Hero(props = {}) {
               PocketJS
             </Text>
             <Text class="text-xs text-slate-500 tracking-wide">
-              {frameworkName()} + {props.runtimeLabel ?? 'RUST + SCEGU'}
+              {frameworkName()} + {props.runtimeLabel ?? 'RUST + ESP-IDF'}
             </Text>
           </View>
         </View>
@@ -94,7 +109,7 @@ export default function Hero(props = {}) {
           <Image class="w-8 h-8" src={spinnerSrc.value} />
         </View>
         <View
-          nodeRef={(el) => { underline = el; }}
+          nodeRef={(el: NodeMirror | null) => { underline = el; }}
           class="h-1 w-0 rounded-full shadow bg-gradient-to-r from-blue-500 to-cyan-500"
           style={{ translateX: count.value * 2 }}
         />
@@ -103,7 +118,7 @@ export default function Hero(props = {}) {
             Flexbox, springs and baked type —
           </Text>
           <Text class="text-xs text-slate-600">
-            {props.deviceLabel ?? 'running on a 2005 handheld.'}
+            {props.deviceLabel ?? 'running on ESP32-S3.'}
           </Text>
         </View>
       </View>

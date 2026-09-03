@@ -12,19 +12,19 @@ importers:
     dependencies:
       '@pocketjs/framework':
         specifier: ^0.11.0
-        version: 0.11.0(@typescript-eslint/types@8.69.0)(csstype@3.2.3)(esbuild@0.28.2)
+        version: 0.11.0(@typescript-eslint/types@8.69.0)(csstype@3.2.3)(esbuild@0.28.2)(typescript@5.9.3)
       '@vue-jsx-vapor/runtime':
         specifier: 3.2.19
-        version: 3.2.19(csstype@3.2.3)(vue@3.6.0-rc.1)
+        version: 3.2.19(csstype@3.2.3)(vue@3.6.0-rc.1(typescript@5.9.3))
       solid-js:
         specifier: ^1.9.0
         version: 1.9.15
       vue:
         specifier: 3.6.0-rc.1
-        version: 3.6.0-rc.1
+        version: 3.6.0-rc.1(typescript@5.9.3)
       vue-jsx-vapor:
         specifier: 3.2.19
-        version: 3.2.19(csstype@3.2.3)(esbuild@0.28.2)(vue@3.6.0-rc.1)
+        version: 3.2.19(csstype@3.2.3)(esbuild@0.28.2)(vue@3.6.0-rc.1(typescript@5.9.3))
     devDependencies:
       '@babel/core':
         specifier: ^8.0.1
@@ -35,9 +35,6 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.9.1)
-      '@pocketjs/cli':
-        specifier: ^0.11.0
-        version: 0.11.0
       '@stylistic/eslint-plugin':
         specifier: ^5.10.0
         version: 5.10.0(eslint@10.9.1)
@@ -56,6 +53,9 @@ importers:
       opentype.js:
         specifier: ^2.0.0
         version: 2.0.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
 
 packages:
 
@@ -466,11 +466,6 @@ packages:
     resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
 
-  '@pocketjs/cli@0.11.0':
-    resolution: {integrity: sha512-VvRMKq3Wdj8z3OBXe/hY+LdFzGzHCh4/3W+oCzp1ghS5Id/8GjYctoS4W/QLVpXgpwpRC2LECKT8esEd1YX9Vg==}
-    engines: {node: '>=18'}
-    hasBin: true
-
   '@pocketjs/framework@0.11.0':
     resolution: {integrity: sha512-//wExk4M+W6Q42i1kEQncqPGUf3g5ZGa+Kae1NC3VY8bDnE2EdqBV0DKEX+ryVBK0kx5yJ+eATSF/Mulav39wg==}
 
@@ -553,25 +548,21 @@ packages:
     resolution: {integrity: sha512-omJ7FlyqchUqpPESe673vjHufzYy7rrOQ/gRGcCBWGlQfTg2tzk8YBxvdFgmqSeCHpIPev7ZdZyWKsjrQGOMyw==}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@vue-jsx-vapor/compiler-rs-linux-arm64-musl@3.2.19':
     resolution: {integrity: sha512-CCzyY/LX6vmhsFhOh/bqaVzIot/Mky9lz3CMgvbzUktUebxG/Rfh9oo4jFcjOb1QFWfNpDPRUZGsBaBXQ+gP2w==}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@vue-jsx-vapor/compiler-rs-linux-x64-gnu@3.2.19':
     resolution: {integrity: sha512-BA/KIwyzkT+jUSYA+t7pZMhZe8zShEDgIgjw94WwBbPLtzWMof+YLKY8FqNjN4nTXTwJn5yBuVtWD2LCg/6sWg==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@vue-jsx-vapor/compiler-rs-linux-x64-musl@3.2.19':
     resolution: {integrity: sha512-iYX0o9lnrTk19g2NAh0+EGflWk02LmKhNB5lwOXzXRVItyBuwqSsyy7fxad2rDHMdUT+gvp5HVA0rS28A11O2g==}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@vue-jsx-vapor/compiler-rs-wasm32-wasi@3.2.19':
     resolution: {integrity: sha512-0/maDIH/KMChDeUJhNik5HFahtJo8fXfYZT2gRtavTqhjAFC9f4WkVSwC87SC8zCi/mVT1cy5f6COCLwN3xTEg==}
@@ -1063,6 +1054,11 @@ packages:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
 
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   unplugin-utils@0.3.2:
     resolution: {integrity: sha512-xVToRh2CTmLk2HnEG7ac4rl1MJTT3RFkpS8B++/SnB0kXvuaavD+n3m/vrzyWQOdJNSZQACnbz01pnppbwV5BA==}
     engines: {node: '>=20.19.0'}
@@ -1519,16 +1515,14 @@ snapshots:
 
   '@noble/hashes@2.4.0': {}
 
-  '@pocketjs/cli@0.11.0': {}
-
-  '@pocketjs/framework@0.11.0(@typescript-eslint/types@8.69.0)(csstype@3.2.3)(esbuild@0.28.2)':
+  '@pocketjs/framework@0.11.0(@typescript-eslint/types@8.69.0)(csstype@3.2.3)(esbuild@0.28.2)(typescript@5.9.3)':
     dependencies:
       '@vue/compiler-sfc': 3.6.0-rc.1
       '@vue/compiler-vapor': 3.6.0-rc.1
       octane: 0.1.26(@typescript-eslint/types@8.69.0)
       solid-js: 1.9.15
-      vue: 3.6.0-rc.1
-      vue-jsx-vapor: 3.2.19(csstype@3.2.3)(esbuild@0.28.2)(vue@3.6.0-rc.1)
+      vue: 3.6.0-rc.1(typescript@5.9.3)
+      vue-jsx-vapor: 3.2.19(csstype@3.2.3)(esbuild@0.28.2)(vue@3.6.0-rc.1(typescript@5.9.3))
     transitivePeerDependencies:
       - '@farmfe/core'
       - '@nuxt/kit'
@@ -1667,14 +1661,14 @@ snapshots:
       '@vue-jsx-vapor/compiler-rs-win32-ia32-msvc': 3.2.19
       '@vue-jsx-vapor/compiler-rs-win32-x64-msvc': 3.2.19
 
-  '@vue-jsx-vapor/macros@3.2.19(esbuild@0.28.2)(vue@3.6.0-rc.1)':
+  '@vue-jsx-vapor/macros@3.2.19(esbuild@0.28.2)(vue@3.6.0-rc.1(typescript@5.9.3))':
     dependencies:
       hash-sum: 2.0.0
       magic-string: 0.30.21
       ts-macro: 0.3.7
       unplugin: 3.3.0(esbuild@0.28.2)
       unplugin-utils: 0.3.2
-      vue: 3.6.0-rc.1
+      vue: 3.6.0-rc.1(typescript@5.9.3)
     optionalDependencies:
       esbuild: 0.28.2
     transitivePeerDependencies:
@@ -1684,10 +1678,10 @@ snapshots:
       - rolldown
       - unloader
 
-  '@vue-jsx-vapor/runtime@3.2.19(csstype@3.2.3)(vue@3.6.0-rc.1)':
+  '@vue-jsx-vapor/runtime@3.2.19(csstype@3.2.3)(vue@3.6.0-rc.1(typescript@5.9.3))':
     dependencies:
       csstype: 3.2.3
-      vue: 3.6.0-rc.1
+      vue: 3.6.0-rc.1(typescript@5.9.3)
 
   '@vue/compiler-core@3.6.0-rc.1':
     dependencies:
@@ -2131,6 +2125,8 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
 
+  typescript@5.9.3: {}
+
   unplugin-utils@0.3.2:
     dependencies:
       pathe: 2.0.3
@@ -2154,17 +2150,17 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  vue-jsx-vapor@3.2.19(csstype@3.2.3)(esbuild@0.28.2)(vue@3.6.0-rc.1):
+  vue-jsx-vapor@3.2.19(csstype@3.2.3)(esbuild@0.28.2)(vue@3.6.0-rc.1(typescript@5.9.3)):
     dependencies:
       '@vue-jsx-vapor/compiler-rs': 3.2.19
-      '@vue-jsx-vapor/macros': 3.2.19(esbuild@0.28.2)(vue@3.6.0-rc.1)
-      '@vue-jsx-vapor/runtime': 3.2.19(csstype@3.2.3)(vue@3.6.0-rc.1)
+      '@vue-jsx-vapor/macros': 3.2.19(esbuild@0.28.2)(vue@3.6.0-rc.1(typescript@5.9.3))
+      '@vue-jsx-vapor/runtime': 3.2.19(csstype@3.2.3)(vue@3.6.0-rc.1(typescript@5.9.3))
       '@vue/shared': 3.6.0-rc.1
       pathe: 2.0.3
       ts-macro: 0.3.7
       unplugin: 3.3.0(esbuild@0.28.2)
       unplugin-utils: 0.3.2
-      vue: 3.6.0-rc.1
+      vue: 3.6.0-rc.1(typescript@5.9.3)
     optionalDependencies:
       esbuild: 0.28.2
     transitivePeerDependencies:
@@ -2175,7 +2171,7 @@ snapshots:
       - rolldown
       - unloader
 
-  vue@3.6.0-rc.1:
+  vue@3.6.0-rc.1(typescript@5.9.3):
     dependencies:
       '@vue/compiler-dom': 3.6.0-rc.1
       '@vue/compiler-sfc': 3.6.0-rc.1
@@ -2183,6 +2179,8 @@ snapshots:
       '@vue/runtime-vapor': 3.6.0-rc.1(@vue/runtime-dom@3.6.0-rc.1)
       '@vue/server-renderer': 3.6.0-rc.1
       '@vue/shared': 3.6.0-rc.1
+    optionalDependencies:
+      typescript: 5.9.3
 
   webpack-virtual-modules@0.6.2: {}
 

@@ -1,122 +1,156 @@
 # Remapad 新手开发与上手指南
 
-本文档指导开发者与协作 Agent 在本地搭建完整的 Remapad 开发环境，执行构建验证、本地实时仿真与固件烧录。
+本指南面向 ESP32-S3 N16R8 目标板，说明 UI 检查、PocketJS 包构建、ESP-IDF 编译和当前 bring-up 边界。Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，并通过屏幕 UI 管理连接和配对；协议资料见 [controller.md](controller.md)。
 
----
+## 前置环境
 
-## 前置环境准备
-
-在开始开发前，请确保电脑已安装以下工具链：
-
-| 工具 / 环境 | 建议版本 | 用途说明 |
+| 工具 | 版本/要求 | 用途 |
 | :--- | :--- | :--- |
-| **Bun** | v1.0 或更高版本（实测 v1.4 通过） | 前端开发服务器与打包脚本运行时 |
-| **pnpm** | v9 或更高版本（优先推荐包管理器） | 工作区依赖安装与根目录任务调度 |
-| **Python** | v3.10 或更高版本（实测 v3.13 通过） | ADR 架构决策工具及 ESP-IDF 构建脚本依赖 |
-| **ESP-IDF** | v5.3 或更高版本 | 乐鑫官方芯片驱动、FreeRTOS 与硬件编译烧录套件 |
-| **硬件设备** | ESP32-S3 (N16R8) + ST7789 屏幕 | 物理硬件板卡，配备 16MB Flash 与 8MB Octal PSRAM |
+| Node.js | 18 或更高 | 运行项目脚本和已发布 CLI |
+| pnpm | 当前稳定版 | 工作区依赖与任务调度 |
+| Bun | PocketJS 官方要求的版本 | 执行官方 compiler；`idf.py build` 消费预构建包时可不参与 |
+| PocketJS checkout | 当前 `main` 或包含 ESP-IDF host profile 的版本 | 提供官方 `tools/pocket.ts`；用 `POCKETJS_ROOT` 指向根目录 |
+| Python | 由 ESP-IDF 安装环境提供 | `idf.py` 和 ESP-IDF 工具链 |
+| ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求 |
+| 硬件 | ESP32-S3-WROOM-1 N16R8 | 16 MB Flash、8 MB Octal PSRAM |
 
----
+USB 输入设备、目标 NS2 手柄型号、BLE 天线/射频和屏幕控制器也属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 UI 模拟器可点击就认为真实 USB 或 BLE 链路已经可用。
 
-## 最短可运行步骤
+实际屏幕控制器、引脚、触控芯片和串口端口需要根据开发板资料配置；仓库当前只确定 240×280 RGB565 逻辑视口，没有假定通用 ST7789 引脚表。
 
-### 步骤一：安装前端工程依赖
-在项目根目录下执行：
+## 最短步骤
+
+### 1. 安装依赖
+
 ```powershell
 pnpm install
 ```
 
-### 步骤二：启动浏览器模拟器（零刷机秒级开发）
-启动本地 WebAssembly 仿真服务：
+在 PocketJS 官方 checkout 中安装编译器依赖，并设置项目脚本使用的路径：
+
 ```powershell
-cd ui ; bun run dev
+cd C:\src\pocketjs
+bun install
+$env:POCKETJS_ROOT = 'C:\src\pocketjs'
+cd C:\src\remapad
 ```
-打开浏览器访问 [http://127.0.0.1:8130](http://127.0.0.1:8130)，即可在带有 ESP32-S3 外观边框的模拟器中实时查看 240×280 屏幕渲染（60 FPS）。修改 [ui/src/App.jsx](../ui/src/App.jsx) 后保存，浏览器将自动热刷新。
 
-### 步骤三：执行前端完整编译与资产导出
-当完成界面调整后，执行全量编译：
+### 2. 检查 UI 与设备契约
+
 ```powershell
-cd ui ; bun run build
+pnpm run lint
+pnpm run check
 ```
-构建器将自动完成 Tailwind 样式表光栅化、矢量字体烘焙、SVG 图像光栅化，输出 .pocket 包并全自动同步覆盖到 [firmware/main/app_pocket.h](../firmware/main/app_pocket.h)。
 
-### 步骤四：固件工程编译与烧录
-打开已载入 ESP-IDF 环境变量的终端（如从开始菜单打开 "ESP-IDF PowerShell"）：
+`check` 会使用 `ui/pocket.json` 和 `firmware/pocket.host.json`，由官方 resolver 检查 manifest、能力、视口、tick 和 host profile。它不修改 UI 包。
+
+### 3. 编译 UI 资源与 `.pocket`
+
 ```powershell
-# 1. 进入固件目录
-cd F:/private/remapad/firmware
+pnpm run compile
+pnpm run build
+```
 
-# 2. 首次配置目标架构 (自动合并 sdkconfig.defaults)
+脚本最终调用 PocketJS 官方 CLI，输出到 `ui/dist/`：
+
+```text
+remapad-ui.js       编译后的 JavaScript bundle
+remapad-ui.pak      样式、字体和图像资源包
+remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
+```
+
+`ui/scripts/pocket.mjs` 优先使用 `POCKETJS_ROOT` 指向的官方 checkout；若本地安装的 framework 包已经包含 `--host-profile` compiler，也可以直接使用。这个脚本只处理路径和启动方式，不实现 compiler，也不改变 package 格式。当前已发布的 npm CLI 可能尚未包含 ESP-IDF host profile 支持。
+
+官方命令的语义如下，适用于已正确安装并能定位 PocketJS framework checkout 的环境：
+
+```powershell
+$env:POCKETJS_ROOT = 'C:\src\pocketjs'
+pocket build --manifest ui/pocket.json `
+  --host-profile firmware/pocket.host.json `
+  --project-root ui --outdir ui/dist `
+  --output ui/dist/remapad-ui.pocket
+```
+
+不要将 `--target psp` 用在本项目上。`psp` 是 Sony PSP 后端的 target 名称；ESP32 使用自定义 `--host-profile`。
+
+### 4. 启动浏览器模拟器
+
+```powershell
+pnpm run dev
+```
+
+打开 [http://127.0.0.1:8130](http://127.0.0.1:8130)。模拟器使用 PocketJS WebAssembly host，提供 240×280 画布、触控模拟和热重载。首次启动会先调用官方 `compile`，因此需要 Bun。
+
+### 5. 编译 ESP-IDF 固件
+
+从 ESP-IDF PowerShell 或已加载 `export.ps1` 的终端执行：
+
+```powershell
+cd firmware
 idf.py set-target esp32s3
-
-# 3. 编译完整固件
 idf.py build
-
-# 4. 连接开发板烧录并查看串口监控 (COMx 替换为实际端口)
-idf.py -p COMx flash monitor
 ```
 
----
+`firmware/main/CMakeLists.txt` 的顺序是：
 
-## 命令速查表
+1. 如果 `ui/dist/remapad-ui.pocket` 存在，使用官方 `pocketjs_embed_package`。
+2. 否则使用官方 `pocketjs_compile_app`，让 CMake 调用 PocketJS CLI 生成 build 目录内的包。
 
-| 操作意图 | 执行命令 | 预期效果与产物 |
-| :--- | :--- | :--- |
-| **代码规范检查** | \`pnpm run lint\` | 使用 ESLint 检查全部源码风格规范 |
-| **代码格式修复** | \`pnpm run lint:fix\` | 自动修复单引号、缩进、行尾空行等风格问题 |
-| **启动开发服务器** | \`cd ui ; bun run dev\` | 监听 ui/src，启动 8130 端口模拟器并支持热重载 |
-| **全量打包构建** | \`cd ui ; bun run build\` | 输出 app.js, app.pak, app.pocket 并同步 app_pocket.h |
-| **新建架构决策** | \`python scripts/create_adr.py ...\` | 在 docs/adr 下自动按四位序号生成新 ADR |
-| **清除编译缓存** | \`cd firmware ; idf.py fullclean\` | 清除 ESP-IDF 的 build 目录与临时对象缓存 |
+团队建议先运行 `pnpm run build`，再运行 `idf.py build`。预构建路径不需要在 ESP-IDF 构建阶段安装 Bun；编译路径则需要可被 CMake 找到的官方 `pocket` CLI 和 Bun。
 
----
+### 6. 烧录与监视
 
-## 关键文件快速索引
+```powershell
+idf.py -p COM3 flash monitor
+```
 
-- **UI 根组件**：[ui/src/App.jsx](../ui/src/App.jsx)（页面整体布局、组件组合与交互逻辑）
-- **UI 挂载入口**：[ui/src/index.jsx](../ui/src/index.jsx)（注入 prelude 虚拟 DOM 门面并挂载根组件）
-- **前端打包器**：[ui/scripts/build.mjs](../ui/scripts/build.mjs)（Tailwind 编译、字体烘焙与资产打包主管道）
-- **开发模拟器服务器**：[ui/scripts/dev.mjs](../ui/scripts/dev.mjs)（WebAssembly 宿主服务器、触控队列与 SSE 热重载）
-- **固件主入口**：[firmware/main/main.c](../firmware/main/main.c)（硬件自检、PSRAM 校验与 PCKT 包魔数校验）
-- **硬件配置预设**：[firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)（N16R8 专属 16MB Flash 与 8MB Octal PSRAM 参数）
-- **Flash 分区表**：[firmware/partitions.csv](../firmware/partitions.csv)（16MB Flash 分区规划）
+把 `COM3` 替换为实际端口。若开发板没有自动进入下载模式，按板卡说明操作 BOOT/EN。串口监视器使用 `Ctrl + ]` 退出。
 
----
+## 关键文件
 
-## 常见开发任务
+- [ui/pocket.json](../ui/pocket.json)：应用清单和应用侧 capability。
+- [firmware/pocket.host.json](../firmware/pocket.host.json)：ESP32-S3 host profile。
+- [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
+- [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer、runner 生命周期。
+- [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：N16R8 Flash/PSRAM 和 FreeRTOS 预设。
+- [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY 和 4 MB factory 分区。
+- [ui/scripts/dev.mjs](../ui/scripts/dev.mjs)：WebAssembly 模拟器和热重载服务器。
+- [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 
-### 添加新的文本并指定字号
-在 PocketJS 体系中，字号必须映射为 Tailwind 插槽：
-- \`text-xs\`：12px
-- \`text-sm\`：14px
-- \`text-base\`：16px
-- \`text-lg\`：18px
-- \`text-xl\`：20px
-- \`text-2xl\`：24px
-代码保存后，构建器会自动收集文本中出现的所有新字符编码，并在烘焙阶段自动生成对应插槽的点阵图集。
+## 最终产品数据面（当前规划）
 
-### 添加新的图片素材
-1. 将图片（PNG 格式或 SVG 格式）放入 [ui/src/assets/images/](../ui/src/assets/images/) 目录中（如 \`icon.png\`）。
-2. 在组件中直接使用：\`<Image class="w-8 h-8" src="icon.png" />\`。
-3. 执行 \`pnpm run build\`，构建器会自动解析 PNG/SVG，生成纹理并打包入 \`app.pak\`。
+后续固件工作按以下顺序拆分：
 
----
+1. 接入 ESP-IDF USB host，接收并解析输入设备报告。
+2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。
+3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。
+4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。
+5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。
 
-## 常见故障排查
+USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge 只作为控制面，数据面应使用 ESP-IDF 原生任务和队列。
 
-### 模拟器启动报端口占用 (\`EADDRINUSE 127.0.0.1:8130\`)
-- **原因**：先前的 \`dev.mjs\` 进程在后台未被正常关闭。
-- **排查与解决**：
-  在 PowerShell 中查找并终止占用 8130 端口的进程：
-  ```powershell
-  Get-NetTCPConnection -LocalPort 8130 -State Listen | Select-Object OwningProcess
-  Stop-Process -Id <PID> -Force
-  ```
+## 常见问题
 
-### 界面元素正常显示但文字全空
-- **原因**：未加载字模图集（Font Atlas）或组件中直接使用了不受支持的任意内联 \`fontSize\`。
-- **解决**：确保挂载时传入了包含字模的 \`app.pak\`，且文字字号严格使用 Tailwind 类名。
+### `bun not found`
 
-### ESP32-S3 启动日志输出 PSRAM 警告
-- **现象**：串口监控输出 \`未检测到 PSRAM 或 PSRAM 初始化失败\`。
-- **排查**：确认板载芯片丝印是否为 **ESP32-S3 N16R8**（Octal PSRAM）。若使用的是 N16R2 或 N8R2（Quad PSRAM），需进入固件目录运行 \`idf.py menuconfig\`，将 SPIRAM 模式由 \`Octal\` 修改为 \`Quad\`。
+项目脚本通过 Bun 执行官方 checkout 中的 `tools/pocket.ts` 和 compiler。安装官方 Bun，并设置 `POCKETJS_ROOT` 指向包含该文件的 PocketJS checkout，确保 `bun` 位于当前 PowerShell 的 `PATH`，再重试 `pnpm run check` 或 `pnpm run build`。
+
+### `pocketjs_compile_app requires the PocketJS CLI in PATH`
+
+这是官方 CMake helper 的预期错误。优先在项目根目录执行 `pnpm run build` 生成 `ui/dist/remapad-ui.pocket`；如果要使用 CMake 自动编译路径，需要把官方 `pocket` CLI 放入 ESP-IDF 构建进程的 `PATH`，并确保它能定位 PocketJS framework checkout。
+
+### 固件日志有 package admission 错误
+
+确认 `.pocket` 是由同一份 `firmware/pocket.host.json` 生成的，且没有手动修改 profile 的视口、tick、presentation、raster density 或 capabilities。改动 profile 后重新执行 `pnpm run build`。
+
+### 烧录后没有屏幕画面
+
+当前固件只完成官方运行时和 RGB565 damage strip 的无面板 bring-up：`sample_input` 返回空输入，`after_turn` 尚未调用真实面板 DMA。需要根据开发板硬件资料补充产品 BSP，再将输入采样和 strip 传输接入回调。
+
+### BLE 没有发现 NS2 手柄
+
+当前固件尚未实现 USB→NS2→BLE 数据面，也没有配对广播或 GATT 服务。请先阅读 [controller.md](controller.md)，不要仅通过修改 PocketJS manifest 或 UI bridge 宣称已支持 NS2。
+
+### `ui/dist` 或 `firmware/build` 出现文件
+
+这些目录是生成目录，已被 Git 忽略。不要手动编辑其中的 JavaScript、PAK、`.pocket`、C/汇编嵌入源或生成头文件。

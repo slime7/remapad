@@ -1,6 +1,6 @@
 # Remapad Agent 开发与维护指南
 
-Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统，采用“PocketJS 前端 (Vue Vapor + Tailwind) + ESP-IDF 固件”双工作区架构。
+Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，最终目标是“USB 输入 → NS2 手柄报告 → BLE 手柄”，并配套 PocketJS 屏幕 UI。工程采用“PocketJS 前端 (Vue Vapor + Tailwind) + ESP-IDF 固件”双工作区架构；NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)。
 
 ## 开始任务前必读
 
@@ -11,6 +11,7 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 3. [核心概念与领域抽象 (docs/ABSTRACTIONS.md)](docs/ABSTRACTIONS.md)：掌握 PocketJS 节点模型、Tailwind 编译机制与软硬件契约。
 4. [新手开发与上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)：掌握开发环境搭建、常用命令与调试排错方法。
 5. [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：查阅具有长期影响的既定架构决策与选型取舍。
+6. [控制器协议参考 (docs/controller.md)](docs/controller.md)：掌握 USB→NS2→BLE 数据面的协议范围、配对和广播验证边界。
 
 ## 项目工程架构与工作区划分
 
@@ -19,11 +20,12 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 - **前端 UI 工程 (`ui/`)**：
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法构建。
   - 样式使用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
-  - 依赖与脚本由 Bun 及 pnpm 驱动。
+  - 依赖由 pnpm 管理，官方 PocketJS 编译器由 Bun 执行。
 - **设备固件工程 (`firmware/`)**：
-  - 基于乐鑫官方 ESP-IDF (v5.3+) 框架与 C 语言编写。
+  - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言编写。
   - 硬件绑定 ESP32-S3-WROOM-1 N16R8（16MB Flash + 8MB Octal PSRAM）。
-  - 静态编译包含前端自动导出的头文件并直接烧录至开发板。
+  - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
+  - `main/bridge/`、`main/drivers/` 和 `ui/src/bridge/` 是未来产品控制面/数据面的预留代码，即使当前未编译或未被 UI 调用，也不要仅因暂时未使用而删除。
 
 ## 项目核心操作命令
 
@@ -31,9 +33,10 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 | :--- | :--- | :--- |
 | **依赖安装** | `pnpm install` | 安装前端工作区依赖 |
 | **代码检查** | `pnpm run lint` | 执行前端 ESLint 静态代码检查 |
-| **代码修复** | `pnpm run lint:fix` | 自动修复前端代码格式问题 |
-| **前端打包** | `cd ui ; bun run build` | 编译 JSX、光栅化样式与字体、输出 `.pocket` 并同步固件头文件 |
-| **本地仿真** | `cd ui ; bun run dev` | 启动浏览器 60 FPS WebAssembly 仿真服务器 (端口 8130，支持热重载) |
+| **PocketJS 契约检查** | `pnpm run check` | 使用官方 CLI 和 `firmware/pocket.host.json` 校验清单、能力与视口 |
+| **前端资源编译** | `pnpm run compile` | 调用官方 PocketJS 编译器，输出 `.js` 与 `.pak` |
+| **前端应用打包** | `pnpm run build` | 调用官方 `pocket build --host-profile` 输出 `.pocket` |
+| **本地仿真** | `pnpm run dev` | 启动浏览器 60 FPS WebAssembly 仿真服务器 (端口 8130，支持热重载) |
 | **固件配置** | `cd firmware ; idf.py set-target esp32s3` | 配置目标芯片架构并合并硬件预设 |
 | **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件 |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器 |
@@ -43,8 +46,8 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 - **禁止手动修改构建产物**：
   - `ui/dist/` 为前端构建产物目录，由构建脚本全自动生成。
   - `firmware/build/` 为 ESP-IDF 编译目录。
-- **固件头文件单向同步**：
-  - [firmware/main/app_pocket.h](firmware/main/app_pocket.h) 为前端构建生成的 C 静态常量数组，由前端 `build.mjs` 全自动同步覆盖，禁止在该文件中手动书写业务代码。
+  - `ui/.pocket/` 为 PocketJS 计划文件目录。
+- `.pocket` 包由官方 PocketJS CLI 生成；ESP-IDF 的 `pocketjs_embed_package` 会在 `firmware/build/` 中生成临时 C/汇编嵌入文件，禁止提交或手动维护。
 
 ## 项目特有约束
 
@@ -61,5 +64,6 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 | 硬件规格、屏幕驱动、Flash/PSRAM 配置变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
 | 产品定位、服务受众、非目标边界变动 | [docs/VISION.md](docs/VISION.md) |
 | 跨层数据协议、核心图元、宏常量与状态模型变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
+| USB 输入、NS2 报告、BLE 广播/GATT、配对或绑定状态变动 | [docs/controller.md](docs/controller.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | 环境依赖、操作指令、目录结构变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
 | 产生新的长期架构决策与技术选型取舍 | 使用 [scripts/create_adr.py](scripts/create_adr.py) 新建 ADR 并更新 [docs/adr/README.md](docs/adr/README.md) |

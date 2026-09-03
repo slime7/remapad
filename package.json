@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "check": "pnpm --filter remapad-ui run check",
+    "compile": "pnpm --filter remapad-ui run compile",
     "build": "pnpm --filter remapad-ui run build",
     "dev": "pnpm --filter remapad-ui run dev",
     "lint": "pnpm --filter remapad-ui run lint",
