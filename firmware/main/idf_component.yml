@@ -1,0 +1,3 @@
+dependencies:
+  # 如需使用特定显示屏驱动组件，可在下方声明
+  # espressif/esp_lcd_st7789: "^1.1.4"

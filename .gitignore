@@ -1,0 +1,39 @@
+# ESP-IDF 固件编译产物与配置备份
+build/
+sdkconfig.old
+sdkconfig.defaults.old
+dependencies.lock
+managed_components/
+compile_commands.json
+
+# Node / Bun 前端依赖与产物
+node_modules/
+dist/
+ui/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Rust 编译临时产物 (若本地引入 Rust 渲染核心)
+target/
+
+# 编辑器与 IDE 配置
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosv
+*.sln.docstates
+.clangd/
+
+# 操作系统生成文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时文件与日志
+*.tmp
+*.bak
+*.log

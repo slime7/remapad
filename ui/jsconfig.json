@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "checkJs": false
+  },
+  "include": ["src/**/*", "pocket.config.js"]
+}
+

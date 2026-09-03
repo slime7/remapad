@@ -1,0 +1,11 @@
+{
+  "name": "remapad-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter remapad-ui run build",
+    "dev": "pnpm --filter remapad-ui run dev",
+    "lint": "pnpm --filter remapad-ui run lint",
+    "lint:fix": "pnpm --filter remapad-ui run lint:fix"
+  }
+}

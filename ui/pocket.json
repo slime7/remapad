@@ -1,0 +1,25 @@
+{
+  "$schema": "https://pocketjs.dev/schema/pocket-2.json",
+  "pocket": 2,
+  "id": "com.remapad.esp32s3-ui",
+  "name": "remapad-ui",
+  "title": "Remapad ESP32-S3 UI",
+  "version": "0.1.0",
+  "target": "esp32s3",
+  "engine": {
+    "capabilities": {
+      "requires": ["input.touch", "text.glyphs.baked"]
+    }
+  },
+  "app": {
+    "entry": "src/index.jsx",
+    "output": "remapad-ui",
+    "framework": "vue-vapor",
+    "viewport": {
+      "fixed": {
+        "logical": [240, 280],
+        "presentation": "native"
+      }
+    }
+  }
+}
