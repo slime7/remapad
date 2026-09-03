@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "app_pocket.h"
+#include "bridge/js_bridge.h"
 
 static const char *TAG = "remapad_app";
 
@@ -28,6 +29,9 @@ void app_main(void)
     } else {
         ESP_LOGI(TAG, "PSRAM 初始化正常，满足 PocketJS 运行要求。");
     }
+
+    // 初始化 JavaScript - 硬件原生桥接层
+    js_bridge_init();
 
     // PocketJS 应用资产包自检
     bool magic_ok = (app_pocket_len >= 16) &&

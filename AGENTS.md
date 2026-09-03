@@ -32,8 +32,8 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 | **依赖安装** | `pnpm install` | 安装前端工作区依赖 |
 | **代码检查** | `pnpm run lint` | 执行前端 ESLint 静态代码检查 |
 | **代码修复** | `pnpm run lint:fix` | 自动修复前端代码格式问题 |
-| **前端打包** | `pnpm run build` | 编译 JSX、光栅化样式与字体、输出 `.pocket` 并同步固件头文件 |
-| **本地仿真** | `pnpm run dev` | 启动浏览器 60 FPS WebAssembly 仿真服务器 (端口 8130，支持热重载) |
+| **前端打包** | `cd ui ; bun run build` | 编译 JSX、光栅化样式与字体、输出 `.pocket` 并同步固件头文件 |
+| **本地仿真** | `cd ui ; bun run dev` | 启动浏览器 60 FPS WebAssembly 仿真服务器 (端口 8130，支持热重载) |
 | **固件配置** | `cd firmware ; idf.py set-target esp32s3` | 配置目标芯片架构并合并硬件预设 |
 | **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件 |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器 |
@@ -54,6 +54,8 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 
 ## 文档维护触发映射
 
+文档栏目可能持续增加。修改文档时应优先保持现有标题层级与内容顺序，仅在确有必要表达层级或便于导航时使用序号标题；新增内容尽量就地追加或局部修改，避免无关的重排、重编号和大面积 diff。
+
 | 变更范围 | 应同步维护的文档 |
 | :--- | :--- |
 | 硬件规格、屏幕驱动、Flash/PSRAM 配置变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
@@ -61,4 +63,3 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式 UI 开发系统�
 | 跨层数据协议、核心图元、宏常量与状态模型变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | 环境依赖、操作指令、目录结构变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
 | 产生新的长期架构决策与技术选型取舍 | 使用 [scripts/create_adr.py](scripts/create_adr.py) 新建 ADR 并更新 [docs/adr/README.md](docs/adr/README.md) |
-

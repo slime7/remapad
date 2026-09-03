@@ -189,32 +189,34 @@ async function build() {
   }
   const manifest = JSON.parse(manifestRaw);
   const framework = manifest.app?.framework || 'vue-vapor';
+  const target = manifest.target || 'esp32s3';
+  const [viewportW, viewportH] = manifest.app?.viewport?.logical || [240, 280];
 
-  console.log('[PocketJS Build] Target: ESP32-S3 (N16R8) | Framework: ' + framework + ' | Toolchain: Node.js + pnpm');
+  console.log('[PocketJS Packaging] 目标架构: ' + target + ' | 视图尺寸: ' + viewportW + 'x' + viewportH + ' | 框架: ' + framework);
 
   if (!fs.existsSync(DIST)) {
     fs.mkdirSync(DIST, { recursive: true });
   }
 
-  // --- Tailwind Utilities Compilation ---
-  console.log('[PocketJS Build] Collecting Tailwind classes and text codepoints...');
+  // --- Tailwind 工具类解析与编译 ---
+  console.log('[PocketJS Packaging] 解析 src/ 目录中的 Tailwind 类名与文本字符集...');
   const { classes, codepoints } = collectFromSrc(path.join(ROOT, 'src'));
   const compiledStyles = compileClasses(classes);
-  console.log('[PocketJS Build] Compiled ' + Object.keys(compiledStyles.ids).length + ' Tailwind classes (' + compiledStyles.bin.length + ' bytes styles.bin)');
+  console.log('[PocketJS Packaging] 成功编译 ' + Object.keys(compiledStyles.ids).length + ' 个样式规则 (' + compiledStyles.bin.length + ' 字节 styles.bin)');
 
   const generatedStylesModuleSource = generateStylesModule(compiledStyles);
   fs.writeFileSync(path.join(DIST, 'styles.bin'), compiledStyles.bin);
 
-  // --- Font Atlases Baking ---
-  console.log('[PocketJS Build] Baking font atlases for slots: [' + compiledStyles.usedFontSlots.join(', ') + ']...');
+  // --- 点阵字模图集烘焙 ---
+  console.log('[PocketJS Packaging] 烘焙字模图集，使用插槽: [' + compiledStyles.usedFontSlots.join(', ') + ']...');
   const atlases = await bakeAtlases({
     codepoints,
     slots: compiledStyles.usedFontSlots,
     rasterDensity: 1,
   });
-  console.log('[PocketJS Build] Baked ' + atlases.length + ' font atlases successfully');
+  console.log('[PocketJS Packaging] 成功烘焙 ' + atlases.length + ' 个字号插槽点阵图集');
 
-  // --- Image and SVG Assets Baking ---
+  // --- 图像与矢量光栅化资源烘焙 ---
   const imageDir = path.join(ROOT, 'src/assets/images');
   const imageBlobs = [];
   if (fs.existsSync(imageDir)) {
@@ -239,9 +241,9 @@ async function build() {
       }
     }
   }
-  console.log('[PocketJS Build] Baked ' + imageBlobs.length + ' image/spinner assets');
+  console.log('[PocketJS Packaging] 成功封装 ' + imageBlobs.length + ' 个图像图元资源');
 
-  // --- Resource Pak Packaging ---
+  // --- 资产归档包打包 (app.pak) ---
   const pakBlobs = [
     { key: KEY_STYLES || 'ui:styles', dtype: 1, data: compiledStyles.bin },
     ...atlases.map((a) => ({
@@ -253,7 +255,6 @@ async function build() {
   ];
   const pakBytes = pack(pakBlobs);
   fs.writeFileSync(path.join(DIST, 'app.pak'), pakBytes);
-  console.log('[PocketJS Build] Pak file generated: ' + path.join(DIST, 'app.pak') + ' (' + (pakBytes.length / 1024).toFixed(1) + ' KB)');
 
   const plugins = [];
   if (framework === 'vue-vapor') {
@@ -307,7 +308,7 @@ async function build() {
   }
 
   const jsOutfile = path.join(DIST, 'app.js');
-  console.log('[PocketJS Build] Compiling JSX and bundling JavaScript...');
+  console.log('[PocketJS Packaging] 编译 JSX 视图并生成 IIFE 独立字节流...');
   await esbuild.build({
     entryPoints: [path.join(ROOT, manifest.app?.entry || 'src/index.jsx')],
     bundle: true,
@@ -328,8 +329,6 @@ async function build() {
   });
 
   const jsContent = fs.readFileSync(jsOutfile);
-  console.log('[PocketJS Build] JS bundle generated: ' + jsOutfile + ' (' + (jsContent.length / 1024).toFixed(1) + ' KB)');
-
   const jsSectionBytes = new Uint8Array(jsContent.length + 1);
   jsSectionBytes.set(jsContent, 0);
 
@@ -340,8 +339,8 @@ async function build() {
   });
 
   const planBytes = new TextEncoder().encode(JSON.stringify({
-    target: 'esp32s3',
-    display: { width: 240, height: 280, format: 'rgb565' },
+    target,
+    display: { width: viewportW, height: viewportH, format: 'rgb565' },
     entry: manifest.app?.entry || 'src/index.jsx',
     framework,
   }));
@@ -350,7 +349,7 @@ async function build() {
     manifest: new TextEncoder().encode(manifestRaw),
     variants: [
       {
-        target: 'esp32s3',
+        target,
         hostAbi: 1,
         sections: [
           { kind: POCKET_SECTION.identity, bytes: identityBytes },
@@ -365,7 +364,6 @@ async function build() {
   const packageBytes = encodePocketPackage(pocketPkg);
   const pocketOutfile = path.join(DIST, 'app.pocket');
   fs.writeFileSync(pocketOutfile, packageBytes);
-  console.log('[PocketJS Build] Pocket package generated: ' + pocketOutfile + ' (' + (packageBytes.length / 1024).toFixed(1) + ' KB)');
 
   const binOutfile = path.join(DIST, 'app.bin');
   fs.writeFileSync(binOutfile, packageBytes);
@@ -373,18 +371,23 @@ async function build() {
   const cHeader = generateCHeader(packageBytes, 'app_pocket');
   const headerOutfile = path.join(DIST, 'app_pocket.h');
   fs.writeFileSync(headerOutfile, cHeader, 'utf8');
-  console.log('[PocketJS Build] C header generated: ' + headerOutfile);
 
   if (fs.existsSync(FW_MAIN)) {
     const fwHeader = path.join(FW_MAIN, 'app_pocket.h');
     fs.writeFileSync(fwHeader, cHeader, 'utf8');
-    console.log('[PocketJS Build] Synced C header to firmware: ' + fwHeader);
   }
 
-  console.log('[PocketJS Build] Build completed successfully!');
+  console.log('--------------------------------------------------');
+  console.log('PocketJS 打包产物度量清单:');
+  console.log('  - 核心单文件容器: ' + pocketOutfile + ' (' + (packageBytes.length / 1024).toFixed(1) + ' KB)');
+  console.log('  - 资产包 (Pak):   ' + path.join(DIST, 'app.pak') + ' (' + (pakBytes.length / 1024).toFixed(1) + ' KB)');
+  console.log('  - JS 字节流:      ' + jsOutfile + ' (' + (jsContent.length / 1024).toFixed(1) + ' KB)');
+  console.log('  - 固件头文件:     ' + path.join(FW_MAIN, 'app_pocket.h') + ' (已同步)');
+  console.log('--------------------------------------------------');
+  console.log('[PocketJS Packaging] 打包流水线执行完毕！');
 }
 
 build().catch((err) => {
-  console.error('[PocketJS Build] Build failed:', err);
+  console.error('[PocketJS Packaging] 打包失败:', err);
   process.exit(1);
 });

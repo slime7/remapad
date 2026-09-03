@@ -61,7 +61,6 @@ fs.watch(SRC, { recursive: true }, (eventType, filename) => {
     triggerBuild();
   }, 200);
 });
-
 const SIMULATOR_HTML = `<!doctype html>
 <html lang="zh-CN">
 <head>

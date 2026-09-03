@@ -8,7 +8,8 @@
   "target": "esp32s3",
   "engine": {
     "capabilities": {
-      "requires": ["input.touch", "text.glyphs.baked"]
+      "requires": ["text.glyphs.baked", "input.touch"],
+      "enhances": ["input.buttons", "input.analog.left", "input.analog.right"]
     }
   },
   "app": {
@@ -16,10 +17,8 @@
     "output": "remapad-ui",
     "framework": "vue-vapor",
     "viewport": {
-      "fixed": {
-        "logical": [240, 280],
-        "presentation": "native"
-      }
+      "logical": [240, 280],
+      "presentation": "native"
     }
   }
 }

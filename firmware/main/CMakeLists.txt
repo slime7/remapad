@@ -1,4 +1,11 @@
 idf_component_register(
-    SRCS "main.c"
-    INCLUDE_DIRS "."
+    SRCS
+        "main.c"
+        "bridge/js_bridge.c"
+        "drivers/backlight.c"
+        "drivers/battery.c"
+    INCLUDE_DIRS
+        "."
+        "bridge"
+        "drivers"
 )
