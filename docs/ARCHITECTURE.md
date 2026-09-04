@@ -103,6 +103,7 @@ remapad/
 │   ├── controller.md
 │   └── adr/
 ├── ui/
+│   ├── index.html       # WebAssembly 模拟器页面
 │   ├── package.json
 │   ├── pocket.json
 │   ├── jsconfig.json

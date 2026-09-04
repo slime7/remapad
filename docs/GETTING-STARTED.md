@@ -114,6 +114,7 @@ idf.py -p COM3 flash monitor
 - [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer、runner 生命周期。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：N16R8 Flash/PSRAM 和 FreeRTOS 预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY 和 4 MB factory 分区。
+- [ui/index.html](../ui/index.html)：WebAssembly 模拟器预览页面。
 - [ui/scripts/dev.mjs](../ui/scripts/dev.mjs)：WebAssembly 模拟器和热重载服务器。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 
