@@ -1,5 +1,7 @@
 # ESP-IDF 固件编译产物与配置备份
 build/
+# sdkconfig 由 idf.py 依据 sdkconfig.defaults 生成，不是事实源
+firmware/sdkconfig
 sdkconfig.old
 sdkconfig.defaults.old
 dependencies.lock

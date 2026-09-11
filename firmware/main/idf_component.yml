@@ -1,8 +1,5 @@
+# The PocketJS components are discovered from the POCKETJS_ROOT checkout through
+# EXTRA_COMPONENT_DIRS in firmware/CMakeLists.txt. Only their own manifests
+# pull the Registry dependencies (espressif/quickjs-ng for pocketjs_guest).
 dependencies:
   idf: ">=6.0,<6.2"
-  pocket-stack/pocketjs_package: "0.1.0"
-  pocket-stack/pocketjs_guest: "0.1.0"
-  pocket-stack/pocketjs_ui_core: "0.1.0"
-  pocket-stack/pocketjs_ui_qjs: "0.1.0"
-  pocket-stack/pocketjs_render_rgb565: "0.1.0"
-  pocket-stack/pocketjs_runner: "0.1.0"
