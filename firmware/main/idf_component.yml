@@ -1,5 +1,8 @@
 # PocketJS 官方组件固定在本仓库的 firmware/components/，由 ESP-IDF 默认的组件目录
 # 规则直接发现，不依赖外部 checkout。这里只声明应用对 ESP-IDF 版本的要求；Registry
 # 依赖由组件各自的清单负责（pocketjs_guest 需要 espressif/quickjs-ng）。
+# 面板使用 IDF 内置 ST7789 驱动（esp_lcd），触摸走 Registry 的 CST816S 组件。
 dependencies:
   idf: ">=6.0,<6.2"
+  espressif/esp_lcd_touch: "^1.2"
+  espressif/esp_lcd_touch_cst816s: "^1.1"

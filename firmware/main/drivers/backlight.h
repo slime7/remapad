@@ -8,13 +8,14 @@
 extern "C" {
 #endif
 
-/** 预留屏幕背光 PWM 驱动初始化接口。 */
+/** 初始化背光 PWM 通道，初始为熄灭。面板可见性由调用方在合适时机
+ * （如首帧提交成功后）调用 backlight_set 点亮。 */
 esp_err_t backlight_init(void);
 
-/** 设置预留的背光亮度接口（0 - 100）。 */
+/** 设置背光亮度（0 - 100），超出范围自动收敛到 100。 */
 esp_err_t backlight_set(uint8_t brightness_pct);
 
-/** 读取当前预留的背光亮度值。 */
+/** 读取当前背光亮度值。 */
 uint8_t backlight_get(void);
 
 #ifdef __cplusplus

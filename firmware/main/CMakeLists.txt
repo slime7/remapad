@@ -1,5 +1,9 @@
 set(remapad_pocketjs_requires
     esp_timer
+    esp_lcd
+    esp_driver_ledc
+    esp_lcd_touch
+    esp_lcd_touch_cst816s
     pocketjs_package
     pocketjs_guest
     pocketjs_ui_core
@@ -10,6 +14,12 @@ idf_component_register(
     SRCS
         "main.c"
         "pocketjs_host.c"
+        "drivers/panel.c"
+        "drivers/backlight.c"
+        "drivers/touch.c"
+    INCLUDE_DIRS
+        "."
+        "drivers"
     REQUIRES ${remapad_pocketjs_requires}
 )
 

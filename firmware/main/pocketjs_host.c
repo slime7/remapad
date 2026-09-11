@@ -15,6 +15,10 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
+#include "backlight.h"
+#include "panel.h"
+#include "touch.h"
+
 #include "pocketjs/guest.h"
 #include "pocketjs/package.h"
 #include "pocketjs/render_rgb565.h"
@@ -34,6 +38,7 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_POCKETJS_TASK_PRIORITY 5
 #define REMAPAD_POCKETJS_MAX_LAG_US 500000
 #define REMAPAD_POCKETJS_STOP_TIMEOUT_MS 5000
+#define REMAPAD_BACKLIGHT_PCT 80
 
 typedef struct {
     pocketjs_package_t *package;
@@ -57,6 +62,7 @@ typedef struct {
     uint16_t *strip_buffer;
     size_t strip_capacity_pixels;
     bool first_frame_logged;
+    bool panel_ready;
 } remapad_pocketjs_runtime_t;
 
 static remapad_pocketjs_runtime_t s_runtime;
@@ -138,6 +144,18 @@ static esp_err_t sample_input(pocketjs_ui_input_t *input, void *user_data)
     input->analog_y = 0;
     input->touches = NULL;
     input->touch_count = 0;
+
+    /* 触点 id 必须在同一按压期间保持稳定；CST816T 为单点触摸，恒用 0。 */
+    static pocketjs_ui_touch_t ui_touches[POCKETJS_UI_MAX_TOUCHES];
+    touch_contact_t contacts[POCKETJS_UI_MAX_TOUCHES];
+    const size_t count = touch_sample(contacts, POCKETJS_UI_MAX_TOUCHES);
+    for (size_t index = 0; index < count; ++index) {
+        ui_touches[index].id = 0;
+        ui_touches[index].x = contacts[index].x;
+        ui_touches[index].y = contacts[index].y;
+    }
+    input->touches = ui_touches;
+    input->touch_count = count;
     return ESP_OK;
 }
 
@@ -169,6 +187,7 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return ESP_ERR_INVALID_SIZE;
         }
+        const int region_y = (int)(region.y * scale);
         const size_t region_pixels = physical_width * region_height;
         if (region_pixels > runtime->strip_capacity_pixels) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
@@ -184,6 +203,20 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
         if (result != ESP_OK) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return result;
+        }
+        /* strip 是全宽区域，像素列从 0 起覆盖物理整行；面板传输失败时同样
+         * 放弃本帧事务。 */
+        if (runtime->panel_ready) {
+            result = panel_transfer(
+                runtime->strip_buffer,
+                0,
+                region_y,
+                (int)physical_width,
+                (int)region_height);
+            if (result != ESP_OK) {
+                pocketjs_rgb565_abort(runtime->renderer, runtime->target);
+                return result;
+            }
         }
     }
 
@@ -201,6 +234,11 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
                  frame->raster_density,
                  plan.region_count);
         runtime->first_frame_logged = true;
+        /* 背光在首帧提交成功后点亮，避免开机时闪出未初始化的面板内容。 */
+        esp_err_t backlight_result = backlight_set(REMAPAD_BACKLIGHT_PCT);
+        if (backlight_result != ESP_OK) {
+            ESP_LOGW(TAG, "backlight on failed: %s", esp_err_to_name(backlight_result));
+        }
     }
     return result;
 }
@@ -240,6 +278,24 @@ static esp_err_t allocate_strip_buffer(
 
 static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
 {
+    /* 面板与触摸初始化失败不阻断启动：面板失败时退回纯渲染 bring-up，
+     * 触摸失败时 sample_input 每帧返回零触点。 */
+    runtime->panel_ready = false;
+    esp_err_t bsp_result = panel_init();
+    if (bsp_result != ESP_OK) {
+        ESP_LOGE(TAG, "panel init failed: %s", esp_err_to_name(bsp_result));
+    } else {
+        runtime->panel_ready = true;
+    }
+    bsp_result = touch_init();
+    if (bsp_result != ESP_OK) {
+        ESP_LOGE(TAG, "touch init failed: %s", esp_err_to_name(bsp_result));
+    }
+    bsp_result = backlight_init();
+    if (bsp_result != ESP_OK) {
+        ESP_LOGE(TAG, "backlight init failed: %s", esp_err_to_name(bsp_result));
+    }
+
     const char *stage = "package_open";
     esp_err_t result = pocketjs_package_open(
         pocketjs_package_remapad.data,
