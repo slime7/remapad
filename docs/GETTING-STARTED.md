@@ -129,6 +129,14 @@ idf.py build
 idf.py -p COM3 flash monitor
 ```
 
+没有 ESP-IDF 终端时（例如从 Git Bash 直接发起），可以用一条 PowerShell 命令激活 EIM 环境后执行。关键是先清掉 `MSYSTEM`——Git Bash 会把它带给子进程，`idf.py` 检测到后只打印警告并静默拒绝执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item Env:MSYSTEM -ErrorAction SilentlyContinue; . 'C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1'; Set-Location firmware; idf.py -p COM3 flash"
+```
+
+EIM 安装路径不同时改用实际的 `Microsoft.*.PowerShell_profile.ps1` 位置即可。
+
 把 `COM3` 替换为实际端口。若开发板没有自动进入下载模式，按板卡说明操作 BOOT/EN。串口监视器使用 `Ctrl + ]` 退出。
 
 `idf.py build` 在 `firmware/build/` 下生成三个可烧录文件，偏移与 `firmware/build/flash_project_args` 一致：
