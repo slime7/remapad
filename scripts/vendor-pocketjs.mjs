@@ -19,6 +19,14 @@ if (!existsSync(join(checkout, 'tools/pocket.ts'))) {
   process.exit(1);
 }
 
+// 编译器生成的样式表镜像必须一起进快照：官方 CLI 的类型检查跑在编译器写入它之前，快照
+// 缺少该文件时，新克隆的仓库连 pnpm run check 都过不去。先确认再删除旧快照。
+if (!existsSync(join(checkout, 'framework/src/styles.generated.ts'))) {
+  console.error('PocketJS checkout 缺少 framework/src/styles.generated.ts。');
+  console.error('先在该 checkout 里执行官方 bun tools/build.ts 生成它，再重新生成本快照。');
+  process.exit(1);
+}
+
 const pkg = JSON.parse(readFileSync(join(checkout, 'package.json'), 'utf8'));
 const IMPORT_RE = /from\s*["']([^"']+)["']/g;
 

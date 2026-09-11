@@ -72,9 +72,9 @@ remapad-ui.pak      样式、字体和图像资源包
 remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
 ```
 
-`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、`ui/vendor/pocketjs`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；默认命中仓库内的快照。它只负责路径与参数转发、建立快照的依赖链接、补齐编译器需要的生成模块占位，不实现 compiler，也不改变 package 格式。
+`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、`ui/vendor/pocketjs`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；默认命中仓库内的快照。它只负责路径与参数转发、建立快照的依赖链接，不实现 compiler，也不改变 package 格式。
 
-快照里没有编译器生成的 `framework/src/styles.generated.ts`，而官方 CLI 的类型检查跑在编译器写入该文件之前，所以脚本会在它缺失时先补一个同形状的空模块占位；官方编译流程随后在同一轮里改写成本次构建的真实样式表。因此刚克隆的仓库可以直接 `pnpm run check` 与 `pnpm run build`。
+快照同时携带编译器生成的 `framework/src/styles.generated.ts`（class 字面量到 styleId 的映射）。它必须提交：官方 CLI 的类型检查跑在编译器写入该文件之前，而 `pnpm install` 之后新写入的快照文件不会进入 pnpm 的依赖副本，缺少它时连 `pnpm run check` 都会以 TS2307 失败。每次 `pnpm run build` 会按当前 `ui/src` 重新生成该文件，出现差异时正常提交即可。
 
 官方命令的语义如下，`pocket build` 的 `--host-profile` 形式等价于上面的项目脚本：
 
@@ -185,6 +185,10 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 ### `bun not found`
 
 项目脚本通过 Bun 执行 `ui/vendor/pocketjs/tools/pocket.ts`。安装官方 Bun 并确保它位于当前 PowerShell 的 `PATH`，再重试 `pnpm run check` 或 `pnpm run build`；如果看到缺少依赖的报错，先执行一次 `pnpm install`。
+
+### `Cannot find module './styles.generated.ts'`
+
+快照里的 `ui/vendor/pocketjs/framework/src/styles.generated.ts` 缺失，或它没有进入 pnpm 的依赖副本。从 Git 恢复该文件后重新执行 `pnpm install`；如果用的是外部 checkout，先在其目录里执行官方 `bun tools/build.ts` 生成这个镜像。
 
 ### `pocketjs_compile_app requires the PocketJS CLI in PATH`
 

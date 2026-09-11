@@ -59,6 +59,7 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
 
 - **PocketJS 组件、归档与脚本入口**：
   - 仓库是自包含的：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定编译器、框架源码、构建资源与触摸预览用的官方 wasm 核心。
+  - `ui/vendor/pocketjs/framework/src/styles.generated.ts` 是编译器生成的样式镜像，但必须随快照提交：官方类型检查跑在编译器写入它之前，且 `pnpm install` 之后新增的快照文件不会进入依赖副本。它按 `ui/src` 重新生成，出现差异时直接提交。
   - `POCKETJS_ROOT` 是可选的对照路径，只在重新生成快照（`scripts/vendor-pocketjs.mjs`）或重建原生归档时使用；不要把本项目的产物写进该目录。
   - 硬件屏幕是触摸屏：`ui/preview/` 是项目自己的预览页，把浏览器触摸事件转换为 PocketJS 触摸帧契约（`frame(buttons, analog, touches, hits)`），由 `scripts/preview-server.mjs` 提供静态服务；不要再退回官方 playground 的 PSP 按键界面。
   - 升级 `firmware/components/` 后必须重新生成原生归档并核对 QuickJS 校验值，见 [patches/README.md](patches/README.md)。
