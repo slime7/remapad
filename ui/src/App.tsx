@@ -125,12 +125,12 @@ export default function Hero(props: HeroProps = {}) {
 
       <View class="flex-col items-start gap-2">
         <View
-          class="px-4 py-2 rounded-xl shadow-md bg-blue-600 border-blue-500 active:bg-blue-700 transition-colors duration-150"
+          class="px-6 py-3 rounded-xl shadow-md bg-blue-600 border-blue-500 active:bg-blue-700 transition-colors duration-150"
           focusable
           onPress={() => { count.value++; }}
         >
           <Text class="text-sm text-white font-bold">
-            {props.actionLabel ?? 'Press Circle'}
+            {props.actionLabel ?? 'Tap here'}
           </Text>
         </View>
 

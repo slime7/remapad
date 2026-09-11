@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "component": "pocketjs_render_rgb565",
+  "target": "esp32s3",
+  "rustTarget": "xtensa-esp32s3-none-elf",
+  "compiler": "rustc 1.97.0-nightly (8ea53bcd7 2026-07-08) (1.97.0.0)\nbinary: rustc\ncommit-hash: 8ea53bcd7257011cbf96f6398551bdc650b04334\ncommit-date: 2026-07-08\nhost: x86_64-pc-windows-msvc\nrelease: 1.97.0-nightly\nLLVM version: 21.1.3",
+  "archiver": null,
+  "sourceSha256": "456a65c5fb7689644057fdd558a719fb6730d675201c574d1e6c3e9e9250dc77",
+  "archiveSha256": "dee8319940921b4fd57b715c5e8de6b0c195c1a58d9b7ee58480e2822df9a54a",
+  "archiveBytes": 2244160,
+  "policy": {
+    "profile": "release",
+    "defaultFeatures": false,
+    "locked": true,
+    "codegenUnits": 16,
+    "lto": false,
+    "optLevel": 3,
+    "panic": "abort",
+    "preparationVersion": 1,
+    "rustSymbolNamespace": "non-stdlib-components"
+  }
+}

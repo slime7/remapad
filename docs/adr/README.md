@@ -30,8 +30,11 @@
 | [0002](0002-adopt-hardware-bridge-and-packaging-architecture.md) | active | 引入统一硬件桥接协议与双工作区分层架构；打包部分由 0003 取代 |
 | [0003](0003-use-official-esp-idf-host.md) | active | 采用官方 PocketJS ESP-IDF host 构建链路 |
 | [0004](0004-use-local-pocketjs-checkout.md) | active | PocketJS 组件与原生归档改由本地 checkout 提供，Web 预览切换为官方开发主机 |
+| [0005](0005-vendor-pocketjs-idf-components.md) | active | ESP-IDF 组件与原生归档固定在本仓库，pocketjs 仅作开发参考 |
 
 `0002` 仍作为硬件 bridge 与控制面分层的决策依据；其自定义打包和 host 接入范围由 `0003` 取代。旧 ADR 文件正文保持不变。
+
+`0004` 仍作为 Web 预览采用官方 `hosts/web` 开发主机的决策依据；其固件组件与原生归档取自 PocketJS checkout 的范围由 `0005` 取代。旧 ADR 文件正文保持不变。
 
 ## 创建 ADR 脚本用法
 

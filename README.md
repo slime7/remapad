@@ -51,17 +51,20 @@ flowchart LR
 remapad/
 ├── scripts/
 │   ├── create_adr.py            # ADR 生成脚本
-│   └── pocketjs.mjs             # 官方工具链与 Web 开发主机入口
-├── patches/                     # 必须应用到 PocketJS checkout 的补丁
+│   ├── pocketjs.mjs             # 官方工具链与触摸预览入口
+│   └── preview-server.mjs       # 触摸预览的静态服务器
+├── patches/                     # 上游 PocketJS 对账记录与发布说明
 ├── ui/
 │   ├── pocket.json              # PocketJS 应用清单
+│   ├── preview/                 # 触摸屏预览页（浏览器触摸事件 → PocketJS 触摸帧）
 │   └── src/                     # Vue Vapor JSX UI
 │       └── bridge/              # USB/NS2/BLE 控制面协议预留
 ├── firmware/
 │   ├── pocket.host.json         # ESP32-S3 host profile
-│   ├── CMakeLists.txt           # ESP-IDF 工程入口，发现 checkout 中的官方组件
+│   ├── CMakeLists.txt           # ESP-IDF 工程入口
 │   ├── sdkconfig.defaults       # N16R8 配置
 │   ├── partitions.csv          # Flash 分区
+│   ├── components/              # 固定在本仓库的官方 ESP-IDF 组件与 S3 原生归档
 │   └── main/
 │       ├── idf_component.yml    # IDF 版本约束
 │       ├── CMakeLists.txt       # embed/compile 接入
@@ -76,12 +79,13 @@ remapad/
 
 - Node.js 18 或更高版本。
 - pnpm，用于工作区依赖和脚本调度。
-- Bun，用于执行 PocketJS 官方编译器。
-- 更新的 PocketJS 官方源码 checkout；通过 `POCKETJS_ROOT` 指向其根目录，直到带 ESP-IDF host profile 的 CLI 发布到 npm。
-- ESP-IDF `>=6.0,<6.2`，由官方 PocketJS ESP-IDF 组件要求。
-- ESP32-S3 N16R8 开发板；实际屏幕和输入设备还需要产品 BSP。
+- Bun，用于执行 PocketJS 官方脚本与 Web 开发主机。
+- 可选的 PocketJS 官方源码 checkout：默认构建不需要它，只有当前 npm 版本缺少 ESP-IDF host profile 编译器、或需要重建原生归档与登记上游更新时才用 `POCKETJS_ROOT` 指向它。
+- ESP-IDF `>=6.0,<6.2`，由官方 PocketJS ESP-IDF 组件要求；本仓库已在 6.1 上验证。
+- Xtensa Rust 工具链（仅升级组件、重建原生归档时需要）：固定为 `esp-rs/rust-build` 的 `v1.97.0.0`。
+- ESP32-S3 N16R8 开发板与触摸屏；屏幕控制器、触摸芯片和引脚仍需要产品 BSP。
 
-Rust 运行时由 PocketJS 官方 ESP-IDF 组件的目标归档提供，使用注册表组件时不需要在本项目中维护 Rust 工程。
+PocketJS 的 ESP-IDF 组件没有发布到 ESP Component Registry，因此六个官方组件与 ESP32-S3 原生 Rust 归档固定在 `firmware/components/` 内；本项目不维护 Rust 工程，日常构建不下载组件、也不需要 Rust。
 
 ## 开发与构建
 
@@ -91,7 +95,7 @@ Rust 运行时由 PocketJS 官方 ESP-IDF 组件的目标归档提供，使用�
 pnpm install
 ```
 
-先在 PocketJS 官方 checkout 中安装其编译器依赖，再回到本项目；该安装只属于 PocketJS checkout：
+仓库依赖 `@pocketjs/framework` 自带 Web 开发主机，但 0.11.0 还不含 ESP-IDF host profile 编译器，因此前端编译需要官方 checkout 参与；该安装只属于 PocketJS checkout：
 
 ```powershell
 cd C:\src\pocketjs
@@ -99,6 +103,8 @@ bun install
 $env:POCKETJS_ROOT = 'C:\src\pocketjs'
 cd C:\src\remapad
 ```
+
+`POCKETJS_ROOT` 只影响 compiler 的来源；包、预览产物和原生归档都留在本仓库内。
 
 然后在仓库根目录执行：
 
@@ -110,7 +116,7 @@ pnpm run build
 pnpm run dev
 ```
 
-这些命令都由 `scripts/pocketjs.mjs` 转发给 PocketJS checkout 中的官方脚本：`check`、`compile`、`build` 调用官方 `tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；`dev` 启动官方 `hosts/web` 开发主机，用 `?demo=remapad-ui&width=240&height=280&density=1` 预览 240×280 画布；`native` 用官方 `tools/esp-idf-native.ts` 生成 ESP32-S3 原生归档。设置 `POCKETJS_ROOT` 后，`build` 的等价官方命令为：
+这些命令都由 `scripts/pocketjs.mjs` 转发给官方脚本：`check`、`compile`、`build` 调用 `tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；`dev` 编译后启动项目内的触摸屏预览页（`ui/preview/`，240 × 280，触摸输入，无实体按键），其渲染与触摸语义来自官方运行时；`native` 重建 ESP32-S3 原生归档。`build` 的等价官方命令为：
 
 ```powershell
 cd $env:POCKETJS_ROOT
@@ -132,18 +138,7 @@ pocket build --manifest ui/pocket.json `
 
 输出位于 `ui/dist/`，包括 `remapad-ui.js`、`remapad-ui.pak` 和 `remapad-ui.pocket`。这些文件都是生成产物，不应手动编辑或提交。
 
-`pocketjs_guest` 在编译前会校验 QuickJS 源码哈希，而 ESP Component Registry 当前提供的 `espressif/quickjs-ng` 0.14.0 与该校验值不一致，因此先把补丁应用到 checkout；核对过程见 [patches/README.md](patches/README.md)：
-
-```powershell
-git -C $env:POCKETJS_ROOT apply "$PWD/patches/0001-quickjs-ng-0.14.0-source-pin.patch"
-```
-
-ESP32-S3 的两个原生归档由官方脚本生成，需要固定版本的 Xtensa Rust 工具链（`esp-rs/rust-build` 的 `v1.97.0.0`）：
-
-```powershell
-$env:POCKETJS_CARGO = 'C:\Users\admin\.esp-rust\1.97.0.0\bin\cargo'
-pnpm run native
-```
+`pocketjs_guest` 在编译前会校验 QuickJS 源码哈希，而上游记录的校验值与 ESP Component Registry 当前提供的 `espressif/quickjs-ng` 0.14.0 不一致；仓库内的组件副本已按 Registry 实际内容修正，因此日常构建不需要任何补丁。核对过程与升级步骤见 [patches/README.md](patches/README.md)。ESP32-S3 的两个原生归档同样随组件提交在 `firmware/components/*/lib/esp32s3/`。
 
 载入 ESP-IDF 环境后构建固件：
 
@@ -154,7 +149,7 @@ idf.py build
 idf.py -p COM3 flash monitor
 ```
 
-`firmware/CMakeLists.txt` 依据 `POCKETJS_ROOT` 把 checkout 中的官方组件加入 `EXTRA_COMPONENT_DIRS`，因此 `idf.py build` 编译的是官方 `pocketjs_*` 组件。当 `ui/dist/remapad-ui.pocket` 存在时，CMake 使用官方 `pocketjs_embed_package`，此时不需要 Bun；没有预构建包时走官方 `pocketjs_compile_app`，需要构建环境中可用的 `pocket` CLI 和 Bun，因此建议先执行 `pnpm run build` 再运行 `idf.py build`。
+`firmware/components/` 中的官方组件由 ESP-IDF 默认发现，`idf.py build` 不需要 PocketJS checkout，也不需要 Rust。当 `ui/dist/remapad-ui.pocket` 存在时，CMake 使用官方 `pocketjs_embed_package`，此时不需要 Bun；没有预构建包时走官方 `pocketjs_compile_app`，需要构建环境中可用的 `pocket` CLI 和 Bun，因此建议先执行 `pnpm run build` 再运行 `idf.py build`。
 
 ## 分区与内存
 

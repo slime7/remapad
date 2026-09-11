@@ -95,8 +95,9 @@ remapad/
 ├── pnpm-workspace.yaml
 ├── scripts/
 │   ├── create_adr.py
-│   └── pocketjs.mjs         # 官方工具链与 Web 开发主机入口
-├── patches/                 # 必须应用到 PocketJS checkout 的补丁
+│   ├── pocketjs.mjs         # 官方工具链与触摸预览入口
+│   └── preview-server.mjs   # 触摸预览的静态服务器
+├── patches/                 # 上游 PocketJS 对账记录与发布说明
 ├── docs/
 │   ├── VISION.md
 │   ├── ARCHITECTURE.md
@@ -111,12 +112,21 @@ remapad/
 │   └── src/
 │       ├── index.tsx
 │       ├── App.tsx
+│       ├── logo.png 与 spinner-*.svg   # 入口同级的图片资源
 │       └── bridge/           # 产品控制面协议预留
+│   └── preview/              # 触摸屏预览页
 └── firmware/
-    ├── CMakeLists.txt        # 通过 POCKETJS_ROOT 发现官方组件
-    ├── pocket.host.json
+    ├── CMakeLists.txt        # ESP-IDF 工程入口
+    ├── pocket.host.json      # ESP32-S3 host profile
     ├── partitions.csv
     ├── sdkconfig.defaults
+    ├── components/           # 固定在本仓库的官方 PocketJS ESP-IDF 组件与 S3 原生归档
+    │   ├── pocketjs_package/
+    │   ├── pocketjs_guest/
+    │   ├── pocketjs_ui_core/
+    │   ├── pocketjs_ui_qjs/
+    │   ├── pocketjs_render_rgb565/
+    │   └── pocketjs_runner/
     └── main/
         ├── CMakeLists.txt
         ├── idf_component.yml
@@ -127,7 +137,7 @@ remapad/
         └── drivers/           # 背光、电池等 BSP 预留
 ```
 
-`scripts/pocketjs.mjs` 优先使用 `POCKETJS_ROOT` 指向的官方 checkout，解决应用仓库与 PocketJS checkout 分离时的路径问题；实际检查、编译、打包、Web 预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
+仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/node_modules/@pocketjs/framework` 提供编译器与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
 
 ## 构建链路
 
@@ -151,7 +161,7 @@ ui/src + ui/pocket.json + firmware/pocket.host.json
 1. `ui/dist/remapad-ui.pocket` 存在时，调用 `pocketjs_embed_package`。包通过生成的 `.c`/`.S` 文件嵌入固件，生成文件只位于 `firmware/build/`。
 2. 没有预构建包时，调用 `pocketjs_compile_app`。它让官方 CMake helper 调用 `pocket build --host-profile`，并把依赖文件、plan 和包写入 ESP-IDF build 目录。
 
-组件本身来自 `POCKETJS_ROOT` 指向的 checkout（默认仓库同级 `../pocketjs`），由 `firmware/CMakeLists.txt` 通过 `EXTRA_COMPONENT_DIRS` 发现；仓库不再保存组件副本，S3 的原生归档由 `pnpm run native` 生成。团队的可复现构建入口是先运行 `pnpm run build` 再运行 `idf.py build`。这样 ESP-IDF 构建阶段只消费已生成的包，不需要在 CMake 中重复实现编译器逻辑。
+组件与 S3 原生归档随仓库一起固定，ESP-IDF 从 `firmware/components/` 直接发现它们；升级时对照上游 PocketJS 更新该目录，并用 `pnpm run native` 重新生成归档。团队的可复现构建入口是先运行 `pnpm run build` 再运行 `idf.py build`。这样 ESP-IDF 构建阶段只消费已生成的包，不需要在 CMake 中重复实现编译器逻辑。
 
 ## 固件运行时生命周期
 
@@ -166,7 +176,7 @@ ui/src + ui/pocket.json + firmware/pocket.host.json
 7. 使用一个可复用的 PSRAM strip scratch buffer 启动 `pocketjs_runner`。
 8. 每个 tick 由 `sample_input` 提供输入，runner 执行一次 `pocketjs_ui_turn`，再在 `after_turn` 中完成 prepare、render strip、commit/abort。
 
-当前 `sample_input` 返回空输入，渲染结果也尚未传入真实面板。这是为了先验证官方 package admission、guest、UI binding 和 renderer 链路；接入硬件时应将 BSP 的触控/按键采样接入 `sample_input`，并在每个成功渲染的 strip 后完成面板 DMA 传输。
+当前 `sample_input` 返回空输入，渲染结果也尚未传入真实面板。这是为了先验证官方 package admission、guest、UI binding 和 renderer 链路；屏幕是触摸屏，接入硬件时应把面板触摸芯片的采样转换为官方 `pocketjs_ui_touch_t` 触点填入 `sample_input`，并在每个成功渲染的 strip 后完成面板 DMA 传输。触摸采样就位前，`firmware/pocket.host.json` 不声明 `input.touch`。
 
 `pocketjs_runner` 是官方可选组件。如果未来设备需要把 UI turn 集成进已有的 FreeRTOS task，可移除 runner，直接由产品 task 调用 `pocketjs_ui_turn`，保留相同的渲染事务边界。
 

@@ -24,7 +24,7 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言编写。
   - 硬件绑定 ESP32-S3-WROOM-1 N16R8（16MB Flash + 8MB Octal PSRAM）。
-  - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；组件来自 `POCKETJS_ROOT` 指向的 PocketJS checkout（默认仓库同级的 `../pocketjs`），不要在 `firmware/` 下重新复制组件副本。产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
+  - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；六个组件与 ESP32-S3 原生归档固定在 `firmware/components/`，由 ESP-IDF 默认发现，构建不依赖 PocketJS checkout，也不要把它改回外部路径。产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
   - `main/bridge/`、`main/drivers/` 和 `ui/src/bridge/` 是未来产品控制面/数据面的预留代码，即使当前未编译或未被 UI 调用，也不要仅因暂时未使用而删除。
 
 ## 项目核心操作命令
@@ -36,9 +36,9 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
 | **PocketJS 契约检查** | `pnpm run check` | 使用官方 CLI 和 `firmware/pocket.host.json` 校验清单、能力与视口 |
 | **前端资源编译** | `pnpm run compile` | 调用官方 PocketJS 编译器，输出 `.js` 与 `.pak` |
 | **前端应用打包** | `pnpm run build` | 调用官方 `pocket build --host-profile` 输出 `.pocket` |
-| **原生归档生成** | `pnpm run native` | 用官方 `tools/esp-idf-native.ts` 生成 ESP32-S3 的 `libpocketjs_idf_ui_core.a` 与 `libpocketjs_idf_render_rgb565.a` |
-| **QuickJS 补丁** | `git -C $env:POCKETJS_ROOT apply <仓库>/patches/0001-quickjs-ng-0.14.0-source-pin.patch` | 修正 `pocketjs_guest` 的源码校验值，详见 [patches/README.md](patches/README.md) |
-| **Web 预览** | `pnpm run dev` | 启动官方 `hosts/web` 开发主机（端口 8130），以 240×280 预览 UI |
+| **原生归档重建** | `pnpm run native` | 仅在升级组件时用官方 `tools/esp-idf-native.ts` 重新生成 `firmware/components/` 内的 `libpocketjs_idf_ui_core.a` 与 `libpocketjs_idf_render_rgb565.a` |
+| **上游对账** | 见 [patches/README.md](patches/README.md) | 升级 `firmware/components/` 后核对 QuickJS 源码校验值与 `build-receipt.json` |
+| **触摸预览** | `pnpm run dev` | 编译后启动项目内的触摸屏预览页（端口 8130，240 × 280，触摸输入，无实体按键） |
 | **固件配置** | `cd firmware ; idf.py set-target esp32s3` | 配置目标芯片架构并合并硬件预设 |
 | **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件 |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器 |
@@ -57,10 +57,11 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
   - PocketJS 不依赖宿主操作系统字体，新增文本的字号应使用 Tailwind 支持的标准插槽（如 `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`）。
   - 构建期会自动提取文本字符集并在烘焙阶段生成对应插槽的点阵图集。
 
-- **PocketJS checkout 与脚本入口**：
-  - `scripts/pocketjs.mjs` 是 check/compile/build/dev/native 的统一入口，实际逻辑仍在官方 checkout 的脚本中。
-  - `firmware/CMakeLists.txt` 通过 `POCKETJS_ROOT`（默认仓库同级 `../pocketjs`）发现官方 ESP-IDF 组件，不要再把组件复制回 `firmware/`。
-  - `patches/` 中的补丁必须应用到 PocketJS checkout；PocketJS 更新相关常量后应先移除补丁再验证。
+- **PocketJS 组件、归档与脚本入口**：
+  - 仓库是自包含的：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/node_modules/@pocketjs/framework` 提供 Web 开发主机（npm 上的 0.11.0 还不含 ESP-IDF host profile 编译器，该编译器来自可选 checkout）。
+  - `POCKETJS_ROOT` 是可选的对照路径，只在 npm 版本缺少 host profile 编译器或需要重建原生归档时使用；不要把本项目的产物写进该目录。
+  - 硬件屏幕是触摸屏：`ui/preview/` 是项目自己的预览页，把浏览器触摸事件转换为 PocketJS 触摸帧契约（`frame(buttons, analog, touches, hits)`），由 `scripts/preview-server.mjs` 提供静态服务；不要再退回官方 playground 的 PSP 按键界面。
+  - 升级 `firmware/components/` 后必须重新生成原生归档并核对 QuickJS 校验值，见 [patches/README.md](patches/README.md)。
 
 ## 文档维护触发映射
 

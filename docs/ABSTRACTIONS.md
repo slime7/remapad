@@ -35,11 +35,11 @@ ui/pocket.json                 firmware/pocket.host.json
 
 - `requires` 是应用运行所必需的能力，host 不提供时构建应失败。
 - `enhances` 是应用可以利用但不应作为最低运行条件的能力。
-- `capabilities` 只能填写固件确实会提供的能力。当前 Remapad profile 只声明 `text.glyphs.baked`；固件尚未接入真实触控、按键或模拟量采样，因此不能把这些能力写入 profile。
+- `capabilities` 只能填写固件确实会提供的能力。当前 Remapad profile 只声明 `text.glyphs.baked`；设备屏幕虽然是触摸屏，但固件尚未接入触摸芯片采样，因此此时不能把 `input.touch` 写入 profile。
 - profile 的 canonical hash 会进入构建计划和 package variant，运行时 `pocketjs_package_select` 会校验目标、ABI、tick、视口、density、presentation 和 profile hash。
 - 当前设备的逻辑和物理视口均为 `240×280`。生成的 JavaScript bundle 可能仍包含官方 framework 的 `SCREEN_W = 480`、`SCREEN_H = 272` fallback 常量；它们不是设备 profile 的显示事实，也不应手动修改生成产物。ESP-IDF host 按 package contract 创建 `pocketjs_ui_core`，并通过 `globalThis.ui.__viewport` 发布 `240×280`；构建计划和运行时 frame 才是设备尺寸的校验依据。
 
-当前应用仍可在浏览器 host 中使用触控模拟，因为浏览器 host 和设备 host 是两个不同的运行环境；ESP32 固件的空 `sample_input` 不会伪造触控能力。
+触摸预览页可以在浏览器中提供真实触点，因为浏览器 host 和设备 host 是两个不同的运行环境；ESP32 固件的空 `sample_input` 不会伪造触控能力。预览页覆盖 9 位坐标契约（每轴 512 像素以内），与 240 × 280 视口一致。
 
 ## 最终产品控制器数据面
 
@@ -149,7 +149,7 @@ embedded .pocket bytes
 - `analog_x`、`analog_y`：左模拟量。
 - `touches`、`touch_count`：当前触点数组。
 
-输入采样属于 host/BSP，不属于 PocketJS 应用包。当前实现使用官方 runner 的 `sample_input` 回调并返回零按键、零模拟量、零触点；加入真实屏幕后，应把面板触控或设备按键转换为官方结构。USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
+输入采样属于 host/BSP，不属于 PocketJS 应用包。当前实现使用官方 runner 的 `sample_input` 回调并返回零按键、零模拟量、零触点；屏幕是触摸屏，接入后应把面板触摸芯片的采样转换为官方 `pocketjs_ui_touch_t` 触点数组，触点 `id` 在同一按压期间保持稳定、坐标使用逻辑像素。USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
 
 ## 渲染抽象
 
