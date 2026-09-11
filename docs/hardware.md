@@ -100,10 +100,41 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 ## 板级注意事项
 
 - **I2C 地址冲突**：板内已占用 `0x15`（触摸）、`0x6B`（IMU）、`0x51`（RTC）。外接 I2C 设备必须避开这三个地址。
-- **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志、以及未来的 USB 输入共用同一个物理口。当前实机以 `USB-Serial/JTAG` 模式枚举。产品数据面若要通过该口接收 USB 输入设备，需要这块口工作在 host 模式，届时会与串口调试通道互斥；具体方案留到产品 BSP 阶段确定并实测，不要在文档里预设已经可用。
+- **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志、以及未来的 USB 输入共用同一个物理口。当前实机以 `USB-Serial/JTAG` 模式枚举。产品数据面若要通过该口接收 USB 输入设备，需要这块口工作在 host 模式，届时会与串口调试通道互斥；具体方案留到产品 BSP 阶段确定并实测，不要在文档里预设已经可用。复用开关与切换机制见下文「USB 控制器复用」。
 - **`GPIO19` / `GPIO20`** 已接 Type-C，不要当普通 GPIO 使用。
 - **`GPIO0` 是 BOOT**、`CHIP_PU` 是复位信号，都不适合作为普通用户输入。
 - **按键资源**：`BOOT`(GPIO0)、`RST`(CHIP_PU)、`PWR`(SYS_OUT=GPIO40 / SYS_EN=GPIO41)。PWR 键支持上电检测、单击、双击、多击和长按，属于电源功能电路，接入前要确认它不会切断系统供电。
+
+## USB 控制器复用
+
+ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSLS PHY（模拟收发前端），中间隔着一片片内复用开关，同一时刻只有一个控制器能接到物理口：
+
+| 控制器 | 角色 | 用途 |
+| :--- | :--- | :--- |
+| USB-Serial/JTAG | 固定 device | 烧录与串口日志，当前实机枚举出的 COM 口就是它 |
+| USB OTG 1.1 | device / host，全速 12 Mbps | 产品数据面接收 USB 手柄用它 |
+
+复用开关由 `RTC_CNTL_USB_CONF` 寄存器控制（来源：IDF v6.1 `components/soc/esp32s3/register/soc/rtc_cntl_reg.h`）：
+
+| 寄存器位 | 复位默认 | 含义 |
+| :--- | :--- | :--- |
+| `SW_HW_USB_PHY_SEL`（bit 20） | 0 | 是否启用软件控制复用开关 |
+| `SW_USB_PHY_SEL`（bit 19） | 0 | 0 = PHY 接 USB-Serial/JTAG；1 = PHY 接 USB OTG |
+
+关键结论（来源：IDF v6.1 `components/esp_hal_usb/esp32s3/include/hal/usb_wrap_ll.h` 的 `usb_wrap_ll_phy_enable_external()` 注释、`components/esp_hw_support/include/esp_private/usb_phy.h`）：
+
+- **复位默认永远接 USB-Serial/JTAG**。无论固件运行时把开关切到哪，每次上电/复位后 COM 口与 ROM 下载模式都恢复可用，烧录链路天然保留。
+- **运行时切换是纯软件操作**。ESP-IDF usb_phy 驱动封装为 `usb_new_phy()`，指定 `controller = USB_PHY_CTRL_OTG`、`otg_mode = USB_OTG_MODE_HOST` 即完成切换；`usb_host` 协议栈安装时内部会调用，应用不需要直接写寄存器。切换后 PC 上的 COM 口消失。
+- **切回串口**：复位即回默认位；不重启切回需重新初始化 PHY 并指定 `USB_PHY_CTRL_SERIAL_JTAG`。注意 `usb_del_phy()` 只清理上拉与焊盘，不会把选择位翻回 USB-Serial/JTAG。
+
+对开发流程的影响：
+
+- host 固件运行期间把板子插到 PC 上不会出现 COM 口——此时板子是 host 身份，PC 侧什么都枚举不出来。
+- 烧录不受影响：按住 BOOT 复位进下载模式，ROM 以复位默认 mux 接 USB-Serial/JTAG，COM 口出现，`idf.py flash` 照常工作；固件也可以实现"重启进下载模式"的软命令。
+- host 运行期间的日志通道改为 UART0（GPIO43/44 扩展焊盘 + USB-UART 适配器）——这就是「与串口调试通道互斥」的确切含义。
+- host 模式还需板级向插入的手柄提供 VBUS 5V，供电路径仍待原理图确认，见板级注意事项。
+
+以上为芯片与 IDF v6.1 源码事实；本固件尚未接入 USB host，接入时按本文实施并以实机验证为准。
 
 ## 产品 BSP 尚未实现的范围
 
