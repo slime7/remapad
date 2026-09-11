@@ -1,6 +1,6 @@
 # Remapad 系统架构与技术实现
 
-Remapad 的目标平台是 ESP32-S3 N16R8。最终产品是 USB 到 NS2 BLE 的手柄网关，同时提供本机状态 UI：架构由 PocketJS UI 工程、PocketJS 官方 ESP-IDF host 和产品控制器数据面组成。PocketJS 的包格式、host profile 校验、QuickJS guest、UI binding 和 RGB565 renderer 均使用官方实现。
+Remapad 的目标平台是微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16 MB Flash + 8 MB Octal PSRAM，板载 240 × 280 ST7789V2 触摸屏）；板卡事实见 [hardware.md](hardware.md)。最终产品是 USB 到 NS2 BLE 的手柄网关，同时提供本机状态 UI：架构由 PocketJS UI 工程、PocketJS 官方 ESP-IDF host 和产品控制器数据面组成。PocketJS 的包格式、host profile 校验、QuickJS guest、UI binding 和 RGB565 renderer 均使用官方实现。
 
 PSP 仅用于理解 PocketJS 的官方 host 示例；本项目不使用 PSP target、PSP 工具链或 PSP 后端。
 
@@ -50,13 +50,13 @@ flowchart LR
         Guest[pocketjs_guest / QuickJS]
         Core[pocketjs_ui_core]
         Binding[pocketjs_ui_qjs]
-        Runner[pocketjs_runner]
+        OwnerTask[remapad-pjs owner task]
         Renderer[pocketjs_render_rgb565]
         Package --> Guest
         Guest --> Binding
         Core --> Binding
-        Binding --> Runner
-        Runner --> Renderer
+        Binding --> OwnerTask
+        OwnerTask --> Renderer
     end
 
     Generated --> Package
@@ -81,7 +81,7 @@ flowchart LR
 | 包接入 | `pocketjs_package` | 借用包字节、选择并校验目标 variant |
 | JavaScript | `pocketjs_guest` | 在 ESP-IDF 上创建 QuickJS guest 和执行应用代码 |
 | UI binding | `pocketjs_ui_core`、`pocketjs_ui_qjs` | 保留 UI 节点、加载资源并暴露 `globalThis.ui` |
-| 调度 | `pocketjs_runner` | 官方可选的固定 tick owner task；当前工程采用此组件 |
+| 调度 | 产品 owner task | `remapad-pjs` 固定 tick 任务，承载 guest 生命周期与每帧 UI turn；官方 `pocketjs_runner` 保留在 `firmware/components/` 但当前未接入 |
 | 渲染 | `pocketjs_render_rgb565` | 软件 RGB565 renderer、damage plan 和事务提交 |
 | 控制器数据面 | ESP-IDF USB/BLE/GATT/FreeRTOS（规划） | USB 输入接收、输入规范化、NS2 报告编码、BLE 广播/GATT/配对和状态持久化；协议见 [controller.md](controller.md) |
 | 硬件 | 产品 BSP + ESP-IDF | 输入采样、面板初始化、DMA 传输、电源和其他外设 |
@@ -127,7 +127,7 @@ remapad/
     │   ├── pocketjs_ui_core/
     │   ├── pocketjs_ui_qjs/
     │   ├── pocketjs_render_rgb565/
-    │   └── pocketjs_runner/
+    │   └── pocketjs_runner/   # 官方可选调度组件，当前未接入
     └── main/
         ├── CMakeLists.txt
         ├── idf_component.yml
@@ -166,20 +166,27 @@ ui/src + ui/pocket.json + firmware/pocket.host.json
 
 ## 固件运行时生命周期
 
-`firmware/main/pocketjs_host.c` 按官方 smoke 示例组织资源生命周期：
+`firmware/main/pocketjs_host.c` 按官方 smoke 示例组织资源生命周期，但把整套流程放在产品自己的 `remapad-pjs` owner task 上运行：
 
 1. 使用生成的包字节调用 `pocketjs_package_open`。
 2. 使用生成的 host contract 调用 `pocketjs_package_select`，完成目标和 ABI 校验。
-3. 用官方默认值创建 guest，并设置 4 MB JavaScript heap、优先使用 PSRAM。
+3. 用官方默认值创建 guest，设置 4 MB JavaScript heap、256 KB 栈预算，并优先使用 PSRAM。
 4. 从 package contract 创建 `pocketjs_ui_core`。
 5. 创建 `pocketjs_ui_qjs`，feed PAK，mount `globalThis.ui`/`globalThis.__pak`，再 eval JavaScript bundle。
-6. 创建 RGB565 renderer 和 render target。
-7. 使用一个可复用的 PSRAM strip scratch buffer 启动 `pocketjs_runner`。
-8. 每个 tick 由 `sample_input` 提供输入，runner 执行一次 `pocketjs_ui_turn`，再在 `after_turn` 中完成 prepare、render strip、commit/abort。
+6. 创建 RGB565 renderer 和 render target，并分配一个可复用的 PSRAM strip scratch buffer。
+7. 进入固定 tick 循环：`sample_input` 提供输入，`pocketjs_ui_turn` 执行一次 UI turn，再完成 prepare、render strip、commit/abort。
 
-当前 `sample_input` 返回空输入，渲染结果也尚未传入真实面板。这是为了先验证官方 package admission、guest、UI binding 和 renderer 链路；屏幕是触摸屏，接入硬件时应把面板触摸芯片的采样转换为官方 `pocketjs_ui_touch_t` 触点填入 `sample_input`，并在每个成功渲染的 strip 后完成面板 DMA 传输。触摸采样就位前，`firmware/pocket.host.json` 不声明 `input.touch`。
+当前 `sample_input` 返回空输入，渲染结果也尚未传入真实面板。这是为了先验证官方 package admission、guest、UI binding 和 renderer 链路；屏幕是触摸屏，接入硬件时应把 CST816T 的采样转换为官方 `pocketjs_ui_touch_t` 触点填入 `sample_input`，并在每个成功渲染的 strip 后完成面板传输。触摸采样就位前，`firmware/pocket.host.json` 不声明 `input.touch`。
 
-`pocketjs_runner` 是官方可选组件。如果未来设备需要把 UI turn 集成进已有的 FreeRTOS task，可移除 runner，直接由产品 task 调用 `pocketjs_ui_turn`，保留相同的渲染事务边界。
+### 为什么由产品 task 承载 guest 生命周期
+
+QuickJS 的栈守卫判据是 `rt->stack_limit = rt->stack_top - rt->stack_size`，其中 `stack_top` 取自**创建 runtime 的那个任务**；`JS_UpdateStackTop` 在官方组件和本仓库中都没有被调用。这意味着栈量的是「创建 guest 的任务」的栈，而不是「执行 turn 的任务」的栈。
+
+官方 `pocketjs_guest` 默认把 `stack_limit` 设为 256 KB。Vue Vapor 应用的 mount 是深层递归：每嵌套一层 UI 大约走 15 个 JS 帧，依实测每帧约消耗 1 KB 的 C 栈，示例界面 mount 需要 60 KB 以上。如果承载任务栈小于这个预算，守卫永远不会触发，递归会写穿任务栈并破坏相邻的堆元数据，表现为位置漂移的崩溃（堆锁卡死、链表指针损坏、`LoadProhibited`）。
+
+因此本工程让 `remapad-pjs` owner task 用 PSRAM 栈（288 KB）承载创建、mount、eval 和逐帧 turn，并把 `stack_limit` 收敛到 256 KB 的官方默认值。两条约束必须同时成立：任务栈要大于 `stack_limit`，且不能把 turn 挪到另一个任务上执行。
+
+官方 `pocketjs_runner` 是可选组件，保留在 `firmware/components/` 内但当前未接入。它的 `pocketjs_runner_config_t` 只能指定栈的**大小**，任务栈始终由 IDF 从内部 RAM 分配，而内部 RAM 拿不出 mount 所需的连续空间；这也是改用产品 task 的原因。若将来要把 UI turn 集成进已有任务，必须同时保证该任务的栈来自 PSRAM 且满足上述预算，并保留相同的渲染事务边界。
 
 ## 产品控制器数据面
 
@@ -207,6 +214,8 @@ BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应
 ## 内存与显示策略
 
 - JavaScript guest 和资源优先使用 8 MB Octal PSRAM。
+- `remapad-pjs` owner task 的栈（288 KB）同样分配在 PSRAM，因为 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。主任务栈保持 32 KB，只负责启动 owner task。内部 RAM 因此留给 DMA 缓冲和协议栈，启动后可用量约 360 KB。
+- CPU 运行在 240 MHz。UI 每帧把解释执行的 Vue Vapor bundle 加软件 RGB565 渲染跑在一个核上，默认的 160 MHz 会把整个周期吃满并饿死空闲任务。
 - 当前无面板 bring-up 使用一个按最大视口分配的 PSRAM RGB565 scratch buffer；`render_strip` 每次接收精确的 full-width、region-height 容量。
 - 真实面板 DMA 缓冲区应由 BSP 根据 ESP-IDF 的 DMA 能力、对齐和缓存约束分配。官方 smoke 示例使用内部 DMA strip，产品可按实际屏幕刷新策略选择整帧或分区传输。
 - ESP32-S3 没有本项目所需的 P4 PPA；使用 `pocketjs_render_rgb565` 的软件路径即可。

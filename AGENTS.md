@@ -1,6 +1,6 @@
 # Remapad Agent 开发与维护指南
 
-Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，最终目标是“USB 输入 → NS2 手柄报告 → BLE 手柄”，并配套 PocketJS 屏幕 UI。工程采用“PocketJS 前端 (Vue Vapor + Tailwind) + ESP-IDF 固件”双工作区架构；NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)。
+Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统，最终目标是“USB 输入 → NS2 手柄报告 → BLE 手柄”，并配套 PocketJS 屏幕 UI。工程采用“PocketJS 前端 (Vue Vapor + Tailwind) + ESP-IDF 固件”双工作区架构；NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格见 [docs/hardware.md](docs/hardware.md)。
 
 ## 开始任务前必读
 
@@ -12,6 +12,7 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
 4. [新手开发与上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)：掌握开发环境搭建、常用命令与调试排错方法。
 5. [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：查阅具有长期影响的既定架构决策与选型取舍。
 6. [控制器协议参考 (docs/controller.md)](docs/controller.md)：掌握 USB→NS2→BLE 数据面的协议范围、配对和广播验证边界。
+7. [目标硬件参考 (docs/hardware.md)](docs/hardware.md)：掌握目标板卡的 SoC/存储、屏幕与触摸器件、外设地址、GPIO 分配和板级注意事项。
 
 ## 项目工程架构与工作区划分
 
@@ -23,7 +24,8 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
   - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，编译器与框架来源为仓库内的 `ui/vendor/pocketjs` 快照。
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言编写。
-  - 硬件绑定 ESP32-S3-WROOM-1 N16R8（16MB Flash + 8MB Octal PSRAM）。
+  - 硬件绑定微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏）；规格与引脚见 [docs/hardware.md](docs/hardware.md)。
+  - QuickJS guest 的创建、mount、eval 与逐帧 UI turn 必须由同一个任务承载，且该任务栈要大于 guest 的 `stack_limit`；当前由 `firmware/main/pocketjs_host.c` 的 `remapad-pjs` owner task 承担（栈在 PSRAM）。改动调度或栈预算前先读 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的“为什么由产品 task 承载 guest 生命周期”。
   - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；六个组件与 ESP32-S3 原生归档固定在 `firmware/components/`，由 ESP-IDF 默认发现，构建不依赖 PocketJS checkout，也不要把它改回外部路径。产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
   - `main/bridge/`、`main/drivers/` 和 `ui/src/bridge/` 是未来产品控制面/数据面的预留代码，即使当前未编译或未被 UI 调用，也不要仅因暂时未使用而删除。
 
@@ -70,7 +72,8 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
 
 | 变更范围 | 应同步维护的文档 |
 | :--- | :--- |
-| 硬件规格、屏幕驱动、Flash/PSRAM 配置变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
+| 硬件规格、屏幕驱动、Flash/PSRAM 配置变动 | [docs/hardware.md](docs/hardware.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
+| 板卡外设、GPIO 分配、总线地址变动 | [docs/hardware.md](docs/hardware.md) |
 | 产品定位、服务受众、非目标边界变动 | [docs/VISION.md](docs/VISION.md) |
 | 跨层数据协议、核心图元、宏常量与状态模型变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | USB 输入、NS2 报告、BLE 广播/GATT、配对或绑定状态变动 | [docs/controller.md](docs/controller.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |

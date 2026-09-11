@@ -1,6 +1,6 @@
 # Remapad 新手开发与上手指南
 
-本指南面向 ESP32-S3 N16R8 目标板，说明 UI 检查、PocketJS 包构建、ESP-IDF 编译和当前 bring-up 边界。Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，并通过屏幕 UI 管理连接和配对；协议资料见 [controller.md](controller.md)。
+本指南面向微雪 ESP32-S3-Touch-LCD-1.69 目标板，说明 UI 检查、PocketJS 包构建、ESP-IDF 编译和当前 bring-up 边界。Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，并通过屏幕 UI 管理连接和配对；协议资料见 [controller.md](controller.md)，板卡规格与引脚见 [hardware.md](hardware.md)。
 
 ## 前置环境
 
@@ -13,11 +13,11 @@
 | Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 仅在升级组件、重新生成 ESP32-S3 原生归档时需要 |
 | Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
 | ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
-| 硬件 | ESP32-S3-WROOM-1 N16R8 | 16 MB Flash、8 MB Octal PSRAM |
+| 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
-USB 输入设备、目标 NS2 手柄型号、BLE 天线/射频和屏幕控制器也属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 Web 预览可以交互就认为真实 USB 或 BLE 链路已经可用。
+USB 输入设备、目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 Web 预览可以交互就认为真实 USB 或 BLE 链路已经可用。
 
-设备屏幕是触摸屏：实际屏幕控制器、触摸芯片、引脚和串口端口需要根据开发板资料配置；仓库当前只确定 240×280 RGB565 逻辑视口，没有假定通用 ST7789 引脚表，也没有假定具体触摸控制器。
+板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件侧仍然没有面板 DMA 和触摸采样实现，因此画面尚不可见、触点尚未上报。
 
 ## 最短步骤
 
@@ -162,13 +162,14 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 - [firmware/pocket.host.json](../firmware/pocket.host.json)：ESP32-S3 host profile。
 - [firmware/components/](../firmware/components)：固定的官方 ESP-IDF 组件与 ESP32-S3 原生归档。
 - [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
-- [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer、runner 生命周期。
-- [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：N16R8 Flash/PSRAM 和 FreeRTOS 预设。
+- [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer 生命周期与 `remapad-pjs` owner task。
+- [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率和 FreeRTOS 预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY 和 4 MB factory 分区。
 - [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
 - [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
+- [docs/hardware.md](hardware.md)：目标板卡的 SoC/存储、屏幕、触摸、外设、GPIO 分配和板级注意事项。
 
 ## 最终产品数据面（当前规划）
 
@@ -202,7 +203,47 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 ### 烧录后没有屏幕画面
 
-当前固件只完成官方运行时和 RGB565 damage strip 的无面板 bring-up：`sample_input` 返回空输入，`after_turn` 尚未调用真实面板 DMA。需要根据开发板硬件资料补充产品 BSP，再将输入采样和 strip 传输接入回调。
+当前固件只完成官方运行时和 RGB565 damage strip 的无面板 bring-up：帧会渲染进 PSRAM 暂存区然后丢弃，`after_turn` 尚未调用真实面板传输。板卡屏幕是 ST7789V2，引脚和背光控制脚见 [hardware.md](hardware.md)；补齐面板 BSP 时注意背光（`GPIO15`）需要显式驱动，否则即使提交成功也看不到画面。
+
+### 启动时崩溃重启，崩溃位置每次都不一样
+
+典型现象是日志停在 `remapad_app: PSRAM free: ...` 之后，然后出现 `Interrupt wdt timeout`、堆锁卡死，或 `LoadProhibited` 且两次复位的崩溃点不同。这类“位置漂移”的崩溃通常不是空指针，而是栈溢出写穿了相邻内存。
+
+根因在 QuickJS 的栈守卫：`pocketjs_guest` 默认把 `stack_limit` 设为 256 KB，而守卫判据是 `stack_top - stack_size`，其中 `stack_top` 取自**创建 runtime 的那个任务**（`JS_UpdateStackTop` 在本仓库和组件里都没有人调用）。如果调用它的任务栈比这个预算小，守卫永远不会触发，Vue Vapor 的 mount 递归会直接压坏隔壁的堆元数据。
+
+因此**整套 guest 生命周期（创建、mount、eval、逐帧 turn）必须跑在同一个任务上**，并且给这个任务足够的栈。当前由 `firmware/main/pocketjs_host.c` 里的 `remapad-pjs` owner task 承担，栈放在 PSRAM。改动这块时不要只调 `stack_limit` 而不动任务栈，也不要让 turn 换到另一个任务上执行。
+
+### 设备上看到的错误是 `TypeError: not a function`
+
+这是错误上报路径自己失败，不是真正的故障。quickjs-ng 的 `js_std_add_helpers` 只给全局 `console` 装了 `log`，而框架 polyfill 的守卫写的是 `typeof console !== 'object'`，看到这个半成品对象就跳过补齐，于是 `console.warn` / `console.error` 从未安装。框架渲染器把所有捕获到的异常都交给 `console.error`，方法缺失时原始错误就被 `TypeError: not a function` 顶替。
+
+`ui/src/index.tsx` 现在会在挂载前补齐缺失的 `console.warn` / `console.error`，转发到 native `console.log`（经 QuickJS `js_print` 进串口）。如果又看到这个报错，先确认那段垫片还在。诊断时还可以临时提高 `Error.stackTraceLimit`：QuickJS 默认只保留 10 层栈帧，栈溢出会被截断成看不出形态的短栈。
+
+### 启动 mount 阶段出现 `task_wdt` 告警
+
+从 `app_main` 到首帧就绪之间有一个约 5 到 6 秒的窗口，期间 owner task 连续占用一个核，空闲任务得不到调度，`task_wdt` 会打印 `IDLE0` 未按时喂狗的告警。`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。若后续对启动时间有要求，需要在 BSP 阶段优化 mount 耗时，而不是简单调大看门狗超时。
+
+### 运行时反复 `task_wdt` 告警并且 UI 掉帧
+
+先看 owner task 打印的帧统计（每 5 秒一条，`frames=` / `avg_turn_us=` / `avg_render_us=`）。`avg_turn_us + avg_render_us` 接近或超过 `1e6 / tickHz` 时，说明每帧把整个周期都吃满了，空闲任务自然喂不上狗。
+
+已知的一个原因是 CPU 频率停留在默认的 160 MHz；`firmware/sdkconfig.defaults` 现在显式配置为 240 MHz。提高频率后仍有告警，就要从应用侧入手（减少每帧重绘区域或降低动画频率），而不是继续加栈。
+
+### 移除 `pocketjs_runner` 后编译报 `esp_timer.h: No such file or directory`
+
+`esp_timer` 之前是由 `pocketjs_runner` 间接引入的。改用产品 owner task 后需要在 `firmware/main/CMakeLists.txt` 的 `REQUIRES` 里显式声明 `esp_timer`。同一原则适用于任何原先依赖 runner 传递的头文件。
+
+### `Could not open COM3, the port is busy`
+
+多半是上一轮 `idf.py monitor` 的 python 进程没退干净，占着串口。按进程精确清理后再烧录：
+
+```powershell
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -like '*idf_monitor*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+
+不要按 `node.exe` 或 `python.exe` 之类的进程名批量结束，这些是多个项目共用的进程。
 
 ### BLE 没有发现 NS2 手柄
 
@@ -222,7 +263,7 @@ ESP32-S3 原生归档随组件固定在 `firmware/components/*/lib/esp32s3/`，�
 
 ### 预览页可以点，但固件上触摸无效
 
-预览页走浏览器指针事件，不需要固件参与；设备端的触摸需要产品 BSP 采样面板触摸芯片，再填入官方 runner 的 `sample_input`。`firmware/pocket.host.json` 在触摸采样就位前不声明 `input.touch`，因此固件当前不会向 UI 提供触点。
+预览页走浏览器指针事件，不需要固件参与；设备端的触摸需要产品 BSP 采样 CST816T，再把触点填入 owner task 的 `sample_input`（[firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)）。`firmware/pocket.host.json` 在触摸采样就位前不声明 `input.touch`，因此固件当前不会向 UI 提供触点。
 
 ### `ui/dist` 或 `firmware/build` 出现文件
 

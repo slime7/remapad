@@ -1,6 +1,6 @@
-# Remapad ESP32-S3 N16R8
+# Remapad ESP32-S3 手柄网关
 
-Remapad 是面向 ESP32-S3-WROOM-1 N16R8 的嵌入式控制器工程。最终产品接收 USB 输入，将其转换为 NS2 手柄报告，再通过 BLE 对外提供手柄服务；屏幕 UI 使用 PocketJS Vue Vapor，设备端使用 PocketJS 官方 ESP-IDF host 组件和 ESP-IDF 固件。
+Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器工程。最终产品接收 USB 输入，将其转换为 NS2 手柄报告，再通过 BLE 对外提供手柄服务；屏幕 UI 使用 PocketJS Vue Vapor，设备端使用 PocketJS 官方 ESP-IDF host 组件和 ESP-IDF 固件。板卡规格、引脚和接线注意事项见 [hardware.md](docs/hardware.md)。
 
 PSP 只作为 PocketJS 官方示例的架构参考，不是本项目的目标平台。ESP32-S3 的构建目标由 `firmware/pocket.host.json` 描述；不要使用 `pocket build --target psp` 生成本项目固件。USB→NS2→BLE 的协议、广播、GATT 和配对细节见 [controller.md](docs/controller.md)。
 
@@ -8,10 +8,11 @@ PSP 只作为 PocketJS 官方示例的架构参考，不是本项目的目标平
 
 | 硬件项 | 参数 |
 | :--- | :--- |
-| 主控 | ESP32-S3-WROOM-1，Xtensa LX7 双核，最高 240 MHz |
-| Flash | 16 MB |
-| PSRAM | 8 MB Octal PSRAM（OPI） |
-| UI 视口 | 240 × 280，RGB565 |
+| 主控 | ESP32-S3R8，Xtensa LX7 双核，240 MHz |
+| Flash | 16 MB（W25Q128JVSIQ） |
+| PSRAM | 8 MB Octal PSRAM，叠封在 SoC 内 |
+| 屏幕 | ST7789V2，240 × 280，RGB565，4-wire SPI |
+| 触摸 | CST816T 电容触摸（I2C `0x15`） |
 
 ## 架构
 
@@ -26,8 +27,8 @@ flowchart LR
     Host --> Package[pocketjs_package]
     Package --> Guest[pocketjs_guest]
     Guest --> Binding[pocketjs_ui_qjs + ui_core]
-    Binding --> Runner[pocketjs_runner]
-    Runner --> Renderer[pocketjs_render_rgb565]
+    Binding --> OwnerTask[remapad-pjs owner task]
+    OwnerTask --> Renderer[pocketjs_render_rgb565]
     Renderer --> Strip[RGB565 damage strip]
     Strip --> BSP[产品 BSP：面板 DMA]
     USB[USB 输入] --> DataPlane[产品数据面]
@@ -41,7 +42,7 @@ flowchart LR
 - `ui/` 只描述应用、样式和资源，由官方 PocketJS 编译器生成包。
 - `firmware/pocket.host.json` 是目标设备的事实源，描述视口、tick、presentation 和实际能力。
 - `firmware/main/` 同时承载 PocketJS UI host 和未来产品数据面；UI runtime 负责渲染，USB/NS2/BLE 数据面负责高频报告转换，二者通过明确的设备状态边界协作。
-- 当前仓库没有板卡引脚和 ST7789 控制器初始化信息，因此固件暂时完成无面板的 RGB565 frame bring-up；`sample_input` 也暂时返回空输入。
+- 板卡引脚信息记录在 [docs/hardware.md](docs/hardware.md)，但固件尚未实现 ST7789V2 面板传输和 CST816T 触摸采样，因此目前只完成无面板的 RGB565 frame bring-up；`sample_input` 也暂时返回空输入。
 
 最终控制器数据面不应复用 PocketJS UI turn 作为高频报告通道。USB 接收、规范化、NS2 报告编码、BLE 广播/GATT 和配对状态机应在 ESP-IDF 原生任务与队列中实现；UI bridge 只承载设置、状态和诊断等低频控制消息。
 
@@ -64,7 +65,7 @@ remapad/
 ├── firmware/
 │   ├── pocket.host.json         # ESP32-S3 host profile
 │   ├── CMakeLists.txt           # ESP-IDF 工程入口
-│   ├── sdkconfig.defaults       # N16R8 配置
+│   ├── sdkconfig.defaults       # Flash/PSRAM、CPU 频率与 FreeRTOS 预设
 │   ├── partitions.csv          # Flash 分区
 │   ├── components/              # 固定在本仓库的官方 ESP-IDF 组件与 S3 原生归档
 │   └── main/
@@ -85,7 +86,7 @@ remapad/
 - 可选的 PocketJS 官方源码 checkout：默认构建不需要它（编译器来自仓库内的 `ui/vendor/pocketjs` 快照），只有在重建原生归档、登记上游更新或重新生成快照时才用 `POCKETJS_ROOT` 指向它。
 - ESP-IDF `>=6.0,<6.2`，由官方 PocketJS ESP-IDF 组件要求；本仓库已在 6.1 上验证。
 - Xtensa Rust 工具链（仅升级组件、重建原生归档时需要）：固定为 `esp-rs/rust-build` 的 `v1.97.0.0`。
-- ESP32-S3 N16R8 开发板与触摸屏；屏幕控制器、触摸芯片和引脚仍需要产品 BSP。
+- 微雪 ESP32-S3-Touch-LCD-1.69 开发板；面板传输、触摸采样和 USB host 仍需要产品 BSP。
 
 PocketJS 的 ESP-IDF 组件没有发布到 ESP Component Registry，因此六个官方组件与 ESP32-S3 原生 Rust 归档固定在 `firmware/components/` 内；npm 上的框架包没有 ESP-IDF host profile 编译器，因此编译器固定在 `ui/vendor/pocketjs/` 内。本项目不维护 Rust 工程，日常构建不下载组件、不需要 Rust，也不依赖外部 checkout。
 
@@ -159,6 +160,7 @@ idf.py -p COM3 flash monitor
 - [系统架构](docs/ARCHITECTURE.md)
 - [核心抽象](docs/ABSTRACTIONS.md)
 - [上手指南](docs/GETTING-STARTED.md)
+- [目标硬件](docs/hardware.md)
 - [架构决策记录](docs/adr/README.md)
 - [PocketJS ESP-IDF 官方指南](https://pocketjs.dev/docs/esp-idf/)
 - [PocketJS 官方 ESP-IDF README](https://github.com/pocket-stack/pocketjs/blob/main/hosts/esp-idf/README.md)

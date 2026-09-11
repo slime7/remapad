@@ -112,7 +112,7 @@ remapad-ui.js  remapad-ui.pak  remapad-ui.pocket
 
 ## ESP-IDF 运行时生命周期
 
-`firmware/main/pocketjs_host.c` 使用官方 C API，顺序与官方 ESP-IDF smoke 示例保持一致：
+`firmware/main/pocketjs_host.c` 使用官方 C API，顺序与官方 ESP-IDF smoke 示例保持一致，但创建、mount、eval 和逐帧 turn 都在同一个产品 task 上完成：
 
 ```text
 embedded .pocket bytes
@@ -127,7 +127,7 @@ embedded .pocket bytes
                 │
         ui_qjs_create → feed_pak → mount → guest_eval
                 │
-        runner task:
+        remapad-pjs owner task:
           sample_input → pocketjs_ui_turn → after_turn
                                              │
                                   prepare damage plan
@@ -149,7 +149,7 @@ embedded .pocket bytes
 - `analog_x`、`analog_y`：左模拟量。
 - `touches`、`touch_count`：当前触点数组。
 
-输入采样属于 host/BSP，不属于 PocketJS 应用包。当前实现使用官方 runner 的 `sample_input` 回调并返回零按键、零模拟量、零触点；屏幕是触摸屏，接入后应把面板触摸芯片的采样转换为官方 `pocketjs_ui_touch_t` 触点数组，触点 `id` 在同一按压期间保持稳定、坐标使用逻辑像素。USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
+输入采样属于 host/BSP，不属于 PocketJS 应用包。当前实现由 owner task 的 `sample_input` 回调返回零按键、零模拟量、零触点；屏幕是触摸屏，接入后应把 CST816T 的采样转换为官方 `pocketjs_ui_touch_t` 触点数组，触点 `id` 在同一按压期间保持稳定、坐标使用逻辑像素（板卡引脚见 [hardware.md](hardware.md)）。USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
 
 ## 渲染抽象
 
@@ -165,9 +165,11 @@ ESP32-S3 没有本项目使用的 P4 PPA 加速器，因此 renderer 使用官�
 
 ## 调度抽象
 
-当前选择官方可选的 `pocketjs_runner`，由它创建固定 tick 的 FreeRTOS task，并按 host profile 的 `tickHz` 驱动 UI turn。它只负责调度和回调，不拥有输入驱动或显示设备。
+当前由产品自己的 `remapad-pjs` owner task 承担调度：它按 host profile 的 `tickHz` 驱动 UI turn，同时承载 guest 的创建、mount 和 eval。它只负责调度、输入采样回调与帧消费，不拥有输入驱动或显示设备。
 
-若后续产品已有显示 task 或需要自定义调度，可移除 runner，直接在产品 task 中调用 `pocketjs_ui_turn`，但必须保留相同的 input snapshot、render transaction 和错误处理边界。
+不使用官方 `pocketjs_runner` 的原因是任务栈的宿主：`pocketjs_runner_config_t` 只能指定栈大小，FreeRTOS 任务栈始终由 IDF 从内部 RAM 分配，而 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。owner task 通过 `xTaskCreatePinnedToCoreWithCaps` 把栈放在 PSRAM。
+
+**创建 guest 的任务和执行 UI turn 的任务必须是同一个。** QuickJS 的栈守卫以下限 `stack_top - stack_size` 判断溢出，而 `stack_top` 取自创建 runtime 时的栈指针，`JS_UpdateStackTop` 在官方组件中没有被调用。若 turn 换到别的任务执行，守卫量的是别人的栈，溢出不会被拦截。改动调度时这一点不能破坏；同时任务栈容量必须大于 guest 的 `stack_limit`。
 
 ## 硬件扩展边界
 
