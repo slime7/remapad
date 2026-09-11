@@ -149,6 +149,14 @@ EIM 安装路径不同时改用实际的 `Microsoft.*.PowerShell_profile.ps1` �
 
 应用镜像已经内嵌 `.pocket` 包，烧完这三个文件就是完整的设备固件。
 
+日常迭代只改应用层（`ui/` 产物或 `firmware/main/`）时，bootloader 和分区表没有变化，可以只重写 `0x10000` 处的应用分区，比整片烧录快，对 Flash 的擦写也更少：
+
+```powershell
+idf.py -p COM3 app-flash monitor
+```
+
+改动 bootloader、分区表或 `sdkconfig` 后仍需完整 `flash`。esptool 的等价操作是对 `0x10000` 单独 `write-flash`。
+
 想拿到不依赖构建目录的单一镜像，可以合并成从 `0x0` 起烧的文件：
 
 ```powershell
