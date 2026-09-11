@@ -1,4 +1,4 @@
-# PocketJS 快照
+﻿# PocketJS 快照
 
 本目录是 PocketJS 官方实现的固定快照，让 remapad 不依赖外部 checkout 即可完成 UI 检查、
 编译、打包与触摸预览。内容来自 `pocketjs` 仓库：
@@ -17,7 +17,7 @@ framework/     编译器、清单解析与框架运行时代码
 contracts/     包格式、目标与 ESP-IDF host 契约
 tools/         编译器入口（pocket.ts、build.ts 及其依赖）
 assets/        构建期烘焙的字体与图片资源
-hosts/web/     触摸预览使用的 wasm-ops.js 与官方 wasm 核心
+hosts/web/     触摸预览使用的 wasm-ops.js 与官方 wasm 核心，以及官方 DevTools 服务器与面板
 package.json   保留 name 与 exports，用于子路径解析
 ```
 

@@ -257,6 +257,22 @@ if (command === 'web') {
     runtimeDir,
   });
   console.log('[Remapad] 触摸屏预览: ' + server.url + '（240 × 280，触摸输入，无实体按键）');
+  // 官方 DevTools 服务器（hosts/web/serve.ts = 面板 + WebSocket hub，单进程）。
+  // 预览页以 device 角色接入它的 /ws，面板在 http://127.0.0.1:8131/devtools。
+  const serveScript = resolve(runtimeDir, 'serve.ts');
+  if (existsSync(serveScript)) {
+    const devtools = spawn('bun', [serveScript], {
+      cwd: runtimeDir,
+      env: { ...process.env, PORT: '8131' },
+      stdio: ['ignore', 'inherit', 'inherit'],
+    });
+    process.on('exit', () => {
+      devtools.kill();
+    });
+    console.log('[Remapad] 官方 DevTools: http://127.0.0.1:8131/devtools');
+  } else {
+    console.log('[Remapad] 快照缺少 hosts/web/serve.ts，未启动官方 DevTools 服务器（重新执行 scripts/vendor-pocketjs.mjs 同步）');
+  }
   watchUiSources(compilerRoot, server);
 }
 

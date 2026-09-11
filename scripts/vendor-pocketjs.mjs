@@ -68,9 +68,17 @@ for (const relative of ['framework', 'contracts', 'assets/fonts', 'assets/images
   cpSync(join(checkout, relative), join(VENDOR, relative), { recursive: true });
 }
 
-// 3. 触摸预览使用的浏览器运行时。
+// 3. 触摸预览使用的浏览器运行时，以及官方 DevTools 服务器与面板（serve.ts
+//    依赖 server.ts，面板页 devtools.html 加载 devtools.js，均无外部依赖）。
 mkdirSync(join(VENDOR, 'hosts/web'), { recursive: true });
-for (const relative of ['hosts/web/wasm-ops.js', 'hosts/web/pocketjs.wasm']) {
+for (const relative of [
+  'hosts/web/wasm-ops.js',
+  'hosts/web/pocketjs.wasm',
+  'hosts/web/serve.ts',
+  'hosts/web/server.ts',
+  'hosts/web/devtools.html',
+  'hosts/web/devtools.js',
+]) {
   cpSync(join(checkout, relative), join(VENDOR, relative));
 }
 

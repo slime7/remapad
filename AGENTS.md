@@ -40,7 +40,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | **前端应用打包** | `pnpm run build` | 调用官方 `pocket build --host-profile` 输出 `.pocket` |
 | **原生归档重建** | `pnpm run native` | 仅在升级组件时用官方 `tools/esp-idf-native.ts` 重新生成 `firmware/components/` 内的 `libpocketjs_idf_ui_core.a` 与 `libpocketjs_idf_render_rgb565.a` |
 | **上游对账** | 见 [patches/README.md](patches/README.md) | 升级 `firmware/components/` 后核对 QuickJS 源码校验值与 `build-receipt.json` |
-| **触摸预览** | `pnpm run dev` | 编译后启动项目内的触摸屏预览页（端口 8130，240 × 280，触摸输入，无实体按键） |
+| **触摸预览** | `pnpm run dev` | 编译后启动项目内的触摸屏预览页（端口 8130，240 × 280，触摸输入，无实体按键），并同时拉起官方 DevTools 服务器（面板 8131） |
 | **固件配置** | `cd firmware ; idf.py set-target esp32s3` | 配置目标芯片架构并合并硬件预设 |
 | **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件 |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器 |
@@ -66,7 +66,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
   - 仓库是自包含的：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定编译器、框架源码、构建资源与触摸预览用的官方 wasm 核心。
   - `ui/vendor/pocketjs/framework/src/styles.generated.ts` 是编译器生成的样式镜像，但必须随快照提交：官方类型检查跑在编译器写入它之前，且 `pnpm install` 之后新增的快照文件不会进入依赖副本。它按 `ui/src` 重新生成，出现差异时直接提交。
   - `POCKETJS_ROOT` 是可选的对照路径，只在重新生成快照（`scripts/vendor-pocketjs.mjs`）或重建原生归档时使用；不要把本项目的产物写进该目录。
-  - 硬件屏幕是触摸屏：`ui/preview/` 是项目自己的预览页，把浏览器触摸事件转换为 PocketJS 触摸帧契约（`frame(buttons, analog, touches, hits)`），由 `scripts/preview-server.mjs` 提供静态服务；不要再退回官方 playground 的 PSP 按键界面。
+  - 硬件屏幕是触摸屏：`ui/preview/` 是项目自己的预览页，把浏览器触摸事件转换为 PocketJS 触摸帧契约（`frame(buttons, analog, touches, hits)`），由 `scripts/preview-server.mjs` 提供静态服务；不要再退回官方 playground 的 PSP 按键界面。预览页按官方 `engine.js` 的设备协议接入快照内携带的官方 DevTools 服务器（`hosts/web/serve.ts`，面板 + WebSocket hub）；官方 playground 没有触摸输入，不要用它替代触摸预览页。
   - 升级 `firmware/components/` 后必须重新生成原生归档并核对 QuickJS 校验值，见 [patches/README.md](patches/README.md)。
 
 ## 文档维护触发映射
