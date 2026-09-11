@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "check": "node scripts/pocket.mjs check",
-    "compile": "node scripts/pocket.mjs compile",
-    "build": "node scripts/pocket.mjs build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },

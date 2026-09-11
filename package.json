@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "check": "pnpm --filter remapad-ui run check",
-    "compile": "pnpm --filter remapad-ui run compile",
-    "build": "pnpm --filter remapad-ui run build",
-    "dev": "pnpm --filter remapad-ui run dev",
+    "check": "node scripts/pocketjs.mjs check",
+    "compile": "node scripts/pocketjs.mjs compile",
+    "build": "node scripts/pocketjs.mjs build",
+    "dev": "node scripts/pocketjs.mjs web",
+    "native": "node scripts/pocketjs.mjs native",
     "lint": "pnpm --filter remapad-ui run lint",
     "lint:fix": "pnpm --filter remapad-ui run lint:fix"
   }
