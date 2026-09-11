@@ -50,8 +50,8 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
   - 完成双工作区工程架构、ESP32-S3R8 硬件预设和 ESP32-S3 host profile。
   - 使用 PocketJS 官方 ESP-IDF 组件完成 package、guest、UI binding、RGB565 renderer 和产品 owner task 的生命周期接入；组件与 ESP32-S3 原生归档固定在仓库内，克隆后即可构建固件。
   - 在浏览器中以 240×280 画布预览同一份 UI 代码，输入按触摸屏处理：预览页把指针事件转换为官方触摸帧契约，不使用实体按键模拟。
-  - 固件目前完成无面板的首帧渲染 bring-up，并以 60 FPS 稳定运行；ST7789V2 面板传输、CST816T 触摸采样、USB 接收、NS2 报告转换、BLE 广播/配对和其他外设仍需产品 BSP/数据面实现。
+  - 固件已通过产品 BSP 点亮真实屏幕：ST7789V2 面板提交、背光 PWM 与 CST816T 触摸采样接入 owner task，宿主 profile 声明 `input.touch`；USB 接收、NS2 报告转换、BLE 广播/配对和电池、IMU、RTC 等其余外设仍需产品数据面/BSP 实现。
 - **近期演进规划 (Phase 2)**：
   - 丰富常用嵌入式基础组件库（列表滚动组件、开关 Switch、进度条 Progress、表单项）。
-  - 按实际板卡补充 ESP-IDF 产品 BSP，实现面板提交、USB host 接收和 GPIO 等外设接入。
+  - 按实际板卡补充 ESP-IDF 产品 BSP 的其余部分，实现 USB host 接收和 GPIO 等外设接入（面板提交与触摸采样已在 Phase 1 完成）。
   - 按 [controller.md](controller.md) 完成 NS2 报告编码、BLE 广播/GATT、配对状态机和配对凭证持久化。

@@ -35,11 +35,11 @@ ui/pocket.json                 firmware/pocket.host.json
 
 - `requires` 是应用运行所必需的能力，host 不提供时构建应失败。
 - `enhances` 是应用可以利用但不应作为最低运行条件的能力。
-- `capabilities` 只能填写固件确实会提供的能力。当前 Remapad profile 只声明 `text.glyphs.baked`；设备屏幕虽然是触摸屏，但固件尚未接入触摸芯片采样，因此此时不能把 `input.touch` 写入 profile。
+- `capabilities` 只能填写固件确实会提供的能力。当前 Remapad profile 声明 `text.glyphs.baked` 与 `input.touch`；后者随触摸 BSP（CST816T 采样，见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）接入一并加入，按键和模拟量能力仍不在 profile 中。
 - profile 的 canonical hash 会进入构建计划和 package variant，运行时 `pocketjs_package_select` 会校验目标、ABI、tick、视口、density、presentation 和 profile hash。
 - 当前设备的逻辑和物理视口均为 `240×280`。生成的 JavaScript bundle 可能仍包含官方 framework 的 `SCREEN_W = 480`、`SCREEN_H = 272` fallback 常量；它们不是设备 profile 的显示事实，也不应手动修改生成产物。ESP-IDF host 按 package contract 创建 `pocketjs_ui_core`，并通过 `globalThis.ui.__viewport` 发布 `240×280`；构建计划和运行时 frame 才是设备尺寸的校验依据。
 
-触摸预览页可以在浏览器中提供真实触点，因为浏览器 host 和设备 host 是两个不同的运行环境；ESP32 固件的空 `sample_input` 不会伪造触控能力。预览页覆盖 9 位坐标契约（每轴 512 像素以内），与 240 × 280 视口一致。
+触摸预览页可以在浏览器中提供真实触点，浏览器 host 与设备 host 各自把输入交给同一套框架语义：预览页把指针事件转换为触摸帧，设备端由 `drivers/touch.c` 把 CST816T 采样填入 `sample_input`。
 
 ## 最终产品控制器数据面
 

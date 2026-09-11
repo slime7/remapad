@@ -17,7 +17,7 @@
 
 USB 输入设备、目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 Web 预览可以交互就认为真实 USB 或 BLE 链路已经可用。
 
-板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件侧仍然没有面板 DMA 和触摸采样实现，因此画面尚不可见、触点尚未上报。
+板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；USB 输入、BLE 数据面与电池等其余外设仍待实现。
 
 ## 最短步骤
 
@@ -203,7 +203,7 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 ### 烧录后没有屏幕画面
 
-当前固件只完成官方运行时和 RGB565 damage strip 的无面板 bring-up：帧会渲染进 PSRAM 暂存区然后丢弃，`after_turn` 尚未调用真实面板传输。板卡屏幕是 ST7789V2，引脚和背光控制脚见 [hardware.md](hardware.md)；补齐面板 BSP 时注意背光（`GPIO15`）需要显式驱动，否则即使提交成功也看不到画面。
+面板由 `drivers/panel.c` 驱动（esp_lcd 内置 ST7789，SPI2 40 MHz），背光在首帧提交成功后由 `drivers/backlight.c` 点亮。若画面不可见，先看串口日志：`panel init failed` 表示面板初始化失败（此时固件退回无面板渲染，帧只进 PSRAM）；首帧日志出现但屏幕黑，再检查背光（`GPIO15` 需要显式驱动，若 `backlight init failed` 会有对应日志）与面板排线。修改面板方向/偏移配置时要对照 [hardware.md](hardware.md) 与微雪官方示例，不要凭空猜测初始化序列。
 
 ### 启动时崩溃重启，崩溃位置每次都不一样
 
@@ -263,7 +263,7 @@ ESP32-S3 原生归档随组件固定在 `firmware/components/*/lib/esp32s3/`，�
 
 ### 预览页可以点，但固件上触摸无效
 
-预览页走浏览器指针事件，不需要固件参与；设备端的触摸需要产品 BSP 采样 CST816T，再把触点填入 owner task 的 `sample_input`（[firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)）。`firmware/pocket.host.json` 在触摸采样就位前不声明 `input.touch`，因此固件当前不会向 UI 提供触点。
+设备端触摸由 `drivers/touch.c` 采样 CST816T 并经 owner task 的 `sample_input` 填入官方触点契约（`firmware/pocket.host.json` 已声明 `input.touch`）。触摸无效时先看启动日志有无 `touch init failed`（多为 I2C 无应答，检查地址 `0x15` 与共享总线接线）；init 失败时固件继续运行，但每帧触点为零。改过 profile 或驱动后需要重新 `pnpm run build` 与 `idf.py build`，旧包不会带新能力。
 
 ### `ui/dist` 或 `firmware/build` 出现文件
 

@@ -1,6 +1,6 @@
 # Remapad 目标硬件参考
 
-本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。产品 BSP（面板、触摸、USB、BLE、电源）尚未实现，本文档描述硬件边界，不代表固件已经接入这些外设。
+本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。面板、触摸与背光 BSP 已接入固件（见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；USB 输入、BLE、电池、IMU、RTC 与蜂鸣器尚未实现，这些外设仍只有硬件事实。
 
 板卡为微雪 (Waveshare) **ESP32-S3-Touch-LCD-1.69**，SKU 27350；本文档的规格、引脚与地址来自微雪官方文档 <https://docs.waveshare.net/ESP32-S3-Touch-LCD-1.69>。
 
@@ -107,13 +107,11 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 
 ## 产品 BSP 尚未实现的范围
 
-以下外设目前只有硬件事实，固件没有接入；`firmware/main/drivers/` 是这些预留的位置：
+面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 40 MHz）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。以下外设目前只有硬件事实，固件没有接入：
 
-- ST7789V2 面板初始化、方向/偏移、SPI DMA 与背光控制；
-- CST816T 触摸采样并向官方 `pocketjs_ui_touch_t` 契约提供触点；
-- 电池 ADC 采样与充电状态；
+- 电池 ADC 采样与充电状态（`drivers/battery.c` 仍为占位，未编译）；
 - IMU、RTC、蜂鸣器的驱动与状态上报；
 - USB host 输入接收与 NS2 报告编码；
 - BLE 广播、GATT 与配对状态机。
 
-在这些实现就位之前，`firmware/pocket.host.json` 只声明 `text.glyphs.baked`；触摸、按键和模拟量能力不能在 profile 里提前声明。
+屏幕事实已写入 `firmware/pocket.host.json`：`input.touch` 随触摸采样接入一并声明。

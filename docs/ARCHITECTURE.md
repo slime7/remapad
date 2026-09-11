@@ -61,7 +61,7 @@ flowchart LR
 
     Generated --> Package
     Renderer --> Strip[RGB565 damage strip]
-    Strip --> DisplayBSP[产品 BSP：面板 DMA]
+    Strip --> DisplayBSP[panel_transfer：esp_lcd SPI EDMA]
 
     USB[USB 接收] --> DataPlane[产品控制器数据面]
     DataPlane --> Normalize[输入规范化]
@@ -135,7 +135,7 @@ remapad/
         ├── pocketjs_host.c
         ├── pocketjs_host.h
         ├── bridge/            # 产品控制面预留
-        └── drivers/           # 背光、电池等 BSP 预留
+        └── drivers/           # panel/backlight/touch BSP 与 battery 等预留
 ```
 
 仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
@@ -176,7 +176,7 @@ ui/src + ui/pocket.json + firmware/pocket.host.json
 6. 创建 RGB565 renderer 和 render target，并分配一个可复用的 PSRAM strip scratch buffer。
 7. 进入固定 tick 循环：`sample_input` 提供输入，`pocketjs_ui_turn` 执行一次 UI turn，再完成 prepare、render strip、commit/abort。
 
-当前 `sample_input` 返回空输入，渲染结果也尚未传入真实面板。这是为了先验证官方 package admission、guest、UI binding 和 renderer 链路；屏幕是触摸屏，接入硬件时应把 CST816T 的采样转换为官方 `pocketjs_ui_touch_t` 触点填入 `sample_input`，并在每个成功渲染的 strip 后完成面板传输。触摸采样就位前，`firmware/pocket.host.json` 不声明 `input.touch`。
+当前 `sample_input` 由 `drivers/touch.c` 采样 CST816T 填入官方 `pocketjs_ui_touch_t` 触点（单点，id 恒为 0），每个成功渲染的 strip 在事务内经 `drivers/panel.c` 的 `panel_transfer` 提交到 ST7789V2，全部 region 传输成功后才 `commit`。面板或触摸初始化失败时不阻断启动：面板失败退回纯渲染 bring-up（帧仍渲染进 PSRAM 后丢弃），触摸失败则每帧零触点。触摸事实已声明进 `firmware/pocket.host.json` 的 `input.touch`。
 
 ### 为什么由产品 task 承载 guest 生命周期
 
@@ -216,8 +216,8 @@ BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应
 - JavaScript guest 和资源优先使用 8 MB Octal PSRAM。
 - `remapad-pjs` owner task 的栈（288 KB）同样分配在 PSRAM，因为 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。主任务栈保持 32 KB，只负责启动 owner task。内部 RAM 因此留给 DMA 缓冲和协议栈，启动后可用量约 360 KB。
 - CPU 运行在 240 MHz。UI 每帧把解释执行的 Vue Vapor bundle 加软件 RGB565 渲染跑在一个核上，默认的 160 MHz 会把整个周期吃满并饿死空闲任务。
-- 当前无面板 bring-up 使用一个按最大视口分配的 PSRAM RGB565 scratch buffer；`render_strip` 每次接收精确的 full-width、region-height 容量。
-- 真实面板 DMA 缓冲区应由 BSP 根据 ESP-IDF 的 DMA 能力、对齐和缓存约束分配。官方 smoke 示例使用内部 DMA strip，产品可按实际屏幕刷新策略选择整帧或分区传输。
+- 当前实现使用一个按最大视口分配的 PSRAM RGB565 scratch buffer；`render_strip` 每次接收精确的 full-width、region-height 容量。渲染完成后 strip 经 esp_lcd 的 `psram_dma_direct` 路径被 SPI EDMA 直读提交面板（S3 的 AHB GDMA v1 对外部内存无对齐约束），传输前由 `panel_transfer` 原地完成 RGB565 大小端交换并做缓存写回。
+- 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、SPI2 40 MHz、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
 - ESP32-S3 没有本项目所需的 P4 PPA；使用 `pocketjs_render_rgb565` 的软件路径即可。
 
 ## Flash 分区

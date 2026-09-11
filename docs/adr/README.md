@@ -32,6 +32,7 @@
 | [0004](0004-use-local-pocketjs-checkout.md) | active | PocketJS 组件与原生归档改由本地 checkout 提供，Web 预览切换为官方开发主机 |
 | [0005](0005-vendor-pocketjs-idf-components.md) | active | ESP-IDF 组件与原生归档固定在本仓库，pocketjs 仅作开发参考 |
 | [0006](0006-product-owner-task-for-pocketjs-guest.md) | active | 由产品 owner task 承载 PocketJS guest 生命周期 |
+| [0007](0007-esp-lcd-panel-touch-bsp.md) | active | 显示与触摸 BSP 采用 esp_lcd 内置驱动与 Registry 触摸组件 |
 
 `0002` 仍作为硬件 bridge 与控制面分层的决策依据；其自定义打包和 host 接入范围由 `0003` 取代。旧 ADR 文件正文保持不变。
 
