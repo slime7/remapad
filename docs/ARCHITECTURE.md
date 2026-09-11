@@ -94,7 +94,9 @@ remapad/
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── scripts/
-│   └── create_adr.py
+│   ├── create_adr.py
+│   └── pocketjs.mjs         # 官方工具链与 Web 开发主机入口
+├── patches/                 # 必须应用到 PocketJS checkout 的补丁
 ├── docs/
 │   ├── VISION.md
 │   ├── ARCHITECTURE.md
@@ -103,19 +105,15 @@ remapad/
 │   ├── controller.md
 │   └── adr/
 ├── ui/
-│   ├── index.html       # WebAssembly 模拟器页面
 │   ├── package.json
 │   ├── pocket.json
 │   ├── jsconfig.json
-│   ├── scripts/
-│   │   ├── pocket.mjs       # 官方 CLI 的 cwd/path 适配器
-│   │   └── dev.mjs          # WebAssembly 模拟器与热重载
 │   └── src/
 │       ├── index.tsx
 │       ├── App.tsx
 │       └── bridge/           # 产品控制面协议预留
 └── firmware/
-    ├── CMakeLists.txt
+    ├── CMakeLists.txt        # 通过 POCKETJS_ROOT 发现官方组件
     ├── pocket.host.json
     ├── partitions.csv
     ├── sdkconfig.defaults
@@ -129,7 +127,7 @@ remapad/
         └── drivers/           # 背光、电池等 BSP 预留
 ```
 
-`ui/scripts/pocket.mjs` 优先使用 `POCKETJS_ROOT` 指向的官方 checkout，解决应用仓库与 PocketJS checkout 分离时的路径问题；实际检查、编译和打包仍由官方 `tools/pocket.ts` 执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
+`scripts/pocketjs.mjs` 优先使用 `POCKETJS_ROOT` 指向的官方 checkout，解决应用仓库与 PocketJS checkout 分离时的路径问题；实际检查、编译、打包、Web 预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
 
 ## 构建链路
 
@@ -153,7 +151,7 @@ ui/src + ui/pocket.json + firmware/pocket.host.json
 1. `ui/dist/remapad-ui.pocket` 存在时，调用 `pocketjs_embed_package`。包通过生成的 `.c`/`.S` 文件嵌入固件，生成文件只位于 `firmware/build/`。
 2. 没有预构建包时，调用 `pocketjs_compile_app`。它让官方 CMake helper 调用 `pocket build --host-profile`，并把依赖文件、plan 和包写入 ESP-IDF build 目录。
 
-团队的可复现构建入口是先运行 `pnpm run build` 再运行 `idf.py build`。这样 ESP-IDF 构建阶段只消费已生成的包，不需要在 CMake 中重复实现编译器逻辑。
+组件本身来自 `POCKETJS_ROOT` 指向的 checkout（默认仓库同级 `../pocketjs`），由 `firmware/CMakeLists.txt` 通过 `EXTRA_COMPONENT_DIRS` 发现；仓库不再保存组件副本，S3 的原生归档由 `pnpm run native` 生成。团队的可复现构建入口是先运行 `pnpm run build` 再运行 `idf.py build`。这样 ESP-IDF 构建阶段只消费已生成的包，不需要在 CMake 中重复实现编译器逻辑。
 
 ## 固件运行时生命周期
 

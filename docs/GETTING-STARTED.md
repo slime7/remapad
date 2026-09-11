@@ -8,13 +8,14 @@
 | :--- | :--- | :--- |
 | Node.js | 18 或更高 | 运行项目脚本和已发布 CLI |
 | pnpm | 当前稳定版 | 工作区依赖与任务调度 |
-| Bun | PocketJS 官方要求的版本 | 执行官方 compiler；`idf.py build` 消费预构建包时可不参与 |
-| PocketJS checkout | 当前 `main` 或包含 ESP-IDF host profile 的版本 | 提供官方 `tools/pocket.ts`；用 `POCKETJS_ROOT` 指向根目录 |
-| Python | 由 ESP-IDF 安装环境提供 | `idf.py` 和 ESP-IDF 工具链 |
-| ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求 |
+| Bun | PocketJS 官方要求的版本 | 执行官方 compiler、官方构建脚本和 Web 开发主机 |
+| PocketJS checkout | 当前 `main` 或包含 ESP-IDF host profile 的版本 | 提供官方组件、compiler 和 `hosts/web` 开发主机；用 `POCKETJS_ROOT` 指向根目录，默认仓库同级的 `../pocketjs` |
+| Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 生成 ESP32-S3 原生归档；Web 预览还需要 `wasm32-unknown-unknown` target |
+| Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
+| ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
 | 硬件 | ESP32-S3-WROOM-1 N16R8 | 16 MB Flash、8 MB Octal PSRAM |
 
-USB 输入设备、目标 NS2 手柄型号、BLE 天线/射频和屏幕控制器也属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 UI 模拟器可点击就认为真实 USB 或 BLE 链路已经可用。
+USB 输入设备、目标 NS2 手柄型号、BLE 天线/射频和屏幕控制器也属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 Web 预览可以交互就认为真实 USB 或 BLE 链路已经可用。
 
 实际屏幕控制器、引脚、触控芯片和串口端口需要根据开发板资料配置；仓库当前只确定 240×280 RGB565 逻辑视口，没有假定通用 ST7789 引脚表。
 
@@ -35,7 +36,24 @@ $env:POCKETJS_ROOT = 'C:\src\pocketjs'
 cd C:\src\remapad
 ```
 
-### 2. 检查 UI 与设备契约
+### 2. 准备 PocketJS ESP-IDF 依赖
+
+ESP Component Registry 没有发布 `pocket-stack/pocketjs_*` 组件，而 `pocketjs_guest` 使用的 QuickJS 源码校验值与 registry 当前提供的 `espressif/quickjs-ng` 0.14.0 不一致，因此先应用本仓库的补丁：
+
+```powershell
+git -C $env:POCKETJS_ROOT apply "$PWD/patches/0001-quickjs-ng-0.14.0-source-pin.patch"
+```
+
+再用官方脚本生成 ESP32-S3 的两个原生 Rust 归档：
+
+```powershell
+$env:POCKETJS_CARGO = 'C:\Users\admin\.esp-rust\1.97.0.0\bin\cargo'
+pnpm run native
+```
+
+归档写入 checkout 的 `hosts/esp-idf/components/pocketjs_ui_core/lib/esp32s3/` 和 `pocketjs_render_rgb565/lib/esp32s3/`，并附带 `build-receipt.json`。这两步只需执行一次，之后 `idf.py build` 不再需要 Rust。
+
+### 3. 检查 UI 与设备契约
 
 ```powershell
 pnpm run lint
@@ -44,7 +62,7 @@ pnpm run check
 
 `check` 会使用 `ui/pocket.json` 和 `firmware/pocket.host.json`，由官方 resolver 检查 manifest、能力、视口、tick 和 host profile。它不修改 UI 包。
 
-### 3. 编译 UI 资源与 `.pocket`
+### 4. 编译 UI 资源与 `.pocket`
 
 ```powershell
 pnpm run compile
@@ -59,7 +77,7 @@ remapad-ui.pak      样式、字体和图像资源包
 remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
 ```
 
-`ui/scripts/pocket.mjs` 优先使用 `POCKETJS_ROOT` 指向的官方 checkout；若本地安装的 framework 包已经包含 `--host-profile` compiler，也可以直接使用。这个脚本只处理路径和启动方式，不实现 compiler，也不改变 package 格式。当前已发布的 npm CLI 可能尚未包含 ESP-IDF host profile 支持。
+`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、仓库同级 `../pocketjs`、`ui/node_modules/@pocketjs/framework` 的顺序定位包含 `--host-profile` 的官方脚本；它只负责路径和参数转发，不实现 compiler，也不改变 package 格式。
 
 官方命令的语义如下，适用于已正确安装并能定位 PocketJS framework checkout 的环境：
 
@@ -73,15 +91,15 @@ pocket build --manifest ui/pocket.json `
 
 不要将 `--target psp` 用在本项目上。`psp` 是 Sony PSP 后端的 target 名称；ESP32 使用自定义 `--host-profile`。
 
-### 4. 启动浏览器模拟器
+### 5. 官方 Web 预览
 
 ```powershell
 pnpm run dev
 ```
 
-打开 [http://127.0.0.1:8130](http://127.0.0.1:8130)。模拟器使用 PocketJS WebAssembly host，提供 240×280 画布、触控模拟和热重载。首次启动会先调用官方 `compile`，因此需要 Bun。
+该命令先用官方 `compile` 把 bundle 写入 checkout 的 `dist/`，再启动官方 `hosts/web` 开发主机。打开 [http://127.0.0.1:8130/?demo=remapad-ui&width=240&height=280&density=1](http://127.0.0.1:8130/?demo=remapad-ui&width=240&height=280&density=1) 可以看到 240×280 画布、虚拟按键和运行日志。首次运行会用 Rust 的 `wasm32-unknown-unknown` target 构建 `pocketjs.wasm`，之后直接复用。
 
-### 5. 编译 ESP-IDF 固件
+### 6. 编译 ESP-IDF 固件
 
 从 ESP-IDF PowerShell 或已加载 `export.ps1` 的终端执行：
 
@@ -91,14 +109,14 @@ idf.py set-target esp32s3
 idf.py build
 ```
 
-`firmware/main/CMakeLists.txt` 的顺序是：
+`firmware/CMakeLists.txt` 先按 `POCKETJS_ROOT`（默认仓库同级 `../pocketjs`）把 checkout 中的官方组件加入 `EXTRA_COMPONENT_DIRS`，`firmware/main/CMakeLists.txt` 再按顺序接入包：
 
 1. 如果 `ui/dist/remapad-ui.pocket` 存在，使用官方 `pocketjs_embed_package`。
 2. 否则使用官方 `pocketjs_compile_app`，让 CMake 调用 PocketJS CLI 生成 build 目录内的包。
 
-团队建议先运行 `pnpm run build`，再运行 `idf.py build`。预构建路径不需要在 ESP-IDF 构建阶段安装 Bun；编译路径则需要可被 CMake 找到的官方 `pocket` CLI 和 Bun。
+建议先运行 `pnpm run build`，再运行 `idf.py build`。预构建路径只需要 Python 执行官方嵌入脚本，不需要 Bun；编译路径则需要可被 CMake 找到的官方 `pocket` CLI 和 Bun。构建产物是 `firmware/build/remapad_firmware.bin`，可直接用 `idf.py flash` 烧录。
 
-### 6. 烧录与监视
+### 7. 烧录与监视
 
 ```powershell
 idf.py -p COM3 flash monitor
@@ -110,12 +128,13 @@ idf.py -p COM3 flash monitor
 
 - [ui/pocket.json](../ui/pocket.json)：应用清单和应用侧 capability。
 - [firmware/pocket.host.json](../firmware/pocket.host.json)：ESP32-S3 host profile。
+- [firmware/CMakeLists.txt](../firmware/CMakeLists.txt)：按 `POCKETJS_ROOT` 发现官方 ESP-IDF 组件。
 - [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
 - [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer、runner 生命周期。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：N16R8 Flash/PSRAM 和 FreeRTOS 预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY 和 4 MB factory 分区。
-- [ui/index.html](../ui/index.html)：WebAssembly 模拟器预览页面。
-- [ui/scripts/dev.mjs](../ui/scripts/dev.mjs)：WebAssembly 模拟器和热重载服务器。
+- [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：官方 CLI、Web 开发主机和原生归档脚本的统一入口。
+- [patches/README.md](../patches/README.md)：必须应用到 PocketJS checkout 的补丁与核对说明。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 
 ## 最终产品数据面（当前规划）
@@ -151,6 +170,18 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 ### BLE 没有发现 NS2 手柄
 
 当前固件尚未实现 USB→NS2→BLE 数据面，也没有配对广播或 GATT 服务。请先阅读 [controller.md](controller.md)，不要仅通过修改 PocketJS manifest 或 UI bridge 宣称已支持 NS2。
+
+### `unsupported QuickJS source; review immutable-buffer patch before upgrading`
+
+`pocketjs_guest` 的 QuickJS 源码校验值与 ESP Component Registry 提供的 `espressif/quickjs-ng` 0.14.0 不一致。按 [patches/README.md](../patches/README.md) 把 `patches/0001-quickjs-ng-0.14.0-source-pin.patch` 应用到 PocketJS checkout 后重新执行 `idf.py build`。
+
+### `Missing libpocketjs_idf_ui_core.a for esp32s3`
+
+官方组件没有附带 S3 原生归档，需要先执行 `pnpm run native` 用固定版本的 Xtensa Rust 生成。归档缺失时官方 CMake 会直接报错，不会尝试下载或安装工具链。
+
+### Web 页面提示 `pocketjs.wasm not found`
+
+官方 `hosts/web` 开发主机需要 Rust 构建的 wasm 核心。执行 `rustup target add wasm32-unknown-unknown` 后重试 `pnpm run dev`，脚本会在缺少 `pocketjs.wasm` 时调用官方 `tools/wasm.ts` 生成。
 
 ### `ui/dist` 或 `firmware/build` 出现文件
 

@@ -49,7 +49,7 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
 - **当前阶段 (Phase 1 - 官方 host 链路已接入)**：
   - 完成双工作区工程架构、N16R8 硬件预设和 ESP32-S3 host profile。
   - 使用 PocketJS 官方 ESP-IDF 组件完成 package、guest、UI binding、RGB565 renderer 和 runner 的生命周期接入。
-  - 保留 60 FPS WebAssembly 浏览器模拟器与热重载，用于 UI 开发。
+  - 使用官方 PocketJS `hosts/web` 开发主机，在浏览器中以 240×280 画布预览同一份 UI 代码。
   - 固件目前完成无面板的首帧渲染 bring-up；ST7789 面板 DMA、USB 接收、NS2 报告转换、BLE 广播/配对和其他外设仍需产品 BSP/数据面实现。
 - **近期演进规划 (Phase 2)**：
   - 丰富常用嵌入式基础组件库（列表滚动组件、开关 Switch、进度条 Progress、表单项）。
