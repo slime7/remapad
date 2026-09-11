@@ -39,7 +39,8 @@ pnpm install
 2. 用固定版本的 Xtensa Rust 重新生成 ESP32-S3 原生归档：
 
 ```powershell
-$env:POCKETJS_CARGO = 'C:\Users\admin\.esp-rust\1.97.0.0\bin\cargo'
+# 指向 esp-rs/rust-build v1.97.0.0 的 cargo，路径按本机安装位置调整
+$env:POCKETJS_CARGO = "$env:USERPROFILE\.esp-rust\1.97.0.0\bin\cargo"
 pnpm run native
 ```
 
@@ -71,7 +72,9 @@ remapad-ui.pak      样式、字体和图像资源包
 remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
 ```
 
-`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、`ui/vendor/pocketjs`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；默认命中仓库内的快照。它只负责路径与参数转发、建立快照的依赖链接，不实现 compiler，也不改变 package 格式。
+`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、`ui/vendor/pocketjs`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；默认命中仓库内的快照。它只负责路径与参数转发、建立快照的依赖链接、补齐编译器需要的生成模块占位，不实现 compiler，也不改变 package 格式。
+
+快照里没有编译器生成的 `framework/src/styles.generated.ts`，而官方 CLI 的类型检查跑在编译器写入该文件之前，所以脚本会在它缺失时先补一个同形状的空模块占位；官方编译流程随后在同一轮里改写成本次构建的真实样式表。因此刚克隆的仓库可以直接 `pnpm run check` 与 `pnpm run build`。
 
 官方命令的语义如下，`pocket build` 的 `--host-profile` 形式等价于上面的项目脚本：
 
@@ -114,7 +117,9 @@ idf.py build
 1. 如果 `ui/dist/remapad-ui.pocket` 存在，使用官方 `pocketjs_embed_package`。
 2. 否则使用官方 `pocketjs_compile_app`，让 CMake 调用 PocketJS CLI 生成 build 目录内的包。
 
-建议先运行 `pnpm run build`，再运行 `idf.py build`。预构建路径只需要 Python 执行官方嵌入脚本，不需要 Bun；编译路径则需要可被 CMake 找到的官方 `pocket` CLI 和 Bun。构建产物是 `firmware/build/remapad_firmware.bin`，可直接用 `idf.py flash` 烧录。
+建议先运行 `pnpm run build`，再运行 `idf.py build`。预构建路径只需要 Python 执行官方嵌入脚本，不需要 Bun；编译路径则需要可被 CMake 找到的官方 `pocket` CLI 和 Bun。
+
+嵌入过程把 `ui/dist/remapad-ui.pocket` 登记为 CMake 依赖，所以改完 `ui/src` 之后重新执行 `pnpm run build` 与 `idf.py build`，固件会自动重新嵌入新包，不需要删除 `firmware/build/`。
 
 ### 7. 烧录与监视
 
@@ -123,6 +128,31 @@ idf.py -p COM3 flash monitor
 ```
 
 把 `COM3` 替换为实际端口。若开发板没有自动进入下载模式，按板卡说明操作 BOOT/EN。串口监视器使用 `Ctrl + ]` 退出。
+
+`idf.py build` 在 `firmware/build/` 下生成三个可烧录文件，偏移与 `firmware/build/flash_project_args` 一致：
+
+| 文件 | 烧录偏移 |
+| :--- | :--- |
+| `build/bootloader/bootloader.bin` | `0x0` |
+| `build/partition_table/partition-table.bin` | `0x8000` |
+| `build/remapad_firmware.bin` | `0x10000` |
+
+应用镜像已经内嵌 `.pocket` 包，烧完这三个文件就是完整的设备固件。
+
+想拿到不依赖构建目录的单一镜像，可以合并成从 `0x0` 起烧的文件：
+
+```powershell
+cd firmware
+idf.py merge-bin -o remapad-firmware-merged.bin
+```
+
+结果写入 `firmware/build/remapad-firmware-merged.bin`，用 esptool 一次写入，不需要偏移参数：
+
+```powershell
+esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
+```
+
+乐鑫的 Flash Download Tool 也可以直接加载这个合并镜像。ESP-IDF 的 esptool 随 Python 环境安装，命令名是 `esptool`（`esptool.py` 在新版中已弃用）。不确定端口时用 `Get-PnpDevice -Class Ports | Where-Object Status -eq OK` 列出当前串口。
 
 ## 关键文件
 

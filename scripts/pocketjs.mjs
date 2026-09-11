@@ -2,7 +2,7 @@
 // ui/vendor/pocketjs 快照，因此项目自身就能完成检查、编译、打包与预览；POCKETJS_ROOT
 // 只在需要对照官方 checkout 或重建原生归档时使用。
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, symlinkSync } from 'node:fs';
+import { existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -98,6 +98,37 @@ function ensureVendorNodeModules() {
   }
   symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
   console.log('[Remapad] 已把 ui/vendor/pocketjs/node_modules 指向项目依赖目录');
+}
+
+// 框架源码 import 了编译器生成的 framework/src/styles.generated.ts，而官方 CLI 的类型
+// 检查发生在编译器写入该文件之前，因此刚克隆的仓库会以 TS2307 失败。缺失时先放一个同形状
+// 的空模块占位；官方编译流程会在同一次运行里把它改写成本次构建的真实样式表。
+const GENERATED_STYLES = 'framework/src/styles.generated.ts';
+const GENERATED_STYLES_STUB = [
+  '// 占位模块：快照缺少编译器产物时由 scripts/pocketjs.mjs 预置，',
+  '// 官方编译流程会在同一次运行里把它改写成本次构建的真实样式表。',
+  '',
+  'export const STYLE_IDS: Record<string, number> = {};',
+  '',
+  'export const STYLE_COUNT = 0;',
+  '',
+  'export const FONT_SLOTS: Record<number, { px: number; bold: boolean }> = {};',
+  '',
+  'export const DEFAULT_FONT_SLOT = 2;',
+  '',
+].join('\n');
+
+function ensureGeneratedStylesModule(root) {
+  const file = resolve(root, GENERATED_STYLES);
+  if (existsSync(file)) {
+    return;
+  }
+  if (root !== VENDOR_ROOT) {
+    console.error('[Remapad] ' + root + ' 缺少 ' + GENERATED_STYLES + '，请先在该 checkout 里执行官方 bun tools/build.ts');
+    return;
+  }
+  writeFileSync(file, GENERATED_STYLES_STUB);
+  console.log('[Remapad] 已预置 ' + GENERATED_STYLES + ' 占位模块，真实样式表由官方编译流程写入');
 }
 
 /** 监听 UI 源码，变更后重新编译并让预览页加载新产物。 */
@@ -217,6 +248,7 @@ const compilerRoot = requireRoot(hasHostProfileCompiler, '包含 --host-profile 
 if (compilerRoot === VENDOR_ROOT) {
   ensureVendorNodeModules();
 }
+ensureGeneratedStylesModule(compilerRoot);
 console.log('[Remapad] compiler: ' + compilerRoot);
 
 if (command === 'web') {

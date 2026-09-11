@@ -112,12 +112,13 @@ pnpm run dev
 这些命令都由 `scripts/pocketjs.mjs` 调用仓库内的官方实现：`check`、`compile`、`build` 执行 `ui/vendor/pocketjs/tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；`dev` 编译后启动项目内的触摸屏预览页（`ui/preview/`，240 × 280，触摸输入，无实体按键）；`native` 用上游 `tools/esp-idf-native.ts` 重建 ESP32-S3 原生归档。`build` 的等价官方命令为：
 
 ```powershell
-cd C:\src\remapad\ui\vendor\pocketjs
-bun tools/pocket.ts build --manifest C:\src\remapad\ui\pocket.json `
-  --host-profile C:\src\remapad\firmware\pocket.host.json `
-  --project-root C:\src\remapad\ui --outdir C:\src\remapad\ui\dist `
-  --output C:\src\remapad\ui\dist\remapad-ui.pocket
-cd C:\src\remapad
+$repo = (Get-Location).Path
+cd ui\vendor\pocketjs
+bun tools/pocket.ts build --manifest "$repo\ui\pocket.json" `
+  --host-profile "$repo\firmware\pocket.host.json" `
+  --project-root "$repo\ui" --outdir "$repo\ui\dist" `
+  --output "$repo\ui\dist\remapad-ui.pocket"
+cd $repo
 ```
 
 若已安装包含 host profile 支持的 `pocket` CLI，也可使用官方 CLI 形式：

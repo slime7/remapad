@@ -43,14 +43,14 @@
 ### PowerShell 调用示例
 
 ```powershell
-python .\scripts\create_adr.py F:/private/remapad "决策标题" --slug "short-slug" --status active --context "决策促成的背景、约束与痛点" --decision "最终确认的技术选择" --option "候选方案 A" --option "候选方案 B" --consequence "正向影响与需要承受的代价"
+python .\scripts\create_adr.py . "决策标题" --slug "short-slug" --status active --context "决策促成的背景、约束与痛点" --decision "最终确认的技术选择" --option "候选方案 A" --option "候选方案 B" --consequence "正向影响与需要承受的代价"
 ```
 
 
 ### Bash 调用示例
 
 ```bash
-python3 ./scripts/create_adr.py F:/private/remapad "决策标题" --slug "short-slug" --status active --context "决策促成的背景、约束与痛点" --decision "最终确认的技术选择" --option "候选方案 A" --option "候选方案 B" --consequence "正向影响与需要承受的代价"
+python3 ./scripts/create_adr.py . "决策标题" --slug "short-slug" --status active --context "决策促成的背景、约束与痛点" --decision "最终确认的技术选择" --option "候选方案 A" --option "候选方案 B" --consequence "正向影响与需要承受的代价"
 ```
 
 ### 参数规则

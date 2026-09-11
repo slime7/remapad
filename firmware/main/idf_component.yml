@@ -1,5 +1,5 @@
-# The PocketJS components are discovered from the POCKETJS_ROOT checkout through
-# EXTRA_COMPONENT_DIRS in firmware/CMakeLists.txt. Only their own manifests
-# pull the Registry dependencies (espressif/quickjs-ng for pocketjs_guest).
+# PocketJS 官方组件固定在本仓库的 firmware/components/，由 ESP-IDF 默认的组件目录
+# 规则直接发现，不依赖外部 checkout。这里只声明应用对 ESP-IDF 版本的要求；Registry
+# 依赖由组件各自的清单负责（pocketjs_guest 需要 espressif/quickjs-ng）。
 dependencies:
   idf: ">=6.0,<6.2"
