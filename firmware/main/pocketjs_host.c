@@ -38,7 +38,7 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_POCKETJS_TASK_PRIORITY 5
 #define REMAPAD_POCKETJS_MAX_LAG_US 500000
 #define REMAPAD_POCKETJS_STOP_TIMEOUT_MS 5000
-#define REMAPAD_BACKLIGHT_PCT 80
+#define REMAPAD_BACKLIGHT_PCT 40
 
 typedef struct {
     pocketjs_package_t *package;
