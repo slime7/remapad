@@ -13,6 +13,7 @@
       --accent: #38bdf8;
       --ok: #10b981;
       --err: #ef4444;
+      /* 屏幕显示倍数，由面板的「屏幕尺寸」开关切换：1 = 原始尺寸，2 = 放大尺寸。 */
       --screen-scale: 2;
       --screen-w: 240px;
       --screen-h: 280px;
@@ -84,7 +85,6 @@
       background: #000;
       border-radius: 10px;
       touch-action: none;
-      cursor: pointer;
     }
     .device-foot {
       display: flex;
@@ -120,6 +120,7 @@
     }
     .row {
       display: flex;
+      align-items: center;
       justify-content: space-between;
       gap: 12px;
       padding: 3px 0;
@@ -138,6 +139,30 @@
       margin-right: 6px;
       border-radius: 50%;
       background: var(--ok);
+    }
+    /* 两段式开关：始终显示当前选中的屏幕尺寸。 */
+    .seg {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      background: #0f172a;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+    .seg button {
+      padding: 2px 12px;
+      background: transparent;
+      border: 0;
+      color: #94a3b8;
+      font-size: 11px;
+    }
+    .seg button:hover {
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    .seg button[aria-pressed='true'] {
+      background: #334155;
+      color: #f1f5f9;
     }
     #log {
       height: 96px;
@@ -177,6 +202,13 @@
       <div class="row"><span>触摸帧</span><strong id="stat-frames">0</strong></div>
       <div class="row"><span>命中节点</span><strong id="stat-hit">--</strong></div>
       <div class="row"><span>屏幕规格</span><strong>240 × 280 · RGB565</strong></div>
+      <div class="row">
+        <span>屏幕尺寸</span>
+        <span class="seg" id="zoom-toggle">
+          <button type="button" data-scale="1" aria-pressed="false">原始</button>
+          <button type="button" data-scale="2" aria-pressed="true">放大</button>
+        </span>
+      </div>
       <pre id="log"></pre>
     </aside>
   </main>
@@ -210,6 +242,42 @@
     const hitEl = document.getElementById('stat-hit');
     const touchFramesEl = document.getElementById('stat-frames');
     const logEl = document.getElementById('log');
+
+    /** 屏幕显示倍数开关：只改变浏览器里的呈现大小。触点坐标按画布实际尺寸换算，
+     *  与缩放无关，所以切换尺寸不会影响命中判定。选择记在 localStorage 里，刷新后保留。 */
+    const SCALE_KEY = 'remapad.preview.screenScale';
+    const scaleButtons = [...document.querySelectorAll('#zoom-toggle button')];
+
+    function applyScreenScale(scale, persist) {
+      document.documentElement.style.setProperty('--screen-scale', String(scale));
+      for (const button of scaleButtons) {
+        button.setAttribute('aria-pressed', String(Number(button.dataset.scale) === scale));
+      }
+      if (persist) {
+        try {
+          localStorage.setItem(SCALE_KEY, String(scale));
+        } catch {
+          // 无痕模式下写入会被拒绝，缩放仍在本页生效。
+        }
+      }
+    }
+
+    function storedScreenScale() {
+      try {
+        const value = Number(localStorage.getItem(SCALE_KEY));
+        return value === 1 || value === 2 ? value : 2;
+      } catch {
+        return 2;
+      }
+    }
+
+    for (const button of scaleButtons) {
+      button.addEventListener('click', () => {
+        applyScreenScale(Number(button.dataset.scale), true);
+      });
+    }
+
+    applyScreenScale(storedScreenScale(), false);
 
     let wasm = null;
     let frameCb = null;
