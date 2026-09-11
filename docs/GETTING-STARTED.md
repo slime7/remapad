@@ -210,9 +210,9 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 仓库内的 `firmware/components/pocketjs_guest` 已经按 Registry 实际内容修正了该校验值，出现这个报错说明组件被上游版本覆盖过。按 [patches/README.md](../patches/README.md) 重新核对并修正。
 
-### `Missing libpocketjs_idf_ui_core.a for esp32s3`
+### `Missing pocketjs_idf_ui_core for esp32s3`
 
-官方组件没有附带 S3 原生归档，需要先执行 `pnpm run native` 用固定版本的 Xtensa Rust 生成。归档缺失时官方 CMake 会直接报错，不会尝试下载或安装工具链。
+ESP32-S3 原生归档随组件固定在 `firmware/components/*/lib/esp32s3/`，正常构建不需要额外操作。出现这个报错说明归档或它的 build receipt 缺失：从 Git 恢复这两个文件即可。只有在登记上游更新、需要重新生成归档时才执行 `pnpm run native`（配合固定版本的 Xtensa Rust）；官方 CMake 不会自行下载或构建工具链。
 
 ### 预览页提示缺少 wasm 核心
 

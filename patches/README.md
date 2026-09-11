@@ -23,6 +23,14 @@
 `SOURCE_SHA256` 直接改成 Registry 实际内容。`0001-quickjs-ng-0.14.0-source-pin.patch` 是这份差异的
 记录，用来说明仓库副本相对上游改了什么，不需要对 PocketJS checkout 执行 `git apply`。
 
+## 0002-ui-core-native-archive-in-tree
+
+上游 `pocketjs_ui_core` 组件自带 `.gitignore` 忽略整个 `lib/`：原生归档在 CI 里构建，不进源码树。
+本仓库的约定相反，ESP32-S3 归档随组件提交，克隆后不需要 Rust。沿用上游规则会让
+`firmware/components/pocketjs_ui_core/lib/esp32s3/` 下的归档与 build receipt 进不了 Git，克隆出来的
+仓库在 configure 阶段报 `Missing pocketjs_idf_ui_core for esp32s3`。仓库副本因此平掉了这条忽略规则；
+`pocketjs_render_rgb565` 本来就没有它，两者现在一致。
+
 ## 重新对账的方法
 
 升级 `firmware/components/` 中的组件、或 Registry 的 `espressif/quickjs-ng` 内容发生变化时：
