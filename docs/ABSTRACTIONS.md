@@ -74,7 +74,7 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 `ui/src/App.tsx` 使用 PocketJS Vue Vapor 的 `<View>`、`<Text>` 和 `<Image>` 等图元：
 
 - `<View>` 提供嵌入式布局、背景、边框、间距和 focusable 交互。
-- `<Text>` 使用构建期收集的字符集和 baked font atlas；字号应使用 PocketJS 支持的 Tailwind 插槽。
+- `<Text>` 使用构建期收集的字符集和 baked font atlas；字号应使用 PocketJS 支持的 Tailwind 插槽。Inter 未映射的码点（中文等）经应用目录 `fonts.json` 声明的回退字体面（当前为 Noto Sans SC）烘焙进同一图集。
 - `<Image>` 通过资源名称引用 PAK 中的图像；图片在构建期处理，不在 ESP32 上解析 SVG。
 - `createSpriteAnimation` 只描述资源帧选择，实际资源仍由官方编译器和 PAK 管理。
 

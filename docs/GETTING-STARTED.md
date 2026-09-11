@@ -175,6 +175,7 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 ## 关键文件
 
 - [ui/pocket.json](../ui/pocket.json)：应用清单和应用侧 capability。
+- [ui/src/fonts.json](../ui/src/fonts.json)：应用目录的回退字体清单；中文字体烘焙见 [ui/assets/fonts/](../ui/assets/fonts)。
 - [firmware/pocket.host.json](../firmware/pocket.host.json)：ESP32-S3 host profile。
 - [firmware/components/](../firmware/components)：固定的官方 ESP-IDF 组件与 ESP32-S3 原生归档。
 - [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
@@ -208,6 +209,10 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 ### `Cannot find module './styles.generated.ts'`
 
 快照里的 `ui/vendor/pocketjs/framework/src/styles.generated.ts` 缺失，或它没有进入 pnpm 的依赖副本。从 Git 恢复该文件后重新执行 `pnpm install`；如果用的是外部 checkout，先在其目录里执行官方 `bun tools/build.ts` 生成这个镜像。
+
+### 屏幕上中文显示为方框（tofu）
+
+中文字形是否可用取决于烘焙图集。`ui/src/fonts.json` 已把 `ui/assets/fonts/NotoSansSC-Regular.otf` 声明为回退字体面，源码字符串里出现过的中文会在 `pnpm run compile` 时自动烘焙进各字号槽位。仍显示方框的常见原因：文本是运行时动态拼接、且字符从未出现在任何源码字面量里；或使用了字体不覆盖的码点（emoji 等符号没有字形，只会渲染为方框）。新增或修改文案后重新执行 `pnpm run compile`（或 `pnpm run build`）即可。
 
 ### `pocketjs_compile_app requires the PocketJS CLI in PATH`
 
