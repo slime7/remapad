@@ -1,10 +1,10 @@
 set(remapad_pocketjs_requires
+    esp_timer
     pocketjs_package
     pocketjs_guest
     pocketjs_ui_core
     pocketjs_ui_qjs
-    pocketjs_render_rgb565
-    pocketjs_runner)
+    pocketjs_render_rgb565)
 
 idf_component_register(
     SRCS

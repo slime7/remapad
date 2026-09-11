@@ -3,21 +3,37 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <string.h>
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 
 #include "pocketjs/guest.h"
 #include "pocketjs/package.h"
 #include "pocketjs/render_rgb565.h"
-#include "pocketjs/runner.h"
 #include "pocketjs/ui_core.h"
 #include "pocketjs/ui_qjs.h"
 #include "pocketjs_package_remapad.h"
 
 static const char *TAG = "remapad_pocketjs";
+
+/* QuickJS 从创建 runtime 的那个 task 上取栈指针来计算守卫下限，所以创建、
+ * mount、求值和每一帧 turn 必须共用同一个 task；否则守卫量的是别人的栈。
+ * Vue Vapor 应用在 mount 期间每层嵌套要吃掉几十 KB 的 C 栈，内部 RAM 拿不出
+ * 这么多连续空间，因此 owner task 的栈放在 PSRAM。 */
+#define REMAPAD_POCKETJS_STACK_LIMIT (256U * 1024U)
+#define REMAPAD_POCKETJS_TASK_STACK_BYTES (288U * 1024U)
+#define REMAPAD_POCKETJS_TASK_NAME "remapad-pjs"
+#define REMAPAD_POCKETJS_TASK_PRIORITY 5
+#define REMAPAD_POCKETJS_MAX_LAG_US 500000
+#define REMAPAD_POCKETJS_STOP_TIMEOUT_MS 5000
 
 typedef struct {
     pocketjs_package_t *package;
@@ -26,7 +42,18 @@ typedef struct {
     pocketjs_ui_qjs_t *binding;
     pocketjs_rgb565_renderer_t *renderer;
     pocketjs_rgb565_target_t *target;
-    pocketjs_runner_t *runner;
+    TaskHandle_t task;
+    SemaphoreHandle_t wake;
+    SemaphoreHandle_t exited;
+    atomic_bool stopping;
+    uint32_t tick_hz;
+    uint32_t frames;
+    uint32_t max_frame_us;
+    uint32_t max_turn_us;
+    uint32_t max_render_us;
+    uint64_t window_turn_us;
+    uint64_t window_render_us;
+    uint32_t window_frames;
     uint16_t *strip_buffer;
     size_t strip_capacity_pixels;
     bool first_frame_logged;
@@ -34,16 +61,8 @@ typedef struct {
 
 static remapad_pocketjs_runtime_t s_runtime;
 
-static esp_err_t destroy_runtime(remapad_pocketjs_runtime_t *runtime)
+static void release_resources(remapad_pocketjs_runtime_t *runtime)
 {
-    if (runtime->runner != NULL) {
-        const esp_err_t result = pocketjs_runner_stop(runtime->runner);
-        if (result != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to stop PocketJS runner: %s", esp_err_to_name(result));
-            return result;
-        }
-        runtime->runner = NULL;
-    }
     if (runtime->strip_buffer != NULL) {
         heap_caps_free(runtime->strip_buffer);
         runtime->strip_buffer = NULL;
@@ -72,6 +91,32 @@ static esp_err_t destroy_runtime(remapad_pocketjs_runtime_t *runtime)
         pocketjs_package_close(runtime->package);
         runtime->package = NULL;
     }
+}
+
+static esp_err_t destroy_runtime(remapad_pocketjs_runtime_t *runtime)
+{
+    if (runtime->task != NULL) {
+        atomic_store_explicit(&runtime->stopping, true, memory_order_relaxed);
+        if (runtime->binding != NULL) {
+            pocketjs_ui_qjs_interrupt(runtime->binding);
+        }
+        (void)xSemaphoreGive(runtime->wake);
+        if (xSemaphoreTake(runtime->exited,
+                           pdMS_TO_TICKS(REMAPAD_POCKETJS_STOP_TIMEOUT_MS)) != pdTRUE) {
+            ESP_LOGE(TAG, "PocketJS owner task did not stop in time");
+            return ESP_ERR_TIMEOUT;
+        }
+        runtime->task = NULL;
+    }
+    if (runtime->wake != NULL) {
+        vSemaphoreDelete(runtime->wake);
+        runtime->wake = NULL;
+    }
+    if (runtime->exited != NULL) {
+        vSemaphoreDelete(runtime->exited);
+        runtime->exited = NULL;
+    }
+    release_resources(runtime);
     return ESP_OK;
 }
 
@@ -193,79 +238,84 @@ static esp_err_t allocate_strip_buffer(
     return ESP_OK;
 }
 
-esp_err_t remapad_pocketjs_start(void)
+static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
 {
-    if (s_runtime.runner != NULL || s_runtime.package != NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
+    const char *stage = "package_open";
     esp_err_t result = pocketjs_package_open(
         pocketjs_package_remapad.data,
         pocketjs_package_remapad.size,
         0,
-        &s_runtime.package);
+        &runtime->package);
     if (result != ESP_OK) {
         goto fail;
     }
 
+    stage = "package_select";
     pocketjs_package_variant_t app = {
         .struct_size = sizeof(app),
     };
     result = pocketjs_package_select(
-        s_runtime.package,
+        runtime->package,
         &pocketjs_package_remapad_contract,
         &app);
     if (result != ESP_OK) {
         goto fail;
     }
 
+    stage = "guest_create";
     pocketjs_guest_config_t guest_config;
     pocketjs_guest_config_defaults(&guest_config);
     guest_config.heap_limit = 4U * 1024U * 1024U;
+    guest_config.stack_limit = REMAPAD_POCKETJS_STACK_LIMIT;
     guest_config.prefer_psram = true;
-    result = pocketjs_guest_create(&guest_config, &s_runtime.guest);
+    result = pocketjs_guest_create(&guest_config, &runtime->guest);
     if (result != ESP_OK) {
         goto fail;
     }
 
+    stage = "ui_core_create";
     pocketjs_ui_core_config_t core_config;
     pocketjs_ui_core_config_defaults(&core_config);
     core_config.logical_width = pocketjs_package_remapad_contract.logical_width;
     core_config.logical_height = pocketjs_package_remapad_contract.logical_height;
     core_config.raster_density = pocketjs_package_remapad_contract.raster_density;
     core_config.tick_hz = pocketjs_package_remapad_contract.tick_hz;
-    result = pocketjs_ui_core_create(&core_config, &s_runtime.core);
+    result = pocketjs_ui_core_create(&core_config, &runtime->core);
     if (result != ESP_OK) {
         goto fail;
     }
 
+    stage = "ui_qjs_create";
     const pocketjs_ui_qjs_config_t binding_config = {
         .struct_size = sizeof(binding_config),
         .target_id = pocketjs_package_remapad_contract.target_id,
         .host_abi = pocketjs_package_remapad_contract.host_abi,
     };
     result = pocketjs_ui_qjs_create(
-        s_runtime.guest,
-        s_runtime.core,
+        runtime->guest,
+        runtime->core,
         &binding_config,
-        &s_runtime.binding);
+        &runtime->binding);
     if (result != ESP_OK) {
         goto fail;
     }
 
+    stage = "feed_pak";
     result = pocketjs_ui_qjs_feed_pak(
-        s_runtime.binding,
+        runtime->binding,
         app.pak.data,
         app.pak.size);
     if (result != ESP_OK) {
         goto fail;
     }
-    result = pocketjs_ui_qjs_mount(s_runtime.binding);
+    stage = "mount";
+    result = pocketjs_ui_qjs_mount(runtime->binding);
     if (result != ESP_OK) {
         goto fail;
     }
+    stage = "guest_eval";
     result = pocketjs_guest_eval(
-        s_runtime.guest,
+        runtime->guest,
         (const char *)app.javascript.data,
         app.javascript.size - 1U,
         "remapad");
@@ -273,44 +323,187 @@ esp_err_t remapad_pocketjs_start(void)
         goto fail;
     }
 
+    stage = "renderer_create";
     pocketjs_rgb565_renderer_config_t renderer_config;
     pocketjs_rgb565_renderer_config_defaults(&renderer_config);
     renderer_config.scale = pocketjs_package_remapad_contract.raster_density;
     result = pocketjs_rgb565_renderer_create(
         &renderer_config,
-        &s_runtime.renderer);
+        &runtime->renderer);
     if (result != ESP_OK) {
         goto fail;
     }
-    result = pocketjs_rgb565_target_create(&s_runtime.target);
+    stage = "target_create";
+    result = pocketjs_rgb565_target_create(&runtime->target);
     if (result != ESP_OK) {
         goto fail;
     }
+    stage = "strip_buffer";
     result = allocate_strip_buffer(
-        &s_runtime,
+        runtime,
         &pocketjs_package_remapad_contract);
     if (result != ESP_OK) {
         goto fail;
     }
 
-    pocketjs_runner_config_t runner_config;
-    pocketjs_runner_config_defaults(&runner_config);
-    runner_config.task_name = "remapad-pjs";
-    runner_config.task_stack_bytes = 32U * 1024U;
-    runner_config.sample_input = sample_input;
-    runner_config.after_turn = render_frame;
-    runner_config.user_data = &s_runtime;
-    result = pocketjs_runner_start(
-        s_runtime.binding,
-        &runner_config,
-        &s_runtime.runner);
-    if (result != ESP_OK) {
+    stage = "tick_hz";
+    runtime->tick_hz = pocketjs_ui_qjs_tick_hz(runtime->binding);
+    if (runtime->tick_hz == 0U) {
+        result = ESP_ERR_INVALID_STATE;
         goto fail;
     }
 
     return ESP_OK;
 
 fail:
-    (void)destroy_runtime(&s_runtime);
+    ESP_LOGE(TAG,
+             "start failed at %s: %s (internal=%u largest=%u psram=%u)", stage,
+             esp_err_to_name(result),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    release_resources(runtime);
     return result;
+}
+
+static bool owner_wait_until(remapad_pocketjs_runtime_t *runtime, int64_t deadline)
+{
+    while (!atomic_load_explicit(&runtime->stopping, memory_order_relaxed)) {
+        const int64_t remaining = deadline - esp_timer_get_time();
+        if (remaining <= 0) {
+            return true;
+        }
+        if (remaining > 2000) {
+            const TickType_t ticks = pdMS_TO_TICKS((uint32_t)(remaining / 1000));
+            (void)xSemaphoreTake(runtime->wake, ticks > 1 ? ticks - 1 : 1);
+        } else {
+            taskYIELD();
+        }
+    }
+    return false;
+}
+
+static void pocketjs_owner_task(void *opaque)
+{
+    remapad_pocketjs_runtime_t *runtime = opaque;
+    if (remapad_pocketjs_init(runtime) != ESP_OK) {
+        goto exit;
+    }
+
+    ESP_LOGI(TAG, "PocketJS owner task running at %" PRIu32 " Hz (stack %u bytes)",
+             runtime->tick_hz, (unsigned)REMAPAD_POCKETJS_TASK_STACK_BYTES);
+
+    const int64_t started = esp_timer_get_time();
+    uint64_t tick = 0;
+    int64_t report_due = started + INT64_C(5000000);
+    while (!atomic_load_explicit(&runtime->stopping, memory_order_relaxed)) {
+        const int64_t deadline =
+            started + (int64_t)((tick * UINT64_C(1000000)) / runtime->tick_hz);
+        if (!owner_wait_until(runtime, deadline)) {
+            break;
+        }
+        const int64_t now = esp_timer_get_time();
+        if (now - deadline > REMAPAD_POCKETJS_MAX_LAG_US) {
+            const uint64_t current =
+                (uint64_t)(now - started) * runtime->tick_hz / UINT64_C(1000000);
+            if (current > tick) {
+                tick = current;
+            }
+        }
+
+        pocketjs_ui_input_t input = { .struct_size = sizeof(input) };
+        esp_err_t result = sample_input(&input, runtime);
+        pocketjs_ui_frame_view_t frame = { .struct_size = sizeof(frame) };
+        const int64_t frame_started = esp_timer_get_time();
+        if (result == ESP_OK) {
+            result = pocketjs_ui_turn(runtime->binding, &input, &frame);
+        }
+        const uint32_t turn_us = (uint32_t)(esp_timer_get_time() - frame_started);
+        const int64_t render_started = esp_timer_get_time();
+        if (result == ESP_OK) {
+            result = render_frame(&frame, runtime);
+        }
+        if (result != ESP_OK) {
+            ESP_LOGE(TAG, "PocketJS turn failed: %s", esp_err_to_name(result));
+        }
+        const uint32_t render_us = (uint32_t)(esp_timer_get_time() - render_started);
+        const uint32_t frame_us = (uint32_t)(esp_timer_get_time() - frame_started);
+        if (frame_us > runtime->max_frame_us) {
+            runtime->max_frame_us = frame_us;
+        }
+        if (turn_us > runtime->max_turn_us) {
+            runtime->max_turn_us = turn_us;
+        }
+        if (render_us > runtime->max_render_us) {
+            runtime->max_render_us = render_us;
+        }
+        runtime->frames++;
+        runtime->window_frames++;
+        runtime->window_turn_us += turn_us;
+        runtime->window_render_us += render_us;
+        tick++;
+
+        if (esp_timer_get_time() >= report_due) {
+            ESP_LOGI(TAG,
+                     "frames=%" PRIu32 " avg_turn_us=%" PRIu32
+                     " avg_render_us=%" PRIu32 " max_turn_us=%" PRIu32
+                     " max_render_us=%" PRIu32,
+                     runtime->frames,
+                     runtime->window_frames == 0U
+                         ? 0U
+                         : (uint32_t)(runtime->window_turn_us / runtime->window_frames),
+                     runtime->window_frames == 0U
+                         ? 0U
+                         : (uint32_t)(runtime->window_render_us / runtime->window_frames),
+                     runtime->max_turn_us, runtime->max_render_us);
+            runtime->window_frames = 0U;
+            runtime->window_turn_us = 0U;
+            runtime->window_render_us = 0U;
+            report_due += INT64_C(5000000);
+        }
+    }
+
+exit:
+    xSemaphoreGive(runtime->exited);
+    vTaskDelete(NULL);
+}
+
+esp_err_t remapad_pocketjs_start(void)
+{
+    if (s_runtime.task != NULL || s_runtime.package != NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    s_runtime.wake = xSemaphoreCreateBinary();
+    s_runtime.exited = xSemaphoreCreateBinary();
+    if (s_runtime.wake == NULL || s_runtime.exited == NULL) {
+        if (s_runtime.wake != NULL) {
+            vSemaphoreDelete(s_runtime.wake);
+            s_runtime.wake = NULL;
+        }
+        if (s_runtime.exited != NULL) {
+            vSemaphoreDelete(s_runtime.exited);
+            s_runtime.exited = NULL;
+        }
+        return ESP_ERR_NO_MEM;
+    }
+
+    atomic_init(&s_runtime.stopping, false);
+    const BaseType_t created = xTaskCreatePinnedToCoreWithCaps(
+        pocketjs_owner_task,
+        REMAPAD_POCKETJS_TASK_NAME,
+        REMAPAD_POCKETJS_TASK_STACK_BYTES,
+        &s_runtime,
+        REMAPAD_POCKETJS_TASK_PRIORITY,
+        &s_runtime.task,
+        tskNO_AFFINITY,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (created != pdPASS) {
+        vSemaphoreDelete(s_runtime.wake);
+        s_runtime.wake = NULL;
+        vSemaphoreDelete(s_runtime.exited);
+        s_runtime.exited = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }

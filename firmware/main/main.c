@@ -17,5 +17,5 @@ void app_main(void)
     ESP_LOGI("remapad_app", "PSRAM free: %" PRIu32 " bytes", (uint32_t)psram_free);
 
     ESP_ERROR_CHECK(remapad_pocketjs_start());
-    ESP_LOGI("remapad_app", "PocketJS runner started");
+    ESP_LOGI("remapad_app", "PocketJS owner task started");
 }

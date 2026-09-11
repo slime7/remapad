@@ -6,7 +6,8 @@
 extern "C" {
 #endif
 
-/** Start the product-owned PocketJS package, guest, UI core, renderer, and runner. */
+/** Start the product-owned PocketJS owner task: package, guest, UI core,
+ * binding, renderer, and the UI turn loop all run on that one task. */
 esp_err_t remapad_pocketjs_start(void);
 
 #ifdef __cplusplus
