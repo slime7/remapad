@@ -31,34 +31,29 @@
 仓库在 configure 阶段报 `Missing pocketjs_idf_ui_core for esp32s3`。仓库副本因此平掉了这条忽略规则；
 `pocketjs_render_rgb565` 本来就没有它，两者现在一致。
 
-## 0003-ui-qjs-touch-hit-facts-empty-frame
+## 0003-ui-qjs-touch-hit-facts-capture-table
 
-上游 `pocketjs_ui_qjs` 的 `pocketjs_ui_turn` 只在 `touch_count != 0` 时调用
-`pocketjs_ui_core_touch_hits`。官方宿主契约（框架 `touch.ts` 中 `createTouchHitFacts`，注释里写明
-它的 Rust 对偶就是 `pocketjs_core::Ui::touch_hits`，归档符号中可见 `touch::HitTable::resolve`）
-要求宿主每帧调用它：无触点的帧负责把已抬起的触点 id 从核心的命中捕获表里清除，否则首个触点
-id 的命中事实会被永久携带。单点触摸屏（CST816T）触点 id 恒为 0，触发路径是：开机后第一次
-按下（通常落在唯一可按的 "Tap here" 按钮）解析出按钮节点 → 抬起后空帧被跳过、表项不清除 →
-之后任意位置的触摸都携带按钮的命中事实，`touchFocusable` 直接命中按钮，表现为"全屏触摸都在
-按按钮"。浏览器预览在按下时自行查询 `hitTestBounds`，不走这条捕获表路径，因此只有真机受影响。
+上游 `pocketjs_ui_qjs` 的 `pocketjs_ui_turn` 用 native `pocketjs_ui_core_touch_hits`
+解析触摸命中事实，且只在 `touch_count != 0` 时调用。真机上观察到两个层面的故障：
 
-核对过的事实：
+1. 跳过空帧使核心内的命中捕获表（归档符号 `pocketjs_core::touch::HitTable`）永不清理
+   已抬起的触点 id——CST816T 单点触点 id 恒为 0，开机后第一次按压解析出的节点被永久
+   携带，之后任意位置的触摸都命中该节点（表现为"全屏触摸都在按同一个按钮"）。
+2. 改为每帧调用（含空帧，即官方宿主契约要求的节奏）后，空帧调用之后的 resolve 不再
+   返回有效节点 id，任何触摸都找不到目标（表现为"按钮完全无响应"）。native 归档无源码
+   可查，无法进一步定位。
 
-- `firmware/components/pocketjs_ui_core/lib/esp32s3/libpocketjs_idf_ui_core.a` 的符号表中存在
-  `pocketjs_core::touch::HitTable::resolve`，且被 `pocketjs_core::Ui::touch_hits` 内联调用，证实
-  native core 维护按触点 id 的命中捕获表。
-- `ui/vendor/pocketjs/framework/src/touch.ts` 的 `createTouchHitFacts`（注释标注 "Rust twin:
-  pocketjs_core::Ui::touch_hits"）每帧调用、空帧 `table.clear()`、未见 id 逐帧剔除，是官方宿主
-  的参考行为。
-- `ui/vendor/pocketjs/contracts/spec/spec.ts` 对 op 42（hitTestBounds）的注释：宿主在触点 DOWN
-  沿解析一次，在触点存续期间携带，经 `frame()` 第 4 参下发。
-- `pocketjs_guest` 的 `guest.c` 在 `touch_count == 0` 时本来就不向 guest 传 touches/hits 参数，
-  因此空帧调用 `pocketjs_ui_core_touch_hits` 只影响核心内的命中表维护，不改变 guest 可见行为。
+本仓库的处理方式是不再调用 native `pocketjs_ui_core_touch_hits`，改为在
+`firmware/components/pocketjs_ui_qjs/src/ui_qjs.c` 内用 C 移植框架官方的宿主侧参考
+实现（`ui/vendor/pocketjs/framework/src/touch.ts` 的 `createTouchHitFacts`，注释标注
+"Rust twin: pocketjs_core::Ui::touch_hits"）：新触点 id 经
+`pocketjs_ui_core_hit_test_bounds`（规范 op 42，对当前布局树的通用几何查询）解析一次，
+触点存续期间携带，抬起后由空帧清除。该行为已在真机通过固件注入合成点击端到端验证
+（按钮坐标 → 命中按钮节点 → `onPress` 触发 → 串口输出；空白坐标正确不触发）。
 
-本仓库的处理方式是去掉 `firmware/components/pocketjs_ui_qjs/src/ui_qjs.c` 中对
-`pocketjs_ui_core_touch_hits` 的 `touch_count != 0` 门控，改为每帧调用（含 0 触点帧，函数对空
-输入返回 0，与 `hit_count != input->touch_count` 的校验天然兼容）。`0003-ui-qjs-touch-hit-facts-
-empty-frame.patch` 是这份差异的记录，用于升级组件时重新对账，不需要执行 `git apply`。
+`0003-ui-qjs-touch-hit-facts-capture-table.patch` 是这份差异的记录，用于升级组件时
+重新对账，不需要执行 `git apply`。升级组件时应优先确认上游是否已修复
+`pocketjs_ui_core_touch_hits` 的空帧行为，修复后可回退本补丁。
 
 ## 重新对账的方法
 

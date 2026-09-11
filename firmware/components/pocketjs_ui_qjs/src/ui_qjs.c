@@ -815,6 +815,60 @@ static uint32_t pack_analog(int16_t value) {
   return (uint32_t)((int32_t)value + 32896) / 257U;
 }
 
+/* Touch hit facts, ported from the framework's host-side reference
+ * (framework/src/touch.ts createTouchHitFacts): each NEW contact id resolves
+ * ONCE through the bounds hit test (spec op 42) and the node id is carried
+ * until the id lifts; contact-free frames drop every entry. The native
+ * pocketjs_ui_core_touch_hits table was observed misbehaving when driven
+ * every frame as this contract requires (resolves after a contact-free call
+ * return no node, so no tap can find a target). See patches/0003. */
+typedef struct {
+  uint8_t id;
+  bool live;
+  int32_t hit;
+} touch_fact_entry_t;
+
+static int32_t touch_fact_resolve(
+    pocketjs_ui_qjs_t *binding, touch_fact_entry_t *table,
+    const pocketjs_ui_touch_t *touch) {
+  for (size_t slot = 0; slot < POCKETJS_UI_MAX_TOUCHES; ++slot) {
+    if (table[slot].live && table[slot].id == touch->id) {
+      return table[slot].hit;
+    }
+  }
+  const int32_t hit = pocketjs_ui_core_hit_test_bounds(
+      binding->core, (float)touch->x, (float)touch->y);
+  for (size_t slot = 0; slot < POCKETJS_UI_MAX_TOUCHES; ++slot) {
+    if (!table[slot].live) {
+      table[slot].live = true;
+      table[slot].id = touch->id;
+      table[slot].hit = hit;
+      break;
+    }
+  }
+  return hit;
+}
+
+static void touch_fact_sweep(
+    touch_fact_entry_t *table, const pocketjs_ui_touch_t *touches,
+    size_t touch_count) {
+  for (size_t slot = 0; slot < POCKETJS_UI_MAX_TOUCHES; ++slot) {
+    if (!table[slot].live) {
+      continue;
+    }
+    bool present = false;
+    for (size_t index = 0; index < touch_count; ++index) {
+      if (touches[index].id == table[slot].id) {
+        present = true;
+        break;
+      }
+    }
+    if (!present) {
+      table[slot].live = false;
+    }
+  }
+}
+
 esp_err_t pocketjs_ui_turn(pocketjs_ui_qjs_t *binding,
                            const pocketjs_ui_input_t *input,
                            pocketjs_ui_frame_view_t *out_frame) {
@@ -839,16 +893,13 @@ esp_err_t pocketjs_ui_turn(pocketjs_ui_qjs_t *binding,
                      ((uint32_t)input->touches[index].y << 9U) |
                      input->touches[index].x;
   }
-  /* Hit facts must be refreshed on every turn, contact-free frames included:
-   * the core's hit table clears contacts that lifted, so a host that skips
-   * empty frames pins the first resolution to the contact id forever and
-   * every later tap lands on that stale node. */
-  const size_t hit_count =
-      pocketjs_ui_core_touch_hits(binding->core, touches, input->touch_count,
-                                  hits, POCKETJS_UI_MAX_TOUCHES);
-  if (hit_count != input->touch_count) {
-    return ESP_FAIL;
+  /* Mount guards the binding to one per guest, so module-static fact state
+   * is safe. */
+  static touch_fact_entry_t fact_table[POCKETJS_UI_MAX_TOUCHES];
+  for (size_t index = 0; index < input->touch_count; ++index) {
+    hits[index] = touch_fact_resolve(binding, fact_table, &input->touches[index]);
   }
+  touch_fact_sweep(fact_table, input->touches, input->touch_count);
   const pocketjs_guest_frame_t frame = {
       .struct_size = sizeof(frame),
       .buttons = input->buttons,
