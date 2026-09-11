@@ -10,6 +10,11 @@ compile_commands.json
 
 # Node / Bun 前端依赖与产物
 node_modules/
+# 快照目录内的依赖链接与生成文件
+ui/vendor/pocketjs/node_modules
+ui/vendor/pocketjs/.cache/
+ui/vendor/pocketjs/framework/src/styles.generated.ts
+ui/vendor/pocketjs/framework/src/styles.generated.d.ts
 dist/
 ui/dist/
 # 官方编译器在入口目录生成又删除的类型检查临时目录

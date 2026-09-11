@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Remapad 触摸屏预览</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f19;
+      --card: #141b2b;
+      --line: #22304a;
+      --accent: #38bdf8;
+      --ok: #10b981;
+      --err: #ef4444;
+      --screen-scale: 2;
+      --screen-w: 240px;
+      --screen-h: 280px;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 24px 16px 40px;
+      background: var(--bg);
+      color: #e2e8f0;
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      min-height: 100vh;
+    }
+    header {
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 19px;
+      letter-spacing: 0.02em;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--accent);
+      font-size: 12px;
+    }
+    main {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 28px;
+    }
+    /* 触摸屏外壳：屏幕区域就是唯一的输入面，没有实体按键。 */
+    .device {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 16px 14px;
+      background: #1e293b;
+      border: 2px solid #334155;
+      border-radius: 26px;
+      box-shadow: 0 22px 44px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .bezel {
+      padding: 6px;
+      background: #020617;
+      border: 2px solid #0f172a;
+      border-radius: 16px;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.85);
+    }
+    #screen {
+      display: block;
+      width: calc(var(--screen-w) * var(--screen-scale));
+      height: calc(var(--screen-h) * var(--screen-scale));
+      max-width: 100%;
+      image-rendering: pixelated;
+      background: #000;
+      border-radius: 10px;
+      touch-action: none;
+      cursor: pointer;
+    }
+    .device-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+    }
+    .hint {
+      color: #64748b;
+      font-size: 12px;
+    }
+    button {
+      padding: 6px 14px;
+      background: #334155;
+      border: 1px solid #475569;
+      border-radius: 999px;
+      color: #f1f5f9;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #475569;
+    }
+    .panel {
+      width: 320px;
+      padding: 14px 16px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      font-size: 12px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 3px 0;
+    }
+    .row span {
+      color: #94a3b8;
+    }
+    .row strong {
+      color: #e2e8f0;
+      font-variant-numeric: tabular-nums;
+    }
+    .dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+    }
+    #log {
+      height: 96px;
+      margin: 10px 0 0;
+      padding: 8px;
+      overflow-y: auto;
+      background: #0f172a;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #94a3b8;
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Remapad 触摸屏预览</h1>
+    <span class="badge">ESP32-S3 N16R8 · 240 × 280 · 触摸输入</span>
+  </header>
+
+  <main>
+    <div class="device">
+      <div class="bezel">
+        <canvas id="screen" width="240" height="280"></canvas>
+      </div>
+      <div class="device-foot">
+        <button id="reload" type="button">重新加载应用</button>
+        <span class="hint">单击或拖动屏幕</span>
+      </div>
+    </div>
+
+    <aside class="panel">
+      <div class="row"><span>运行状态</span><strong id="stat-status"><span class="dot"></span>加载中…</strong></div>
+      <div class="row"><span>帧率</span><strong id="stat-fps">--</strong></div>
+      <div class="row"><span>触点</span><strong id="stat-touch">0</strong></div>
+      <div class="row"><span>触摸帧</span><strong id="stat-frames">0</strong></div>
+      <div class="row"><span>命中节点</span><strong id="stat-hit">--</strong></div>
+      <div class="row"><span>屏幕规格</span><strong>240 × 280 · RGB565</strong></div>
+      <pre id="log"></pre>
+    </aside>
+  </main>
+
+  <script type="module">
+    // 触摸预览驱动：官方 wasm 核心负责布局与栅格化，本页只负责浏览器事件到
+    // PocketJS 触摸帧契约的转换，以及固定 60 Hz 的 frame → tick → render 循环。
+    import { createWasmUi } from '/runtime/wasm-ops.js';
+
+    // 视口与 ui/pocket.json 的 app.viewport.logical 保持一致。
+    const VIEW_W = 240;
+    const VIEW_H = 280;
+    const RASTER_DENSITY = 1;
+    const SIM_HZ = 60;
+    const STEP_MS = 1000 / SIM_HZ;
+    const MAX_CATCHUP_STEPS = 4;
+    const MAX_DT_MS = 250;
+    /** 触摸屏没有实体按键，每帧的按键与模拟量输入恒为「无输入」与「居中」。 */
+    const BUTTONS_NONE = 0;
+    const ANALOG_CENTER = 0x8080;
+    const MAX_CONTACTS = 8;
+    const LEGACY_COORD_MASK = 0x1ff;
+
+    const APP_NAME = 'remapad-ui';
+
+    const canvas = document.getElementById('screen');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('stat-status');
+    const fpsEl = document.getElementById('stat-fps');
+    const touchEl = document.getElementById('stat-touch');
+    const hitEl = document.getElementById('stat-hit');
+    const touchFramesEl = document.getElementById('stat-frames');
+    const logEl = document.getElementById('log');
+
+    let wasm = null;
+    let frameCb = null;
+    let imageData = null;
+    let rafId = 0;
+    let lastNow = 0;
+    let acc = 0;
+    let framesInSecond = 0;
+    let secondStart = 0;
+    /** pointerId -> { id, x, y, hit }，坐标是设备逻辑像素。 */
+    const contacts = new Map();
+    let touchFrameCount = 0;
+    /** 最近一次的命中结果，用于面板读数（触点在抬起后会从 contacts 移除）。 */
+    let lastHit = undefined;
+    /** 两帧之间已经抬起的触点：保留到下一帧，保证每次按压都至少被采样一次。 */
+    let releasedContacts = [];
+
+    function log(message) {
+      logEl.textContent = (logEl.textContent + message + '\n').slice(-4000);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus(text, color) {
+      statusEl.textContent = text;
+      statusEl.style.color = color ?? '#e2e8f0';
+    }
+
+    /** 触点 id 取当前未占用的最小值，释放后可以被后续触点复用。 */
+    function claimContactId() {
+      const used = new Set();
+      for (const contact of contacts.values()) {
+        used.add(contact.id);
+      }
+      for (const contact of releasedContacts) {
+        used.add(contact.id);
+      }
+      for (let candidate = 1; candidate <= MAX_CONTACTS; candidate += 1) {
+        if (!used.has(candidate)) {
+          return candidate;
+        }
+      }
+      return 0;
+    }
+
+    /** 打包成官方触点契约：x:9 位、y:9 位、id:8 位，最高位为 0 表示 9 位形式。 */
+    function packContact(id, x, y) {
+      return (
+        ((id & 0xff) << 18) |
+        ((y & LEGACY_COORD_MASK) << 9) |
+        (x & LEGACY_COORD_MASK)
+      ) >>> 0;
+    }
+
+    /** 命中事实查询：优先用边界命中（规范 op 42），回退到墨迹命中，再回退为空。 */
+    function hitQuery() {
+      if (!wasm || !wasm.ops) {
+        return null;
+      }
+      return wasm.ops.hitTestBounds ?? wasm.ops.hitTest ?? null;
+    }
+
+    function toLogical(event) {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.min(
+        VIEW_W - 1,
+        Math.max(0, Math.floor(((event.clientX - rect.left) * VIEW_W) / rect.width)),
+      );
+      const y = Math.min(
+        VIEW_H - 1,
+        Math.max(0, Math.floor(((event.clientY - rect.top) * VIEW_H) / rect.height)),
+      );
+      return { x, y };
+    }
+
+    function updateTouchReadout() {
+      touchEl.textContent = String(contacts.size);
+      hitEl.textContent = lastHit === undefined ? '--' : String(lastHit);
+    }
+
+    function onPointerDown(event) {
+      if (!wasm) {
+        return;
+      }
+      event.preventDefault();
+      const id = claimContactId();
+      if (id === 0) {
+        return;
+      }
+      const { x, y } = toLogical(event);
+      const query = hitQuery();
+      // 命中事实在按下瞬间查询一次，并在触点存续期间保持不变。
+      const hit = query ? query(x, y) : undefined;
+      lastHit = hit;
+      log('触点 (' + x + ', ' + y + ') 命中 ' + (hit === undefined ? '无查询通道' : hit));
+      contacts.set(event.pointerId, { id, x, y, hit });
+      canvas.setPointerCapture?.(event.pointerId);
+      updateTouchReadout();
+    }
+
+    function onPointerMove(event) {
+      const contact = contacts.get(event.pointerId);
+      if (!contact) {
+        return;
+      }
+      event.preventDefault();
+      const { x, y } = toLogical(event);
+      contact.x = x;
+      contact.y = y;
+    }
+
+    function onPointerUp(event) {
+      const contact = contacts.get(event.pointerId);
+      if (!contact) {
+        return;
+      }
+      event.preventDefault();
+      contacts.delete(event.pointerId);
+      releasedContacts.push(contact);
+      updateTouchReadout();
+    }
+
+    function releaseAll() {
+      if (contacts.size === 0 && releasedContacts.length === 0) {
+        return;
+      }
+      for (const contact of contacts.values()) {
+        releasedContacts.push(contact);
+      }
+      contacts.clear();
+      updateTouchReadout();
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('blur', releaseAll);
+
+    /** 本帧的触点快照：触点打包数组，以及与之对应的命中事实数组。抬起事件在下一次采样时
+     * 已生效，因此这里把刚抬起的触点一并送出，避免快速点击落在两帧之间而被漏掉。 */
+    function contactSnapshot() {
+      const packed = [];
+      const hits = [];
+      const frame = [...contacts.values(), ...releasedContacts];
+      releasedContacts = [];
+      for (const contact of frame) {
+        packed.push(packContact(contact.id, contact.x, contact.y));
+        hits.push(contact.hit);
+      }
+      return { packed, hits };
+    }
+
+    function safeFrame() {
+      if (!frameCb) {
+        return;
+      }
+      try {
+        const { packed, hits } = contactSnapshot();
+        if (packed.length > 0) {
+          touchFrameCount += 1;
+          touchFramesEl.textContent = String(touchFrameCount);
+        }
+        frameCb(BUTTONS_NONE, ANALOG_CENTER, packed, hits, undefined);
+        wasm.tick();
+      } catch (error) {
+        frameCb = null;
+        log('帧执行失败: ' + (error && error.stack ? error.stack : error));
+        setStatus('运行出错', '#ef4444');
+      }
+    }
+
+    function blit() {
+      if (!wasm) {
+        return;
+      }
+      imageData.data.set(wasm.renderScaledIncremental(RASTER_DENSITY));
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function tick(now) {
+      rafId = requestAnimationFrame(tick);
+      let dt = now - lastNow;
+      lastNow = now;
+      if (dt > MAX_DT_MS) {
+        dt = MAX_DT_MS;
+      }
+      acc += dt;
+      let steps = 0;
+      while (acc >= STEP_MS && steps < MAX_CATCHUP_STEPS) {
+        safeFrame();
+        acc -= STEP_MS;
+        steps += 1;
+        framesInSecond += 1;
+      }
+      if (steps > 0) {
+        blit();
+      }
+      if (secondStart === 0) {
+        secondStart = now;
+      }
+      if (now - secondStart >= 1000) {
+        fpsEl.textContent = String(Math.round((framesInSecond * 1000) / (now - secondStart)));
+        framesInSecond = 0;
+        secondStart = now;
+      }
+    }
+
+    function start() {
+      if (rafId !== 0) {
+        return;
+      }
+      lastNow = performance.now();
+      secondStart = 0;
+      acc = 0;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function stop() {
+      if (rafId === 0) {
+        return;
+      }
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+
+    async function loadApp() {
+      stop();
+      releaseAll();
+      frameCb = null;
+      setStatus('加载中…');
+      // 每次加载都重置核心，避免上一轮的资源与节点残留。
+      wasm.init(RASTER_DENSITY);
+      globalThis.ui = wasm.ops;
+      globalThis.frame = undefined;
+      globalThis.__simHz = SIM_HZ;
+      globalThis.__pocketApp = APP_NAME;
+      const pakResponse = await fetch('/dist/' + APP_NAME + '.pak');
+      globalThis.__pak = pakResponse.ok ? await pakResponse.arrayBuffer() : undefined;
+      const bundleResponse = await fetch('/dist/' + APP_NAME + '.js');
+      if (!bundleResponse.ok) {
+        throw new Error('/dist/' + APP_NAME + '.js 不存在（HTTP ' + bundleResponse.status + '），请先执行 pnpm run compile');
+      }
+      const source = await bundleResponse.text();
+      // 每次加载都建立新的函数作用域，避免上一轮顶层变量冲突。
+      new Function(source + '\n//# sourceURL=' + APP_NAME + '.js')();
+      if (typeof globalThis.frame !== 'function') {
+        throw new Error('bundle 已执行但没有安装 globalThis.frame，请确认入口调用了 mount()');
+      }
+      frameCb = globalThis.frame;
+      safeFrame();
+      blit();
+      start();
+      setStatus('运行中 · 60 FPS 目标', '#10b981');
+      log('已加载 ' + APP_NAME);
+    }
+
+    async function boot() {
+      const wasmResponse = await fetch('/runtime/pocketjs.wasm');
+      if (!wasmResponse.ok) {
+        throw new Error('缺少官方 wasm 核心（HTTP ' + wasmResponse.status + '）');
+      }
+      wasm = await createWasmUi(await wasmResponse.arrayBuffer(), {
+        width: VIEW_W,
+        height: VIEW_H,
+        rasterDensity: RASTER_DENSITY,
+      });
+      imageData = ctx.createImageData(VIEW_W * RASTER_DENSITY, VIEW_H * RASTER_DENSITY);
+      log('wasm 核心就绪');
+      await loadApp();
+    }
+
+    document.getElementById('reload').addEventListener('click', () => {
+      reloadApp();
+    });
+
+    function reloadApp() {
+      loadApp().catch((error) => {
+        log('加载失败: ' + (error && error.stack ? error.stack : error));
+        setStatus('加载失败', '#ef4444');
+      });
+    }
+
+    // 预览服务器在 ui/src 变更并重新编译后推送 reload，页面据此加载新产物。
+    new EventSource('/events').onmessage = (event) => {
+      if (event.data === 'reload') {
+        log('检测到重新编译，正在加载新产物…');
+        reloadApp();
+      }
+    };
+
+    boot().catch((error) => {
+      log('启动失败: ' + (error && error.stack ? error.stack : error));
+      setStatus('启动失败', '#ef4444');
+    });
+  </script>
+</body>
+</html>

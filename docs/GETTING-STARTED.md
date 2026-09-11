@@ -9,7 +9,7 @@
 | Node.js | 18 或更高 | 运行项目脚本和已发布 CLI |
 | pnpm | 当前稳定版 | 工作区依赖与任务调度 |
 | Bun | PocketJS 官方要求的版本 | 执行官方 compiler、官方构建脚本和 Web 开发主机 |
-| PocketJS compiler | 仓库依赖 `@pocketjs/framework`，或含 ESP-IDF host profile 的官方 checkout | 提供 `tools/pocket.ts`；npm 上的 0.11.0 还没有 host profile 支持，此时用 `POCKETJS_ROOT` 指向官方 checkout |
+| PocketJS compiler | 仓库内的 `ui/vendor/pocketjs` 快照 | 提供 `tools/pocket.ts` 与 ESP-IDF host profile 支持；npm 上发布的 0.11.0 尚不含该支持 |
 | Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 仅在升级组件、重新生成 ESP32-S3 原生归档时需要 |
 | Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
 | ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
@@ -29,16 +29,7 @@ pnpm install
 
 六个官方 ESP-IDF 组件与 ESP32-S3 原生归档已随仓库固定在 `firmware/components/`，Web 开发主机随 `ui/node_modules/@pocketjs/framework` 一起安装，因此这一条之后就只剩构建命令。
 
-`@pocketjs/framework` 0.11.0 还没有 ESP-IDF host profile 编译器，因此前端检查、编译和打包仍需官方 checkout 参与。把路径告诉项目脚本即可：
-
-```powershell
-cd C:\src\pocketjs
-bun install
-$env:POCKETJS_ROOT = 'C:\src\pocketjs'
-cd C:\src\remapad
-```
-
-`POCKETJS_ROOT` 只影响 compiler 的来源；包和预览产物始终写入本仓库的 `ui/dist/`。
+前端检查、编译和打包使用仓库内的 `ui/vendor/pocketjs` 快照，依赖由 `pnpm install` 安装，因此不需要额外准备。快照的来源与同步方式见 [ui/vendor/pocketjs/README.md](../ui/vendor/pocketjs/README.md)。
 
 ### 2. 准备 PocketJS ESP-IDF 依赖（升级时）
 
@@ -80,13 +71,13 @@ remapad-ui.pak      样式、字体和图像资源包
 remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
 ```
 
-`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、仓库同级 `../pocketjs`、`ui/node_modules/@pocketjs/framework` 的顺序定位包含 `--host-profile` 的官方脚本；它只负责路径和参数转发，不实现 compiler，也不改变 package 格式。
+`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、`ui/vendor/pocketjs`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；默认命中仓库内的快照。它只负责路径与参数转发、建立快照的依赖链接，不实现 compiler，也不改变 package 格式。
 
-官方命令的语义如下，适用于已正确安装并能定位 PocketJS framework checkout 的环境：
+官方命令的语义如下，`pocket build` 的 `--host-profile` 形式等价于上面的项目脚本：
 
 ```powershell
-$env:POCKETJS_ROOT = 'C:\src\pocketjs'
-pocket build --manifest ui/pocket.json `
+cd ui/vendor/pocketjs
+bun tools/pocket.ts build --manifest ../pocket.json `
   --host-profile firmware/pocket.host.json `
   --project-root ui --outdir ui/dist `
   --output ui/dist/remapad-ui.pocket
@@ -118,7 +109,7 @@ idf.py set-target esp32s3
 idf.py build
 ```
 
-`firmware/CMakeLists.txt` 先按 `POCKETJS_ROOT`（默认仓库同级 `../pocketjs`）把 checkout 中的官方组件加入 `EXTRA_COMPONENT_DIRS`，`firmware/main/CMakeLists.txt` 再按顺序接入包：
+`firmware/components/` 中的官方组件由 ESP-IDF 自动发现，`firmware/main/CMakeLists.txt` 按顺序接入包：
 
 1. 如果 `ui/dist/remapad-ui.pocket` 存在，使用官方 `pocketjs_embed_package`。
 2. 否则使用官方 `pocketjs_compile_app`，让 CMake 调用 PocketJS CLI 生成 build 目录内的包。
@@ -137,14 +128,14 @@ idf.py -p COM3 flash monitor
 
 - [ui/pocket.json](../ui/pocket.json)：应用清单和应用侧 capability。
 - [firmware/pocket.host.json](../firmware/pocket.host.json)：ESP32-S3 host profile。
-- [firmware/CMakeLists.txt](../firmware/CMakeLists.txt)：按 `POCKETJS_ROOT` 发现官方 ESP-IDF 组件。
+- [firmware/components/](../firmware/components)：固定的官方 ESP-IDF 组件与 ESP32-S3 原生归档。
 - [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
 - [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer、runner 生命周期。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：N16R8 Flash/PSRAM 和 FreeRTOS 预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY 和 4 MB factory 分区。
 - [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
 - [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
-- [patches/README.md](../patches/README.md)：必须应用到 PocketJS checkout 的补丁与核对说明。
+- [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 
 ## 最终产品数据面（当前规划）
@@ -163,7 +154,7 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 ### `bun not found`
 
-项目脚本通过 Bun 执行官方 checkout 中的 `tools/pocket.ts` 和 compiler。安装官方 Bun，并设置 `POCKETJS_ROOT` 指向包含该文件的 PocketJS checkout，确保 `bun` 位于当前 PowerShell 的 `PATH`，再重试 `pnpm run check` 或 `pnpm run build`。
+项目脚本通过 Bun 执行 `ui/vendor/pocketjs/tools/pocket.ts`。安装官方 Bun 并确保它位于当前 PowerShell 的 `PATH`，再重试 `pnpm run check` 或 `pnpm run build`；如果看到缺少依赖的报错，先执行一次 `pnpm install`。
 
 ### `pocketjs_compile_app requires the PocketJS CLI in PATH`
 
@@ -183,7 +174,7 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 ### `unsupported QuickJS source; review immutable-buffer patch before upgrading`
 
-`pocketjs_guest` 的 QuickJS 源码校验值与 ESP Component Registry 提供的 `espressif/quickjs-ng` 0.14.0 不一致。按 [patches/README.md](../patches/README.md) 把 `patches/0001-quickjs-ng-0.14.0-source-pin.patch` 应用到 PocketJS checkout 后重新执行 `idf.py build`。
+仓库内的 `firmware/components/pocketjs_guest` 已经按 Registry 实际内容修正了该校验值，出现这个报错说明组件被上游版本覆盖过。按 [patches/README.md](../patches/README.md) 重新核对并修正。
 
 ### `Missing libpocketjs_idf_ui_core.a for esp32s3`
 

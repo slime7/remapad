@@ -1,8 +1,8 @@
-// 官方 PocketJS 工具链入口。默认使用 ui/node_modules 中的 @pocketjs/framework，
-// 因此项目自身就能完成检查、编译、打包与 Web 预览；POCKETJS_ROOT 只在需要对照最新
-// 官方源码或重建原生归档时使用。
+// 官方 PocketJS 工具链入口。编译器、框架源码、字体与浏览器运行时都取自仓库内的
+// ui/vendor/pocketjs 快照，因此项目自身就能完成检查、编译、打包与预览；POCKETJS_ROOT
+// 只在需要对照官方 checkout 或重建原生归档时使用。
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, symlinkSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,8 +14,8 @@ const HOST_PROFILE = resolve(PROJECT_ROOT, 'firmware/pocket.host.json');
 const UI_OUTDIR = resolve(UI_ROOT, 'dist');
 const PACKAGE_OUTPUT = resolve(UI_OUTDIR, 'remapad-ui.pocket');
 const COMPONENTS_DIR = resolve(PROJECT_ROOT, 'firmware/components');
+const VENDOR_ROOT = resolve(UI_ROOT, 'vendor/pocketjs');
 const SIBLING_CHECKOUT = resolve(PROJECT_ROOT, '../pocketjs');
-const INSTALLED_FRAMEWORK = resolve(UI_ROOT, 'node_modules/@pocketjs/framework');
 
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? '';
@@ -28,7 +28,7 @@ if (!['check', 'compile', 'build', 'web', 'native'].includes(command)) {
 
 const candidates = [
   process.env.POCKETJS_ROOT?.trim() ? resolve(process.env.POCKETJS_ROOT.trim()) : null,
-  INSTALLED_FRAMEWORK,
+  VENDOR_ROOT,
   SIBLING_CHECKOUT,
 ].filter((root, index, roots) => root !== null && roots.indexOf(root) === index);
 
@@ -81,6 +81,23 @@ function cliArgs(root, subcommand, outdir) {
     args.push('--output', PACKAGE_OUTPUT);
   }
   return args;
+}
+
+// 编译器在打包阶段从自身包根解析 vue、solid-js 等运行时依赖。快照位于仓库内，
+// 因此这里把它指向项目已安装的 ui/node_modules，避免同一批依赖出现第二份副本。
+// 目标已存在时不做任何事；pnpm install 会重建 ui/node_modules。
+function ensureVendorNodeModules() {
+  const link = resolve(VENDOR_ROOT, 'node_modules');
+  if (existsSync(link)) {
+    return;
+  }
+  const target = resolve(UI_ROOT, 'node_modules');
+  if (!existsSync(target)) {
+    console.error('[Remapad] 缺少 ' + target + '，请先执行 pnpm install');
+    process.exit(1);
+  }
+  symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+  console.log('[Remapad] 已把 ui/vendor/pocketjs/node_modules 指向项目依赖目录');
 }
 
 /** 监听 UI 源码，变更后重新编译并让预览页加载新产物。 */
@@ -197,9 +214,14 @@ if (command === 'native') {
 // bundle 仍然输出到本仓库的 ui/dist。
 const compilerRoot = requireRoot(hasHostProfileCompiler, '包含 --host-profile 的 PocketJS compiler');
 
+if (compilerRoot === VENDOR_ROOT) {
+  ensureVendorNodeModules();
+}
+console.log('[Remapad] compiler: ' + compilerRoot);
+
 if (command === 'web') {
-  // 浏览器运行时优先取自项目依赖，避免往作为参考的 checkout 里写入任何文件。
-  const runtimeRoot = [INSTALLED_FRAMEWORK, ...candidates].find(hasWebHost) ?? compilerRoot;
+  // 浏览器运行时取自与编译器同一份快照，避免版本错配。
+  const runtimeRoot = [VENDOR_ROOT, ...candidates].find(hasWebHost) ?? compilerRoot;
   const runtimeDir = resolve(runtimeRoot, 'hosts/web');
   console.log('[Remapad] compiler: ' + compilerRoot);
   console.log('[Remapad] 浏览器运行时: ' + runtimeDir);

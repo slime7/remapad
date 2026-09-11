@@ -20,7 +20,7 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
 - **前端 UI 工程 (`ui/`)**：
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法构建。
   - 样式使用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
-  - 依赖由 pnpm 管理，官方 PocketJS 编译器由 Bun 执行。
+  - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，编译器与框架来源为仓库内的 `ui/vendor/pocketjs` 快照。
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言编写。
   - 硬件绑定 ESP32-S3-WROOM-1 N16R8（16MB Flash + 8MB Octal PSRAM）。
@@ -58,8 +58,8 @@ Remapad 是面向搭载屏幕的 ESP32-S3 (N16R8) 的嵌入式控制器系统，
   - 构建期会自动提取文本字符集并在烘焙阶段生成对应插槽的点阵图集。
 
 - **PocketJS 组件、归档与脚本入口**：
-  - 仓库是自包含的：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/node_modules/@pocketjs/framework` 提供 Web 开发主机（npm 上的 0.11.0 还不含 ESP-IDF host profile 编译器，该编译器来自可选 checkout）。
-  - `POCKETJS_ROOT` 是可选的对照路径，只在 npm 版本缺少 host profile 编译器或需要重建原生归档时使用；不要把本项目的产物写进该目录。
+  - 仓库是自包含的：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定编译器、框架源码、构建资源与触摸预览用的官方 wasm 核心。
+  - `POCKETJS_ROOT` 是可选的对照路径，只在重新生成快照（`scripts/vendor-pocketjs.mjs`）或重建原生归档时使用；不要把本项目的产物写进该目录。
   - 硬件屏幕是触摸屏：`ui/preview/` 是项目自己的预览页，把浏览器触摸事件转换为 PocketJS 触摸帧契约（`frame(buttons, analog, touches, hits)`），由 `scripts/preview-server.mjs` 提供静态服务；不要再退回官方 playground 的 PSP 按键界面。
   - 升级 `firmware/components/` 后必须重新生成原生归档并核对 QuickJS 校验值，见 [patches/README.md](patches/README.md)。
 

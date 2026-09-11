@@ -51,11 +51,13 @@ flowchart LR
 remapad/
 ├── scripts/
 │   ├── create_adr.py            # ADR 生成脚本
-│   ├── pocketjs.mjs             # 官方工具链与触摸预览入口
-│   └── preview-server.mjs       # 触摸预览的静态服务器
+│   ├── pocketjs.mjs             # 工具链与触摸预览入口
+│   ├── preview-server.mjs       # 触摸预览的静态服务器
+│   └── vendor-pocketjs.mjs      # 从上游 checkout 重新生成编译器快照
 ├── patches/                     # 上游 PocketJS 对账记录与发布说明
 ├── ui/
 │   ├── pocket.json              # PocketJS 应用清单
+│   ├── vendor/pocketjs/         # 固定的 PocketJS 编译器与框架快照
 │   ├── preview/                 # 触摸屏预览页（浏览器触摸事件 → PocketJS 触摸帧）
 │   └── src/                     # Vue Vapor JSX UI
 │       └── bridge/              # USB/NS2/BLE 控制面协议预留
@@ -80,12 +82,12 @@ remapad/
 - Node.js 18 或更高版本。
 - pnpm，用于工作区依赖和脚本调度。
 - Bun，用于执行 PocketJS 官方脚本与 Web 开发主机。
-- 可选的 PocketJS 官方源码 checkout：默认构建不需要它，只有当前 npm 版本缺少 ESP-IDF host profile 编译器、或需要重建原生归档与登记上游更新时才用 `POCKETJS_ROOT` 指向它。
+- 可选的 PocketJS 官方源码 checkout：默认构建不需要它（编译器来自仓库内的 `ui/vendor/pocketjs` 快照），只有在重建原生归档、登记上游更新或重新生成快照时才用 `POCKETJS_ROOT` 指向它。
 - ESP-IDF `>=6.0,<6.2`，由官方 PocketJS ESP-IDF 组件要求；本仓库已在 6.1 上验证。
 - Xtensa Rust 工具链（仅升级组件、重建原生归档时需要）：固定为 `esp-rs/rust-build` 的 `v1.97.0.0`。
 - ESP32-S3 N16R8 开发板与触摸屏；屏幕控制器、触摸芯片和引脚仍需要产品 BSP。
 
-PocketJS 的 ESP-IDF 组件没有发布到 ESP Component Registry，因此六个官方组件与 ESP32-S3 原生 Rust 归档固定在 `firmware/components/` 内；本项目不维护 Rust 工程，日常构建不下载组件、也不需要 Rust。
+PocketJS 的 ESP-IDF 组件没有发布到 ESP Component Registry，因此六个官方组件与 ESP32-S3 原生 Rust 归档固定在 `firmware/components/` 内；npm 上的框架包没有 ESP-IDF host profile 编译器，因此编译器固定在 `ui/vendor/pocketjs/` 内。本项目不维护 Rust 工程，日常构建不下载组件、不需要 Rust，也不依赖外部 checkout。
 
 ## 开发与构建
 
@@ -95,16 +97,7 @@ PocketJS 的 ESP-IDF 组件没有发布到 ESP Component Registry，因此六个
 pnpm install
 ```
 
-仓库依赖 `@pocketjs/framework` 自带 Web 开发主机，但 0.11.0 还不含 ESP-IDF host profile 编译器，因此前端编译需要官方 checkout 参与；该安装只属于 PocketJS checkout：
-
-```powershell
-cd C:\src\pocketjs
-bun install
-$env:POCKETJS_ROOT = 'C:\src\pocketjs'
-cd C:\src\remapad
-```
-
-`POCKETJS_ROOT` 只影响 compiler 的来源；包、预览产物和原生归档都留在本仓库内。
+`ui/vendor/pocketjs` 是固定的官方编译器与框架快照，`pnpm install` 之后即可直接构建；`POCKETJS_ROOT` 是可选的对照路径，只有重新生成快照或重建原生归档时才需要。
 
 然后在仓库根目录执行：
 
@@ -116,10 +109,10 @@ pnpm run build
 pnpm run dev
 ```
 
-这些命令都由 `scripts/pocketjs.mjs` 转发给官方脚本：`check`、`compile`、`build` 调用 `tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；`dev` 编译后启动项目内的触摸屏预览页（`ui/preview/`，240 × 280，触摸输入，无实体按键），其渲染与触摸语义来自官方运行时；`native` 重建 ESP32-S3 原生归档。`build` 的等价官方命令为：
+这些命令都由 `scripts/pocketjs.mjs` 调用仓库内的官方实现：`check`、`compile`、`build` 执行 `ui/vendor/pocketjs/tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；`dev` 编译后启动项目内的触摸屏预览页（`ui/preview/`，240 × 280，触摸输入，无实体按键）；`native` 用上游 `tools/esp-idf-native.ts` 重建 ESP32-S3 原生归档。`build` 的等价官方命令为：
 
 ```powershell
-cd $env:POCKETJS_ROOT
+cd C:\src\remapad\ui\vendor\pocketjs
 bun tools/pocket.ts build --manifest C:\src\remapad\ui\pocket.json `
   --host-profile C:\src\remapad\firmware\pocket.host.json `
   --project-root C:\src\remapad\ui --outdir C:\src\remapad\ui\dist `
