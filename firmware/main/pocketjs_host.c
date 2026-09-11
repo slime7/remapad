@@ -188,6 +188,12 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
             return ESP_ERR_INVALID_SIZE;
         }
         const int region_y = (int)(region.y * scale);
+        const int region_x = (int)(region.x * scale);
+        const int region_width = (int)(region.width * scale);
+        if (region_width <= 0 || (size_t)region_width > physical_width) {
+            pocketjs_rgb565_abort(runtime->renderer, runtime->target);
+            return ESP_ERR_INVALID_SIZE;
+        }
         const size_t region_pixels = physical_width * region_height;
         if (region_pixels > runtime->strip_capacity_pixels) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
@@ -204,14 +210,21 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return result;
         }
-        /* strip 是全宽区域，像素列从 0 起覆盖物理整行；面板传输失败时同样
-         * 放弃本帧事务。 */
+        /* strip 每行按视口全宽布局，renderer 只写 region 横向区间；先按行
+         * 搬移为紧凑布局，再只把这个区间提交面板，避免把区间外的清零像素
+         * 当作黑色刷进画面。 */
+        for (size_t row = 0; row < region_height; ++row) {
+            memmove(runtime->strip_buffer + row * region_width,
+                    runtime->strip_buffer + row * physical_width + region_x,
+                    (size_t)region_width * sizeof(*runtime->strip_buffer));
+        }
+        /* 面板传输失败时放弃本帧事务。 */
         if (runtime->panel_ready) {
             result = panel_transfer(
                 runtime->strip_buffer,
-                0,
+                region_x,
                 region_y,
-                (int)physical_width,
+                region_width,
                 (int)region_height);
             if (result != ESP_OK) {
                 pocketjs_rgb565_abort(runtime->renderer, runtime->target);

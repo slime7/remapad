@@ -90,13 +90,27 @@ size_t touch_sample(touch_contact_t *out, size_t capacity)
         return 0;
     }
 
+    static uint32_t poll_index;
+    static bool last_pressed;
+    ++poll_index;
+
     /* CST816T 是单点触摸，读到按下即返回一个触点；无按下时触点数组清空。 */
     uint16_t x = 0;
     uint16_t y = 0;
     uint8_t count = 0;
-    esp_lcd_touch_read_data(s_touch);
+    const esp_err_t read_result = esp_lcd_touch_read_data(s_touch);
     const bool pressed =
         esp_lcd_touch_get_coordinates(s_touch, &x, &y, NULL, &count, 1);
+
+    /* 诊断日志（触摸链路验证后移除）：按下沿即时记录，平时每秒输出一次
+     * 轮询状态，用于区分「芯片无上报」与「触点未进入 UI」。 */
+    const bool pressed_edge = pressed && !last_pressed;
+    if (pressed_edge || (poll_index % 60U) == 0U) {
+        ESP_LOGI(TAG, "poll rd=%s pressed=%d count=%u x=%u y=%u",
+                 esp_err_to_name(read_result), pressed ? 1 : 0, count, x, y);
+    }
+    last_pressed = pressed;
+
     if (!pressed || count == 0) {
         return 0;
     }
