@@ -1,5 +1,6 @@
 import { mount } from '@pocketjs/framework/vue-vapor';
-import Hero from './App';
+import Hero from './Hero';
+import App from './App';
 
 // quickjs-ng 的 js_std_add_helpers 只给全局 console 装了 log，框架 prelude 的
 // 守卫用 `typeof console !== 'object'` 判断，看到这个半成品对象就跳过了 warn
@@ -43,4 +44,4 @@ if (pocketConsole !== undefined && typeof nativeLog === 'function') {
   }
 }
 
-mount(() => <Hero />);
+mount(() => <App />);

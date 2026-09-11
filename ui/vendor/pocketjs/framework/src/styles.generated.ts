@@ -37,15 +37,22 @@ export const STYLE_IDS: Record<string, number> = {
   "absolute left-3 right-3 bottom-3 flex-row items-center justify-between px-2 py-1 rounded-lg shadow-md bg-white border-slate-200": 29,
   "flex-row flex-wrap": 30,
   "hidden": 31,
+  "w-full h-full flex-col items-stretch bg-[#060f1b]": 32,
+  "px-8 py-2 w-full flex": 33,
+  "text-[#d9e6ff]": 34,
+  "flex-1": 35,
+  "px-4 pb-6 mt-4": 36,
+  "text-[#d9e6ff] text-xl": 37,
 };
 
 /** Number of records in styles.bin (valid styleIds are 0..COUNT-1). */
-export const STYLE_COUNT = 32;
+export const STYLE_COUNT = 38;
 
 /** Baked font-atlas slots shipped in the pak: slot -> metrics. */
 export const FONT_SLOTS: Record<number, { px: number; bold: boolean }> = {
   0: { px: 12, bold: false },
   2: { px: 16, bold: false },
+  4: { px: 20, bold: false },
   7: { px: 12, bold: true },
   8: { px: 14, bold: true },
   9: { px: 16, bold: true },
