@@ -1,0 +1,27 @@
+diff --git a/hosts/esp-idf/components/pocketjs_ui_qjs/src/ui_qjs.c b/hosts/esp-idf/components/pocketjs_ui_qjs/src/ui_qjs.c
+--- a/hosts/esp-idf/components/pocketjs_ui_qjs/src/ui_qjs.c
++++ b/hosts/esp-idf/components/pocketjs_ui_qjs/src/ui_qjs.c
+@@ -839,14 +839,19 @@
+                      ((uint32_t)input->touches[index].y << 9U) |
+                      input->touches[index].x;
+   }
+-  if (input->touch_count != 0U) {
+-    const size_t hit_count =
+-        pocketjs_ui_core_touch_hits(binding->core, touches, input->touch_count,
+-                                    hits, POCKETJS_UI_MAX_TOUCHES);
+-    if (hit_count != input->touch_count)
+-      return ESP_FAIL;
+-  }
++  /* Hit facts must be refreshed on every turn, contact-free frames included:
++   * the core's hit table clears contacts that lifted, so a host that skips
++   * empty frames pins the first resolution to the contact id forever and
++   * every later tap lands on that stale node. */
++  const size_t hit_count =
++      pocketjs_ui_core_touch_hits(binding->core, touches, input->touch_count,
++                                  hits, POCKETJS_UI_MAX_TOUCHES);
++  if (hit_count != input->touch_count) {
++    return ESP_FAIL;
++  }
+   const pocketjs_guest_frame_t frame = {
+       .struct_size = sizeof(frame),
+       .buttons = input->buttons,
