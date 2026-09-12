@@ -376,7 +376,12 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
     stage = "guest_create";
     pocketjs_guest_config_t guest_config;
     pocketjs_guest_config_defaults(&guest_config);
-    guest_config.heap_limit = 4U * 1024U * 1024U;
+    /* JS 堆预算：7 个常驻页面 + 5 键导航的 mount 峰值实测越过 4MB 默认
+     * （guest_eval OOM），提到 5.5MB 后挂载峰值仍随页面增重间歇性越过
+     * （QuickJS InternalError: out of memory，两次连续复现），再提到
+     * 6.5MB；OOM 时 PSRAM 尚余 2.6MB、内部 RAM 尚余 264KB，该值留有
+     * 运行期增长余量，继续扩页面前先看 mount 后的 js_heap 日志。 */
+    guest_config.heap_limit = 6656U * 1024U;
     guest_config.stack_limit = REMAPAD_POCKETJS_STACK_LIMIT;
     guest_config.prefer_psram = true;
     result = pocketjs_guest_create(&guest_config, &runtime->guest);
@@ -443,6 +448,13 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
         "remapad");
     if (result != ESP_OK) {
         goto fail;
+    }
+    /* 启动路径的 JS 堆峰值一次性采样（全堆遍历有毫秒级开销，不进周期日志）。 */
+    pocketjs_guest_stats_t boot_stats = {.struct_size = sizeof(boot_stats)};
+    if (pocketjs_guest_stats(runtime->guest, &boot_stats) == ESP_OK) {
+        ESP_LOGI(TAG, "js heap after eval: used=%" PRIu32 "kB limit=%" PRIu32 "kB",
+                 (uint32_t)(boot_stats.heap_used / 1024U),
+                 (uint32_t)(boot_stats.heap_limit / 1024U));
     }
 
     stage = "renderer_create";
