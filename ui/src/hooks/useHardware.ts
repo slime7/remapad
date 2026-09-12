@@ -8,7 +8,7 @@
 import { reactive } from 'vue';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { hardware } from '../bridge/driver';
-import type { BatteryInfo, DeviceMsg, PairingState, UsbRole } from '../bridge/protocol';
+import type { BatteryInfo, DebugKey, DeviceMsg, PairingState, UsbRole } from '../bridge/protocol';
 
 export interface HardwareUiState {
   /** bridge 握手成功（原生固件或浏览器 mock）。 */
@@ -120,6 +120,15 @@ export function setBacklight(brightness: number): void {
   hardware.send({ t: 'setBacklight', brightness: clamped }, (msg) => {
     if (msg.t === 'backlightSet' && msg.success) {
       hw.backlight = msg.brightness;
+    }
+  });
+}
+
+/** 调试页按键注入：onAck 在固件确认写入数据面后触发，用于按钮高亮反馈。 */
+export function sendDebugKey(key: DebugKey, onAck?: () => void): void {
+  hardware.send({ t: 'debugKey', key }, (msg) => {
+    if (msg.t === 'debugKeySet' && onAck) {
+      onAck();
     }
   });
 }

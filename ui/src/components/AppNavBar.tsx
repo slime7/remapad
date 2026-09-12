@@ -1,6 +1,6 @@
 /**
  * 悬浮底部菜单：状态 + 设置两个大按钮，绝对定位悬浮在所有页面之上。
- * 页面内容自行预留底部空间（pb-[96]），避免被菜单遮挡。
+ * 滚动页在内容末尾放 BottomPlaceholder 垫高，避免最后一段被菜单遮挡。
  *
  * 注意 Vue Vapor 响应性：条件必须以函数调用形式出现在 JSX 里（读取发生在
  * 渲染作用内才会被跟踪），setup 期赋值的常量不会随 props 更新。
@@ -9,7 +9,7 @@ import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { COLOR } from '../theme';
 
-export type TabKey = 'home' | 'settings' | 'pairing' | 'mode' | 'system';
+export type TabKey = 'home' | 'settings' | 'pairing' | 'mode' | 'system' | 'debug';
 
 export function AppNavBar(props: { tab: TabKey; onChange: (tab: TabKey) => void }) {
   const statusActive = () => props.tab === 'home';

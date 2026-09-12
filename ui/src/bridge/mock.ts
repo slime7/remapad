@@ -137,6 +137,11 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       reply({ t: 'rumbleAck', id, success: false });
       break;
 
+    case 'debugKey':
+      // 浏览器预览没有数据面，只回执确认供调试页高亮反馈。
+      reply({ t: 'debugKeySet', id, key: cmd.key });
+      break;
+
     case 'calibrateSensors':
       reply({
         t: 'error',

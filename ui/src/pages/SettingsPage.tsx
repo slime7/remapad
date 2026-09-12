@@ -5,14 +5,13 @@ import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR } from '../theme';
+import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
 import type { TabKey } from '../components/AppNavBar';
 
 const ITEM_H = 44;
 const ITEM_GAP = 8;
 /** 顶部留白：26px 状态栏覆盖层 + 8px 间距。 */
 const TOP_PAD = 34;
-/** 底部预留：96px 底栏避让 + 24px 滚动余量，保证列表可滚，随 item 数自动增长。 */
-const BOTTOM_RESERVE = 120;
 
 interface SettingsItem {
   key: TabKey;
@@ -24,17 +23,18 @@ const ITEMS: SettingsItem[] = [
   { key: 'pairing', title: '手柄配对', glyph: ICON.bluetooth },
   { key: 'mode', title: '模式切换', glyph: ICON.swapHoriz },
   { key: 'system', title: '系统', glyph: ICON.settings },
+  { key: 'debug', title: '调试', glyph: ICON.bug },
 ];
 
 export function SettingsPage(props: { active: () => boolean; onGo: (tab: TabKey) => void }) {
   const contentH = () =>
-    TOP_PAD + ITEMS.length * ITEM_H + (ITEMS.length - 1) * ITEM_GAP + BOTTOM_RESERVE;
+    TOP_PAD + ITEMS.length * ITEM_H + ITEMS.length * ITEM_GAP + BOTTOM_PLACEHOLDER_H;
   const scroller = usePageScroll(props.active, contentH);
 
   return (
     <View class="w-full h-full overflow-hidden">
       <View
-        class="w-full flex-col px-4 pt-[34] pb-[96] gap-2"
+        class="w-full flex-col px-4 pt-[34] gap-2"
         style={{ translateY: -scroller.offset() }}
       >
         {ITEMS.map((item) => (
@@ -49,6 +49,7 @@ export function SettingsPage(props: { active: () => boolean; onGo: (tab: TabKey)
             <Icon glyph={ICON.chevronRight} class="shrink-0 text-lg" color={COLOR.outline} />
           </View>
         ))}
+        <BottomPlaceholder />
       </View>
     </View>
   );

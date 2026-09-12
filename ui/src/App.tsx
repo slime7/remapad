@@ -15,6 +15,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { PairingPage } from './pages/PairingPage';
 import { ModePage } from './pages/ModePage';
 import { SystemPage } from './pages/SystemPage';
+import { DebugPage } from './pages/DebugPage';
 import { CHARSET_ANCHOR } from './theme';
 
 // 构建期字符集锚点：保持导入即可，让动态数字/符号字形进入字体图集。
@@ -48,6 +49,9 @@ export default function App() {
         </View>
         <View class={tab.value === 'system' ? 'w-full h-full' : 'hidden'}>
           <SystemPage active={() => tab.value === 'system'} onAskReboot={() => (rebootAsk.value = true)} />
+        </View>
+        <View class={tab.value === 'debug' ? 'w-full h-full' : 'hidden'}>
+          <DebugPage active={() => tab.value === 'debug'} />
         </View>
       </View>
       <AppNavBar tab={tab.value} onChange={(next) => (tab.value = next)} />

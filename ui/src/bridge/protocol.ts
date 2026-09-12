@@ -17,6 +17,9 @@ export type PairingState = 'idle' | 'scanning' | 'pairing' | 'paired' | 'connect
 /** 手柄设备型号。 */
 export type ControllerModel = 'pro-controller-2' | 'joycon-l' | 'joycon-r';
 
+/** 调试注入的按键（调试页按键指令区）。 */
+export type DebugKey = 'a' | 'home';
+
 /** 电池状态数据包。 */
 export interface BatteryInfo {
   voltageMv: number;
@@ -54,6 +57,7 @@ export type DeviceCmd =
   | { t: 'startPairing'; id: number }
   | { t: 'stopPairing'; id: number }
   | { t: 'triggerRumble'; id: number; frequencyHz: number; amplitude: number; durationMs: number }
+  | { t: 'debugKey'; id: number; key: DebugKey }
   | { t: 'calibrateSensors'; id: number }
   | { t: 'reboot'; id: number };
 
@@ -81,6 +85,7 @@ export type DeviceMsg =
   | { t: 'usbRoleSet'; id: number; role: UsbRole; active: boolean; message?: string }
   | { t: 'pairingResult'; id: number; state: PairingState; message?: string }
   | { t: 'rumbleAck'; id: number; success: boolean }
+  | { t: 'debugKeySet'; id: number; key: DebugKey }
   | { t: 'rebooting'; id: number }
   | { t: 'error'; id: number; code: string; message: string }
   | { t: 'batteryChanged'; battery: BatteryInfo }

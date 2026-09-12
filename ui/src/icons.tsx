@@ -23,6 +23,7 @@ export const ICON = {
   chevronRight: '\ue5cc',
   power: '\ue8ac',
   swapHoriz: '\ue8d4',
+  bug: '\ue868',
   brightnessHigh: '\ue1ac',
   batteryStd: '\ue1a5',
   batteryChargingFull: '\ue1a3',
