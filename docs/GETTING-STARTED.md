@@ -159,6 +159,12 @@ idf.py -p COM3 app-flash monitor
 
 改动 bootloader、分区表或 `sdkconfig` 后仍需完整 `flash`。esptool 的等价操作是对 `0x10000` 单独 `write-flash`。
 
+分区表自 ADR 0009 起为终局布局（`ota_0`/`ota_1` 双应用分区 + `storage` 通用存储区，`ota_0` 继承原 factory 的 `0x10000`）。烧录时注意：
+
+- 分区表布局变更后烧录分区表即可让已部署固件原地迁移为 `ota_0`，但保险起见直接完整 `flash`。
+- `erase-flash` 会全片擦除，清掉 NVS 里的设置与 BLE 配对、`storage` 里的用户数据；设备交到用户手上之后不要再随手执行。
+- 将来 OTA 运行期把活动分区切到 `ota_1` 后，`app-flash` 固定写入的 `0x10000`（`ota_0`）未必是被启动的分区，继续开发前先擦除 otadata。
+
 想拿到不依赖构建目录的单一镜像，可以合并成从 `0x0` 起烧的文件：
 
 ```powershell
@@ -183,7 +189,7 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 - [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
 - [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer 生命周期与 `remapad-pjs` owner task。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率和 FreeRTOS 预设。
-- [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY 和 4 MB factory 分区。
+- [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。
 - [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
 - [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。

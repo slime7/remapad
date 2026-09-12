@@ -148,7 +148,7 @@ idf.py -p COM3 flash monitor
 
 ## 分区与内存
 
-当前 `firmware/partitions.csv` 采用官方示例同类的内置包方案：NVS、PHY 初始化和 4 MB `factory` 应用分区。`.pocket` 会嵌入 `factory`，不再需要独立的 SPIFFS 资源分区。
+当前 `firmware/partitions.csv` 采用官方示例同类的内置包方案，并为 OTA 与用户数据预留了终局布局（见 [ADR 0009](docs/adr/0009-ota-storage-flash-layout.md)）：NVS、PHY 初始化、4 MB `ota_0`/`ota_1` 双应用分区、`otadata` 和约 7.9 MB `storage` 通用存储区。`.pocket` 会嵌入应用镜像，不再需要独立的 SPIFFS 资源分区；`ota_0` 继承原 `factory` 的 `0x10000` 偏移，`storage` 将来挂 littlefs，首个用途是用户上传的 amiibo（NTAG215）。
 
 8 MB Octal PSRAM 用于 PocketJS guest 和渲染暂存区；真正的面板 DMA 缓冲区应由后续 BSP 按显示控制器和 ESP-IDF DMA 约束分配。
 

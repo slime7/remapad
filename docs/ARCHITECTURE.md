@@ -222,15 +222,18 @@ BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应
 
 ## Flash 分区
 
-当前分区表只有 NVS、PHY 初始化和 4 MB `factory` 应用分区：
+分区表为终局布局（见 [ADR 0009](adr/0009-ota-storage-flash-layout.md)），一次性划分 OTA 双应用分区与通用存储区，16 MB Flash 不留未分配尾部：
 
 | 分区 | 类型 | 偏移 | 大小 | 用途 |
 | :--- | :--- | :--- | :--- | :--- |
-| `nvs` | data/nvs | `0x9000` | 24 KB | 系统配置、未来配对凭证索引 |
+| `nvs` | data/nvs | `0x9000` | 24 KB | 设置项（亮度、连发/改建、手柄颜色）、BLE 配对密钥 |
 | `phy_init` | data/phy | `0xf000` | 4 KB | 射频校准 |
-| `factory` | app/factory | `0x10000` | 4 MB | 固件及内置 `.pocket` |
+| `ota_0` | app/ota_0 | `0x10000` | 4 MB | 主应用分区，固件及内置 `.pocket`（继承原 factory 偏移） |
+| `ota_1` | app/ota_1 | `0x410000` | 4 MB | OTA 备份分区，供将来 `esp_ota` 升级回写 |
+| `otadata` | data/ota | `0x810000` | 8 KB | OTA 启动选择数据 |
+| `storage` | data/spiffs | `0x812000` | 约 7.9 MB | 通用数据存储区（首个用途：用户上传的 amiibo/NTAG215），将来挂 littlefs |
 
-包是固件的一部分，不再通过 SPIFFS 运行时加载。若后续包或固件超过 4 MB，应先重新评估分区布局，再修改 `partitions.csv`。
+包是固件的一部分，不再通过 SPIFFS 运行时加载。若后续包或固件超过 4 MB，应先重新评估分区布局，再修改 `partitions.csv`。布局受 ADR 0009 约束：新增分区只允许在尾部追加，禁止移动 `nvs`/`phy_init` 偏移，以免升级固件时擦除用户 NVS 数据与配对凭证。
 
 ## 相关决策与官方资料
 
