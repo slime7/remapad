@@ -1,0 +1,59 @@
+diff --git a/hosts/esp-idf/components/pocketjs_guest/CMakeLists.txt b/hosts/esp-idf/components/pocketjs_guest/CMakeLists.txt
+index 10afdc8..01e4163 100644
+--- a/hosts/esp-idf/components/pocketjs_guest/CMakeLists.txt
++++ b/hosts/esp-idf/components/pocketjs_guest/CMakeLists.txt
+@@ -2,7 +2,7 @@ idf_component_register(
+     SRCS "src/guest.c"
+     INCLUDE_DIRS "include"
+     REQUIRES quickjs-ng
+-    PRIV_REQUIRES heap log
++    PRIV_REQUIRES heap log esp_timer freertos
+     REQUIRED_IDF_TARGETS esp32p4 esp32s3
+ )
+ 
+diff --git a/hosts/esp-idf/components/pocketjs_guest/src/guest.c b/hosts/esp-idf/components/pocketjs_guest/src/guest.c
+index 9fc5a9a..58b32c6 100644
+--- a/hosts/esp-idf/components/pocketjs_guest/src/guest.c
++++ b/hosts/esp-idf/components/pocketjs_guest/src/guest.c
+@@ -8,6 +8,9 @@
+ 
+ #include "esp_heap_caps.h"
+ #include "esp_log.h"
++#include "esp_timer.h"
++#include "freertos/FreeRTOS.h"
++#include "freertos/task.h"
+ #include "quickjs-libc.h"
+ 
+ static const char *TAG = "pocketjs_guest";
+@@ -36,6 +39,7 @@ struct pocketjs_guest {
+   bool prefer_psram;
+   atomic_uint interrupt_epoch;
+   unsigned int handled_interrupt_epoch;
++  int64_t next_yield_us;
+   rejection_t *rejections;
+   bool rejection_tracking_failed;
+   surface_t *surfaces;
+@@ -114,11 +118,23 @@ static const JSMallocFunctions GUEST_ALLOCATOR = {
+     .js_malloc_usable_size = guest_usable_size,
+ };
+ 
++/* The interpreter polls the interrupt handler every ~10k instructions, so one
++ * uninterrupted JS_Eval would otherwise hold CPU 0 away from IDLE0 for the
++ * whole run (initial bundle eval: ~11 s) and trip the 5 s task watchdog, which
++ * subscribes the idle tasks. Time-gating a one-tick delay through the poll
++ * keeps IDLE0 fed; turns shorter than the gate never delay. See patches/0004. */
++#define GUEST_YIELD_INTERVAL_US 20000
++
+ static int guest_interrupt(JSRuntime *runtime, void *opaque) {
+   (void)runtime;
+   pocketjs_guest_t *guest = opaque;
+   if (guest == NULL)
+     return 0;
++  const int64_t now = esp_timer_get_time();
++  if (now >= guest->next_yield_us) {
++    guest->next_yield_us = now + GUEST_YIELD_INTERVAL_US;
++    vTaskDelay(1);
++  }
+   const unsigned int requested =
+       atomic_load_explicit(&guest->interrupt_epoch, memory_order_relaxed);
+   if (requested == guest->handled_interrupt_epoch)

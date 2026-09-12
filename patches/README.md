@@ -55,6 +55,24 @@
 重新对账，不需要执行 `git apply`。升级组件时应优先确认上游是否已修复
 `pocketjs_ui_core_touch_hits` 的空帧行为，修复后可回退本补丁。
 
+## 0004-guest-interrupt-handler-periodic-yield
+
+上游 `pocketjs_guest` 的 `guest_interrupt` 只负责消费 `interrupt_epoch` 终止请求，
+正常执行路径对调度零让出。真机观察到：初始化 bundle 的首次 `JS_Eval` 是一段
+约 11 秒的连续解释器执行，期间 `remapad-pjs`（优先级 5）一直占据 CPU 0，IDLE0
+饿死，触发默认订阅空闲任务的 task watchdog（超时 5s）在 6.7s 与 11.7s 各打印
+一次；稳态帧循环因帧间等待走信号量阻塞不受影响。
+
+本仓库的处理方式是在 `firmware/components/pocketjs_guest/src/guest.c` 的
+`guest_interrupt` 内加时间门控让出：解释器每约 1 万条指令轮询一次该 handler，
+门控（20ms）到期时执行一次 `vTaskDelay(1)`，IDLE0 借块运行喂狗；短于门控的
+turn 不会延迟，`pocketjs_guest_interrupt` 的终止语义原样保留。CMakeLists 相应
+补上 `esp_timer`、`freertos` 私有依赖。
+
+`0004-guest-interrupt-handler-periodic-yield.patch` 是这份差异的记录，用于升级
+组件时重新对账，不需要执行 `git apply`。升级组件时应确认上游是否已在长 eval
+场景处理空闲任务喂狗，处理后可回退本补丁。
+
 ## 重新对账的方法
 
 升级 `firmware/components/` 中的组件、或 Registry 的 `espressif/quickjs-ng` 内容发生变化时：

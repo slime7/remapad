@@ -2,7 +2,7 @@ idf_component_register(
     SRCS "src/guest.c"
     INCLUDE_DIRS "include"
     REQUIRES quickjs-ng
-    PRIV_REQUIRES heap log
+    PRIV_REQUIRES heap log esp_timer freertos
     REQUIRED_IDF_TARGETS esp32p4 esp32s3
 )
 
