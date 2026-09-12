@@ -35,8 +35,11 @@ bool ble_controller_input_notify_ready(uint8_t report_format);
 void ble_controller_notify_input_05(const uint8_t report[63]);
 void ble_controller_notify_input_09(const uint8_t report[63]);
 
-/** 发送指令应答帧（0x001A，需主机已开 0x001B CCCD）。 */
+/** 发送指令应答帧（0x001E，需主机已开 0x001F CCCD）。 */
 void ble_controller_notify_answer(const uint8_t *frame, size_t len);
+
+/** 停止广播（未配对空闲态不保持可发现广播，与真实手柄一致）。 */
+void ble_controller_adv_stop(void);
 
 /** 以 31 字节原始载荷启动通用可发现广播（ADV_IND）。 */
 void ble_controller_advertise(const uint8_t payload[31]);

@@ -58,18 +58,15 @@ size_t ns2_body_flash_read(uint8_t *out, size_t cap, uint32_t addr,
     if (len > 0xFF) {
         return 0;
     }
-    const size_t need = 8 + len;
+    const size_t need = 4 + len;
     if (cap < need) {
         return 0;
     }
-    out[0] = (uint8_t)len;
-    out[1] = 0x00;
-    out[2] = 0x00;
-    out[3] = 0x00;
-    out[4] = (uint8_t)(addr & 0xFF);
-    out[5] = (uint8_t)((addr >> 8) & 0xFF);
-    out[6] = (uint8_t)((addr >> 16) & 0xFF);
-    out[7] = (uint8_t)((addr >> 24) & 0xFF);
-    memcpy(&out[8], data, len);
+    /* 实机抓包：应答体 = 4B 小端地址 + 数据，无长度前缀。 */
+    out[0] = (uint8_t)(addr & 0xFF);
+    out[1] = (uint8_t)((addr >> 8) & 0xFF);
+    out[2] = (uint8_t)((addr >> 16) & 0xFF);
+    out[3] = (uint8_t)((addr >> 24) & 0xFF);
+    memcpy(&out[4], data, len);
     return need;
 }

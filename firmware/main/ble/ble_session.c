@@ -52,6 +52,13 @@ static struct {
 
 static uint8_t s_factory[FACTORY_SIZE];
 
+/** 主机经 0x02/0x04 实际读取的出厂块（实机抓包基址 0x7E40，64B）：
+ * 序列号、VID/PID、机身配色。 */
+static uint8_t s_factory_block[64];
+
+/** 指令应答的通知载荷 = 14 字节 0x00 前缀 + 8B 帧头 + 应答体（实机抓包）。 */
+#define ANSWER_PREFIX_LEN 14
+
 /** 帧内 4 字节小端读取。 */
 static uint32_t le32(const uint8_t *p)
 {
@@ -119,6 +126,28 @@ static void factory_init(void)
     static const uint8_t stick_cal[9] = {0x00, 0x08, 0x80, 0xFF, 0xF7, 0x7F, 0x00, 0x08, 0x80};
     memcpy(&s_factory[0x00A8], stick_cal, sizeof(stick_cal));
     memcpy(&s_factory[0x00E8], stick_cal, sizeof(stick_cal));
+
+    /* 0x7E40 出厂块按实机抓包布局：6B 头 + 14B 序列号 + 2B 保留 +
+     * 4B VID/PID + 3B 版本 + 12B 机身配色，尾部未用区 0xFF。 */
+    memset(s_factory_block, 0xFF, sizeof(s_factory_block));
+    s_factory_block[0] = 0x00;
+    s_factory_block[1] = 0x30;
+    s_factory_block[2] = 0x01;
+    s_factory_block[3] = 0x00;
+    s_factory_block[4] = 0x01;
+    s_factory_block[5] = 0x00;
+    memcpy(&s_factory_block[6], "REMAPAD2S30001", 14);
+    s_factory_block[22] = 0x7E;
+    s_factory_block[23] = 0x05;
+    s_factory_block[24] = 0x69;
+    s_factory_block[25] = 0x20;
+    s_factory_block[26] = 0x01;
+    s_factory_block[27] = 0x06;
+    s_factory_block[28] = 0x01;
+    static const uint8_t body_colors[12] = {
+        0x23, 0x23, 0x23, 0xA0, 0xA0, 0xA0, 0xE6, 0xE6, 0xE6, 0x32, 0x32, 0x32,
+    };
+    memcpy(&s_factory_block[29], body_colors, sizeof(body_colors));
 }
 
 /** 配对区镜像：1B 数量 + 40B 记录项（MAC@+0x08、LTK@+0x1A，controller.md §7.4）。 */
@@ -134,9 +163,17 @@ static void pairing_region_image(uint8_t out[PAIRING_IMAGE_SIZE])
     }
 }
 
-/** SPI Flash 读取仿真：出厂数据区与配对区有效，其余地址按未初始化返回 0xFF。 */
+/** SPI Flash 读取仿真：出厂数据区与配对区有效；0x7E40 出厂块按实机抓包
+ * 布局返回，其余地址按未初始化 0xFF。 */
 static void flash_read(uint32_t addr, uint8_t *out, size_t len)
 {
+    if (addr >= 0x7E00u && (uint64_t)addr + len <= 0x7E80u) {
+        for (size_t i = 0; i < len; i++) {
+            const uint32_t a = addr + (uint32_t)i;
+            out[i] = (a >= 0x7E40u && a < 0x7E80u) ? s_factory_block[a - 0x7E40u] : 0xFF;
+        }
+        return;
+    }
     if (addr >= PAIRING_BASE && (uint64_t)addr + len <= PAIRING_BASE + 0x1000u) {
         uint8_t image[PAIRING_IMAGE_SIZE];
         pairing_region_image(image);
@@ -178,12 +215,18 @@ static void build_adv_payload(uint8_t out[31], bool reconnect)
     }
 }
 
-/** 按凭证状态恢复广播：已配对回连，否则标准发现。 */
-static void advertise_for_creds(void)
+/** 按凭证状态恢复广播：已配对发回连广播等待主机；未配对保持静默，
+ * 进入配对模式（UI「开始」）才发发现广播——与真实手柄行为一致。 */
+static void resume_advertising(void)
 {
-    uint8_t adv[31];
-    build_adv_payload(adv, ble_creds_count() > 0);
-    ble_controller_advertise(adv);
+    if (ble_creds_count() > 0) {
+        uint8_t adv[31];
+        build_adv_payload(adv, true);
+        ble_controller_advertise(adv);
+    } else {
+        ble_controller_adv_stop();
+        s_ses.state = SESSION_ADV_DISCOVERY;
+    }
 }
 
 void ns2_session_on_sync(const uint8_t own_mac[6])
@@ -192,7 +235,7 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     memcpy(s_ses.own_mac, own_mac, 6);
     ESP_LOGI(TAG, "host synced, own MAC %02x:%02x:%02x:%02x:%02x:%02x",
              own_mac[0], own_mac[1], own_mac[2], own_mac[3], own_mac[4], own_mac[5]);
-    advertise_for_creds();
+    resume_advertising();
 }
 
 void ns2_session_on_connect(uint16_t conn_handle)
@@ -216,7 +259,7 @@ void ns2_session_on_connect(uint16_t conn_handle)
 void ns2_session_on_disconnect(void)
 {
     ESP_LOGI(TAG, "disconnected, resume advertising");
-    advertise_for_creds();
+    resume_advertising();
 }
 
 /** Command 0x02 SPI Flash 读取：0x01 固定 64B 块、0x04 通用读取（controller.md §6.2）。 */
@@ -368,7 +411,8 @@ static size_t handle_pairing_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
         resp[8] = 0x01;
         resp[9] = 0x04;
         resp[10] = 0x01;
-        reverse_bytes(s_ses.own_mac, &resp[11], 6);
+        /* 抓包应答的地址即 NimBLE 存储序原样，不做反转。 */
+        memcpy(&resp[11], s_ses.own_mac, 6);
         return NS2_FRAME_HEADER_LEN + 9;
     case 0x04:
         /* 步骤 2：请求体 `00 [16B 主机公钥 A1 反序]`；LTK = A1 XOR B1（B1 为
@@ -430,19 +474,21 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
     const uint8_t cmd = data[0];
     const uint8_t subcmd = data[3];
 
-    uint8_t resp[96];
+    uint8_t resp[ANSWER_PREFIX_LEN + 96];
+    uint8_t *frame = &resp[ANSWER_PREFIX_LEN];
+    memset(resp, 0, ANSWER_PREFIX_LEN);
     size_t resp_len;
     switch (cmd) {
     case 0x07:
         /* 初始握手（§10.2 阶段 1）：应答体 1 字节 0x00。 */
-        resp[8] = 0x00;
+        frame[8] = 0x00;
         resp_len = NS2_FRAME_HEADER_LEN + 1;
         break;
     case NS2_CMD_SPI_FLASH:
-        resp_len = handle_flash_cmd(data, len, subcmd, resp, sizeof(resp));
+        resp_len = handle_flash_cmd(data, len, subcmd, frame, sizeof(resp) - ANSWER_PREFIX_LEN);
         break;
     case 0x03:
-        resp_len = handle_init_cmd(data, len, subcmd, resp);
+        resp_len = handle_init_cmd(data, len, subcmd, frame);
         break;
     case 0x09:
         resp_len = handle_led_cmd(data, len, subcmd);
@@ -452,18 +498,35 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
         resp_len = NS2_FRAME_HEADER_LEN;
         break;
     case 0x0C:
-        resp_len = handle_feature_cmd(data, len, subcmd, resp);
+        resp_len = handle_feature_cmd(data, len, subcmd, frame);
+        break;
+    case 0x11:
+        /* 抓包样例：0x11/0x01 返回 4B 确认字，0x11/0x03 返回 0x1C 传感器块。 */
+        if (subcmd == 0x03) {
+            static const uint8_t sensor_block[28] = {
+                0x01, 0x20, 0x03, 0x00, 0x00, 0x0a, 0xe8, 0x1c,
+                0x3b, 0x79, 0x7d, 0x8b, 0x3a, 0x0a, 0xe8, 0x9c,
+                0x42, 0x58, 0xa0, 0x0b, 0x42, 0x0a, 0xe8, 0x9c,
+                0x41, 0x58, 0xa0, 0x0b,
+            };
+            memcpy(&frame[8], sensor_block, sizeof(sensor_block));
+            resp_len = NS2_FRAME_HEADER_LEN + sizeof(sensor_block);
+        } else {
+            frame[8] = 0x01;
+            memset(&frame[9], 0, 3);
+            resp_len = NS2_FRAME_HEADER_LEN + 4;
+        }
         break;
     case NS2_CMD_VERSION:
         if (subcmd == 0x01) {
-            ns2_body_version(&resp[8]);
+            ns2_body_version(&frame[8]);
             resp_len = NS2_FRAME_HEADER_LEN + NS2_VERSION_BODY_LEN;
         } else {
             resp_len = NS2_FRAME_HEADER_LEN;
         }
         break;
     case NS2_CMD_PAIRING:
-        resp_len = handle_pairing_cmd(data, len, subcmd, resp, sizeof(resp));
+        resp_len = handle_pairing_cmd(data, len, subcmd, frame, sizeof(resp) - ANSWER_PREFIX_LEN);
         break;
     default:
         ESP_LOGW(TAG, "unhandled command 0x%02x/0x%02x", cmd, subcmd);
@@ -475,8 +538,8 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
         ESP_LOGW(TAG, "cmd 0x%02x/0x%02x response overflow", cmd, subcmd);
         resp_len = NS2_FRAME_HEADER_LEN;
     }
-    ns2_frame_response_header(resp, cmd, transport, subcmd);
-    ble_controller_notify_answer(resp, resp_len);
+    ns2_frame_response_header(frame, cmd, transport, subcmd);
+    ble_controller_notify_answer(resp, ANSWER_PREFIX_LEN + resp_len);
 }
 
 void ns2_session_on_output(const uint8_t *data, size_t len)
@@ -492,14 +555,14 @@ void ns2_session_on_output(const uint8_t *data, size_t len)
 
 void ns2_session_on_composite(const uint8_t *data, size_t len)
 {
-    if (len < 32) {
+    /* 实机抓包：复合输出 = 33 字节 0x00 填充 + 命令帧（首字节为震动形态
+     * 的 Switch 1 布局未被 Switch 2 主机使用）。 */
+    if (len < 33 + NS2_FRAME_HEADER_LEN) {
         ESP_LOGW(TAG, "composite too short (%u)", (unsigned)len);
         return;
     }
     ns2_session_on_output(data, 32);
-    if (len > 32) {
-        ns2_session_on_command(&data[32], len - 32, NS2_FRAME_TRANSPORT_BLE);
-    }
+    ns2_session_on_command(&data[33], len - 33, NS2_FRAME_TRANSPORT_BLE);
 }
 
 uint8_t ns2_session_report_format(void)
@@ -524,7 +587,7 @@ void ns2_session_start_pairing_mode(void)
 void ns2_session_stop_pairing_mode(void)
 {
     s_ses.pairing_mode = false;
-    advertise_for_creds();
+    resume_advertising();
     ESP_LOGI(TAG, "pairing mode stopped");
 }
 
@@ -546,7 +609,7 @@ bool ns2_session_host_registered(void)
 void ns2_session_unpair(void)
 {
     ble_creds_clear();
-    /* 凭证清空后回连广播失效，切回标准发现广播供新主机配对。 */
-    advertise_for_creds();
+    /* 凭证清空后回连广播失效，恢复为未配对静默。 */
+    resume_advertising();
     ESP_LOGI(TAG, "pairing credentials cleared");
 }

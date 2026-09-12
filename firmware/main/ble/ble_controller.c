@@ -55,6 +55,7 @@ static void set_adv_address(void)
 #define CHR_FWUPG 9
 #define CHR_ANSWER 10
 #define CHR_ANSWER2 11
+#define CHR_DESC 12
 
 static const ble_uuid128_t uuid_svc_vendor =
     BLE_UUID128_INIT(0x80, 0xd2, 0x6b, 0xf9, 0x56, 0x19, 0x51, 0x8f,
@@ -106,6 +107,7 @@ static struct {
     uint16_t input05;
     uint16_t input09;
     uint16_t answer;
+    uint16_t answer2;
 } s_h;
 
 static struct {
@@ -114,6 +116,7 @@ static struct {
     bool input05_notify;
     bool input09_notify;
     bool answer_notify;
+    bool answer2_notify;
     uint8_t last_input05[63];
     uint8_t last_input09[63];
 } s_ctl;
@@ -173,7 +176,12 @@ static const struct ble_gatt_svc_def gatt_services[] = {
                  {0},
              }},
             {.uuid = &uuid_answer2.u, .access_cb = chr_access,
-             .flags = BLE_GATT_CHR_F_NOTIFY, .arg = (void *)CHR_ANSWER2},
+             .flags = BLE_GATT_CHR_F_NOTIFY, .arg = (void *)CHR_ANSWER2,
+             .descriptors = (struct ble_gatt_dsc_def[]){
+                 {.uuid = &uuid_report_rate.u, .access_cb = chr_access,
+                  .att_flags = BLE_ATT_F_READ, .arg = NULL},
+                 {0},
+             }},
             {0},
         },
     },
@@ -206,6 +214,10 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_DSC) {
         static const uint8_t rate_zero[1] = {0};
         return read_flat(ctxt, rate_zero, sizeof(rate_zero));
+    }
+    if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_DSC) {
+        /* 主机初始化时向 0x0010 等报告率描述符写入配置；接受即认可。 */
+        return 0;
     }
     if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) {
         return BLE_ATT_ERR_UNLIKELY;
@@ -246,6 +258,8 @@ static void gatt_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
             s_h.input09 = ctxt->chr.val_handle;
         } else if (ble_uuid_cmp(ctxt->chr.chr_def->uuid, &uuid_answer.u) == 0) {
             s_h.answer = ctxt->chr.val_handle;
+        } else if (ble_uuid_cmp(ctxt->chr.chr_def->uuid, &uuid_answer2.u) == 0) {
+            s_h.answer2 = ctxt->chr.val_handle;
         }
         ESP_LOGI(TAG, "GATT chr 0x%04x (val)", ctxt->chr.val_handle);
     } else if (ctxt->op == BLE_GATT_REGISTER_OP_DSC) {
@@ -291,6 +305,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         s_ctl.input05_notify = false;
         s_ctl.input09_notify = false;
         s_ctl.answer_notify = false;
+        s_ctl.answer2_notify = false;
         ESP_LOGI(TAG, "disconnected reason=0x%02x", event->disconnect.reason);
         ns2_session_on_disconnect();
         break;
@@ -305,6 +320,8 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             s_ctl.input09_notify = event->subscribe.cur_notify != 0;
         } else if (event->subscribe.attr_handle == s_h.answer) {
             s_ctl.answer_notify = event->subscribe.cur_notify != 0;
+        } else if (event->subscribe.attr_handle == s_h.answer2) {
+            s_ctl.answer2_notify = event->subscribe.cur_notify != 0;
         }
         ESP_LOGI(TAG, "subscribe 0x%04x notify=%d",
                  event->subscribe.attr_handle, event->subscribe.cur_notify);
@@ -373,7 +390,15 @@ void ble_controller_notify_answer(const uint8_t *frame, size_t len)
     if (len > 96) {
         return;
     }
-    notify(s_h.answer, s_ctl.answer_notify, frame, len);
+    /* 实机抓包：指令应答从 0x001E（answer2）通知，主机先开其 0x001F CCCD。 */
+    notify(s_h.answer2, s_ctl.answer2_notify, frame, len);
+}
+
+void ble_controller_adv_stop(void)
+{
+    if (ble_gap_adv_active()) {
+        ble_gap_adv_stop();
+    }
 }
 
 bool ble_controller_connected(void)
