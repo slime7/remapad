@@ -16,9 +16,16 @@
 
 static const char *TAG = "remapad_dp";
 
+/** 调试注入状态：bridge（owner task）写入、dp_task 读取递减，临界区保护。 */
+static portMUX_TYPE s_debug_mux = portMUX_INITIALIZER_UNLOCKED;
+static volatile uint32_t s_debug_buttons;
+static volatile uint32_t s_debug_hold_ticks;
+
 #define DP_TICK_MS 5
 #define DP_WALK_LEN 12
 #define DP_WALK_PERIOD_TICKS 100
+/** 调试注入的按下保持时长：5ms × 50 = 250ms。 */
+#define DP_DEBUG_HOLD_TICKS 50
 
 /** 合成输入源的按键遍历序列：每 500ms 前进一个，按下保持 250ms。 */
 static const uint32_t s_walk[DP_WALK_LEN] = {
@@ -60,6 +67,17 @@ static void dp_task(void *param)
     ESP_LOGI(TAG, "data plane task running, tick=%dms, source=synthetic", DP_TICK_MS);
     for (;;) {
         synthetic_sample(&state, tick++);
+        uint32_t debug_buttons = 0;
+        portENTER_CRITICAL(&s_debug_mux);
+        if (s_debug_hold_ticks > 0) {
+            debug_buttons = s_debug_buttons;
+            s_debug_hold_ticks--;
+            if (s_debug_hold_ticks == 0) {
+                s_debug_buttons = 0;
+            }
+        }
+        portEXIT_CRITICAL(&s_debug_mux);
+        state.buttons |= debug_buttons;
         if (ble_controller_connected()) {
             const uint8_t format = ns2_session_report_format();
             if (ble_controller_input_notify_ready(format)) {
@@ -77,6 +95,15 @@ static void dp_task(void *param)
         wake += pdMS_TO_TICKS(DP_TICK_MS);
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(DP_TICK_MS));
     }
+}
+
+void dp_plane_debug_key(uint32_t buttons_mask)
+{
+    portENTER_CRITICAL(&s_debug_mux);
+    s_debug_buttons |= buttons_mask;
+    s_debug_hold_ticks = DP_DEBUG_HOLD_TICKS;
+    portEXIT_CRITICAL(&s_debug_mux);
+    ESP_LOGI(TAG, "debug key inject: mask=0x%08lx", (unsigned long)buttons_mask);
 }
 
 esp_err_t dp_plane_start(void)

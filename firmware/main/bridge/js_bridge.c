@@ -15,12 +15,14 @@
 #include "backlight.h"
 #include "ble_controller.h"
 #include "ble_session.h"
+#include "dp_plane.h"
+#include "ns2_state.h"
 
 #include "pocketjs/guest.h"
 
 static const char *TAG = "remapad_bridge";
 
-#define REMAPAD_FW_VERSION "v0.3.0"
+#define REMAPAD_FW_VERSION "v0.3.1"
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
@@ -287,6 +289,34 @@ static void handle_reboot(int id)
              (long long)(REMAPAD_REBOOT_DELAY_US / 1000LL));
 }
 
+/** 调试页按键注入：key 当前支持 a / home，映射到规范化按键位后交数据面。 */
+static void handle_debug_key(int id, const char *cmd)
+{
+    size_t key_len = 0;
+    const char *key = cmd_string(cmd, "key", &key_len);
+    uint32_t mask = 0;
+    if (key != NULL && key_len == 1 && key[0] == 'a') {
+        mask = NS2_BTN_A;
+    } else if (key != NULL && key_len == 4 && strncmp(key, "home", 4) == 0) {
+        mask = NS2_BTN_HOME;
+    }
+    if (mask == 0) {
+        char event[REMAPAD_EVENT_MAX];
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"error\",\"id\":%d,\"code\":\"BAD_REQUEST\","
+                 "\"message\":\"unknown debug key\"}",
+                 id);
+        reply_raw(event);
+        return;
+    }
+    dp_plane_debug_key(mask);
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"debugKeySet\",\"id\":%d,\"key\":\"%.*s\"}",
+             id, (int)key_len, key);
+    reply_raw(event);
+}
+
 static void handle_cmd(const char *cmd)
 {
     const int id = cmd_id(cmd);
@@ -302,6 +332,8 @@ static void handle_cmd(const char *cmd)
         handle_start_pairing(id);
     } else if (cmd_has(cmd, "\"t\":\"stopPairing\"")) {
         handle_stop_pairing(id);
+    } else if (cmd_has(cmd, "\"t\":\"debugKey\"")) {
+        handle_debug_key(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"reboot\"")) {
         handle_reboot(id);
     } else {
