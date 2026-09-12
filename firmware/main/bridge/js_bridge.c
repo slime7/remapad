@@ -270,9 +270,13 @@ static void handle_start_pairing(int id)
 
 static void handle_stop_pairing(int id)
 {
-    /* 停止搜索只退出配对模式并恢复常规广播；凭证以协议证据为准持久化，
-     * 解除配对走显式 unpair 命令，避免误清与频繁的 NVS 擦写。 */
+    /* 停止搜索退出配对模式并恢复常规广播；连接中但注册握手未完成的主机
+     * 一并断开，否则 pairing 状态由连接驱动、停止永远无法退出。凭证以
+     * 协议证据为准持久化，解除配对走显式 unpair 命令。 */
     ns2_session_stop_pairing_mode();
+    if (!ns2_session_host_registered()) {
+        ble_controller_disconnect();
+    }
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","

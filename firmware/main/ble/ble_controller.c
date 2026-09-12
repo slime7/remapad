@@ -26,14 +26,14 @@ static const uint8_t ADV_ADDR_OUI[3] = {0x98, 0xE2, 0x55};
 
 /** Switch 2 主机在芯片层只放行任天堂广播帧，地址 OUI 一并参与过滤；
  * 广播须以 Nintendo OUI 的 public 地址发出。后缀取 eFuse MAC 低 3 字节，
- * 每次上电稳定不变，保证配对凭证与回连地址一致。 */
+ * 每次上电稳定不变，保证配对凭证与回连地址一致。
+ * NimBLE 地址按小端存储（val[0] 为可读序末字节），故整体反转写入。 */
 static void set_adv_address(void)
 {
-    uint8_t addr[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     uint8_t mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    memcpy(addr, ADV_ADDR_OUI, sizeof(ADV_ADDR_OUI));
-    memcpy(&addr[3], &mac[3], 3);
+    const uint8_t addr[6] = {mac[5], mac[4], mac[3],
+                             ADV_ADDR_OUI[2], ADV_ADDR_OUI[1], ADV_ADDR_OUI[0]};
     const int rc = ble_hs_id_set_pub(addr);
     if (rc != 0) {
         ESP_LOGE(TAG, "set public adv addr rc=%d", rc);
@@ -381,6 +381,20 @@ bool ble_controller_connected(void)
     return s_ctl.connected;
 }
 
+bool ble_controller_disconnect(void)
+{
+    if (!s_ctl.connected) {
+        return false;
+    }
+    const int rc = ble_gap_terminate(s_ctl.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    if (rc != 0) {
+        ESP_LOGW(TAG, "gap terminate rc=%d", rc);
+        return false;
+    }
+    ESP_LOGI(TAG, "terminate initiated (conn=%u)", s_ctl.conn_handle);
+    return true;
+}
+
 bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6])
 {
     struct ble_gap_conn_desc desc;
@@ -401,6 +415,9 @@ bool ble_controller_input_notify_ready(uint8_t report_format)
 
 static void on_sync(void)
 {
+    /* 须在 ensure_addr 之前设置：若此时 host 侧仍无地址，ensure_addr 会
+     * 读取并采用 controller 的 Espressif 地址，伪装即被覆盖。 */
+    set_adv_address();
     const int rc = ble_hs_util_ensure_addr(BLE_ADDR_PUBLIC);
     if (rc != 0) {
         ESP_LOGE(TAG, "ensure addr rc=%d", rc);
@@ -432,8 +449,6 @@ esp_err_t ble_controller_start(void)
     if (err != ESP_OK) {
         return err;
     }
-    /* 须在 host 与 controller 同步前设置，广播 AdvA 才使用伪装地址。 */
-    set_adv_address();
     ble_hs_cfg.reset_cb = on_reset;
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.gatts_register_cb = gatt_register_cb;

@@ -68,7 +68,7 @@ static void dp_task(void *param)
                 }
             }
         }
-        wake += pdMS_TO_TICKS(DP_TICK_MS);
+        /* vTaskDelayUntil 内部自行推进 wake；再手动累加会把实际周期翻倍。 */
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(DP_TICK_MS));
     }
 }
