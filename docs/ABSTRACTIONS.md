@@ -68,8 +68,8 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 - BLE manager 负责厂商广播字段、GATT service/characteristic、通知订阅、回连、唤醒和配对状态机；配对凭证通过 NVS 等持久化层保存。
 - `ui/src/bridge/` 与 `firmware/main/bridge/` 只适合承载低频的模式切换、开始/停止配对、连接状态、电池和诊断消息。传输层已接通：guest 侧 `HardwareDriver` 经 `globalThis.__nativeBridge.postMessage(json)` 发命令（由 `pocketjs_host.c` 在 mount 后、eval 前用 `pocketjs_guest_quickjs_install_once` 注入的 native surface 接收并入队），owner task 每帧 `js_bridge_service()` 处理队列并用 `pocketjs_guest_eval` 调 `__onNativeBridgeMessage(json)` 回发应答/事件；入队与出队都在 owner task 上，无锁。协议以 `ui/src/bridge/protocol.ts` 为准，命令包含 hello/getSystemStatus/setBacklight/setUsbRole/startPairing/stopPairing/debugKey/reboot，事件包含 ready/systemStatus/backlightSet/usbRoleSet/usbRoleChanged/pairingResult/pairingStateChanged/debugKeySet/rebooting/error。
 - USB 角色（`usbRole`: device=插电脑 COM 口，host=插手柄）目前只由固件记录并如实上报 `usbRoleActive`；USB OTG PHY 切换属于数据面，未接入前任何代码都不触碰 RTC_CNTL USB mux，复位后永远回到默认的 USB-Serial/JTAG（COM 设备模式），"重启回 COM 模式"因此天然成立。
-- 配对与连接状态已接入真实 BLE 会话（NimBLE 手柄外设，进度见 [ROADMAP.md](ROADMAP.md)）：bridge 的 `startPairing/stopPairing` 触发固件侧发现广播，配对六态由连接/凭证状态实时推导并经 `pairingStateChanged` 推送；Command 0x15 私有配对与 NVS 凭证见 [controller.md](controller.md) 与 [ADR 0010](adr/0010-nimble-ble-controller-stack.md)。电池字段仍是 `battery.c` 预留占位值（真实 ADC 随 M5 接入）。
-- 调试注入是控制面进入数据面的唯一低频通道：bridge 的 `debugKey` 命令经 `dp_plane_debug_key()` 在数据面当前输入状态上叠加一次约 250ms 的按键按下（UI 调试页「按键指令」区），采样与编码仍由数据面任务独立完成，不引入高频路径。
+- 配对与连接状态已接入真实 BLE 会话（NimBLE 手柄外设，进度见 [ROADMAP.md](ROADMAP.md)）：bridge 的 `startPairing` 触发固件侧发现广播，`stopPairing` 停止广播并清除 NVS 凭证（即解除配对，状态回到未配对），配对六态由连接/凭证状态实时推导并经 `pairingStateChanged` 推送；Command 0x15 私有配对与 NVS 凭证见 [controller.md](controller.md) 与 [ADR 0010](adr/0010-nimble-ble-controller-stack.md)。电池字段仍是 `battery.c` 预留占位值（真实 ADC 随 M5 接入）。
+- 调试注入是控制面进入数据面的唯一低频通道：bridge 的 `debugKey` 命令经 `dp_plane_debug_key()` 在数据面当前输入状态上叠加一次按键按下并按时长自动释放（A/HOME 约 250ms，配对 L+R 约 1s，对应主机 Grip/顺序界面的配对确认动作；UI 调试页「按键指令」区），采样与编码仍由数据面任务独立完成，不引入高频路径。
 - USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
 
 ## UI 图元与资源

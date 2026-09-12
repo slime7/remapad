@@ -17,8 +17,8 @@ export type PairingState = 'idle' | 'scanning' | 'pairing' | 'paired' | 'connect
 /** 手柄设备型号。 */
 export type ControllerModel = 'pro-controller-2' | 'joycon-l' | 'joycon-r';
 
-/** 调试注入的按键（调试页按键指令区）。 */
-export type DebugKey = 'a' | 'home';
+/** 调试注入的按键（调试页按键指令区）；lr 表示同时按下 L 和 R。 */
+export type DebugKey = 'a' | 'home' | 'lr';
 
 /** 电池状态数据包。 */
 export interface BatteryInfo {

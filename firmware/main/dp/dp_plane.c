@@ -22,8 +22,6 @@ static volatile uint32_t s_debug_buttons;
 static volatile uint32_t s_debug_hold_ticks;
 
 #define DP_TICK_MS 5
-/** 调试注入的按下保持时长：5ms × 50 = 250ms。 */
-#define DP_DEBUG_HOLD_TICKS 50
 
 /** 合成输入源：仅提供静置状态（摇杆居中、无按键）与电源/特性字段，
  *  按键输入全部来自调试注入，主机侧不应出现任何自动变化。 */
@@ -75,13 +73,20 @@ static void dp_task(void *param)
     }
 }
 
-void dp_plane_debug_key(uint32_t buttons_mask)
+void dp_plane_debug_key(uint32_t buttons_mask, uint32_t hold_ms)
 {
+    if (hold_ms < DP_TICK_MS) {
+        hold_ms = DP_TICK_MS;
+    }
+    if (hold_ms > 5000) {
+        hold_ms = 5000;
+    }
     portENTER_CRITICAL(&s_debug_mux);
     s_debug_buttons |= buttons_mask;
-    s_debug_hold_ticks = DP_DEBUG_HOLD_TICKS;
+    s_debug_hold_ticks = hold_ms / DP_TICK_MS;
     portEXIT_CRITICAL(&s_debug_mux);
-    ESP_LOGI(TAG, "debug key inject: mask=0x%08lx", (unsigned long)buttons_mask);
+    ESP_LOGI(TAG, "debug key inject: mask=0x%08lx hold=%lums", (unsigned long)buttons_mask,
+             (unsigned long)hold_ms);
 }
 
 esp_err_t dp_plane_start(void)

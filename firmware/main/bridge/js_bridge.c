@@ -22,7 +22,7 @@
 
 static const char *TAG = "remapad_bridge";
 
-#define REMAPAD_FW_VERSION "v0.3.2"
+#define REMAPAD_FW_VERSION "v0.3.4"
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
@@ -269,13 +269,15 @@ static void handle_start_pairing(int id)
 static void handle_stop_pairing(int id)
 {
     ns2_session_stop_pairing_mode();
+    /* UI 的停止即解除配对：清除凭证，避免取消后仍显示"已配对"。 */
+    ns2_session_clear_pairing();
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","
-             "\"message\":\"已停止配对\"}",
+             "\"message\":\"已取消配对，凭证已清除\"}",
              id, real_pairing_state());
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing mode off");
+    ESP_LOGI(TAG, "pairing cancelled, credentials cleared");
 }
 
 static void handle_reboot(int id)
@@ -289,16 +291,21 @@ static void handle_reboot(int id)
              (long long)(REMAPAD_REBOOT_DELAY_US / 1000LL));
 }
 
-/** 调试页按键注入：key 当前支持 a / home，映射到规范化按键位后交数据面。 */
+/** 调试页按键注入：a/home 单次 250ms；lr 同时按下 L 和 R 保持 1s，
+ *  对应主机 Grip/顺序界面的配对确认动作。 */
 static void handle_debug_key(int id, const char *cmd)
 {
     size_t key_len = 0;
     const char *key = cmd_string(cmd, "key", &key_len);
     uint32_t mask = 0;
+    uint32_t hold_ms = 250;
     if (key != NULL && key_len == 1 && key[0] == 'a') {
         mask = NS2_BTN_A;
     } else if (key != NULL && key_len == 4 && strncmp(key, "home", 4) == 0) {
         mask = NS2_BTN_HOME;
+    } else if (key != NULL && key_len == 2 && strncmp(key, "lr", 2) == 0) {
+        mask = NS2_BTN_L | NS2_BTN_R;
+        hold_ms = 1000;
     }
     if (mask == 0) {
         char event[REMAPAD_EVENT_MAX];
@@ -309,7 +316,7 @@ static void handle_debug_key(int id, const char *cmd)
         reply_raw(event);
         return;
     }
-    dp_plane_debug_key(mask);
+    dp_plane_debug_key(mask, hold_ms);
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"debugKeySet\",\"id\":%d,\"key\":\"%.*s\"}",

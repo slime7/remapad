@@ -82,10 +82,12 @@ export const STYLE_IDS: Record<string, number> = {
   "w-[64] h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150": 74,
   "grow h-[44] rounded-[12] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150": 75,
   "grow h-[44] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150": 76,
+  "w-full h-[44] shrink-0 rounded-[12] bg-[#9ecefe] flex-row items-center justify-center mt-2 active:bg-[#b8dbff] transition-colors duration-150": 77,
+  "w-full h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center mt-2 active:bg-[#1c3350] transition-colors duration-150": 78,
 };
 
 /** Number of records in styles.bin (valid styleIds are 0..COUNT-1). */
-export const STYLE_COUNT = 77;
+export const STYLE_COUNT = 79;
 
 /** Baked font-atlas slots shipped in the pak: slot -> metrics. */
 export const FONT_SLOTS: Record<number, { px: number; bold: boolean }> = {
