@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "esp_log.h"
-#include "esp_mac.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "host/ble_hs.h"
@@ -16,29 +15,6 @@
 #include "ns2_frames.h"
 
 static const char *TAG = "remapad_blctl";
-
-/** 设置 host 侧 public 地址；IDF 6.1 的头文件移除了声明但符号仍导出。 */
-int ble_hs_id_set_pub(const uint8_t *pub_addr);
-
-/** 真实 Pro Controller 2 的广播地址前缀：Nintendo OUI（2024 年注册，
- * ndeadly/switch2_controller_research 抓包中全部广播包均为该前缀）。 */
-static const uint8_t ADV_ADDR_OUI[3] = {0x98, 0xE2, 0x55};
-
-/** Switch 2 主机在芯片层只放行任天堂广播帧，地址 OUI 一并参与过滤；
- * 广播须以 Nintendo OUI 的 public 地址发出。后缀取 eFuse MAC 低 3 字节，
- * 每次上电稳定不变，保证配对凭证与回连地址一致。
- * NimBLE 地址按小端存储（val[0] 为可读序末字节），故整体反转写入。 */
-static void set_adv_address(void)
-{
-    uint8_t mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    const uint8_t addr[6] = {mac[5], mac[4], mac[3],
-                             ADV_ADDR_OUI[2], ADV_ADDR_OUI[1], ADV_ADDR_OUI[0]};
-    const int rc = ble_hs_id_set_pub(addr);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "set public adv addr rc=%d", rc);
-    }
-}
 
 /* ---- GATT UUID 表（controller.md §4）----
  * NimBLE 以空中传输字节序（小端）定义 128 位 UUID，即把规范字符串
@@ -352,8 +328,9 @@ void ble_controller_advertise(const uint8_t payload[31])
     struct ble_gap_adv_params params = {0};
     params.conn_mode = BLE_GAP_CONN_MODE_UND;
     params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-    params.itvl_min = 0x20; /* 32 x 0.625ms = 20ms */
-    params.itvl_max = 0x30; /* 37.5ms */
+    /* 实机抓包的广播事件间隔约 40ms，对齐以排除主机侧扫描策略差异。 */
+    params.itvl_min = 0x40; /* 64 x 0.625ms = 40ms */
+    params.itvl_max = 0x40;
     const int rc = ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, BLE_HS_FOREVER,
                                      &params, gap_event_cb, NULL);
     if (rc != 0) {
@@ -440,9 +417,8 @@ bool ble_controller_input_notify_ready(uint8_t report_format)
 
 static void on_sync(void)
 {
-    /* 须在 ensure_addr 之前设置：若此时 host 侧仍无地址，ensure_addr 会
-     * 读取并采用 controller 的 Espressif 地址，伪装即被覆盖。 */
-    set_adv_address();
+    /* base MAC 已在 app_main 换为 Nintendo OUI，controller 读回的 public
+     * 地址即伪装地址，无需 host 侧干预。 */
     const int rc = ble_hs_util_ensure_addr(BLE_ADDR_PUBLIC);
     if (rc != 0) {
         ESP_LOGE(TAG, "ensure addr rc=%d", rc);
