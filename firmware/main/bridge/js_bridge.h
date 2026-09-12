@@ -15,7 +15,7 @@ extern "C" {
  *
  * 传输路径：guest 调 globalThis.__nativeBridge.postMessage(json)（由
  * pocketjs_host 注入的 native surface）→ js_bridge_enqueue 入队 → owner
- * task 每帧在 js_bridge_service 里出队、用 cJSON 分发处理，并通过
+ * task 每帧在 js_bridge_service 里出队、按固定键名分发处理，并通过
  * pocketjs_guest_eval 调用 __onNativeBridgeMessage(json) 回发应答/事件。
  * 入队与出队都发生在 PocketJS owner task 上，无锁。
  *

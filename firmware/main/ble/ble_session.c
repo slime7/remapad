@@ -39,6 +39,7 @@ static struct {
     uint8_t report_format;
     uint8_t feature_mask;
     uint8_t player_leds;
+    bool pairing_mode;
 } s_ses;
 
 /** 0x15 配对会话中间态：主机 MAC 与派生 LTK（线格式字节序）。 */
@@ -207,6 +208,7 @@ void ns2_session_on_connect(uint16_t conn_handle)
         }
     }
     s_ses.state = known ? SESSION_NORMAL : SESSION_CONNECTED_WAIT_PAIR;
+    s_ses.pairing_mode = false;
     ESP_LOGI(TAG, "connected (conn=%u, %s), waiting host init sequence",
              conn_handle, known ? "paired host" : "unpaired host");
 }
@@ -502,6 +504,7 @@ bool ns2_session_rumble_enabled(void)
 
 void ns2_session_start_pairing_mode(void)
 {
+    s_ses.pairing_mode = true;
     uint8_t adv[31];
     build_adv_payload(adv, false);
     ble_controller_advertise(adv);
@@ -510,6 +513,17 @@ void ns2_session_start_pairing_mode(void)
 
 void ns2_session_stop_pairing_mode(void)
 {
+    s_ses.pairing_mode = false;
     advertise_for_creds();
     ESP_LOGI(TAG, "pairing mode stopped");
+}
+
+bool ns2_session_pairing_mode_active(void)
+{
+    return s_ses.pairing_mode;
+}
+
+bool ns2_session_paired(void)
+{
+    return ble_creds_count() > 0;
 }

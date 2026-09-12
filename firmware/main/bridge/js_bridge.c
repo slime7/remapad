@@ -13,12 +13,14 @@
 #include "freertos/task.h"
 
 #include "backlight.h"
+#include "ble_controller.h"
+#include "ble_session.h"
 
 #include "pocketjs/guest.h"
 
 static const char *TAG = "remapad_bridge";
 
-#define REMAPAD_FW_VERSION "v0.2.0"
+#define REMAPAD_FW_VERSION "v0.3.0"
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
@@ -28,17 +30,7 @@ static const char *TAG = "remapad_bridge";
 #define REMAPAD_BATTERY_MV 4120
 #define REMAPAD_BATTERY_PCT 88
 
-/** 配对状态机时序：扫描 0.6s -> 配对 4s -> 已配对（BLE 栈接入后换成真实事件）。 */
-#define REMAPAD_PAIR_SCAN_US (600 * 1000LL)
-#define REMAPAD_PAIR_PAIRING_US (4000 * 1000LL)
 #define REMAPAD_REBOOT_DELAY_US (150 * 1000LL)
-
-typedef enum {
-    BRIDGE_PAIRING_IDLE = 0,
-    BRIDGE_PAIRING_SCANNING,
-    BRIDGE_PAIRING_PAIRING,
-    BRIDGE_PAIRING_PAIRED,
-} bridge_pairing_state_t;
 
 typedef struct {
     char data[REMAPAD_BRIDGE_CMD_MAX];
@@ -49,26 +41,11 @@ static struct {
     bridge_cmd_slot_t queue[REMAPAD_BRIDGE_QUEUE_LEN];
     size_t queue_head;
     size_t queue_len;
-    bridge_pairing_state_t pairing;
-    int64_t pairing_deadline_us;
+    const char *last_pairing_state; /* 字面量常量指针，用于变化检测。 */
     bool usb_role_host; /* UI 请求的角色；host 数据面未接入，仅记录。 */
     int64_t reboot_at_us;
     bool reboot_pending;
 } s_bridge;
-
-static const char *pairing_state_name(bridge_pairing_state_t state)
-{
-    switch (state) {
-    case BRIDGE_PAIRING_SCANNING:
-        return "scanning";
-    case BRIDGE_PAIRING_PAIRING:
-        return "pairing";
-    case BRIDGE_PAIRING_PAIRED:
-        return "paired";
-    default:
-        return "idle";
-    }
-}
 
 esp_err_t js_bridge_init(void)
 {
@@ -182,17 +159,31 @@ static void handle_hello(int id)
     ESP_LOGI(TAG, "hello -> ready (psram=%u)", (unsigned)psram);
 }
 
+/** 从 BLE 会话推导 UI 六态配对模型（ui/src/bridge/protocol.ts PairingState）。 */
+static const char *real_pairing_state(void)
+{
+    if (ble_controller_connected()) {
+        return ns2_session_pairing_mode_active() ? "pairing" : "connected";
+    }
+    if (ns2_session_pairing_mode_active()) {
+        return "scanning";
+    }
+    return ns2_session_paired() ? "paired" : "idle";
+}
+
 static void handle_get_system_status(int id)
 {
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"systemStatus\",\"id\":%d,\"battery\":{\"voltageMv\":%d,"
              "\"percentage\":%d,\"charging\":false},\"backlight\":%u,\"mode\":\"ble\","
-             "\"pairing\":\"%s\",\"controller\":null,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
+             "\"pairing\":\"%s\",\"controller\":%s,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
              "\"uptimeMs\":%lld,"
              "\"heapFree\":%u,\"heapSize\":%u,\"psramFree\":%u}",
              id, REMAPAD_BATTERY_MV, REMAPAD_BATTERY_PCT, backlight_get(),
-             pairing_state_name(s_bridge.pairing), s_bridge.usb_role_host ? "host" : "device",
+             real_pairing_state(),
+             ble_controller_connected() ? "\"pro-controller-2\"" : "null",
+             s_bridge.usb_role_host ? "host" : "device",
              s_bridge.usb_role_host ? "false" : "true",
              (long long)(esp_timer_get_time() / 1000LL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
@@ -263,37 +254,26 @@ static void handle_set_usb_role(int id, const char *cmd)
 
 static void handle_start_pairing(int id)
 {
+    ns2_session_start_pairing_mode();
     char event[REMAPAD_EVENT_MAX];
-    if (s_bridge.pairing == BRIDGE_PAIRING_SCANNING ||
-        s_bridge.pairing == BRIDGE_PAIRING_PAIRING) {
-        snprintf(event, sizeof(event),
-                 "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","
-                 "\"message\":\"配对已在进行中\"}",
-                 id, pairing_state_name(s_bridge.pairing));
-        reply_raw(event);
-        return;
-    }
-    s_bridge.pairing = BRIDGE_PAIRING_SCANNING;
-    s_bridge.pairing_deadline_us = esp_timer_get_time() + REMAPAD_PAIR_SCAN_US;
     snprintf(event, sizeof(event),
              "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"scanning\","
-             "\"message\":\"开始广播（模拟）\"}",
+             "\"message\":\"广播中，等待主机连接\"}",
              id);
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing started (simulated; BLE stack pending)");
+    ESP_LOGI(TAG, "pairing mode on (real BLE advertising)");
 }
 
 static void handle_stop_pairing(int id)
 {
-    s_bridge.pairing = BRIDGE_PAIRING_IDLE;
-    s_bridge.pairing_deadline_us = 0;
+    ns2_session_stop_pairing_mode();
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
-             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"idle\","
+             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","
              "\"message\":\"已停止配对\"}",
-             id);
+             id, real_pairing_state());
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing stopped");
+    ESP_LOGI(TAG, "pairing mode off");
 }
 
 static void handle_reboot(int id)
@@ -335,35 +315,26 @@ static void handle_cmd(const char *cmd)
     }
 }
 
-static void pairing_service(int64_t now_us)
+/** 每帧轮询 BLE 会话状态，发现变化即广播 pairingStateChanged 事件。 */
+static void pairing_state_poll(void)
 {
-    if ((s_bridge.pairing == BRIDGE_PAIRING_SCANNING ||
-         s_bridge.pairing == BRIDGE_PAIRING_PAIRING) &&
-        now_us >= s_bridge.pairing_deadline_us) {
-        bridge_pairing_state_t next;
-        if (s_bridge.pairing == BRIDGE_PAIRING_SCANNING) {
-            next = BRIDGE_PAIRING_PAIRING;
-            s_bridge.pairing_deadline_us = now_us + REMAPAD_PAIR_PAIRING_US;
-        } else {
-            next = BRIDGE_PAIRING_PAIRED;
-            s_bridge.pairing_deadline_us = 0;
-        }
-        s_bridge.pairing = next;
-        ESP_LOGI(TAG, "pairing state -> %s (simulated)", pairing_state_name(next));
+    const char *state = real_pairing_state();
+    if (s_bridge.last_pairing_state == NULL ||
+        strcmp(s_bridge.last_pairing_state, state) != 0) {
+        s_bridge.last_pairing_state = state;
         char event[REMAPAD_EVENT_MAX];
         snprintf(event, sizeof(event),
-                 "{\"t\":\"pairingStateChanged\",\"state\":\"%s\"}",
-                 pairing_state_name(next));
+                 "{\"t\":\"pairingStateChanged\",\"state\":\"%s\"}", state);
         reply_raw(event);
+        ESP_LOGI(TAG, "pairing state -> %s", state);
     }
 }
 
 void js_bridge_service(void)
 {
-    const int64_t now_us = esp_timer_get_time();
-    pairing_service(now_us);
+    pairing_state_poll();
 
-    if (s_bridge.reboot_pending && now_us >= s_bridge.reboot_at_us) {
+    if (s_bridge.reboot_pending && esp_timer_get_time() >= s_bridge.reboot_at_us) {
         ESP_LOGI(TAG, "rebooting now (USB returns to Serial/JTAG COM mode)");
         vTaskDelay(pdMS_TO_TICKS(50));
         esp_restart();

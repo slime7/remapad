@@ -44,7 +44,7 @@
 
 **验收**：Switch 2 完成配对、摇杆/按键实时上报可用；断电重启后免配对回连成功；震动输出帧解析正确。
 
-### M4 — 控制面真实化（轻量收口 BLE 侧）　状态：未开始
+### M4 — 控制面真实化（轻量收口 BLE 侧）　状态：已完成（bridge v0.3.0，模拟状态机删除，实机显示待联调）
 
 - [ ] `firmware/main/bridge/js_bridge.c`：删除模拟配对状态机；`startPairing/stopPairing`、`pairingStateChanged/pairingResult` 事件、`systemStatus` 的 controller/model 字段改接真实 BLE 会话；电池保持占位（真实 ADC 放 M5 顺带）。
 - [ ] UI 侧预期近零改动：配对页/首页/状态栏已消费这些命令与事件，换真实数据源即生效。

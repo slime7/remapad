@@ -44,6 +44,12 @@ void ns2_session_start_pairing_mode(void);
 /** 结束手动配对：按凭证状态恢复回连或发现广播。 */
 void ns2_session_stop_pairing_mode(void);
 
+/** 手动配对模式是否开启（供控制面推导 UI 六态）。 */
+bool ns2_session_pairing_mode_active(void);
+
+/** 是否存在已配对主机凭证。 */
+bool ns2_session_paired(void);
+
 #ifdef __cplusplus
 }
 #endif
