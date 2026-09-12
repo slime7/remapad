@@ -50,6 +50,9 @@ bool ns2_session_pairing_mode_active(void);
 /** 是否存在已配对主机凭证。 */
 bool ns2_session_paired(void);
 
+/** 解除配对：清除 NVS 凭证，状态回到未配对；下次配对需重走 0x15。 */
+void ns2_session_clear_pairing(void);
+
 #ifdef __cplusplus
 }
 #endif

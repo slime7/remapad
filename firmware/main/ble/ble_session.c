@@ -527,3 +527,9 @@ bool ns2_session_paired(void)
 {
     return ble_creds_count() > 0;
 }
+
+void ns2_session_clear_pairing(void)
+{
+    ble_creds_clear();
+    ESP_LOGI(TAG, "pairing credentials cleared");
+}
