@@ -193,7 +193,7 @@ python scripts/uartctl.py -p COM3 pairing start   # 配对广播开关
 python scripts/uartctl.py -p COM3 reboot          # 软重启回 COM 模式
 ```
 
-不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。
+不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。注意两点：打开 USB-Serial/JTAG 口通常会把设备复位一次（USJ 特性），所以每次 `uartctl.py` 调用后 `uptime` 会归零属正常现象，连续操作建议用交互模式；抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
 
 PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚暂不驱动：USB 供电下锁存被旁路，电池供电场景待电源 BSP 阶段接入。
 
