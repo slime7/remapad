@@ -189,11 +189,15 @@ static void handle_get_system_status(int id)
              "{\"t\":\"systemStatus\",\"id\":%d,\"battery\":{\"voltageMv\":%d,"
              "\"percentage\":%d,\"charging\":false},\"backlight\":%u,\"mode\":\"ble\","
              "\"pairing\":\"%s\",\"controller\":null,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
-             "\"uptimeMs\":%lld}",
+             "\"uptimeMs\":%lld,"
+             "\"heapFree\":%u,\"heapSize\":%u,\"psramFree\":%u}",
              id, REMAPAD_BATTERY_MV, REMAPAD_BATTERY_PCT, backlight_get(),
              pairing_state_name(s_bridge.pairing), s_bridge.usb_role_host ? "host" : "device",
              s_bridge.usb_role_host ? "false" : "true",
-             (long long)(esp_timer_get_time() / 1000LL));
+             (long long)(esp_timer_get_time() / 1000LL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     reply_raw(event);
 }
 
