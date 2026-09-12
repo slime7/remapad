@@ -1,11 +1,14 @@
 #include "panel.h"
 
+#include "esp_attr.h"
 #include "esp_check.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_log.h"
 #include "driver/spi_master.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 /* 面板与引脚事实来自 docs/hardware.md；方向、GRAM 偏移与反转配置逐条对照微雪
  * 官方示例（02_ESP_IDF_ST7789_LVGL）：
@@ -26,11 +29,32 @@
 static const char *TAG = "driver_panel";
 static esp_lcd_panel_io_handle_t s_io = NULL;
 static esp_lcd_panel_handle_t s_panel = NULL;
+/* draw_bitmap 只把 DMA 事务排队就返回；该信号量由最后一笔分块的
+ * trans_done 回调释放，作为颜色缓冲复用前的完成门控。 */
+static SemaphoreHandle_t s_color_done = NULL;
+
+static bool IRAM_ATTR panel_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
+                                             esp_lcd_panel_io_event_data_t *edata,
+                                             void *user_ctx)
+{
+    (void)panel_io;
+    (void)edata;
+    (void)user_ctx;
+    BaseType_t higher_priority_woken = pdFALSE;
+    xSemaphoreGiveFromISR(s_color_done, &higher_priority_woken);
+    return higher_priority_woken == pdTRUE;
+}
 
 esp_err_t panel_init(void)
 {
     if (s_panel != NULL) {
         return ESP_ERR_INVALID_STATE;
+    }
+    if (s_color_done == NULL) {
+        s_color_done = xSemaphoreCreateBinary();
+        if (s_color_done == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
     }
 
     /* 面板只有 DIN 写入线，MISO 悬空；最大传输按整帧预留。 */
@@ -55,10 +79,11 @@ esp_err_t panel_init(void)
         .lcd_param_bits = REMAPAD_LCD_PARAM_BITS,
         .spi_mode = 0,
         .trans_queue_depth = 10,
+        .on_color_trans_done = panel_color_trans_done,
         .flags =
-            {
-                .psram_dma_direct = 1,
-            },
+        {
+            .psram_dma_direct = 1,
+        },
     };
     esp_err_t result = esp_lcd_new_panel_io_spi(
         (esp_lcd_spi_bus_handle_t)REMAPAD_LCD_SPI_HOST, &io_config, &s_io);
@@ -114,9 +139,19 @@ esp_err_t panel_transfer(uint16_t *pixels, int x, int y, int width, int height)
         pixels[index] = (uint16_t)__builtin_bswap16(pixels[index]);
     }
 
-    /* esp_lcd 的 draw_bitmap 使用开区间终点。每次 draw 都会重新
-     * spi_device_acquire_bus，而 acquire 按 spi_master.h 的约定会先排空该设备
-     * 上一轮排队的事务，因此调用方复用同一缓冲在下一帧重写是安全的，
-     * 无需额外的传输完成门控。 */
-    return esp_lcd_panel_draw_bitmap(s_panel, x, y, x + width, y + height, pixels);
+    /* esp_lcd 的 draw_bitmap 使用开区间终点。它把 CASET/RASET 命令与颜色数据
+     * 排进 SPI 队列后即返回，最后一笔颜色分块的 DMA 可能仍在飞行；官方约定
+     * 颜色缓冲必须在 on_color_trans_done 之后才能复用。调用方逐 region 复用
+     * 同一 strip 缓冲，若在传输完成前 memset/渲染下一块区域，上一笔 DMA 读到
+     * 的就是改写后的内容，实机表现为区域下半段黑线或错位内容。 */
+    esp_err_t result = esp_lcd_panel_draw_bitmap(s_panel, x, y, x + width, y + height, pixels);
+    if (result != ESP_OK) {
+        return result;
+    }
+    /* 整帧 240x280 在 40 MHz 下约 27 ms，超时按传输失败处理并放弃本帧。 */
+    if (xSemaphoreTake(s_color_done, pdMS_TO_TICKS(200)) != pdTRUE) {
+        ESP_LOGE(TAG, "panel transfer did not finish in time");
+        return ESP_ERR_TIMEOUT;
+    }
+    return ESP_OK;
 }
