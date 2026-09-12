@@ -4,6 +4,7 @@ import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { hw, setBacklight } from '../hooks/useHardware';
 import { COLOR } from '../theme';
+import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
 import { formatMb, formatUptime } from '../utils';
 
 const BACKLIGHT_STEP = 20;
@@ -34,11 +35,14 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
   const backlightLevel = () =>
     Math.max(1, Math.min(BACKLIGHT_LEVELS, Math.round(hw.backlight / BACKLIGHT_STEP)));
 
-  const scroller = usePageScroll(props.active, () => 34 + 56 + 16 + 44 + 16 + INFO_H + 96);
+  const scroller = usePageScroll(
+    props.active,
+    () => 34 + 56 + 16 + 44 + 16 + INFO_H + 16 + BOTTOM_PLACEHOLDER_H,
+  );
   return (
     <View class="w-full h-full overflow-hidden">
       <View
-        class="w-full flex-col px-4 pt-[34] pb-[96] gap-4"
+        class="w-full flex-col px-4 pt-[34] gap-4"
         style={{ translateY: -scroller.offset() }}
       >
         <View class="w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-2 gap-2">
@@ -96,6 +100,8 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
           />
           <InfoRow label="运行时长" value={formatUptime(hw.uptimeMs)} />
         </View>
+
+        <BottomPlaceholder />
       </View>
     </View>
   );

@@ -6,6 +6,7 @@ import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { hw, setUsbRole } from '../hooks/useHardware';
 import { COLOR } from '../theme';
+import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
 import type { UsbRole } from '../bridge/protocol';
 
 /** 卡片高度：py-3 上下 24 + 标题行 18 + 描述行 15（单行描述）。 */
@@ -51,11 +52,14 @@ function RoleCard(props: {
 }
 
 export function ModePage(props: { active: () => boolean }) {
-  const scroller = usePageScroll(props.active, () => 34 + CARD_H * 3 + 8 * 2 + 96);
+  const scroller = usePageScroll(
+    props.active,
+    () => 34 + CARD_H * 3 + 8 * 3 + BOTTOM_PLACEHOLDER_H,
+  );
   return (
     <View class="w-full h-full overflow-hidden">
       <View
-        class="w-full flex-col px-4 pt-[34] pb-[96] gap-2"
+        class="w-full flex-col px-4 pt-[34] gap-2"
         style={{ translateY: -scroller.offset() }}
       >
         <RoleCard
@@ -82,6 +86,7 @@ export function ModePage(props: { active: () => boolean }) {
           glyph={ICON.gamepad}
           onSelect={() => setUsbRole('host')}
         />
+        <BottomPlaceholder />
       </View>
     </View>
   );

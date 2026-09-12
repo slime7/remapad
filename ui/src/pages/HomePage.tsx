@@ -8,6 +8,7 @@ import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { hw } from '../hooks/useHardware';
 import { COLOR } from '../theme';
+import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
 import { usbLinkState } from '../utils';
 import type { TabKey } from '../components/AppNavBar';
 
@@ -33,11 +34,11 @@ export function HomePage(props: { active: () => boolean; onGo: (tab: TabKey) => 
     usbState() === 'gamepad' ? COLOR.tertiary : usbState() === 'computer' ? COLOR.primary : usbState() === 'adb' ? COLOR.secondary : DIM;
   const btConnected = () => hw.pairing === 'connected';
 
-  const scroller = usePageScroll(props.active, () => 38 + 56 + 96);
+  const scroller = usePageScroll(props.active, () => 38 + 56 + BOTTOM_PLACEHOLDER_H);
   return (
     <View class="w-full h-full overflow-hidden">
       <View
-        class="w-full flex-col items-center px-4 pt-[38] pb-[96]"
+        class="w-full flex-col items-center px-4 pt-[38]"
         style={{ translateY: -scroller.offset() }}
       >
         <View class="flex-row gap-2 shrink-0">
@@ -49,6 +50,7 @@ export function HomePage(props: { active: () => boolean; onGo: (tab: TabKey) => 
           />
         </View>
         <View class="grow" />
+        <BottomPlaceholder />
       </View>
     </View>
   );
