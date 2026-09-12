@@ -8,8 +8,10 @@ import { formatMb, formatUptime } from '../utils';
 
 const BACKLIGHT_STEP = 20;
 /** 背光滑轨实际宽度：行内 184（240 - 页面 px-4 32 - 卡片 px-3 24）
- *  - 图标 16 - 两个按钮 80 - 百分比 30 - 四处 gap 32。 */
-const TRACK_W = 26;
+ *  - 图标 16 - 两个按钮 80 - 档位数字 8 - 四处 gap 32。 */
+const TRACK_W = 48;
+/** 桥接协议仍以 0–100 百分比传输背光，显示侧映射为 1–5 档位数字。 */
+const BACKLIGHT_LEVELS = 5;
 /** 设备信息卡高度：py-2 上下 16 + 六行 22。 */
 const INFO_H = 16 + 22 * 6;
 
@@ -29,6 +31,8 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
     // 不提供 0 档：最低保持一步，避免误触后屏幕全黑看不到画面。
     setBacklight(Math.max(BACKLIGHT_STEP, hw.backlight + delta));
   };
+  const backlightLevel = () =>
+    Math.max(1, Math.min(BACKLIGHT_LEVELS, Math.round(hw.backlight / BACKLIGHT_STEP)));
 
   const scroller = usePageScroll(props.active, () => 34 + 56 + 16 + 44 + 16 + INFO_H + 96);
   return (
@@ -52,7 +56,7 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
               style={{ width: (hw.backlight / 100) * TRACK_W }}
             />
           </View>
-          <Text class="text-xs text-[#9aacca] shrink-0">{`${hw.backlight}%`}</Text>
+          <Text class="text-xs text-[#9aacca] shrink-0">{`${backlightLevel()}`}</Text>
           <View
             focusable
             onPress={() => changeBacklight(BACKLIGHT_STEP)}
@@ -68,7 +72,7 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
           class="w-full h-[44] shrink-0 rounded-[16] bg-[#8a1a1e] flex-row items-center justify-center gap-2 active:bg-[#a02a2e] transition-colors duration-150"
         >
           <Icon glyph={ICON.power} class="shrink-0 text-base" color="#ff9993" />
-          <Text class="text-sm font-bold text-[#ff9993]">重启设备 · 回到 COM 模式</Text>
+          <Text class="text-sm font-bold text-[#ff9993]">重启设备</Text>
         </View>
 
         <View class="w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2">
