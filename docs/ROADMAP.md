@@ -29,11 +29,11 @@
 新建 `firmware/main/ble/` 与 `firmware/main/dp/`（模块边界见 [ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，栈选型见 [ADR 0010](adr/0010-nimble-ble-controller-stack.md)）：
 
 - [ ] sdkconfig 启用 NimBLE（BLE-only），NimBLE 主机堆评估分配到 PSRAM（与 PocketJS guest 共存，内部 RAM 预算核查）。
-- [ ] `dp/dp_task.c`：独立数据面任务 + 输入源抽象；输入源先接合成测试源（编译期开关：自动按键遍历；可选调试模式：触摸坐标映射左摇杆，复用现有 `sample_input`，零 UI 改动）。
+- [ ] `dp/dp_task.c`：独立数据面任务 + 输入源抽象；输入源先接合成测试源，静置无按键（最初的自动按键遍历已按实机测试需要移除，按键输入改由调试页 `debugKey` 注入触发）。
 - [ ] `ble/ble_controller.c`：广播构造（标准发现 / 回连 / 唤醒三变体，31 字节 = Flags 3B + 厂商数据 28B：Company ID 0x0553、VID 0x057E、PID 0x2069、状态位）；GATT 两大服务按 §4 精确 UUID/handle 落表（Input 0x000A/0x000E + CCCD 0x000B/0x000F、Output 0x0012、Command 0x0014、应答 0x001A + CCCD 0x001B、复合输出 0x0016），全部 Write Without Response。
 - [ ] `ble/ble_session.c`：连接初始化时序（§10.2：0x001B CCCD → 0x07/0x01 握手 → 版本/出厂信息/校准应答 → LED → 0x0C 特性配置 → 0x000F CCCD → 5–15ms notify 循环）。
 
-**验收（真机分档）**：① nRF Connect 可见广播且厂商数据逐字节一致、GATT 结构匹配；② Switch 2 "更改 Grip/顺序"界面发现并连接；③ 握手应答帧日志符合 §10.2 时序，合成输入在主机侧可见按键变化。
+**验收（真机分档）**：① nRF Connect 可见广播且厂商数据逐字节一致、GATT 结构匹配；② Switch 2 "更改 Grip/顺序"界面发现并连接；③ 握手应答帧日志符合 §10.2 时序，调试注入的按键在主机侧可见变化。
 
 ### M3 — 配对、回连与凭证持久化　状态：代码完成（build 通过，配对算法向量校验通过；实机配对/回连验收待烧录联调）
 

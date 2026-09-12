@@ -22,7 +22,7 @@
 
 static const char *TAG = "remapad_bridge";
 
-#define REMAPAD_FW_VERSION "v0.3.1"
+#define REMAPAD_FW_VERSION "v0.3.2"
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8

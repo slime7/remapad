@@ -22,35 +22,14 @@ static volatile uint32_t s_debug_buttons;
 static volatile uint32_t s_debug_hold_ticks;
 
 #define DP_TICK_MS 5
-#define DP_WALK_LEN 12
-#define DP_WALK_PERIOD_TICKS 100
 /** 调试注入的按下保持时长：5ms × 50 = 250ms。 */
 #define DP_DEBUG_HOLD_TICKS 50
 
-/** 合成输入源的按键遍历序列：每 500ms 前进一个，按下保持 250ms。 */
-static const uint32_t s_walk[DP_WALK_LEN] = {
-    NS2_BTN_A, NS2_BTN_B, NS2_BTN_X, NS2_BTN_Y,
-    NS2_BTN_PLUS, NS2_BTN_MINUS, NS2_BTN_L, NS2_BTN_R,
-    NS2_BTN_ZL, NS2_BTN_ZR, NS2_BTN_DPAD_UP, NS2_BTN_HOME,
-};
-
-/** 左摇杆 12 方向圆周（相对中心的偏移量，x113 后约 ±1100）。 */
-static const int8_t s_circle[12][2] = {
-    {0, -100}, {50, -87}, {87, -50}, {100, 0},
-    {87, 50}, {50, 87}, {0, 100}, {-50, 87},
-    {-87, 50}, {-100, 0}, {-87, -50}, {-50, -87},
-};
-
-static void synthetic_sample(ns2_controller_state_t *state, uint32_t tick)
+/** 合成输入源：仅提供静置状态（摇杆居中、无按键）与电源/特性字段，
+ *  按键输入全部来自调试注入，主机侧不应出现任何自动变化。 */
+static void synthetic_sample(ns2_controller_state_t *state)
 {
     ns2_state_defaults(state);
-    const uint32_t idx = (tick / DP_WALK_PERIOD_TICKS) % DP_WALK_LEN;
-    if ((tick % DP_WALK_PERIOD_TICKS) < DP_WALK_PERIOD_TICKS / 2) {
-        state->buttons |= s_walk[idx];
-    }
-    const int8_t *d = s_circle[(tick / 8) % 12];
-    state->stick_lx = (uint16_t)(NS2_STICK_CENTER + d[0] * 11);
-    state->stick_ly = (uint16_t)(NS2_STICK_CENTER + d[1] * 11);
     state->battery_level = 8;
     state->battery_mv = 4120;
     state->rumble_enabled = ns2_session_rumble_enabled();
@@ -61,12 +40,11 @@ static void dp_task(void *param)
     ns2_controller_state_t state;
     uint8_t counter09 = 0;
     uint32_t counter05 = 0;
-    uint32_t tick = 0;
     TickType_t wake = xTaskGetTickCount();
 
     ESP_LOGI(TAG, "data plane task running, tick=%dms, source=synthetic", DP_TICK_MS);
     for (;;) {
-        synthetic_sample(&state, tick++);
+        synthetic_sample(&state);
         uint32_t debug_buttons = 0;
         portENTER_CRITICAL(&s_debug_mux);
         if (s_debug_hold_ticks > 0) {

@@ -202,7 +202,7 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 
 1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（未开始，需先确认 VBUS 供电与 USB mux 切换）
 2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。（已完成，`firmware/main/ns2/`）
-3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。（代码完成，`firmware/main/ble/` + `firmware/main/dp/`，当前由合成输入源驱动，实机互操作待验证）
+3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。（代码完成，`firmware/main/ble/` + `firmware/main/dp/`，合成源静置、按键由调试页注入，实机互操作待验证）
 4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。（配对/回连/NVS 凭证代码完成，唤醒广播顺延；震动解析记录，M5 转发 USB）
 5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。（配对/连接已真实化，电池仍为占位）
 
@@ -276,7 +276,7 @@ Get-CimInstance Win32_Process |
 
 ### 屏幕上没有出现 BLE 手柄广播
 
-BLE 手柄外设已接入（`firmware/main/ble/`，见 [ROADMAP.md](ROADMAP.md)）：开机后设备以厂商数据广播出现（nRF Connect 可见 Company ID `0x0553`），但**主机互操作尚未实机验证**——Switch 2 能否发现、连接并完成 0x15 配对取决于协议逆向细节，验证前不要宣称支持 NS2。排查顺序：先看启动日志有无 `host synced` 与 GATT 句柄表，再确认广播载荷，最后对照 [controller.md](controller.md) 逐段核对。USB 输入源尚未接入（M5），当前上报的是合成测试输入。
+BLE 手柄外设已接入（`firmware/main/ble/`，见 [ROADMAP.md](ROADMAP.md)）：开机后设备以厂商数据广播出现（nRF Connect 可见 Company ID `0x0553`），但**主机互操作尚未实机验证**——Switch 2 能否发现、连接并完成 0x15 配对取决于协议逆向细节，验证前不要宣称支持 NS2。排查顺序：先看启动日志有无 `host synced` 与 GATT 句柄表，再确认广播载荷，最后对照 [controller.md](controller.md) 逐段核对。USB 输入源尚未接入（M5），当前合成源保持静置，按键输入仅来自调试页的注入按钮。
 
 ### `unsupported QuickJS source; review immutable-buffer patch before upgrading`
 
