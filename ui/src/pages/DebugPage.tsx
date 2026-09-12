@@ -14,8 +14,8 @@ import type { DebugKey } from '../bridge/protocol';
 
 /** 注入确认高亮的持续帧数：60Hz 下 9 帧约 150ms。 */
 const FLASH_TICKS = 9;
-/** 按键指令卡高度：py-3 上下 24 + 说明行 15 + 两行按钮（各 mt-2 8 + 44）。 */
-const KEYS_CARD_H = 24 + 15 + 8 + 44 + 8 + 44;
+/** 按键指令卡高度：py-3 上下 24 + 两行按钮（各 mt-2 8 + 44）。 */
+const KEYS_CARD_H = 24 + 8 + 44 + 8 + 44;
 
 export function DebugPage(props: { active: () => boolean }) {
   const flashKey = ref<DebugKey | null>(null);
@@ -51,8 +51,7 @@ export function DebugPage(props: { active: () => boolean }) {
       >
         <Text class="text-xs text-[#9aacca] shrink-0">按键指令</Text>
         <View class="w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-3">
-          <Text class="text-xs text-[#9aacca]">注入后自动释放</Text>
-          <View class="w-full flex-row gap-2 mt-2">
+          <View class="w-full flex-row gap-2">
             <View
               focusable
               onPress={() => press('a')}

@@ -25,6 +25,8 @@ export default function App() {
   useHardware();
   const tab = ref<TabKey>('home');
   const rebootAsk = ref(false);
+  /** 配对进行中锁定底部导航，保证流程在配对页内完成。 */
+  const pairingBusy = () => hw.pairing === 'scanning' || hw.pairing === 'pairing';
 
   const confirmReboot = () => {
     rebootAsk.value = false;
@@ -54,7 +56,7 @@ export default function App() {
           <DebugPage active={() => tab.value === 'debug'} />
         </View>
       </View>
-      <AppNavBar tab={tab.value} onChange={(next) => (tab.value = next)} />
+      <AppNavBar tab={tab.value} disabled={pairingBusy} onChange={(next) => (tab.value = next)} />
 
       {/* 重启确认：官方 Modal 的 portal 层按 480x272 fallback 视口定位，
           在 240x280 上会错位，这里用本应用的绝对定位遮罩实现。 */}
