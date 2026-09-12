@@ -1,0 +1,43 @@
+#pragma once
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * BLE 手柄会话：广播策略、连接初始化时序与指令分发（controller.md §6/§10.2）。
+ * 传输细节（NimBLE、GATT 表、notify）由 ble_controller 承载，本模块只面对协议。
+ * 配对 Command 0x15 与凭证持久化在 M3 接入；高频输入路径不经过本模块。
+ */
+
+/** host 同步完成（栈就绪）：记录自身 MAC 并启动标准发现广播。 */
+void ns2_session_on_sync(const uint8_t own_mac[6]);
+
+/** ACL 连接建立。 */
+void ns2_session_on_connect(uint16_t conn_handle);
+
+/** 断连：复位会话并恢复发现广播。 */
+void ns2_session_on_disconnect(void);
+
+/** Command 通道（0x0014）写入：8 字节帧头 + 应答体，BLE 传输层。 */
+void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport);
+
+/** 震动通道（0x0012）写入：Output Report 0x02。本阶段解析记录，M5 转发 USB。 */
+void ns2_session_on_output(const uint8_t *data, size_t len);
+
+/** 复合输出通道（0x0016）写入：震动参数 + 指令帧。 */
+void ns2_session_on_composite(const uint8_t *data, size_t len);
+
+/** 当前输入报告格式（0x05 / 0x09，由 0x03/0x0A 选择，默认 0x09）。 */
+uint8_t ns2_session_report_format(void);
+
+/** 特性掩码 bit5（触觉震动）是否开启，影响 0x09 状态标志字节。 */
+bool ns2_session_rumble_enabled(void);
+
+#ifdef __cplusplus
+}
+#endif

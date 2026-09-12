@@ -4,8 +4,22 @@
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
 
+#include "dp_plane.h"
 #include "pocketjs_host.h"
+
+/** NVS 存放 PHY 校准与（M3 起）BLE 配对凭证；擦除恢复仅发生在介质损坏场景。 */
+static void nvs_init(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW("remapad_app", "nvs needs recovery, erasing");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+}
 
 void app_main(void)
 {
@@ -16,6 +30,13 @@ void app_main(void)
     ESP_LOGI("remapad_app", "Internal SRAM free: %" PRIu32 " bytes", (uint32_t)internal_free);
     ESP_LOGI("remapad_app", "PSRAM free: %" PRIu32 " bytes", (uint32_t)psram_free);
 
+    nvs_init();
     ESP_ERROR_CHECK(remapad_pocketjs_start());
     ESP_LOGI("remapad_app", "PocketJS owner task started");
+
+    /* 数据面失败不阻断屏幕 UI 启动。 */
+    const esp_err_t dp_err = dp_plane_start();
+    if (dp_err != ESP_OK) {
+        ESP_LOGE("remapad_app", "data plane start failed: %s", esp_err_to_name(dp_err));
+    }
 }

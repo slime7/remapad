@@ -31,3 +31,12 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # Board touch panel is a CST816T; the espressif CST816S driver's chip ID read
 # can break init on T-variant silicon.
 CONFIG_ESP_LCD_TOUCH_CST816S_DISABLE_READ_ID=y
+
+# Bluetooth LE controller peripheral (ADR 0010): NimBLE host, BLE-only,
+# no SMP (NS2 pairing is a private protocol), host memory in PSRAM.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1

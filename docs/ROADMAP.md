@@ -24,7 +24,7 @@
 
 **验收**：编码输出以日志十六进制比对 controller.md 字节布局；摇杆 pack/unpack 往返一致；帧头各字段（Direction 0x91/0x01、Transport、Status/ACK）与 §6.1 一致。
 
-### M2 — BLE 手柄外设骨架（NimBLE + 广播 + GATT + 上报循环）　状态：未开始
+### M2 — BLE 手柄外设骨架（NimBLE + 广播 + GATT + 上报循环）　状态：代码完成（idf.py build 通过，UUID/广播字节已机械核对；实机验收待烧录联调）
 
 新建 `firmware/main/ble/` 与 `firmware/main/dp/`（模块边界见 [ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，栈选型见 [ADR 0010](adr/0010-nimble-ble-controller-stack.md)）：
 
