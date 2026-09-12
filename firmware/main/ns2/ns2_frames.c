@@ -73,10 +73,3 @@ size_t ns2_body_flash_read(uint8_t *out, size_t cap, uint32_t addr,
     memcpy(&out[8], data, len);
     return need;
 }
-
-void ns2_body_mac_reversed(uint8_t out[6], const uint8_t mac[6])
-{
-    for (int i = 0; i < 6; i++) {
-        out[i] = mac[5 - i];
-    }
-}

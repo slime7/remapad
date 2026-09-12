@@ -43,9 +43,6 @@ void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN]);
 size_t ns2_body_flash_read(uint8_t *out, size_t cap, uint32_t addr,
                            const uint8_t *data, size_t len);
 
-/** 配对与广播统一反向字节序：把 6B MAC 反序写入 out。 */
-void ns2_body_mac_reversed(uint8_t out[6], const uint8_t mac[6]);
-
 #ifdef __cplusplus
 }
 #endif

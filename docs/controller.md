@@ -35,6 +35,8 @@ Switch 2 手柄放弃了前代 Switch 1 使用的经典蓝牙（Bluetooth BR/EDR
 
 Switch 2 主机在底层芯片层面启用了广播过滤机制，仅接收符合格式的任天堂广播帧。广播数据总长为 31 字节，包含两部分：BLE 广播标志（Flags）与厂商自定义数据（Manufacturer Specific Data）。
 
+广播方地址（AdvA）与间隔（实机抓包，ndeadly/switch2_controller_research）：真实 Pro Controller 2 以 **public 地址**发送全部广播，地址前缀为 Nintendo OUI `98:E2:55`（2024 年注册的 Switch 2 手柄专用前缀，抓包 1124 个广播包均同址）；芯片层过滤对厂商数据与地址 OUI 一并匹配，第三方模拟实现需将自身 BLE public 地址伪装为该 OUI 前缀（后缀自定且每次上电保持稳定）。广播事件间隔实测约 40 ms（即 0.625 ms × 0x40）。
+
 #### 手柄发往主机的广播包类型
 
 | 广播类型 | PDU 类型 | Flags (AD Type=`0x01`) | 厂商数据长度与类型 | 厂商数据内容 (AD Type=`0xFF`, 共 26 字节) |
@@ -122,6 +124,15 @@ sequenceDiagram
     Controller-->>Host: 响应指令 0x15/0x03 (状态码 0x01)
     Note over Controller: 将主机 MAC 与 LTK 写入 Flash 0x1FA000
 ```
+
+各步骤请求/应答体（body）字节布局（实机抓包，ndeadly/switch2_controller_research）：请求体首字节固定 `0x00`，应答体首字节固定 `0x01`。
+
+| 步骤 | 请求体 | 应答体 |
+| :--- | :--- | :--- |
+| 0x15/0x01 | `00 [地址数] [地址数×6B 主机地址反序]`（主机发 2 个地址，仅末字节相差 `0x80`/`0x81`） | `01 04 01 [手柄地址反序]`（共 9 字节） |
+| 0x15/0x04 | `00 [16B 主机公钥 A1 反序]` | `01 [16B 手柄公钥 B1]`（固定值，未反转） |
+| 0x15/0x02 | `00 [16B 挑战码 A2 反序]` | `01 [16B 应答码 B2 反序]` |
+| 0x15/0x03 | `00` | `01` |
 
 ### 3.2 密码学计算详细算法
 

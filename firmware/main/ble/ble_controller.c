@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "host/ble_hs.h"
@@ -15,6 +16,29 @@
 #include "ns2_frames.h"
 
 static const char *TAG = "remapad_blctl";
+
+/** 设置 host 侧 public 地址；IDF 6.1 的头文件移除了声明但符号仍导出。 */
+int ble_hs_id_set_pub(const uint8_t *pub_addr);
+
+/** 真实 Pro Controller 2 的广播地址前缀：Nintendo OUI（2024 年注册，
+ * ndeadly/switch2_controller_research 抓包中全部广播包均为该前缀）。 */
+static const uint8_t ADV_ADDR_OUI[3] = {0x98, 0xE2, 0x55};
+
+/** Switch 2 主机在芯片层只放行任天堂广播帧，地址 OUI 一并参与过滤；
+ * 广播须以 Nintendo OUI 的 public 地址发出。后缀取 eFuse MAC 低 3 字节，
+ * 每次上电稳定不变，保证配对凭证与回连地址一致。 */
+static void set_adv_address(void)
+{
+    uint8_t addr[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    uint8_t mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    memcpy(addr, ADV_ADDR_OUI, sizeof(ADV_ADDR_OUI));
+    memcpy(&addr[3], &mac[3], 3);
+    const int rc = ble_hs_id_set_pub(addr);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "set public adv addr rc=%d", rc);
+    }
+}
 
 /* ---- GATT UUID 表（controller.md §4）----
  * NimBLE 以空中传输字节序（小端）定义 128 位 UUID，即把规范字符串
@@ -408,6 +432,8 @@ esp_err_t ble_controller_start(void)
     if (err != ESP_OK) {
         return err;
     }
+    /* 须在 host 与 controller 同步前设置，广播 AdvA 才使用伪装地址。 */
+    set_adv_address();
     ble_hs_cfg.reset_cb = on_reset;
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.gatts_register_cb = gatt_register_cb;

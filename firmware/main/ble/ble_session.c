@@ -62,11 +62,11 @@ static uint32_t le32(const uint8_t *p)
            ((uint32_t)p[3] << 24);
 }
 
-/** 16 字节整体反转（AES 挑战与注入 LTK 的字节序变换，controller.md §3.2）。 */
-static void reverse16(const uint8_t *in, uint8_t *out)
+/** 帧内字节序列整体反转（MAC、AES 挑战与注入 LTK 的字节序变换，controller.md §3.2）。 */
+static void reverse_bytes(const uint8_t *in, uint8_t *out, size_t n)
 {
-    for (int i = 0; i < 16; i++) {
-        out[i] = in[15 - i];
+    for (size_t i = 0; i < n; i++) {
+        out[i] = in[n - 1 - i];
     }
 }
 
@@ -271,7 +271,7 @@ static size_t handle_init_cmd(const uint8_t *req, size_t len, uint8_t subcmd, ui
          * MAC 按线格式原样存储；LTK 反转回派生形态（0x15/0x04 路径的 A1^B1）。 */
         if (len >= NS2_FRAME_HEADER_LEN + 22) {
             uint8_t ltk[16];
-            reverse16(&req[14], ltk);
+            reverse_bytes(&req[14], ltk, 16);
             ble_creds_save(&req[8], ltk);
             s_pairing_creds_new = true;
             s_ses.state = SESSION_NORMAL;
@@ -353,52 +353,62 @@ static size_t handle_feature_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
 }
 
 /** Command 0x15 私有配对四步（controller.md §3）：MAC 交换 -> 公钥交换 ->
- * AES-128-ECB 挑战 -> 确认保存；全程不涉及标准 SMP。 */
+ * AES-128-ECB 挑战 -> 确认保存；全程不涉及标准 SMP。请求体以 0x00 前缀、
+ * 应答体以 0x01 前缀（实机抓包，ndeadly/switch2_controller_research）。 */
 static size_t handle_pairing_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
                                  uint8_t *resp, size_t cap)
 {
     switch (subcmd) {
     case 0x01:
-        /* 步骤 1：请求体携带主机 MAC（反序线格式），应答自身 MAC。 */
-        if (len >= NS2_FRAME_HEADER_LEN + 6) {
-            memcpy(s_pair.host_mac, &req[8], 6);
-            s_pair.mac_ready = true;
-        }
-        if (cap < NS2_FRAME_HEADER_LEN + 6) {
+        /* 步骤 1：请求体 `00 [地址数] [地址数×6B 主机地址反序]`（主机发两个地址，
+         * 绑定首个）；应答体 `01 04 01 [自身地址反序]`。 */
+        if (len < NS2_FRAME_HEADER_LEN + 8 || cap < NS2_FRAME_HEADER_LEN + 9) {
             return 0;
         }
-        ns2_body_mac_reversed(&resp[8], s_ses.own_mac);
-        return NS2_FRAME_HEADER_LEN + 6;
+        if (req[9] >= 1) {
+            memcpy(s_pair.host_mac, &req[10], 6);
+            s_pair.mac_ready = true;
+        }
+        resp[8] = 0x01;
+        resp[9] = 0x04;
+        resp[10] = 0x01;
+        reverse_bytes(s_ses.own_mac, &resp[11], 6);
+        return NS2_FRAME_HEADER_LEN + 9;
     case 0x04:
-        /* 步骤 2：LTK = A1 XOR B1（B1 为固定公钥），应答 B1。 */
-        if (len < NS2_FRAME_HEADER_LEN + 16 || cap < NS2_FRAME_HEADER_LEN + 16) {
+        /* 步骤 2：请求体 `00 [16B 主机公钥 A1 反序]`；LTK = A1 XOR B1（B1 为
+         * 固定公钥），应答体 `01 [16B B1]`。 */
+        if (len < NS2_FRAME_HEADER_LEN + 17 || cap < NS2_FRAME_HEADER_LEN + 17) {
             return 0;
         }
         for (int i = 0; i < 16; i++) {
-            s_pair.ltk[i] = (uint8_t)(req[8 + i] ^ ns2_pair_pubkey_b1[i]);
+            s_pair.ltk[i] = (uint8_t)(req[9 + i] ^ ns2_pair_pubkey_b1[i]);
         }
         s_pair.ltk_ready = true;
-        memcpy(&resp[8], ns2_pair_pubkey_b1, 16);
-        return NS2_FRAME_HEADER_LEN + 16;
+        resp[8] = 0x01;
+        memcpy(&resp[9], ns2_pair_pubkey_b1, 16);
+        return NS2_FRAME_HEADER_LEN + 17;
     case 0x02:
-        /* 步骤 3：B2 = reverse(AES128_ECB(Key=reverse(LTK), Data=reverse(A2)))。 */
-        if (!s_pair.ltk_ready || len < NS2_FRAME_HEADER_LEN + 16 ||
-            cap < NS2_FRAME_HEADER_LEN + 16) {
+        /* 步骤 3：请求体 `00 [16B 挑战码 A2 反序]`；
+         * B2 = reverse(AES128_ECB(Key=reverse(LTK), Data=reverse(A2)))，
+         * 应答体 `01 [16B B2 反序]`。 */
+        if (!s_pair.ltk_ready || len < NS2_FRAME_HEADER_LEN + 17 ||
+            cap < NS2_FRAME_HEADER_LEN + 17) {
             return 0;
         }
         {
             uint8_t a2[16];
             uint8_t key[16];
             uint8_t b2_reversed[16];
-            reverse16(&req[8], a2);
-            reverse16(s_pair.ltk, key);
+            reverse_bytes(&req[9], a2, 16);
+            reverse_bytes(s_pair.ltk, key, 16);
             if (!aes_ecb_block(key, a2, b2_reversed)) {
                 ESP_LOGE(TAG, "psa aes failed");
                 return 0;
             }
-            reverse16(b2_reversed, &resp[8]);
+            resp[8] = 0x01;
+            reverse_bytes(b2_reversed, &resp[9], 16);
         }
-        return NS2_FRAME_HEADER_LEN + 16;
+        return NS2_FRAME_HEADER_LEN + 17;
     case 0x03:
         /* 步骤 4：确认并持久化主机 MAC + LTK。 */
         if (s_pair.mac_ready && s_pair.ltk_ready) {
