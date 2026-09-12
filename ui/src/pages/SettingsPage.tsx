@@ -1,10 +1,11 @@
 /**
- * 设置页：rounded-16 列表（配对 / 模式 / 系统），触摸上下滚动。
+ * 设置页：rounded-16 列表（手柄设置 / 调试）。配对、模式与系统已在底部
+ * 导航，触摸上下滚动。
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
-import { COLOR } from '../theme';
+import { COLOR, STYLE } from '../theme';
 import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
 import type { TabKey } from '../components/AppNavBar';
 
@@ -20,9 +21,7 @@ interface SettingsItem {
 }
 
 const ITEMS: SettingsItem[] = [
-  { key: 'pairing', title: '手柄配对', glyph: ICON.bluetooth },
-  { key: 'mode', title: '模式切换', glyph: ICON.swapHoriz },
-  { key: 'system', title: '系统', glyph: ICON.settings },
+  { key: 'controller', title: '手柄设置', glyph: ICON.gamepad },
   { key: 'debug', title: '调试', glyph: ICON.bug },
 ];
 
@@ -42,10 +41,12 @@ export function SettingsPage(props: { active: () => boolean; onGo: (tab: TabKey)
             key={item.key}
             focusable
             onPress={() => props.onGo(item.key)}
-            class="w-full h-[44] shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 active:bg-[#14263e] transition-colors duration-150"
+            class={STYLE.rowCard}
           >
             <Icon glyph={item.glyph} class="shrink-0 text-lg" color={COLOR.primary} />
-            <Text class="text-sm text-[#d9e6ff] ml-3 grow">{item.title}</Text>
+            <Text class="text-sm ml-3 grow" style={{ textColor: COLOR.onSurface }}>
+              {item.title}
+            </Text>
             <Icon glyph={ICON.chevronRight} class="shrink-0 text-lg" color={COLOR.outline} />
           </View>
         ))}

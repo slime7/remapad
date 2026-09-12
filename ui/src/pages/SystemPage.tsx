@@ -2,8 +2,8 @@
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
+import { COLOR, STYLE } from '../theme';
 import { hw, setBacklight } from '../hooks/useHardware';
-import { COLOR } from '../theme';
 import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
 import { formatMb, formatUptime } from '../utils';
 
@@ -20,9 +20,13 @@ const INFO_H = 16 + 22 * 6;
 function InfoRow(props: { label: string; value: string }) {
   return (
     <View class="w-full h-[22] shrink-0 flex-row items-center">
-      <Text class="text-xs text-[#9aacca] shrink-0">{props.label}</Text>
+      <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+        {props.label}
+      </Text>
       <View class="grow" />
-      <Text class="text-xs text-[#d9e6ff] shrink-0">{props.value}</Text>
+      <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>
+        {props.value}
+      </Text>
     </View>
   );
 }
@@ -45,41 +49,37 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
         class="w-full flex-col px-4 pt-[34] gap-4"
         style={{ translateY: -scroller.offset() }}
       >
-        <View class="w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-2 gap-2">
+        <View class={STYLE.backlightRow}>
           <Icon glyph={ICON.brightnessHigh} class="shrink-0 text-base" color={COLOR.primary} />
-          <View
-            focusable
-            onPress={() => changeBacklight(-BACKLIGHT_STEP)}
-            class="w-[40] h-[40] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150"
-          >
-            <Text class="text-lg text-[#9aacca]">−</Text>
+          <View focusable onPress={() => changeBacklight(-BACKLIGHT_STEP)} class={STYLE.surfaceBtn}>
+            <Text class="text-lg" style={{ textColor: COLOR.onSurfaceVariant }}>
+              −
+            </Text>
           </View>
-          <View class="grow h-[8] rounded-[4] bg-[#14263e] overflow-hidden">
+          <View class={STYLE.track}>
             <View
-              class="h-[8] rounded-[4] bg-[#9ecefe]"
+              class={STYLE.trackFill}
               style={{ width: (hw.backlight / 100) * TRACK_W }}
             />
           </View>
-          <Text class="text-xs text-[#9aacca] shrink-0">{`${backlightLevel()}`}</Text>
-          <View
-            focusable
-            onPress={() => changeBacklight(BACKLIGHT_STEP)}
-            class="w-[40] h-[40] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150"
-          >
-            <Text class="text-lg text-[#9aacca]">+</Text>
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+            {`${backlightLevel()}`}
+          </Text>
+          <View focusable onPress={() => changeBacklight(BACKLIGHT_STEP)} class={STYLE.surfaceBtn}>
+            <Text class="text-lg" style={{ textColor: COLOR.onSurfaceVariant }}>
+              +
+            </Text>
           </View>
         </View>
 
-        <View
-          focusable
-          onPress={props.onAskReboot}
-          class="w-full h-[44] shrink-0 rounded-[16] bg-[#8a1a1e] flex-row items-center justify-center gap-2 active:bg-[#a02a2e] transition-colors duration-150"
-        >
-          <Icon glyph={ICON.power} class="shrink-0 text-base" color="#ff9993" />
-          <Text class="text-sm font-bold text-[#ff9993]">重启设备</Text>
+        <View focusable onPress={props.onAskReboot} class={STYLE.dangerRow}>
+          <Icon glyph={ICON.power} class="shrink-0 text-base" color={COLOR.onErrorContainer} />
+          <Text class="text-sm font-bold" style={{ textColor: COLOR.onErrorContainer }}>
+            重启设备
+          </Text>
         </View>
 
-        <View class="w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2">
+        <View class={STYLE.infoCard}>
           <InfoRow label="芯片" value={hw.chip || 'ESP32-S3'} />
           <InfoRow label="固件" value={hw.firmwareVersion || '--'} />
           <InfoRow

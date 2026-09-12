@@ -5,6 +5,7 @@
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
+import { COLOR, STYLE } from '../theme';
 import { hw, sendDebugKey, startPairing, stopPairing } from '../hooks/useHardware';
 import { BottomPlaceholder } from '../components/BottomPlaceholder';
 import { pairingColor, pairingLabel } from '../utils';
@@ -34,7 +35,7 @@ export function PairingPage() {
             {pairingLabel(hw.pairing)}
           </Text>
         </View>
-        <Text class="text-xs text-[#9aacca] mt-1 text-center shrink-0">
+        <Text class="text-xs mt-1 text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
           {hw.pairingMessage || (isBusy() ? '在 NS2 主机配对界面搜索本设备' : '')}
         </Text>
 
@@ -42,37 +43,29 @@ export function PairingPage() {
           <View
             focusable
             onPress={isBusy() ? stopPairing : startPairing}
-            class={
-              isBusy()
-                ? 'w-[76] h-[76] rounded-full bg-[#8a1a1e] flex-col items-center justify-center shrink-0 active:bg-[#a02a2e] transition-colors duration-150'
-                : 'w-[76] h-[76] rounded-full bg-[#9ecefe] flex-col items-center justify-center shrink-0 active:bg-[#b8dbff] transition-colors duration-150'
-            }
+            class={isBusy() ? STYLE.pairMainStop : STYLE.pairMain}
           >
             <Text
-              class={
-                isBusy()
-                  ? 'text-base font-bold text-[#ff9993]'
-                  : 'text-base font-bold text-[#04456e]'
-              }
+              class="text-base font-bold"
+              style={{ textColor: isBusy() ? COLOR.onErrorContainer : COLOR.onPrimaryContainer }}
             >
               {isBusy() ? '停止' : '开始'}
             </Text>
             <Text
-              class={
-                isBusy() ? 'text-xs text-[#ff9993]' : 'text-xs text-[#164e77]'
-              }
+              class="text-xs"
+              style={{ textColor: isBusy() ? COLOR.onErrorContainer : COLOR.onPrimary }}
             >
               配对
             </Text>
           </View>
           {isBusy() ? (
-            <View
-              focusable
-              onPress={() => sendDebugKey('lr')}
-              class="w-[76] h-[76] rounded-full bg-[#14263e] flex-col items-center justify-center shrink-0 active:bg-[#1c3350] transition-colors duration-150"
-            >
-              <Text class="text-sm font-bold text-[#d9e6ff]">配对</Text>
-              <Text class="text-sm font-bold text-[#d9e6ff]">L+R</Text>
+            <View focusable onPress={() => sendDebugKey('lr')} class={STYLE.pairAux}>
+              <Text class="text-sm font-bold" style={{ textColor: COLOR.onSurface }}>
+                配对
+              </Text>
+              <Text class="text-sm font-bold" style={{ textColor: COLOR.onSurface }}>
+                L+R
+              </Text>
             </View>
           ) : null}
         </View>

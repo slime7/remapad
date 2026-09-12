@@ -1,11 +1,21 @@
-import type { BatteryInfo, ControllerMode, DeviceCmd, DeviceMsg, PairingState, UsbRole } from './protocol';
+import type {
+  BatteryInfo,
+  ControllerConfig,
+  ControllerMode,
+  DeviceCmd,
+  DeviceMsg,
+  PairingState,
+  UsbRole,
+} from './protocol';
 
 interface MockHardwareState {
   battery: BatteryInfo;
   backlight: number;
+  screenOn: boolean;
   mode: ControllerMode;
   pairing: PairingState;
   controller: 'pro-controller-2' | 'joycon-l' | 'joycon-r' | null;
+  controllerConfig: ControllerConfig;
   usbRole: UsbRole;
   /** host 数据面未接入，mock 里只有 device 角色是"生效"的。 */
   usbRoleActive: boolean;
@@ -15,6 +25,14 @@ interface MockHardwareState {
   psramFree: number;
 }
 
+/** 浏览器 mock 的默认手柄配置：Pro + 占位配色（与固件出厂块一致）。 */
+const DEFAULT_CONTROLLER_CONFIG: ControllerConfig = {
+  type: 'pro',
+  bodyColor: 0x232323,
+  buttonColor: 0x3c3c3c,
+  gripColor: 0x2e2e2e,
+};
+
 const state: MockHardwareState = {
   battery: {
     voltageMv: 4120,
@@ -22,9 +40,11 @@ const state: MockHardwareState = {
     charging: false,
   },
   backlight: 40,
+  screenOn: true,
   mode: 'ble',
   pairing: 'idle',
   controller: null,
+  controllerConfig: { ...DEFAULT_CONTROLLER_CONFIG },
   usbRole: 'device',
   usbRoleActive: true,
   bootAt: Date.now(),
@@ -62,7 +82,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         t: 'ready',
         id,
         chip: 'ESP32-S3 (Mock)',
-        firmwareVersion: 'v0.2.0-sim',
+        firmwareVersion: 'v0.4.0-sim',
         psramSize: 8 * 1024 * 1024,
       });
       break;
@@ -73,6 +93,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         id,
         battery: { ...state.battery },
         backlight: state.backlight,
+        screenOn: state.screenOn,
         mode: state.mode,
         pairing: state.pairing,
         controller: state.controller,
@@ -87,6 +108,9 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
 
     case 'setBacklight':
       state.backlight = Math.max(0, Math.min(100, cmd.brightness));
+      if (state.backlight > 0) {
+        state.screenOn = true;
+      }
       reply({
         t: 'backlightSet',
         id,
@@ -94,6 +118,19 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         success: true,
       });
       break;
+
+    case 'setScreenPower': {
+      state.screenOn = cmd.on;
+      // 息屏即背光归零；亮屏恢复到最近一次的非零亮度。
+      if (cmd.on) {
+        state.backlight = Math.max(20, state.backlight);
+      } else {
+        state.backlight = 0;
+      }
+      reply({ t: 'screenPowerSet', id, on: state.screenOn });
+      broadcast(reply, { t: 'screenPowerChanged', on: state.screenOn });
+      break;
+    }
 
     case 'setControllerMode':
       state.mode = cmd.mode;
@@ -106,6 +143,16 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       break;
 
     case 'setUsbRole': {
+      // 桥接（otg）双端禁切：USB PHY 切换会断开 COM，数据面也未接入。
+      if (cmd.role === 'otg') {
+        reply({
+          t: 'error',
+          id,
+          code: 'NOT_SWITCHABLE',
+          message: '桥接模式暂不可切换',
+        });
+        break;
+      }
       state.usbRole = cmd.role;
       state.usbRoleActive = cmd.role !== 'host';
       const message =
@@ -114,6 +161,20 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       broadcast(reply, { t: 'usbRoleChanged', role: cmd.role, active: state.usbRoleActive });
       break;
     }
+
+    case 'getControllerConfig':
+      reply({ t: 'controllerConfig', id, config: { ...state.controllerConfig } });
+      break;
+
+    case 'setControllerConfig':
+      state.controllerConfig = { ...cmd.config };
+      reply({
+        t: 'controllerConfigSet',
+        id,
+        config: { ...state.controllerConfig },
+        success: true,
+      });
+      break;
 
     case 'startPairing':
       if (state.pairing === 'scanning' || state.pairing === 'pairing') {

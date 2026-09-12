@@ -5,35 +5,37 @@
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
+import { COLOR, STYLE } from '../theme';
 import { hw } from '../hooks/useHardware';
-import { COLOR } from '../theme';
 import { usbLinkState, usbRoleLabel } from '../utils';
-
-const MUTED = COLOR.onSurfaceVariant;
 
 export function AppStatusBar() {
   const usbOn = usbLinkState(hw.usbRole, hw.usbRoleActive) !== 'off';
   const btConnected = hw.pairing === 'connected';
   return (
-    <View class="absolute top-0 left-0 right-0 h-[26] z-40 flex-row items-center px-6 gap-2 bg-[#081423b3]">
+    <View class={STYLE.statusBar}>
       <Icon
         glyph={usbOn ? ICON.usb : ICON.usbOff}
         class="shrink-0 text-sm"
-        color={usbOn ? COLOR.primary : MUTED}
+        color={usbOn ? COLOR.primary : COLOR.onSurfaceVariant}
       />
-      <Text class="text-xs text-[#9aacca] shrink-0">{usbRoleLabel(hw.usbRole)}</Text>
+      <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+        {usbRoleLabel(hw.usbRole)}
+      </Text>
       <View class="grow" />
       <Icon
         glyph={btConnected ? ICON.bluetoothConnected : ICON.bluetoothDisabled}
         class="shrink-0 text-sm"
-        color={btConnected ? COLOR.primary : MUTED}
+        color={btConnected ? COLOR.primary : COLOR.onSurfaceVariant}
       />
       <Icon
         glyph={hw.battery.charging ? ICON.batteryChargingFull : ICON.batteryStd}
         class="shrink-0 text-sm"
-        color={MUTED}
+        color={COLOR.onSurfaceVariant}
       />
-      <Text class="text-xs text-[#9aacca] shrink-0">{`${hw.battery.percentage}%`}</Text>
+      <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+        {`${hw.battery.percentage}%`}
+      </Text>
     </View>
   );
 }

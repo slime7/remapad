@@ -1,8 +1,8 @@
 /**
- * Remapad 产品控制面协议预留。
+ * Remapad 产品控制面协议。
  *
- * 目标是描述 USB 输入、NS2 手柄状态、BLE 配对/广播和设备管理消息；
- * 它与 PocketJS 官方 ESP-IDF UI binding 分离，当前尚未接入实际传输层。
+ * 描述 USB 输入、NS2 手柄状态、BLE 配对/广播和设备管理消息；
+ * 与 PocketJS 官方 ESP-IDF UI binding 分离，经 __nativeBridge JSON 传输。
  */
 
 /** 手柄工作模式。 */
@@ -16,6 +16,17 @@ export type PairingState = 'idle' | 'scanning' | 'pairing' | 'paired' | 'connect
 
 /** 手柄设备型号。 */
 export type ControllerModel = 'pro-controller-2' | 'joycon-l' | 'joycon-r';
+
+/** 手柄形态：Pro 手柄（默认）或 JoyCon 组合（左 + 右）。 */
+export type ControllerType = 'pro' | 'joycon';
+
+/** 手柄身份配置：类型 + 机身配色（0xRRGGBB）。颜色选择 UI 预留，字段先随配置持久化。 */
+export interface ControllerConfig {
+  type: ControllerType;
+  bodyColor: number;
+  buttonColor: number;
+  gripColor: number;
+}
 
 /** 调试注入的按键（调试页按键指令区）；lr 表示同时按下 L 和 R。 */
 export type DebugKey = 'a' | 'home' | 'lr';
@@ -52,8 +63,11 @@ export type DeviceCmd =
   | { t: 'hello'; id: number; clientVersion: string }
   | { t: 'getSystemStatus'; id: number }
   | { t: 'setBacklight'; id: number; brightness: number }
+  | { t: 'setScreenPower'; id: number; on: boolean }
   | { t: 'setControllerMode'; id: number; mode: ControllerMode }
   | { t: 'setUsbRole'; id: number; role: UsbRole }
+  | { t: 'getControllerConfig'; id: number }
+  | { t: 'setControllerConfig'; id: number; config: ControllerConfig }
   | { t: 'startPairing'; id: number }
   | { t: 'stopPairing'; id: number }
   | { t: 'unpair'; id: number }
@@ -70,6 +84,8 @@ export type DeviceMsg =
       id: number;
       battery: BatteryInfo;
       backlight: number;
+      /** 息屏（背光关闭）状态，PWR 键或命令切换。 */
+      screenOn: boolean;
       mode: ControllerMode;
       pairing: PairingState;
       controller: ControllerModel | null;
@@ -83,6 +99,10 @@ export type DeviceMsg =
       psramFree: number;
     }
   | { t: 'backlightSet'; id: number; brightness: number; success: boolean }
+  | { t: 'screenPowerSet'; id: number; on: boolean }
+  | { t: 'screenPowerChanged'; on: boolean }
+  | { t: 'controllerConfig'; id: number; config: ControllerConfig }
+  | { t: 'controllerConfigSet'; id: number; config: ControllerConfig; success: boolean }
   | { t: 'usbRoleSet'; id: number; role: UsbRole; active: boolean; message?: string }
   | { t: 'pairingResult'; id: number; state: PairingState; message?: string }
   | { t: 'unpairResult'; id: number; state: PairingState; message?: string }
