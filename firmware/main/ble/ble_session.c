@@ -238,11 +238,18 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     resume_advertising();
 }
 
+/** Switch 2 主机地址 OUI（实机抓包，NimBLE 小端存储的 val[5..3]）。 */
+static bool is_nintendo_host(const uint8_t peer[6])
+{
+    return peer[3] == 0xEB && peer[4] == 0xF1 && peer[5] == 0x48;
+}
+
 void ns2_session_on_connect(uint16_t conn_handle)
 {
-    uint8_t peer[6];
+    uint8_t peer[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     bool known = false;
-    if (ble_controller_peer_mac(conn_handle, peer)) {
+    const bool have_peer = ble_controller_peer_mac(conn_handle, peer);
+    if (have_peer) {
         for (size_t i = 0; i < ble_creds_count(); i++) {
             if (memcmp(ble_creds_get(i)->mac, peer, 6) == 0) {
                 known = true;
@@ -250,10 +257,19 @@ void ns2_session_on_connect(uint16_t conn_handle)
             }
         }
     }
+    ESP_LOGI(TAG, "connected (conn=%u, peer %02x:%02x:%02x:%02x:%02x:%02x, %s)",
+             conn_handle, peer[0], peer[1], peer[2], peer[3], peer[4], peer[5],
+             known ? "paired host" : "unpaired host");
+    if (have_peer && !known && !is_nintendo_host(peer)) {
+        /* 手机/PC 的自动回连扫描会抢占广播，导致 Switch 2 侧搜不到设备；
+         * 非 Nintendo 主机且无凭证，直接断开。 */
+        ESP_LOGW(TAG, "non-Nintendo host, terminating");
+        ble_controller_disconnect();
+        return;
+    }
     s_ses.state = known ? SESSION_NORMAL : SESSION_CONNECTED_WAIT_PAIR;
     s_ses.pairing_mode = false;
-    ESP_LOGI(TAG, "connected (conn=%u, %s), waiting host init sequence",
-             conn_handle, known ? "paired host" : "unpaired host");
+    ESP_LOGI(TAG, "waiting host init sequence");
 }
 
 void ns2_session_on_disconnect(void)
