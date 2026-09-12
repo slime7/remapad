@@ -18,10 +18,13 @@ idf_component_register(
         "drivers/panel.c"
         "drivers/backlight.c"
         "drivers/touch.c"
+        "ns2/ns2_report.c"
+        "ns2/ns2_frames.c"
     INCLUDE_DIRS
         "."
         "bridge"
         "drivers"
+        "ns2"
     REQUIRES ${remapad_pocketjs_requires}
 )
 
