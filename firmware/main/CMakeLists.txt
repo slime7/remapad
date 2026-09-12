@@ -14,11 +14,13 @@ idf_component_register(
     SRCS
         "main.c"
         "pocketjs_host.c"
+        "bridge/js_bridge.c"
         "drivers/panel.c"
         "drivers/backlight.c"
         "drivers/touch.c"
     INCLUDE_DIRS
         "."
+        "bridge"
         "drivers"
     REQUIRES ${remapad_pocketjs_requires}
 )

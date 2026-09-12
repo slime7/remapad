@@ -66,7 +66,9 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 - USB 接收、解析、状态快照和 BLE 发送应使用 ESP-IDF 原生驱动、任务和队列。
 - NS2 报告编码应按 [controller.md](controller.md) 的型号、Report ID、摇杆打包、震动输出和字节序实现，并用实机抓包验证。
 - BLE manager 负责厂商广播字段、GATT service/characteristic、通知订阅、回连、唤醒和配对状态机；配对凭证通过 NVS 等持久化层保存。
-- `ui/src/bridge/` 与 `firmware/main/bridge/` 只适合承载低频的模式切换、开始/停止配对、连接状态、电池和诊断消息。当前 bridge 保留但尚未编译或连接真实传输层。
+- `ui/src/bridge/` 与 `firmware/main/bridge/` 只适合承载低频的模式切换、开始/停止配对、连接状态、电池和诊断消息。传输层已接通：guest 侧 `HardwareDriver` 经 `globalThis.__nativeBridge.postMessage(json)` 发命令（由 `pocketjs_host.c` 在 mount 后、eval 前用 `pocketjs_guest_quickjs_install_once` 注入的 native surface 接收并入队），owner task 每帧 `js_bridge_service()` 处理队列并用 `pocketjs_guest_eval` 调 `__onNativeBridgeMessage(json)` 回发应答/事件；入队与出队都在 owner task 上，无锁。协议以 `ui/src/bridge/protocol.ts` 为准，命令包含 hello/getSystemStatus/setBacklight/setUsbRole/startPairing/stopPairing/reboot，事件包含 ready/systemStatus/backlightSet/usbRoleSet/usbRoleChanged/pairingResult/pairingStateChanged/rebooting/error。
+- USB 角色（`usbRole`: device=插电脑 COM 口，host=插手柄）目前只由固件记录并如实上报 `usbRoleActive`；USB OTG PHY 切换属于数据面，未接入前任何代码都不触碰 RTC_CNTL USB mux，复位后永远回到默认的 USB-Serial/JTAG（COM 设备模式），"重启回 COM 模式"因此天然成立。
+- 配对状态机（idle/scanning/pairing/paired）当前运行在固件 bridge 内并按固定时序模拟流转（扫描 0.6s → 配对 4s → 已配对），BLE 栈接入后沿同一命令/事件路径替换为真实广播与凭证交换；电池字段同样是 `battery.c` 预留占位值。
 - USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
 
 ## UI 图元与资源

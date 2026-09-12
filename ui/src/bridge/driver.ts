@@ -4,6 +4,9 @@ import { mockHandleCmd } from './mock';
 export type MessageCallback = (msg: DeviceMsg) => void;
 export type Unsubscribe = () => void;
 
+/** Omit 在判别联合上不分布，会让 send 丢掉各命令的专有字段。 */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 /**
  * 产品控制面桥接预留。
  *
@@ -32,9 +35,11 @@ export class HardwareDriver {
     }
     this.initialized = true;
 
-    (globalThis as any).__onNativeBridgeMessage = (rawJson: string) => {
+    (globalThis as any).__onNativeBridgeMessage = (rawJson: string | object) => {
       try {
-        const msg = JSON.parse(rawJson) as DeviceMsg;
+        // 固件经 pocketjs_guest_eval 回发时直接给对象字面量；字符串则解析。
+        const msg =
+          typeof rawJson === 'string' ? (JSON.parse(rawJson) as DeviceMsg) : (rawJson as DeviceMsg);
         this.routeMessage(msg);
       } catch (e) {
         console.error('[HardwareDriver] Failed to parse native message:', e);
@@ -45,7 +50,7 @@ export class HardwareDriver {
   /**
    * 发送未来产品控制面命令；不参与当前 PocketJS UI turn。
    */
-  public send(cmdWithoutId: Omit<DeviceCmd, 'id'>, onReply?: MessageCallback): number {
+  public send(cmdWithoutId: DistributiveOmit<DeviceCmd, 'id'>, onReply?: MessageCallback): number {
     const id = this.seqId++;
     const cmd = { ...cmdWithoutId, id } as DeviceCmd;
 

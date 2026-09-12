@@ -1,84 +1,90 @@
-import { ref, watchEffect, onMounted } from 'vue';
-import {
-  View,
-  Text,
-  Image,
-  type NodeMirror,
-} from '@pocketjs/framework/vue-vapor/components';
-import { animate } from '@pocketjs/framework/animation';
-import { TICKS_PER_SECOND } from '@pocketjs/framework/clock';
-import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
-import { frameworkName } from '@pocketjs/framework/vue-vapor';
+/**
+ * Remapad 屏幕应用壳：顶部状态栏（半透明覆盖层）+ 功能页 + 悬浮底部菜单。
+ * 功能页状态来自产品控制面（bridge），见 hooks/useHardware.ts。
+ *
+ * 所有页面常驻挂载，切换只翻转 hidden（display:none）——比条件挂载快，
+ * 不用每次重建节点树和重新上传图片纹理。
+ */
+import { ref } from 'vue';
+import { Text, View } from '@pocketjs/framework/vue-vapor/components';
+import { AppStatusBar } from './components/AppStatusBar';
+import { AppNavBar, type TabKey } from './components/AppNavBar';
+import { useHardware, hw, rebootDevice } from './hooks/useHardware';
+import { HomePage } from './pages/HomePage';
+import { SettingsPage } from './pages/SettingsPage';
+import { PairingPage } from './pages/PairingPage';
+import { ModePage } from './pages/ModePage';
+import { SystemPage } from './pages/SystemPage';
+import { CHARSET_ANCHOR } from './theme';
 
-const SPINNER_FRAME_STEP = 3;
-const SPINNER_FRAMES = [
-  'spinner-00.svg',
-  'spinner-01.svg',
-  'spinner-02.svg',
-  'spinner-03.svg',
-  'spinner-04.svg',
-  'spinner-05.svg',
-  'spinner-06.svg',
-  'spinner-07.svg',
-];
+// 构建期字符集锚点：保持导入即可，让动态数字/符号字形进入字体图集。
+void CHARSET_ANCHOR;
 
-function Stat(props: { label: string; value: string; cls: string }) {
-  return (
-    <View class="flex-col items-end">
-      <Text class={props.cls}>{props.value}</Text>
-      <Text class="text-xs text-slate-500 tracking-wide">{props.label}</Text>
-    </View>
-  );
-}
+export default function App() {
+  useHardware();
+  const tab = ref<TabKey>('home');
+  const rebootAsk = ref(false);
 
-interface HeroProps {
-  actionLabel?: string;
-  deviceLabel?: string;
-  headline?: string;
-  onAction?: (count: number) => void;
-  presentationHz?: number;
-  runtimeLabel?: string;
-  spinnerFrameStep?: number;
-}
-
-export default function Hero(props: HeroProps = {}) {
-  const count = ref(0);
-  let underline: NodeMirror | null = null;
-
-  watchEffect(() => {
-    const completedCount = count.value;
-    if (completedCount > 0) props.onAction?.(completedCount);
-  });
-
-  const spinnerSrc = createSpriteAnimation(SPINNER_FRAMES, {
-    frameStep: props.spinnerFrameStep ?? SPINNER_FRAME_STEP,
-  });
-
-  onMounted(() => {
-    if (underline) {
-      animate(underline, 'width', 200, {
-        dur: 700,
-        easing: 'out',
-        delay: 150,
-      });
-    }
-  });
+  const confirmReboot = () => {
+    rebootAsk.value = false;
+    rebootDevice();
+  };
 
   return (
-    <View class="w-full h-full flex-col items-stretch bg-[#060f1b]">
-      <View class="status-bar">
-        <View class="px-8 py-2 w-full flex">
-          <Text class="text-[#d9e6ff]">汉字</Text>
-          <View class="flex-1"></View>
-          <Text class="text-[#d9e6ff]">68%</Text>
+    <View class="w-full h-full relative bg-[#060f1b] overflow-hidden">
+      <AppStatusBar />
+      <View class="w-full h-full overflow-hidden">
+        <View class={tab.value === 'home' ? 'w-full h-full' : 'hidden'}>
+          <HomePage active={() => tab.value === 'home'} onGo={(next) => (tab.value = next)} />
+        </View>
+        <View class={tab.value === 'settings' ? 'w-full h-full' : 'hidden'}>
+          <SettingsPage active={() => tab.value === 'settings'} onGo={(next) => (tab.value = next)} />
+        </View>
+        <View class={tab.value === 'pairing' ? 'w-full h-full' : 'hidden'}>
+          <PairingPage />
+        </View>
+        <View class={tab.value === 'mode' ? 'w-full h-full' : 'hidden'}>
+          <ModePage active={() => tab.value === 'mode'} />
+        </View>
+        <View class={tab.value === 'system' ? 'w-full h-full' : 'hidden'}>
+          <SystemPage active={() => tab.value === 'system'} onAskReboot={() => (rebootAsk.value = true)} />
         </View>
       </View>
+      <AppNavBar tab={tab.value} onChange={(next) => (tab.value = next)} />
 
-      <View class="flex-1"></View>
+      {/* 重启确认：官方 Modal 的 portal 层按 480x272 fallback 视口定位，
+          在 240x280 上会错位，这里用本应用的绝对定位遮罩实现。 */}
+      {rebootAsk.value ? (
+        <View class="absolute inset-0 z-50 flex-col items-center justify-center bg-[#000000b3]">
+          <View class="w-[204] rounded-[16] bg-[#102035] p-3 flex-col items-center">
+            <Text class="text-base font-bold text-[#d9e6ff]">重启设备？</Text>
+            <Text class="text-xs text-[#9aacca] text-center mt-1">重启后回到 COM 设备模式，</Text>
+            <Text class="text-xs text-[#9aacca] text-center">用于烧录与串口日志。</Text>
+            <View class="flex-row gap-2 mt-3">
+              <View
+                focusable
+                onPress={() => (rebootAsk.value = false)}
+                class="w-[84] h-[40] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150"
+              >
+                <Text class="text-sm text-[#d9e6ff]">取消</Text>
+              </View>
+              <View
+                focusable
+                onPress={confirmReboot}
+                class="w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150"
+              >
+                <Text class="text-sm font-bold text-[#ff9993]">重启</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
-      <View class="px-4 pb-6 mt-4">
-        <Text class="text-[#d9e6ff] text-xl">bottom</Text>
-      </View>
+      {hw.rebooting ? (
+        <View class="absolute inset-0 z-50 flex-row items-center justify-center bg-[#000000]">
+          <Text class="text-sm text-[#d9e6ff]">重启中</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -1,11 +1,18 @@
-import type { BatteryInfo, ControllerMode, ControllerModel, DeviceCmd, DeviceMsg, PairingState } from './protocol';
+import type { BatteryInfo, ControllerMode, DeviceCmd, DeviceMsg, PairingState, UsbRole } from './protocol';
 
 interface MockHardwareState {
   battery: BatteryInfo;
   backlight: number;
   mode: ControllerMode;
   pairing: PairingState;
-  controller: ControllerModel;
+  controller: 'pro-controller-2' | 'joycon-l' | 'joycon-r' | null;
+  usbRole: UsbRole;
+  /** host 数据面未接入，mock 里只有 device 角色是"生效"的。 */
+  usbRoleActive: boolean;
+  bootAt: number;
+  heapSize: number;
+  heapFree: number;
+  psramFree: number;
 }
 
 const state: MockHardwareState = {
@@ -14,11 +21,36 @@ const state: MockHardwareState = {
     percentage: 88,
     charging: false,
   },
-  backlight: 80,
+  backlight: 40,
   mode: 'ble',
-  pairing: 'connected',
-  controller: 'pro-controller-2',
+  pairing: 'idle',
+  controller: null,
+  usbRole: 'device',
+  usbRoleActive: true,
+  bootAt: Date.now(),
+  heapSize: 320 * 1024,
+  heapFree: 186 * 1024,
+  psramFree: Math.round(2.8 * 1024 * 1024),
 };
+
+let pairingTimers: ReturnType<typeof setTimeout>[] = [];
+
+function clearPairingTimers(): void {
+  pairingTimers.forEach(clearTimeout);
+  pairingTimers = [];
+}
+
+function broadcast(reply: (msg: DeviceMsg) => void, msg: DeviceMsg): void {
+  pairingTimers.push(setTimeout(() => reply(msg), 0));
+}
+
+function setPairing(
+  reply: (msg: DeviceMsg) => void,
+  pairing: PairingState,
+): void {
+  state.pairing = pairing;
+  broadcast(reply, { t: 'pairingStateChanged', state: pairing });
+}
 
 /** 浏览器环境下的产品控制面协议 mock；不模拟 PocketJS UI binding。 */
 export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): void {
@@ -29,8 +61,8 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       reply({
         t: 'ready',
         id,
-        chip: 'ESP32-S3 (Browser Mock)',
-        firmwareVersion: 'v0.1.0-sim',
+        chip: 'ESP32-S3 (Mock)',
+        firmwareVersion: 'v0.2.0-sim',
         psramSize: 8 * 1024 * 1024,
       });
       break;
@@ -44,6 +76,12 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         mode: state.mode,
         pairing: state.pairing,
         controller: state.controller,
+        usbRole: state.usbRole,
+        usbRoleActive: state.usbRoleActive,
+        uptimeMs: Date.now() - state.bootAt,
+        heapFree: state.heapFree,
+        heapSize: state.heapSize,
+        psramFree: state.psramFree,
       });
       break;
 
@@ -60,50 +98,56 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
     case 'setControllerMode':
       state.mode = cmd.mode;
       reply({
-        t: 'pairingResult',
+        t: 'error',
         id,
-        state: state.pairing,
-        message: `Mode switched to ${cmd.mode}`,
+        code: 'NOT_IMPLEMENTED',
+        message: `Controller mode ${cmd.mode} needs the data plane`,
       });
       break;
 
+    case 'setUsbRole': {
+      state.usbRole = cmd.role;
+      state.usbRoleActive = cmd.role !== 'host';
+      const message =
+        cmd.role === 'host' ? 'USB host 数据面未接入，切换暂不生效' : undefined;
+      reply({ t: 'usbRoleSet', id, role: cmd.role, active: state.usbRoleActive, message });
+      broadcast(reply, { t: 'usbRoleChanged', role: cmd.role, active: state.usbRoleActive });
+      break;
+    }
+
     case 'startPairing':
-      state.pairing = 'pairing';
-      reply({
-        t: 'pairingResult',
-        id,
-        state: 'pairing',
-        message: 'Pairing broadcast active',
-      });
+      if (state.pairing === 'scanning' || state.pairing === 'pairing') {
+        reply({ t: 'pairingResult', id, state: state.pairing, message: '配对已在进行中' });
+        break;
+      }
+      clearPairingTimers();
+      setPairing(reply, 'scanning');
+      reply({ t: 'pairingResult', id, state: 'scanning', message: '开始广播（模拟）' });
+      pairingTimers.push(setTimeout(() => setPairing(reply, 'pairing'), 1500));
+      pairingTimers.push(setTimeout(() => setPairing(reply, 'paired'), 4200));
       break;
 
     case 'stopPairing':
-      state.pairing = 'idle';
-      reply({
-        t: 'pairingResult',
-        id,
-        state: 'idle',
-        message: 'Pairing stopped',
-      });
+      clearPairingTimers();
+      setPairing(reply, 'idle');
+      reply({ t: 'pairingResult', id, state: 'idle', message: '已停止配对' });
       break;
 
     case 'triggerRumble':
-      reply({
-        t: 'rumbleAck',
-        id,
-        success: true,
-      });
+      reply({ t: 'rumbleAck', id, success: false });
       break;
 
     case 'calibrateSensors':
-    case 'reboot':
       reply({
-        t: 'ready',
+        t: 'error',
         id,
-        chip: 'ESP32-S3 (Reboot Mock)',
-        firmwareVersion: 'v0.1.0-sim',
-        psramSize: 8 * 1024 * 1024,
+        code: 'NOT_IMPLEMENTED',
+        message: 'Sensors are not wired yet',
       });
+      break;
+
+    case 'reboot':
+      reply({ t: 'rebooting', id });
       break;
 
     default:

@@ -1,50 +1,374 @@
 #include "js_bridge.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "../drivers/backlight.h"
-#include "../drivers/battery.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-static const char *TAG = "js_bridge";
+#include "backlight.h"
+
+#include "pocketjs/guest.h"
+
+static const char *TAG = "remapad_bridge";
+
+#define REMAPAD_FW_VERSION "v0.2.0"
+#define REMAPAD_CHIP_NAME "ESP32-S3"
+#define REMAPAD_BRIDGE_CMD_MAX 256
+#define REMAPAD_BRIDGE_QUEUE_LEN 8
+#define REMAPAD_EVENT_MAX 320
+
+/** battery.c 仍是预留占位；在真实 ADC 驱动接入前上报固定值。 */
+#define REMAPAD_BATTERY_MV 4120
+#define REMAPAD_BATTERY_PCT 88
+
+/** 配对状态机时序：扫描 0.6s -> 配对 4s -> 已配对（BLE 栈接入后换成真实事件）。 */
+#define REMAPAD_PAIR_SCAN_US (600 * 1000LL)
+#define REMAPAD_PAIR_PAIRING_US (4000 * 1000LL)
+#define REMAPAD_REBOOT_DELAY_US (150 * 1000LL)
+
+typedef enum {
+    BRIDGE_PAIRING_IDLE = 0,
+    BRIDGE_PAIRING_SCANNING,
+    BRIDGE_PAIRING_PAIRING,
+    BRIDGE_PAIRING_PAIRED,
+} bridge_pairing_state_t;
+
+typedef struct {
+    char data[REMAPAD_BRIDGE_CMD_MAX];
+} bridge_cmd_slot_t;
+
+static struct {
+    pocketjs_guest_t *guest;
+    bridge_cmd_slot_t queue[REMAPAD_BRIDGE_QUEUE_LEN];
+    size_t queue_head;
+    size_t queue_len;
+    bridge_pairing_state_t pairing;
+    int64_t pairing_deadline_us;
+    bool usb_role_host; /* UI 请求的角色；host 数据面未接入，仅记录。 */
+    int64_t reboot_at_us;
+    bool reboot_pending;
+} s_bridge;
+
+static const char *pairing_state_name(bridge_pairing_state_t state)
+{
+    switch (state) {
+    case BRIDGE_PAIRING_SCANNING:
+        return "scanning";
+    case BRIDGE_PAIRING_PAIRING:
+        return "pairing";
+    case BRIDGE_PAIRING_PAIRED:
+        return "paired";
+    default:
+        return "idle";
+    }
+}
 
 esp_err_t js_bridge_init(void)
 {
-    ESP_LOGI(TAG, "初始化产品控制面桥接（当前未接入 PocketJS UI）");
-    backlight_init();
-    battery_init();
+    memset(&s_bridge, 0, sizeof(s_bridge));
     return ESP_OK;
 }
 
-void js_bridge_handle_cmd(const char *cmd_json)
+void js_bridge_attach(pocketjs_guest_t *guest)
+{
+    s_bridge.guest = guest;
+}
+
+esp_err_t js_bridge_enqueue(const char *cmd_json)
 {
     if (cmd_json == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strlen(cmd_json) >= REMAPAD_BRIDGE_CMD_MAX) {
+        ESP_LOGW(TAG, "cmd too long, dropping: %.64s", cmd_json);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (s_bridge.queue_len >= REMAPAD_BRIDGE_QUEUE_LEN) {
+        ESP_LOGW(TAG, "cmd queue full, dropping: %.64s", cmd_json);
+        return ESP_ERR_NO_MEM;
+    }
+    const size_t tail = (s_bridge.queue_head + s_bridge.queue_len) % REMAPAD_BRIDGE_QUEUE_LEN;
+    bridge_cmd_slot_t *slot = &s_bridge.queue[tail];
+    strcpy(slot->data, cmd_json);
+    s_bridge.queue_len++;
+    return ESP_OK;
+}
+
+/** 通过 eval 调用 guest 的 __onNativeBridgeMessage；JSON 必须是合法 JS 表达式。 */
+static void post_event_json(const char *event_json)
+{
+    if (s_bridge.guest == NULL) {
+        ESP_LOGI(TAG, "event (no guest): %s", event_json);
         return;
     }
-
-    ESP_LOGI(TAG, "收到预留控制面指令: %s", cmd_json);
-
-    if (strstr(cmd_json, "\"setBacklight\"") != NULL) {
-        const char *val_ptr = strstr(cmd_json, "\"brightness\":");
-        uint8_t brightness = 80;
-        if (val_ptr != NULL) {
-            brightness = (uint8_t)atoi(val_ptr + 13);
-        }
-        backlight_set(brightness);
-        ESP_LOGI(TAG, "已响应背光设置: %u%%", brightness);
-    } else if (strstr(cmd_json, "\"triggerRumble\"") != NULL) {
-        ESP_LOGI(TAG, "已响应预留震动测试指令");
-    } else if (strstr(cmd_json, "\"getSystemStatus\"") != NULL) {
-        ESP_LOGI(TAG, "已响应预留系统状态查询指令");
+    char eval_buf[REMAPAD_EVENT_MAX + 48];
+    const int n = snprintf(eval_buf, sizeof(eval_buf),
+                           "__onNativeBridgeMessage&&__onNativeBridgeMessage(%s)", event_json);
+    if (n < 0 || (size_t)n >= sizeof(eval_buf)) {
+        ESP_LOGW(TAG, "event too long, dropped");
+        return;
+    }
+    const esp_err_t err = pocketjs_guest_eval(s_bridge.guest, eval_buf, (size_t)n, "bridge_evt");
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "event eval failed: %s", esp_err_to_name(err));
     }
 }
 
-void js_bridge_post_event(const char *event_json)
+/* 命令 JSON 由 UI 侧 driver 的 JSON.stringify 生成、字段固定，这里按
+ * "键":值 直接匹配；协议扩展若引入新字段形态，请同步这里的解析。 */
+static bool cmd_has(const char *cmd, const char *key_value)
 {
-    if (event_json == NULL) {
+    return strstr(cmd, key_value) != NULL;
+}
+
+static int cmd_id(const char *cmd)
+{
+    const char *id = strstr(cmd, "\"id\":");
+    return id != NULL ? atoi(id + 5) : 0;
+}
+
+static int cmd_number(const char *cmd, const char *key)
+{
+    char needle[32];
+    snprintf(needle, sizeof(needle), "\"%s\":", key);
+    const char *value = strstr(cmd, needle);
+    if (value == NULL) {
+        return -1;
+    }
+    return atoi(value + strlen(needle));
+}
+
+/** "key":"value" 形态的字符串字段；found 表示键存在。 */
+static const char *cmd_string(const char *cmd, const char *key, size_t *len)
+{
+    char needle[32];
+    snprintf(needle, sizeof(needle), "\"%s\":\"", key);
+    const char *value = strstr(cmd, needle);
+    if (value == NULL) {
+        *len = 0;
+        return NULL;
+    }
+    value += strlen(needle);
+    const char *end = strchr(value, '"');
+    if (end == NULL) {
+        *len = 0;
+        return NULL;
+    }
+    *len = (size_t)(end - value);
+    return value;
+}
+
+static void reply_raw(const char *event_json)
+{
+    post_event_json(event_json);
+}
+
+static void handle_hello(int id)
+{
+    char event[REMAPAD_EVENT_MAX];
+    const size_t psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    snprintf(event, sizeof(event),
+             "{\"t\":\"ready\",\"id\":%d,\"chip\":\"%s\",\"firmwareVersion\":\"%s\","
+             "\"psramSize\":%u}",
+             id, REMAPAD_CHIP_NAME, REMAPAD_FW_VERSION, (unsigned)psram);
+    reply_raw(event);
+    ESP_LOGI(TAG, "hello -> ready (psram=%u)", (unsigned)psram);
+}
+
+static void handle_get_system_status(int id)
+{
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"systemStatus\",\"id\":%d,\"battery\":{\"voltageMv\":%d,"
+             "\"percentage\":%d,\"charging\":false},\"backlight\":%u,\"mode\":\"ble\","
+             "\"pairing\":\"%s\",\"controller\":null,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
+             "\"uptimeMs\":%lld}",
+             id, REMAPAD_BATTERY_MV, REMAPAD_BATTERY_PCT, backlight_get(),
+             pairing_state_name(s_bridge.pairing), s_bridge.usb_role_host ? "host" : "device",
+             s_bridge.usb_role_host ? "false" : "true",
+             (long long)(esp_timer_get_time() / 1000LL));
+    reply_raw(event);
+}
+
+static void handle_set_backlight(int id, const char *cmd)
+{
+    const int brightness = cmd_number(cmd, "brightness");
+    if (brightness < 0) {
+        char event[REMAPAD_EVENT_MAX];
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"error\",\"id\":%d,\"code\":\"BAD_REQUEST\","
+                 "\"message\":\"brightness must be a number\"}",
+                 id);
+        reply_raw(event);
         return;
     }
-    ESP_LOGI(TAG, "预留控制面事件: %s", event_json);
+    const esp_err_t err = backlight_set((uint8_t)brightness);
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"backlightSet\",\"id\":%d,\"brightness\":%u,\"success\":%s}",
+             id, backlight_get(), err == ESP_OK ? "true" : "false");
+    reply_raw(event);
+    ESP_LOGI(TAG, "backlight -> %u%%", backlight_get());
+}
+
+static void handle_set_usb_role(int id, const char *cmd)
+{
+    size_t role_len = 0;
+    const char *role = cmd_string(cmd, "role", &role_len);
+    const bool want_host = role != NULL && role_len == 4 && strncmp(role, "host", 4) == 0;
+    const bool known = want_host || (role != NULL && role_len == 6 && strncmp(role, "device", 6) == 0);
+    if (!known) {
+        char event[REMAPAD_EVENT_MAX];
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"error\",\"id\":%d,\"code\":\"BAD_REQUEST\","
+                 "\"message\":\"unknown usb role\"}",
+                 id);
+        reply_raw(event);
+        return;
+    }
+    s_bridge.usb_role_host = want_host;
+    /* USB PHY/OTG 切换属于数据面，尚未接入：这里只记录请求并如实上报，
+     * 不触碰 RTC_CNTL USB mux。接入后按 docs/hardware.md 的机制实现。 */
+    char event[REMAPAD_EVENT_MAX];
+    if (want_host) {
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"host\",\"active\":false,"
+                 "\"message\":\"USB host 数据面未接入，切换暂不生效\"}",
+                 id);
+    } else {
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"device\",\"active\":true}",
+                 id);
+    }
+    reply_raw(event);
+
+    char broadcast[REMAPAD_EVENT_MAX];
+    snprintf(broadcast, sizeof(broadcast),
+             "{\"t\":\"usbRoleChanged\",\"role\":\"%s\",\"active\":%s}",
+             want_host ? "host" : "device", want_host ? "false" : "true");
+    reply_raw(broadcast);
+    ESP_LOGI(TAG, "usb role request -> %s (phy untouched)", want_host ? "host" : "device");
+}
+
+static void handle_start_pairing(int id)
+{
+    char event[REMAPAD_EVENT_MAX];
+    if (s_bridge.pairing == BRIDGE_PAIRING_SCANNING ||
+        s_bridge.pairing == BRIDGE_PAIRING_PAIRING) {
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","
+                 "\"message\":\"配对已在进行中\"}",
+                 id, pairing_state_name(s_bridge.pairing));
+        reply_raw(event);
+        return;
+    }
+    s_bridge.pairing = BRIDGE_PAIRING_SCANNING;
+    s_bridge.pairing_deadline_us = esp_timer_get_time() + REMAPAD_PAIR_SCAN_US;
+    snprintf(event, sizeof(event),
+             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"scanning\","
+             "\"message\":\"开始广播（模拟）\"}",
+             id);
+    reply_raw(event);
+    ESP_LOGI(TAG, "pairing started (simulated; BLE stack pending)");
+}
+
+static void handle_stop_pairing(int id)
+{
+    s_bridge.pairing = BRIDGE_PAIRING_IDLE;
+    s_bridge.pairing_deadline_us = 0;
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"idle\","
+             "\"message\":\"已停止配对\"}",
+             id);
+    reply_raw(event);
+    ESP_LOGI(TAG, "pairing stopped");
+}
+
+static void handle_reboot(int id)
+{
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event), "{\"t\":\"rebooting\",\"id\":%d}", id);
+    reply_raw(event);
+    s_bridge.reboot_pending = true;
+    s_bridge.reboot_at_us = esp_timer_get_time() + REMAPAD_REBOOT_DELAY_US;
+    ESP_LOGI(TAG, "reboot requested; restarting in %lld ms",
+             (long long)(REMAPAD_REBOOT_DELAY_US / 1000LL));
+}
+
+static void handle_cmd(const char *cmd)
+{
+    const int id = cmd_id(cmd);
+    if (cmd_has(cmd, "\"t\":\"hello\"")) {
+        handle_hello(id);
+    } else if (cmd_has(cmd, "\"t\":\"getSystemStatus\"")) {
+        handle_get_system_status(id);
+    } else if (cmd_has(cmd, "\"t\":\"setBacklight\"")) {
+        handle_set_backlight(id, cmd);
+    } else if (cmd_has(cmd, "\"t\":\"setUsbRole\"")) {
+        handle_set_usb_role(id, cmd);
+    } else if (cmd_has(cmd, "\"t\":\"startPairing\"")) {
+        handle_start_pairing(id);
+    } else if (cmd_has(cmd, "\"t\":\"stopPairing\"")) {
+        handle_stop_pairing(id);
+    } else if (cmd_has(cmd, "\"t\":\"reboot\"")) {
+        handle_reboot(id);
+    } else {
+        ESP_LOGW(TAG, "unsupported cmd: %.96s", cmd);
+        char event[REMAPAD_EVENT_MAX];
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"error\",\"id\":%d,\"code\":\"NOT_IMPLEMENTED\","
+                 "\"message\":\"command needs the data plane\"}",
+                 id);
+        reply_raw(event);
+    }
+}
+
+static void pairing_service(int64_t now_us)
+{
+    if ((s_bridge.pairing == BRIDGE_PAIRING_SCANNING ||
+         s_bridge.pairing == BRIDGE_PAIRING_PAIRING) &&
+        now_us >= s_bridge.pairing_deadline_us) {
+        bridge_pairing_state_t next;
+        if (s_bridge.pairing == BRIDGE_PAIRING_SCANNING) {
+            next = BRIDGE_PAIRING_PAIRING;
+            s_bridge.pairing_deadline_us = now_us + REMAPAD_PAIR_PAIRING_US;
+        } else {
+            next = BRIDGE_PAIRING_PAIRED;
+            s_bridge.pairing_deadline_us = 0;
+        }
+        s_bridge.pairing = next;
+        ESP_LOGI(TAG, "pairing state -> %s (simulated)", pairing_state_name(next));
+        char event[REMAPAD_EVENT_MAX];
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"pairingStateChanged\",\"state\":\"%s\"}",
+                 pairing_state_name(next));
+        reply_raw(event);
+    }
+}
+
+void js_bridge_service(void)
+{
+    const int64_t now_us = esp_timer_get_time();
+    pairing_service(now_us);
+
+    if (s_bridge.reboot_pending && now_us >= s_bridge.reboot_at_us) {
+        ESP_LOGI(TAG, "rebooting now (USB returns to Serial/JTAG COM mode)");
+        vTaskDelay(pdMS_TO_TICKS(50));
+        esp_restart();
+    }
+
+    while (s_bridge.queue_len > 0) {
+        bridge_cmd_slot_t slot = s_bridge.queue[s_bridge.queue_head];
+        s_bridge.queue_head = (s_bridge.queue_head + 1) % REMAPAD_BRIDGE_QUEUE_LEN;
+        s_bridge.queue_len--;
+        handle_cmd(slot.data);
+    }
 }

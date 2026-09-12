@@ -1,5 +1,4 @@
 import { mount } from '@pocketjs/framework/vue-vapor';
-import Hero from './Hero';
 import App from './App';
 
 // quickjs-ng 的 js_std_add_helpers 只给全局 console 装了 log，框架 prelude 的

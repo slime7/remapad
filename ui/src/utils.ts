@@ -1,0 +1,83 @@
+/**
+ * 屏幕文案与格式化工具。所有中文与格式字符都以字面量出现在本文件，
+ * 构建期据此烘焙字体图集；数字/冒号/百分号由 theme.ts 的锚点兜底。
+ */
+import type { PairingState, UsbRole } from './bridge/protocol';
+import { COLOR } from './theme';
+
+/** USB 链路展示状态：off=没插 / adb=PC+烧录（串口） / computer=PC+OTG / gamepad=手柄+主机。 */
+export type UsbLinkState = 'off' | 'adb' | 'computer' | 'gamepad';
+
+/** 由控制面的角色与生效标志推导 USB 链路状态；串口（device）对应烧录态 adb。 */
+export function usbLinkState(usbRole: UsbRole, usbRoleActive: boolean): UsbLinkState {
+  if (!usbRoleActive) {
+    return 'off';
+  }
+  if (usbRole === 'host') {
+    return 'gamepad';
+  }
+  return usbRole === 'otg' ? 'computer' : 'adb';
+}
+
+/** 状态栏的 USB 角色短标。 */
+export function usbRoleLabel(usbRole: UsbRole): string {
+  switch (usbRole) {
+    case 'host':
+      return 'HOST';
+    case 'otg':
+      return 'OTG';
+    default:
+      return 'COM';
+  }
+}
+
+/** 开机时长 → mm:ss 或 h:mm:ss。 */
+export function formatUptime(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = `${Math.floor(m / 10)}${m % 10}`;
+  const ss = `${Math.floor(s / 10)}${s % 10}`;
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/** 字节数 → MB 文本（一位小数，如 8.0 MB）。 */
+export function formatMb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** 配对状态中文标签。 */
+export function pairingLabel(state: PairingState): string {
+  switch (state) {
+    case 'scanning':
+      return '扫描中…';
+    case 'pairing':
+      return '配对中…';
+    case 'paired':
+      return '已配对';
+    case 'connected':
+      return '已连接';
+    case 'error':
+      return '配对出错';
+    default:
+      return '未配对';
+  }
+}
+
+/** 配对状态强调色。 */
+export function pairingColor(state: PairingState): string {
+  switch (state) {
+    case 'paired':
+      return COLOR.primary;
+    case 'connected':
+      return COLOR.tertiary;
+    case 'scanning':
+    case 'pairing':
+      return COLOR.tertiary;
+    case 'error':
+      return COLOR.error;
+    default:
+      return COLOR.onSurfaceVariant;
+  }
+}

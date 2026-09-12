@@ -171,6 +171,16 @@ async function watchUiSources(compilerRoot, server) {
       cwd: compilerRoot,
       stdio: ['ignore', 'ignore', 'inherit'],
     });
+    // spawn 失败（bun 丢失/被占用等）只触发 error 不触发 close；挂上处理器避免
+    // 未捕获的 error 事件带崩整个 dev 进程。
+    child.on('error', (error) => {
+      compiling = false;
+      console.error('[Remapad] 重新编译进程启动失败: ' + error.message);
+      if (pending) {
+        pending = false;
+        compile();
+      }
+    });
     child.on('close', (code) => {
       compiling = false;
       if (code === 0) {

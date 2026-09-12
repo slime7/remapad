@@ -1,0 +1,4 @@
+Material Icons Regular
+Source: google/material-design-icons (font/MaterialIcons-Regular.ttf)
+License: Apache License 2.0 — https://github.com/google/material-design-icons/blob/master/LICENSE
+Copied from the du workspace copy for build-time icon baking only.

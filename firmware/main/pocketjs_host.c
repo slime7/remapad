@@ -16,10 +16,12 @@
 #include "freertos/task.h"
 
 #include "backlight.h"
+#include "bridge/js_bridge.h"
 #include "panel.h"
 #include "touch.h"
 
 #include "pocketjs/guest.h"
+#include "pocketjs/guest_quickjs.h"
 #include "pocketjs/package.h"
 #include "pocketjs/render_rgb565.h"
 #include "pocketjs/ui_core.h"
@@ -133,6 +135,39 @@ static esp_err_t scaled_dimension(uint32_t logical, uint32_t scale, size_t *out)
         return ESP_ERR_INVALID_SIZE;
     }
     *out = (size_t)logical * (size_t)scale;
+    return ESP_OK;
+}
+
+/* 产品控制面入口：guest 侧 driver.ts 约定 globalThis.__nativeBridge.postMessage。
+ * 只入队，不做任何重活；命令在 owner task 的每帧 js_bridge_service 里处理。 */
+static JSValue native_bridge_post_message(JSContext *ctx, JSValueConst this_val,
+                                          int argc, JSValueConst *argv)
+{
+    (void)this_val;
+    if (argc < 1) {
+        return JS_UNDEFINED;
+    }
+    size_t len = 0;
+    const char *cmd = JS_ToCStringLen(ctx, &len, argv[0]);
+    if (cmd == NULL) {
+        return JS_UNDEFINED;
+    }
+    js_bridge_enqueue(cmd);
+    JS_FreeCString(ctx, cmd);
+    return JS_UNDEFINED;
+}
+
+static esp_err_t install_native_bridge_surface(JSContext *ctx, void *user_data)
+{
+    (void)user_data;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue bridge = JS_NewObject(ctx);
+    JSValue fn = JS_NewCFunction(ctx, native_bridge_post_message, "postMessage", 1);
+    /* SetPropertyStr 接管传入值与 global 的引用：bridge/fn 交给 bridge/global
+     * 持有，这里只归还 global 自身的引用，不能重复 free bridge。 */
+    JS_SetPropertyStr(ctx, bridge, "postMessage", fn);
+    JS_SetPropertyStr(ctx, global, "__nativeBridge", bridge);
+    JS_FreeValue(ctx, global);
     return ESP_OK;
 }
 
@@ -382,6 +417,17 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
     if (result != ESP_OK) {
         goto fail;
     }
+    /* 产品控制面 surface 必须在 guest eval 前安装（官方约定：surfaces 先于
+     * eval），这样 bundle 初始化时 driver 就能看到 __nativeBridge。 */
+    stage = "native_bridge_surface";
+    result = pocketjs_guest_quickjs_install_once(
+        runtime->guest,
+        "remapad.native-bridge",
+        install_native_bridge_surface,
+        NULL);
+    if (result != ESP_OK) {
+        goto fail;
+    }
     stage = "guest_eval";
     result = pocketjs_guest_eval(
         runtime->guest,
@@ -421,6 +467,9 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
         result = ESP_ERR_INVALID_STATE;
         goto fail;
     }
+
+    js_bridge_attach(runtime->guest);
+    ESP_LOGI(TAG, "native bridge ready: __nativeBridge.postMessage -> js_bridge");
 
     return ESP_OK;
 
@@ -512,6 +561,10 @@ static void pocketjs_owner_task(void *opaque)
         runtime->window_render_us += render_us;
         tick++;
 
+        /* 控制面命令处理与配对状态机驱动；同在 owner task，guest 事件经
+         * eval 回发（render 之后调用不占用 turn 预算的统计）。 */
+        js_bridge_service();
+
         if (esp_timer_get_time() >= report_due) {
             ESP_LOGI(TAG,
                      "frames=%" PRIu32 " avg_turn_us=%" PRIu32
@@ -541,6 +594,12 @@ esp_err_t remapad_pocketjs_start(void)
 {
     if (s_runtime.task != NULL || s_runtime.package != NULL) {
         return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t bridge_result = js_bridge_init();
+    if (bridge_result != ESP_OK) {
+        ESP_LOGE(TAG, "js_bridge init failed: %s", esp_err_to_name(bridge_result));
+        return bridge_result;
     }
 
     s_runtime.wake = xSemaphoreCreateBinary();

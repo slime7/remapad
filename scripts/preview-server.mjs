@@ -62,6 +62,8 @@ export function startPreviewServer({ port = 8130, pageDir, distDir, runtimeDir }
       });
       response.write('data: connected\n\n');
       eventClients.add(response);
+      // 预览页断开瞬间如果正好有写入，错误事件需要有监听者，否则会带崩进程。
+      response.on('error', () => eventClients.delete(response));
       request.on('close', () => eventClients.delete(response));
       return;
     }
@@ -94,7 +96,11 @@ export function startPreviewServer({ port = 8130, pageDir, distDir, runtimeDir }
         /** 通知已连接的预览页重新加载 ui/dist 中的产物。 */
         notifyReload() {
           for (const client of eventClients) {
-            client.write('data: reload\n\n');
+            try {
+              client.write('data: reload\n\n');
+            } catch {
+              eventClients.delete(client);
+            }
           }
           return eventClients.size;
         },
