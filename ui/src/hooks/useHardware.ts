@@ -104,6 +104,15 @@ export function stopPairing(): void {
   });
 }
 
+export function unpair(): void {
+  hardware.send({ t: 'unpair' }, (msg) => {
+    if (msg.t === 'unpairResult') {
+      hw.pairing = msg.state;
+      hw.pairingMessage = msg.message ?? '';
+    }
+  });
+}
+
 export function setUsbRole(role: UsbRole): void {
   hardware.send({ t: 'setUsbRole', role }, (msg) => {
     if (msg.t === 'usbRoleSet') {

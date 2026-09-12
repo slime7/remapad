@@ -129,8 +129,18 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
 
     case 'stopPairing':
       clearPairingTimers();
+      // 停止搜索只退出配对模式：未配成则回 idle，已配对则凭证保持。
+      if (state.pairing === 'scanning' || state.pairing === 'pairing') {
+        setPairing(reply, 'idle');
+      }
+      reply({ t: 'pairingResult', id, state: state.pairing, message: '已退出配对模式' });
+      break;
+
+    case 'unpair':
+      clearPairingTimers();
+      state.controller = null;
       setPairing(reply, 'idle');
-      reply({ t: 'pairingResult', id, state: 'idle', message: '已停止配对' });
+      reply({ t: 'unpairResult', id, state: 'idle', message: '已解除配对' });
       break;
 
     case 'triggerRumble':

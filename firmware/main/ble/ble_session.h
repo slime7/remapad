@@ -50,8 +50,13 @@ bool ns2_session_pairing_mode_active(void);
 /** 是否存在已配对主机凭证。 */
 bool ns2_session_paired(void);
 
-/** 解除配对：清除 NVS 凭证，状态回到未配对；下次配对需重走 0x15。 */
-void ns2_session_clear_pairing(void);
+/** 当前连接中的主机是否已注册：凭证匹配回连，或本会话内完成 0x15 握手。
+ * 属于协议层的配对成功证据，与 NVS 存储状态相互独立。 */
+bool ns2_session_host_registered(void);
+
+/** 解除配对：清除 NVS 凭证并切回标准发现广播；下次配对需重走 0x15。
+ * 仅供控制面显式触发，「停止配对」不经过本函数。 */
+void ns2_session_unpair(void);
 
 #ifdef __cplusplus
 }

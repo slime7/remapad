@@ -56,6 +56,7 @@ export type DeviceCmd =
   | { t: 'setUsbRole'; id: number; role: UsbRole }
   | { t: 'startPairing'; id: number }
   | { t: 'stopPairing'; id: number }
+  | { t: 'unpair'; id: number }
   | { t: 'triggerRumble'; id: number; frequencyHz: number; amplitude: number; durationMs: number }
   | { t: 'debugKey'; id: number; key: DebugKey }
   | { t: 'calibrateSensors'; id: number }
@@ -84,6 +85,7 @@ export type DeviceMsg =
   | { t: 'backlightSet'; id: number; brightness: number; success: boolean }
   | { t: 'usbRoleSet'; id: number; role: UsbRole; active: boolean; message?: string }
   | { t: 'pairingResult'; id: number; state: PairingState; message?: string }
+  | { t: 'unpairResult'; id: number; state: PairingState; message?: string }
   | { t: 'rumbleAck'; id: number; success: boolean }
   | { t: 'debugKeySet'; id: number; key: DebugKey }
   | { t: 'rebooting'; id: number }

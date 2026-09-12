@@ -161,11 +161,13 @@ static void handle_hello(int id)
     ESP_LOGI(TAG, "hello -> ready (psram=%u)", (unsigned)psram);
 }
 
-/** 从 BLE 会话推导 UI 六态配对模型（ui/src/bridge/protocol.ts PairingState）。 */
+/** 从 BLE 会话推导 UI 六态配对模型（ui/src/bridge/protocol.ts PairingState）。
+ * 连接中的状态以协议证据为准：主机初始化/0x15 握手完成（或凭证匹配回连）
+ * 才算 connected，否则视为 pairing 进行中。 */
 static const char *real_pairing_state(void)
 {
     if (ble_controller_connected()) {
-        return ns2_session_pairing_mode_active() ? "pairing" : "connected";
+        return ns2_session_host_registered() ? "connected" : "pairing";
     }
     if (ns2_session_pairing_mode_active()) {
         return "scanning";
@@ -268,18 +270,28 @@ static void handle_start_pairing(int id)
 
 static void handle_stop_pairing(int id)
 {
+    /* 停止搜索只退出配对模式并恢复常规广播；凭证以协议证据为准持久化，
+     * 解除配对走显式 unpair 命令，避免误清与频繁的 NVS 擦写。 */
     ns2_session_stop_pairing_mode();
-    /* 本次配对会话成功（写入了新凭证）则保留，否则视为取消并解除配对。 */
-    ns2_session_clear_pairing();
-    const char *message =
-        ns2_session_paired() ? "已退出配对模式" : "已取消配对，凭证已清除";
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","
-             "\"message\":\"%s\"}",
-             id, real_pairing_state(), message);
+             "\"message\":\"已退出配对模式\"}",
+             id, real_pairing_state());
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing mode stopped (%s)", message);
+    ESP_LOGI(TAG, "pairing mode stopped (credentials untouched)");
+}
+
+static void handle_unpair(int id)
+{
+    ns2_session_unpair();
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"unpairResult\",\"id\":%d,\"state\":\"%s\","
+             "\"message\":\"已解除配对\"}",
+             id, real_pairing_state());
+    reply_raw(event);
+    ESP_LOGI(TAG, "unpair -> %s", real_pairing_state());
 }
 
 static void handle_reboot(int id)
@@ -341,6 +353,8 @@ static void handle_cmd(const char *cmd)
         handle_start_pairing(id);
     } else if (cmd_has(cmd, "\"t\":\"stopPairing\"")) {
         handle_stop_pairing(id);
+    } else if (cmd_has(cmd, "\"t\":\"unpair\"")) {
+        handle_unpair(id);
     } else if (cmd_has(cmd, "\"t\":\"debugKey\"")) {
         handle_debug_key(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"reboot\"")) {
