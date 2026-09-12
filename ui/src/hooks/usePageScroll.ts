@@ -25,10 +25,11 @@ let handle: GestureHandle | null = null;
 let owner: Entry | null = null;
 
 export function usePageScroll(active: () => boolean, contentH: () => number) {
-  const scroller = createScroller({ max: () => Math.max(0, contentH() - PAGE_VIEW_H) });
+  const maxOffset = () => Math.max(0, contentH() - PAGE_VIEW_H);
+  const scroller = createScroller({ max: maxOffset });
   const entry: Entry = {
     active,
-    scrollable: () => Math.max(0, contentH() - PAGE_VIEW_H) > 0,
+    scrollable: () => maxOffset() > 0,
     scroller,
     attach: () =>
       attachGesture({
@@ -73,6 +74,13 @@ export function usePageScroll(active: () => boolean, contentH: () => number) {
   });
 
   onFrame(() => {
+    // 框架的边缘弹簧（K=170 临界阻尼，常数固定在快照里）回位偏慢；进入
+    // spring 就地改走 120ms tween 回边界：拖拽越界的橡皮筋手感不变，松手
+    // 或惯性冲出边界后都快速弹回。手指按住时 stop() 仍可随时接住内容。
+    if (scroller.state() === 'spring') {
+      const pos = scroller.offset();
+      scroller.scrollTo(Math.max(0, Math.min(pos, maxOffset())), { durMs: 120 });
+    }
     scroller.step();
   });
   return scroller;
