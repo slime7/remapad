@@ -52,6 +52,9 @@ static struct {
 
 static uint8_t s_factory[FACTORY_SIZE];
 
+/** 进入手动配对模式后是否写入过新凭证：退出配对时据此保留成功配对。 */
+static bool s_pairing_creds_new;
+
 /** 帧内 4 字节小端读取。 */
 static uint32_t le32(const uint8_t *p)
 {
@@ -270,6 +273,7 @@ static size_t handle_init_cmd(const uint8_t *req, size_t len, uint8_t subcmd, ui
             uint8_t ltk[16];
             reverse16(&req[14], ltk);
             ble_creds_save(&req[8], ltk);
+            s_pairing_creds_new = true;
             s_ses.state = SESSION_NORMAL;
         }
         return NS2_FRAME_HEADER_LEN;
@@ -399,6 +403,7 @@ static size_t handle_pairing_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
         /* 步骤 4：确认并持久化主机 MAC + LTK。 */
         if (s_pair.mac_ready && s_pair.ltk_ready) {
             ble_creds_save(s_pair.host_mac, s_pair.ltk);
+            s_pairing_creds_new = true;
             s_pair.mac_ready = false;
             s_pair.ltk_ready = false;
             s_ses.state = SESSION_NORMAL;
@@ -505,6 +510,7 @@ bool ns2_session_rumble_enabled(void)
 void ns2_session_start_pairing_mode(void)
 {
     s_ses.pairing_mode = true;
+    s_pairing_creds_new = false;
     uint8_t adv[31];
     build_adv_payload(adv, false);
     ble_controller_advertise(adv);
@@ -530,6 +536,12 @@ bool ns2_session_paired(void)
 
 void ns2_session_clear_pairing(void)
 {
+    if (s_pairing_creds_new) {
+        /* 本次配对会话内新写入的凭证视为配对成功，退出时保留。 */
+        s_pairing_creds_new = false;
+        ESP_LOGI(TAG, "keep credentials written in this pairing session");
+        return;
+    }
     ble_creds_clear();
     ESP_LOGI(TAG, "pairing credentials cleared");
 }

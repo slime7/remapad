@@ -22,7 +22,7 @@
 
 static const char *TAG = "remapad_bridge";
 
-#define REMAPAD_FW_VERSION "v0.3.4"
+#define REMAPAD_FW_VERSION "v0.3.5"
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
@@ -269,15 +269,17 @@ static void handle_start_pairing(int id)
 static void handle_stop_pairing(int id)
 {
     ns2_session_stop_pairing_mode();
-    /* UI 的停止即解除配对：清除凭证，避免取消后仍显示"已配对"。 */
+    /* 本次配对会话成功（写入了新凭证）则保留，否则视为取消并解除配对。 */
     ns2_session_clear_pairing();
+    const char *message =
+        ns2_session_paired() ? "已退出配对模式" : "已取消配对，凭证已清除";
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","
-             "\"message\":\"已取消配对，凭证已清除\"}",
-             id, real_pairing_state());
+             "\"message\":\"%s\"}",
+             id, real_pairing_state(), message);
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing cancelled, credentials cleared");
+    ESP_LOGI(TAG, "pairing mode stopped (%s)", message);
 }
 
 static void handle_reboot(int id)
