@@ -35,7 +35,7 @@ Switch 2 手柄放弃了前代 Switch 1 使用的经典蓝牙（Bluetooth BR/EDR
 
 Switch 2 主机在底层芯片层面启用了广播过滤机制，仅接收符合格式的任天堂广播帧。广播数据总长为 31 字节，包含两部分：BLE 广播标志（Flags）与厂商自定义数据（Manufacturer Specific Data）。
 
-广播方地址（AdvA）与间隔（实机抓包，ndeadly/switch2_controller_research）：真实 Pro Controller 2 以 **public 地址**发送全部广播，地址前缀为 Nintendo OUI `98:E2:55`（2024 年注册的 Switch 2 手柄专用前缀，抓包 1124 个广播包均同址）；芯片层过滤对厂商数据与地址 OUI 一并匹配，第三方模拟实现需将自身 BLE public 地址伪装为该 OUI 前缀（后缀自定且每次上电保持稳定）。广播事件间隔实测约 40 ms（即 0.625 ms × 0x40）。
+广播方地址（AdvA）与间隔（实机抓包，ndeadly/switch2_controller_research）：真实 Pro Controller 2 以 **public 地址**发送全部广播，地址前缀为 Nintendo OUI `98:E2:55`（2024 年注册的 Switch 2 手柄专用前缀，抓包 1124 个广播包均同址）；广播事件间隔实测约 40 ms（即 0.625 ms × 0x40）。**勘误（22.5.0 实测）**：主机并不校验广播地址 OUI——使用 Nintendo `78:81:8C` OUI（已验证同行实现所选）的模拟手柄可正常被搜索、配对与回连；OUI 伪装仅为与已验证实现对齐，非协议要求。广播 PDU 实测为 legacy `ADV_IND`（可连接可扫描，附空 SCAN_RSP）；扩展 PDU（legacy_pdu=0）无法同时置可连接与可扫描位，模拟实现需按 legacy PDU 配置（可另开扩展 PDU 实例并行广播以兼容不同扫描方）。
 
 #### 手柄发往主机的广播包类型
 
@@ -94,7 +94,7 @@ Switch 2 手柄插入底座或线连时通过 USB 2.0 全速/高速通信。设�
 
 ## 3. 自定义安全配对与密钥协商协议
 
-Switch 2 手柄与主机之间的配对不使用标准 BLE SMP。若主机尝试发起标准 SMP 流程，手柄会直接断开连接。配对过程在自定义命令通道（Command 0x15）中通过 4 个步骤的挑战-应答协商完成。
+Switch 2 手柄与主机之间的密钥协商在自定义命令通道（Command 0x15）中通过 4 个步骤的挑战-应答完成。**勘误（22.5.0 实测）**：链路层**同时运行标准 BLE SMP**（Just Works 形态：IO 能力 `NO_IO`、 bonding 置位、无 MITM、不用 LE Secure Connections、仅分发 ENC 密钥；配对不绑定，绑定键由 0x15 协商结果注入本端 store），主机在 MTU 交换后先走 SMP 再发指令；模拟实现若拒绝 SMP，主机在 MTU 交换后即停滞。
 
 ### 3.1 配对流程阶段分解
 
@@ -131,33 +131,31 @@ sequenceDiagram
 | :--- | :--- | :--- |
 | 0x15/0x01 | `00 [地址数] [地址数×6B 主机地址反序]`（主机发 2 个地址，仅末字节相差 `0x80`/`0x81`） | `01 04 01 [手柄地址反序]`（共 9 字节） |
 | 0x15/0x04 | `00 [16B 主机公钥 A1 反序]` | `01 [16B 手柄公钥 B1]`（固定值，未反转） |
-| 0x15/0x02 | `00 [16B 挑战码 A2 反序]` | `01 [16B 应答码 B2 反序]` |
+| 0x15/0x02 | `00 [16B 挑战码 A2 反序]` | `01 [16B 应答码 B2（AES 原始输出，不反转）]` |
 | 0x15/0x03 | `00` | `01` |
 
 ### 3.2 密码学计算详细算法
 
 - **公钥常量**：官方手柄返回的手柄公钥 B1 在目前固件中表现为固定常量：
   `5C F6 EE 79 2C DF 05 E1 BA 2B 63 25 C4 1A 5F 10`
-- **长期密钥派生**：
-  LTK = A1 XOR B1，即主机公钥 A1 与手柄公钥 B1 按字节逐位异或运算。
-- **认证加密计算**：
-  将主机下发的 16 字节挑战码 A2 与计算得出的 LTK 进行**全字节反转**（Byte-Reversed），使用标准 AES-128 在 ECB 模式下加密，得到结果后再反转为传输字节序：
-  `B2 = reverse(AES128_ECB(Key=reverse(LTK), Data=reverse(A2)))`
+- **长期密钥派生**（22.5.0 实测）：
+  应答 B2 所用密钥 `LTK = reverse(A1) XOR reverse(B1)`（A1/B1 均为线上传输的反序字节）；注入本端 BLE store 供标准 SMP 链路加密的 LTK 即该值按存储序写入（NimBLE 为小端，等价于对线序异或结果再反转）。
+- **认证加密计算**（22.5.0 实测）：
+  应答码 B2 = 标准 AES-128 在 ECB 模式下以 `reverse(A1) XOR reverse(B1)` 为密钥、加密 `reverse(A2)` 的**原始输出**，线上不再反转：
+  `B2 = AES128_ECB(Key=reverse(A1) XOR reverse(B1), Data=reverse(A2))`
 
-Python 算法参考：
+Python 算法参考（已验证可通过主机配对确认）：
 ```python
 from Crypto.Cipher import AES
 
-def calculate_pairing_response(a1_bytes, a2_bytes):
-    # 手柄固定公钥 B1
-    b1_bytes = bytes.fromhex("5cf6ee792cdf05e1ba2b6325c41a5f10")
-    # 异或计算 LTK
-    ltk = bytes(a ^ b for a, b in zip(a1_bytes, b1_bytes))
-    # AES-128 ECB 加密 (输入与密钥均反序)
-    cipher = AES.new(ltk[::-1], AES.MODE_ECB)
-    b2_reversed = cipher.encrypt(a2_bytes[::-1])
-    b2 = b2_reversed[::-1]
-    return ltk, b2
+def calculate_pairing_response(a1_wire, a2_wire):
+    # 手柄固定公钥 B1（线序即常量序）
+    b1 = bytes.fromhex("5cf6ee792cdf05e1ba2b6325c41a5f10")
+    # 密钥：双方线上字节各自反转后异或
+    key = bytes(a ^ b for a, b in zip(a1_wire[::-1], b1[::-1]))
+    # 挑战码反转后加密，输出不反转
+    b2 = AES.new(key, AES.MODE_ECB).encrypt(a2_wire[::-1])
+    return key, b2
 ```
 
 ---
@@ -344,12 +342,14 @@ void unpack_stick(const uint8_t *in, uint16_t *x, uint16_t *y) {
 
 #### Command 0x02 - SPI Flash 存储器访问
 
+**勘误（22.5.0 实测）**：`0x04` 通用读取的应答体并非"长度+地址+数据"布局，而是**回显请求体 magic 后接数据**：应答体 = 请求体 [8:16] 的 8 字节原样回显（仅将其中第 1 字节清零）+ `N` 字节读取数据；地址字段实测为 3 字节小端 + 1 字节保留。对未初始化区域（如用户校准区 `0x1FC040`）必须以全 `0xFF` 数据应答——返回空应答体会令主机中止初始化（不再订阅输入通道，表现为手柄"已连接但按键无反应"）。主机回连初始化实测会读取 `0x13000`、`0x13080`、`0x130C0`、`0x1FC040`、`0x13040` 五个地址（首次配对流程不读 `0x1FC040` 与 `0x13040`）。
+
 | 子命令 (Subcmd) | 功能名称 | 请求数据体格式 | 响应数据体格式 |
 | :--- | :--- | :--- | :--- |
 | `0x01` | 读固定 64B 块 | 4B 保留(0) + 4B 读取地址 (小端) | 1B 长度(`0x40`) + 3B 保留 + 4B 地址 + 64B 原始数据 |
 | `0x02` | 写固定 64B 块 | 4B 保留(0) + 4B 写入地址 (小端) + 64B 数据 | 1B 长度(`0x40`) + 3B 保留 + 4B 地址 + 64B 数据回读 |
 | `0x03` | 擦除扇区 (4KB) | 4B 保留(0) + 4B 扇区对齐地址 (小端) | 4B 保留(0) |
-| `0x04` | 通用内存读取 | 1B 长度 + 1B `0x7E` + 2B 保留 + 4B 地址 | 1B 长度 + 3B 保留 + 4B 地址 + N 字节数据体 |
+| `0x04` | 通用内存读取 | 1B 长度 + 1B `0x7E` + 2B 保留 + 3B 地址 (小端) + 1B 保留 | 8B 请求体回显（[1] 清零） + N 字节数据 |
 | `0x05` | 通用内存写入 | 1B 长度 + 1B `0x7E` + 2B 保留 + 4B 地址 + 数据 | 4B 保留 + 4B 地址 |
 
 #### Command 0x03 - 初始化与连接建立
@@ -460,6 +460,10 @@ void unpack_stick(const uint8_t *in, uint16_t *x, uint16_t *y) {
 | `0x13022` | 3 | `32 32 32` | 手柄握把部分 RGB 颜色值 |
 | `0x130A8` | 9 | `B3 67 83 2E 66 5E 3A 06 5F` | **主模拟摇杆（左摇杆）9 字节出厂校准值** |
 | `0x130E8` | 9 | `2C 08 84 D1 65 63 2A 26 62` | **副模拟摇杆（右摇杆）9 字节出厂校准值** |
+
+**序列号地区编码**（switch2brew 社区考证，14 位 ASCII = 3 字母前缀 + 11 位数字）：首字母 `H` 为 Switch 2 代际；次字母为硬件型号（`A` 主机、`B` Joy-Con 2 (L)、`C` Joy-Con 2 (R)、`E` Pro Controller 2）；第三字母为销售地区（`J` 日本、`W` 美洲、`E` 欧洲、`C` 中国、`K` 韩国、`M` 马来西亚）；末位为校验位（前 10 位奇位和 + 偶位和 ×3 后对 10 取补）。`HEJ` 开头即日版 Pro Controller 2，示例 `HEJ71001121247` 与 `HEJ71001123456` 校验位均自洽。
+
+**主机实测读取的其他区块**：`0x13040`（16 字节固定内容 `3B E0 D3 41 C6 60 6A BC 4D D7 A2 BB 71 1E DD 37`）、`0x13060`（空区，`0xFF`）、`0x13100`（24 字节，前 12 字节为 0）；`0x1FC000`/`0x1FC040`/`0x1FC060`（运动/主副摇杆用户自定义校准区）未经用户校准即保持全 `0xFF`。
 
 ---
 
@@ -635,45 +639,56 @@ stateDiagram-v2
 
 ### 10.2 通信交互与报告上报时序
 
+22.5.0 主机实测序列（回连路径，指令均写入复合特征值 0x0016、应答经 0x001E 通知）：
+
 ```mermaid
 sequenceDiagram
     autonumber
     participant Host as Switch 2 主机
     participant ESP as ESP32 模拟手柄
 
-    Note over Host,ESP: 阶段 1：连接与初始化
-    Host->>ESP: BLE 连接握手 (ACL Connect)
-    Host->>ESP: 写入 Handle 0x001B (启用指令应答 CCCD: 0x0001)
-    Host->>ESP: 写入 Handle 0x0014: 0x07/0x01 (查询手柄初始状态)
-    ESP-->>Host: Handle 0x001A 通知: 0x07/0x01 响应 (0x00)
-    Host->>ESP: 写入 Handle 0x0014: 0x02/0x04 (读取出厂信息 Flash 0x13000)
-    ESP-->>Host: Handle 0x001A 通知: 出厂参数 (VID, PID, 配色)
+    Note over Host,ESP: 阶段 1：连接、SMP 与订阅
+    Host->>ESP: BLE 连接 (扫描到回连广播 ADV_IND 后发起)
+    Host->>ESP: MTU 交换 (512)
+    Host->>ESP: 写 Handle 0x0005 (vendor base 配置, 2B 01 00)
+    Host->>ESP: 标准 SMP 配对 (NO_IO, bond, 仅 ENC 密钥；回连走加密恢复)
+    Host->>ESP: 订阅 0x001A / 0x001E / 0x0022 (指令应答 CCCD ×3)
 
-    Note over Host,ESP: 阶段 2：校验或执行配对
-    Host->>ESP: 写入 Handle 0x0014: 0x02/0x04 (读取配对区 LTK)
-    alt 若 LTK 匹配
-        Note over Host,ESP: 跳过配对流程
-    else 若 LTK 不匹配
-        Note over Host,ESP: 执行 0x15 配对 4 步协商流程 (见第 3 节)
+    Note over Host,ESP: 阶段 2：握手与身份确认
+    Host->>ESP: 0x07/0x01 初始握手
+    ESP-->>Host: 应答体 1B 0x00
+    Host->>ESP: 0x02/0x04 读 0x13000 (出厂信息 64B)
+    ESP-->>Host: 回显请求 magic + 出厂参数 (序列号, VID/PID, 版本, 配色)
+    Host->>ESP: 0x10/0x01 固件版本
+    ESP-->>Host: 12B (01 00 0E 02 0C 00 00 00 FF FF FF FF)
+    Host->>ESP: 0x16/0x01
+    ESP-->>Host: 24B 全 0x00
+    opt 未配对主机
+        Note over Host,ESP: 插入 0x15/0x01→0x04→0x02→0x03 四步配对协商 (见第 3 节)
     end
 
-    Note over Host,ESP: 阶段 3：校准与报告配置
-    Host->>ESP: 写入 Handle 0x0014: 0x02/0x04 (读取左右摇杆校准值)
-    ESP-->>Host: Handle 0x001A 通知: 返回 9 字节校准参数
-    Host->>ESP: 写入 Handle 0x0014: 0x09/0x07 (设置 Player LED)
-    ESP-->>Host: Handle 0x001A 通知: LED 确认
-    Host->>ESP: 写入 Handle 0x0014: 0x0C 系列指令 (配置 Feature 掩码)
-    Host->>ESP: 写入 Handle 0x000F (启用专用输入报告 Handle 0x000E CCCD: 0x0001)
+    Note over Host,ESP: 阶段 3：外设配置与校准
+    Host->>ESP: 0x0A/0x02 触觉采样 (0x03)
+    Host->>ESP: 0x09/0x07 设置 Player LED 掩码
+    Host->>ESP: 0x0C/0x02 特性掩码 0x27；0x0C/0x04 启用特性
+    Host->>ESP: 0x02/0x04 读 0x13080 / 0x130C0 (出厂校准)
+    Host->>ESP: 0x02/0x04 读 0x1FC040 (用户校准区，全 0xFF 应答)
+    Host->>ESP: 0x02/0x04 读 0x13040 (16B 固定块)
+    Host->>ESP: 0x11/0x01
+    ESP-->>Host: 应答体 01 00 00 00
 
-    Note over Host,ESP: 阶段 4：周期性游戏数据上报
+    Note over Host,ESP: 阶段 4：输入通道与周期上报
+    Host->>ESP: 订阅 Handle 0x000E (输入报告 0x09 CCCD)
     loop 每 5ms ~ 15ms 周期
         ESP-->>Host: Handle 0x000E 通知 (Input Report 0x09 实时按键/摇杆数据)
     end
 
     opt 触觉反馈下发
-        Host->>ESP: 写入 Handle 0x0012 (Output Report 0x02 震动数据)
+        Host->>ESP: 写 Handle 0x0012 (Output Report 0x02 震动数据)
     end
 ```
+
+实测备注：未实现指令（首次配对末段的 `0x11/0x03` 传感器块、重连期的 `0x01/0x0C` NFC、`0x18/0x01`）返回空应答体不影响主机继续；任何一条 SPI 读取应答为空则初始化中止。
 
 ---
 

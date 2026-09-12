@@ -22,8 +22,13 @@ esp_err_t ble_controller_start(void);
 /** 是否处于 ACL 连接中。 */
 bool ble_controller_connected(void);
 
-/** 主动断开当前连接（远程用户终止）；无连接或发起失败返回 false。 */
-bool ble_controller_disconnect(void);
+/** 主动断开的 HCI 原因码（NimBLE hci_err 取值子集）。
+ * 0x3E 连接建立失败会让手机等回连方按失败退避冷却，而非立刻重试。 */
+#define BLE_CTL_DISCONNECT_USER_TERM 0x13
+#define BLE_CTL_DISCONNECT_CONN_FAIL 0x3E
+
+/** 主动断开当前连接并携带 HCI 断开原因；无连接或发起失败返回 false。 */
+bool ble_controller_disconnect(uint8_t hci_reason);
 
 /** 读取对端主机蓝牙地址（NimBLE 存储序，即显示序反转，与配对线格式一致）。 */
 bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6]);

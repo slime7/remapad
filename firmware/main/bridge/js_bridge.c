@@ -162,12 +162,16 @@ static void handle_hello(int id)
 }
 
 /** 从 BLE 会话推导 UI 六态配对模型（ui/src/bridge/protocol.ts PairingState）。
- * 连接中的状态以协议证据为准：主机初始化/0x15 握手完成（或凭证匹配回连）
- * 才算 connected，否则视为 pairing 进行中。 */
+ * 连接中的状态以协议证据为准：仅白名单放行进入握手等待的主机视为 pairing
+ * 进行中，主机初始化/0x15 握手完成（或凭证匹配回连）才算 connected；
+ * 手机/PC 等被立即断开的连接不改变状态。 */
 static const char *real_pairing_state(void)
 {
-    if (ble_controller_connected()) {
-        return ns2_session_host_registered() ? "connected" : "pairing";
+    if (ns2_session_host_registered()) {
+        return "connected";
+    }
+    if (ns2_session_waiting_pair()) {
+        return "pairing";
     }
     if (ns2_session_pairing_mode_active()) {
         return "scanning";
@@ -186,7 +190,8 @@ static void handle_get_system_status(int id)
              "\"heapFree\":%u,\"heapSize\":%u,\"psramFree\":%u}",
              id, REMAPAD_BATTERY_MV, REMAPAD_BATTERY_PCT, backlight_get(),
              real_pairing_state(),
-             ble_controller_connected() ? "\"pro-controller-2\"" : "null",
+             (ns2_session_waiting_pair() || ns2_session_host_registered())
+                 ? "\"pro-controller-2\"" : "null",
              s_bridge.usb_role_host ? "host" : "device",
              s_bridge.usb_role_host ? "false" : "true",
              (long long)(esp_timer_get_time() / 1000LL),
@@ -275,7 +280,7 @@ static void handle_stop_pairing(int id)
      * 协议证据为准持久化，解除配对走显式 unpair 命令。 */
     ns2_session_stop_pairing_mode();
     if (!ns2_session_host_registered()) {
-        ble_controller_disconnect();
+        ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
     }
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),

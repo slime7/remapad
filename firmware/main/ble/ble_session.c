@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "host/ble_store.h"
 #include "psa/crypto.h"
 
 #include "ble_controller.h"
@@ -14,8 +16,9 @@
 
 static const char *TAG = "remapad_blses";
 
-/** 手柄身份：Pro Controller 2（controller.md §1）。 */
-#define NS2_PID_PRO_CONTROLLER_2 0x2069
+/** 发现广播与出厂块对外的 PID：Pro Controller 2（0x2069），与序列号
+ * 格式、配色一并对齐已验证可完成配对的开源实现。 */
+#define NS2_ADV_PID 0x2069
 
 /** 会话状态：休眠/唤醒广播顺延到后续里程碑（见 docs/ROADMAP.md M3）。 */
 typedef enum {
@@ -28,10 +31,6 @@ typedef enum {
 /** 出厂数据区仿真基址（controller.md §7.2）。 */
 #define FACTORY_BASE 0x013000u
 #define FACTORY_SIZE 2048u
-
-/** 配对信息区仿真基址（controller.md §7.4），结构对齐 0x1FA000。 */
-#define PAIRING_BASE 0x1FA000u
-#define PAIRING_IMAGE_SIZE 256u
 
 static struct {
     session_state_t state;
@@ -52,19 +51,30 @@ static struct {
 
 static uint8_t s_factory[FACTORY_SIZE];
 
-/** 主机经 0x02/0x04 实际读取的出厂块（实机抓包基址 0x7E40，64B）：
- * 序列号、VID/PID、机身配色。 */
-static uint8_t s_factory_block[64];
+/** 0x13000 出厂数据块（实机抓包布局）：`01 00` + 序列号@2 + `00 00`
+ * + VID/PID@18 + 版本@22 + 机身配色@25，尾部 0xFF。 */
+static uint8_t s_mem_factory[64];
+
+/** 0x13080 / 0x130C0 摇杆校准块（实机抓包字节，64B）。 */
+static const uint8_t s_mem_cal80[64] = {
+    0x01, 0xad, 0xd9, 0x9a, 0x55, 0x56, 0x65, 0xa0, 0x00, 0x0a, 0xa0, 0x00,
+    0x0a, 0xe2, 0x20, 0x0e, 0xe2, 0x20, 0x0e, 0x9a, 0xad, 0xd9, 0x9a, 0xad,
+    0xd9, 0x0a, 0xa5, 0x50, 0x0a, 0xa5, 0x50, 0x2f, 0xf6, 0x62, 0x2f, 0xf6,
+    0x62, 0x0a, 0xff, 0xff, 0xb3, 0x67, 0x83, 0x2e, 0x66, 0x5e, 0x3a, 0x06,
+    0x5f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+};
+static const uint8_t s_mem_calc0[64] = {
+    0x01, 0xad, 0xd9, 0x9a, 0x55, 0x56, 0x65, 0xa0, 0x00, 0x0a, 0xa0, 0x00,
+    0x0a, 0xe2, 0x20, 0x0e, 0xe2, 0x20, 0x0e, 0x9a, 0xad, 0xd9, 0x9a, 0xad,
+    0xd9, 0x0a, 0xa5, 0x50, 0x0a, 0xa5, 0x50, 0x2f, 0xf6, 0x62, 0x2f, 0xf6,
+    0x62, 0x0a, 0xff, 0xff, 0x2c, 0x08, 0x84, 0xd1, 0x65, 0x63, 0x2a, 0x26,
+    0x62, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+};
 
 /** 指令应答的通知载荷 = 14 字节 0x00 前缀 + 8B 帧头 + 应答体（实机抓包）。 */
 #define ANSWER_PREFIX_LEN 14
-
-/** 帧内 4 字节小端读取。 */
-static uint32_t le32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
-}
 
 /** 帧内字节序列整体反转（MAC、AES 挑战与注入 LTK 的字节序变换，controller.md §3.2）。 */
 static void reverse_bytes(const uint8_t *in, uint8_t *out, size_t n)
@@ -109,8 +119,8 @@ static void factory_init(void)
     s_factory[0x0011] = 0x00;
     s_factory[0x0012] = 0x7E;
     s_factory[0x0013] = 0x05;
-    s_factory[0x0014] = (uint8_t)(NS2_PID_PRO_CONTROLLER_2 & 0xFF);
-    s_factory[0x0015] = (uint8_t)(NS2_PID_PRO_CONTROLLER_2 >> 8);
+    s_factory[0x0014] = (uint8_t)(NS2_ADV_PID & 0xFF);
+    s_factory[0x0015] = (uint8_t)(NS2_ADV_PID >> 8);
     s_factory[0x0019] = 0xE8;
     s_factory[0x001A] = 0x5D;
     s_factory[0x001B] = 0x22;
@@ -127,67 +137,24 @@ static void factory_init(void)
     memcpy(&s_factory[0x00A8], stick_cal, sizeof(stick_cal));
     memcpy(&s_factory[0x00E8], stick_cal, sizeof(stick_cal));
 
-    /* 0x7E40 出厂块按实机抓包布局：6B 头 + 14B 序列号 + 2B 保留 +
-     * 4B VID/PID + 3B 版本 + 12B 机身配色，尾部未用区 0xFF。 */
-    memset(s_factory_block, 0xFF, sizeof(s_factory_block));
-    s_factory_block[0] = 0x00;
-    s_factory_block[1] = 0x30;
-    s_factory_block[2] = 0x01;
-    s_factory_block[3] = 0x00;
-    s_factory_block[4] = 0x01;
-    s_factory_block[5] = 0x00;
-    memcpy(&s_factory_block[6], "REMAPAD2S30001", 14);
-    s_factory_block[22] = 0x7E;
-    s_factory_block[23] = 0x05;
-    s_factory_block[24] = 0x69;
-    s_factory_block[25] = 0x20;
-    s_factory_block[26] = 0x01;
-    s_factory_block[27] = 0x06;
-    s_factory_block[28] = 0x01;
+    /* 0x13000 出厂数据块（实机抓包布局）：`01 00` + 序列号@2 + `00 00`
+     * + VID/PID@18 + 版本@22 + 机身配色@25，尾部未用区 0xFF。 */
+    memset(s_mem_factory, 0xFF, sizeof(s_mem_factory));
+    s_mem_factory[0] = 0x01;
+    s_mem_factory[1] = 0x00;
+    /* 序列号格式对齐真机（HEJ 前缀 + 数字），主机可能校验其形态。 */
+    memcpy(&s_mem_factory[2], "HEJ71001123456", 14);
+    s_mem_factory[18] = 0x7E;
+    s_mem_factory[19] = 0x05;
+    s_mem_factory[20] = (uint8_t)(NS2_ADV_PID & 0xFF);
+    s_mem_factory[21] = (uint8_t)(NS2_ADV_PID >> 8);
+    s_mem_factory[22] = 0x01;
+    s_mem_factory[23] = 0x06;
+    s_mem_factory[24] = 0x01;
     static const uint8_t body_colors[12] = {
-        0x23, 0x23, 0x23, 0xA0, 0xA0, 0xA0, 0xE6, 0xE6, 0xE6, 0x32, 0x32, 0x32,
+        0x23, 0x23, 0x23, 0x63, 0xB9, 0x7A, 0xE6, 0xE6, 0xE6, 0x32, 0x32, 0x32,
     };
-    memcpy(&s_factory_block[29], body_colors, sizeof(body_colors));
-}
-
-/** 配对区镜像：1B 数量 + 40B 记录项（MAC@+0x08、LTK@+0x1A，controller.md §7.4）。 */
-static void pairing_region_image(uint8_t out[PAIRING_IMAGE_SIZE])
-{
-    memset(out, 0x00, PAIRING_IMAGE_SIZE);
-    const size_t count = ble_creds_count();
-    out[0] = (uint8_t)count;
-    for (size_t i = 0; i < count && i < 5; i++) {
-        const ns2_cred_record_t *rec = ble_creds_get(i);
-        memcpy(&out[0x08 + i * 0x28], rec->mac, 6);
-        memcpy(&out[0x1A + i * 0x28], rec->ltk, 16);
-    }
-}
-
-/** SPI Flash 读取仿真：出厂数据区与配对区有效；0x7E40 出厂块按实机抓包
- * 布局返回，其余地址按未初始化 0xFF。 */
-static void flash_read(uint32_t addr, uint8_t *out, size_t len)
-{
-    if (addr >= 0x7E00u && (uint64_t)addr + len <= 0x7E80u) {
-        for (size_t i = 0; i < len; i++) {
-            const uint32_t a = addr + (uint32_t)i;
-            out[i] = (a >= 0x7E40u && a < 0x7E80u) ? s_factory_block[a - 0x7E40u] : 0xFF;
-        }
-        return;
-    }
-    if (addr >= PAIRING_BASE && (uint64_t)addr + len <= PAIRING_BASE + 0x1000u) {
-        uint8_t image[PAIRING_IMAGE_SIZE];
-        pairing_region_image(image);
-        for (size_t i = 0; i < len; i++) {
-            const uint32_t offset = addr + (uint32_t)i - PAIRING_BASE;
-            out[i] = offset < PAIRING_IMAGE_SIZE ? image[offset] : 0xFF;
-        }
-        return;
-    }
-    if (addr >= FACTORY_BASE && (uint64_t)addr + len <= FACTORY_BASE + FACTORY_SIZE) {
-        memcpy(out, &s_factory[addr - FACTORY_BASE], len);
-        return;
-    }
-    memset(out, 0xFF, len);
+    memcpy(&s_mem_factory[25], body_colors, sizeof(body_colors));
 }
 
 /** 31 字节手柄广播载荷（controller.md §2.1）：Flags 3B + 厂商数据 28B。
@@ -200,7 +167,7 @@ static void build_adv_payload(uint8_t out[31], bool reconnect)
         0x1B, 0xFF,
         0x53, 0x05, 0x01, 0x00, 0x03,
         0x7E, 0x05,
-        0x69, 0x20,
+        (uint8_t)(NS2_ADV_PID & 0xFF), (uint8_t)(NS2_ADV_PID >> 8),
         0x00, 0x01, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -209,23 +176,27 @@ static void build_adv_payload(uint8_t out[31], bool reconnect)
     if (reconnect && ble_creds_count() > 0) {
         const ns2_cred_record_t *rec = ble_creds_get(0);
         memcpy(&out[17], rec->mac, 6);
+        /* 已配对回连/唤醒形态：状态字节 0x81（对齐已验证实现，
+         * 主机据此按回连流程初始化）。 */
+        out[16] = 0x81;
         s_ses.state = SESSION_ADV_RECONNECT;
     } else {
         s_ses.state = SESSION_ADV_DISCOVERY;
     }
 }
 
-/** 按凭证状态恢复广播：已配对发回连广播等待主机；未配对保持静默，
- * 进入配对模式（UI「开始」）才发发现广播——与真实手柄行为一致。 */
+/** 按凭证状态恢复广播：已配对发回连广播等待主机回连；未配对发发现广播
+ * 待主机从 Grip 界面搜索配对，开机即进入可被发现状态。 */
 static void resume_advertising(void)
 {
-    if (ble_creds_count() > 0) {
-        uint8_t adv[31];
-        build_adv_payload(adv, true);
-        ble_controller_advertise(adv);
+    const size_t creds = ble_creds_count();
+    uint8_t adv[31];
+    build_adv_payload(adv, creds > 0);
+    ble_controller_advertise(adv);
+    if (creds > 0) {
+        ESP_LOGI(TAG, "resume: reconnect advertising (%u creds)", (unsigned)creds);
     } else {
-        ble_controller_adv_stop();
-        s_ses.state = SESSION_ADV_DISCOVERY;
+        ESP_LOGI(TAG, "resume: discovery advertising (no creds)");
     }
 }
 
@@ -238,37 +209,69 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     resume_advertising();
 }
 
-/** Switch 2 主机地址 OUI（实机抓包，NimBLE 小端存储的 val[5..3]）。 */
-static bool is_nintendo_host(const uint8_t peer[6])
+/** 连接空闲超时（微秒）：主机连上后会立刻跑初始化序列（毫秒级到达），
+ * 手机/PC 的自动回连则连上后无任何协议活动；超时未活动即断开，
+ * 兼顾主机初始化与回连骚扰清理。主机连接地址是随机地址，
+ * 无法按 OUI 识别，不能再用地址白名单。 */
+#define HOST_IDLE_TIMEOUT_US (3 * 1000000LL)
+
+static int64_t s_last_activity_us;
+
+void ns2_session_touch(void)
 {
-    return peer[3] == 0xEB && peer[4] == 0xF1 && peer[5] == 0x48;
+    s_last_activity_us = esp_timer_get_time();
+}
+
+/** 当前连接是否为应被清理的空闲主机：已连接、握手未完成且超时无活动。 */
+bool ns2_session_host_idle_expired(void)
+{
+    return ble_controller_connected() && s_ses.state == SESSION_CONNECTED_WAIT_PAIR &&
+           esp_timer_get_time() - s_last_activity_us > HOST_IDLE_TIMEOUT_US;
+}
+
+/** 将派生 LTK 注入 NimBLE bonding store（随机数与 EDIV 全 0，BLE 链路
+ * 加密用的 LTK 为线序 A1 XOR B1）；主机配对完成或回连后调用。 */
+static void inject_ltk_to_ble_store(const uint8_t host_mac[6], const uint8_t ltk[16])
+{
+    struct ble_store_value_sec sec;
+    memset(&sec, 0, sizeof(sec));
+    sec.bond_count = 1;
+    sec.key_size = 16;
+    sec.ltk_present = 1;
+    reverse_bytes(ltk, sec.ltk, 16);
+    sec.peer_addr.type = BLE_ADDR_PUBLIC;
+    memcpy(sec.peer_addr.val, host_mac, 6);
+    sec.rand_num = 0;
+    sec.ediv = 0;
+    sec.authenticated = 1;
+    sec.sc = 1;
+    ble_store_write_our_sec(&sec);
+    ble_store_write_peer_sec(&sec);
 }
 
 void ns2_session_on_connect(uint16_t conn_handle)
 {
     uint8_t peer[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-    bool known = false;
+    const ns2_cred_record_t *matched = NULL;
     const bool have_peer = ble_controller_peer_mac(conn_handle, peer);
     if (have_peer) {
         for (size_t i = 0; i < ble_creds_count(); i++) {
             if (memcmp(ble_creds_get(i)->mac, peer, 6) == 0) {
-                known = true;
+                matched = ble_creds_get(i);
                 break;
             }
         }
     }
     ESP_LOGI(TAG, "connected (conn=%u, peer %02x:%02x:%02x:%02x:%02x:%02x, %s)",
              conn_handle, peer[0], peer[1], peer[2], peer[3], peer[4], peer[5],
-             known ? "paired host" : "unpaired host");
-    if (have_peer && !known && !is_nintendo_host(peer)) {
-        /* 手机/PC 的自动回连扫描会抢占广播，导致 Switch 2 侧搜不到设备；
-         * 非 Nintendo 主机且无凭证，直接断开。 */
-        ESP_LOGW(TAG, "non-Nintendo host, terminating");
-        ble_controller_disconnect();
-        return;
-    }
-    s_ses.state = known ? SESSION_NORMAL : SESSION_CONNECTED_WAIT_PAIR;
+             matched ? "paired host" : "unpaired host");
+    s_ses.state = matched ? SESSION_NORMAL : SESSION_CONNECTED_WAIT_PAIR;
     s_ses.pairing_mode = false;
+    ns2_session_touch();
+    if (matched) {
+        /* 回连：把 NVS 里的 LTK 重新注入本周期 NimBLE RAM store。 */
+        inject_ltk_to_ble_store(matched->mac, matched->ltk);
+    }
     ESP_LOGI(TAG, "waiting host init sequence");
 }
 
@@ -278,35 +281,73 @@ void ns2_session_on_disconnect(void)
     resume_advertising();
 }
 
-/** Command 0x02 SPI Flash 读取：0x01 固定 64B 块、0x04 通用读取（controller.md §6.2）。 */
+/** SPI 模拟内存映射块。0x13040 与 0x13100 为实机固定内容；0x13060 与
+ * 用户自定义校准区（0x1FC000 运动 / 0x1FC040 主摇杆 / 0x1FC060 副摇杆）
+ * 未经写入即未初始化，长度 0、读出为全 0xFF。 */
+static const struct {
+    uint32_t start;
+    size_t len;
+    const uint8_t *data;
+} s_mem_map[] = {
+    {0x013000u, sizeof(s_mem_factory), s_mem_factory},
+    {0x013040u, 16,
+     (const uint8_t[]){0x3B, 0xE0, 0xD3, 0x41, 0xC6, 0x60, 0x6A, 0xBC,
+                       0x4D, 0xD7, 0xA2, 0xBB, 0x71, 0x1E, 0xDD, 0x37}},
+    {0x013060u, 0, NULL},
+    {0x013080u, sizeof(s_mem_cal80), s_mem_cal80},
+    {0x0130c0u, sizeof(s_mem_calc0), s_mem_calc0},
+    {0x013100u, 24,
+     (const uint8_t[]){0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                       0x00, 0x00, 0x00, 0x00, 0xA6, 0xF2, 0x62, 0xBD,
+                       0xA8, 0x00, 0x08, 0x3D, 0x2F, 0xED, 0x20, 0x41}},
+    {0x01fc000u, 0, NULL},
+    {0x01fc040u, 0, NULL},
+    {0x01fc060u, 0, NULL},
+};
+
+/** Command 0x02 SPI 读取：应答体 = 回显请求 [8:16] 的 8B magic（[1] 清零）
+ * + 命中数据。地址为请求 [12:15] 的 3 字节小端，按 s_mem_map 区间重叠取数，
+ * 命中范围内未覆盖的部分补 0xFF；无任何命中返回空应答体。 */
 static size_t handle_flash_cmd(const uint8_t *req, size_t len, uint8_t subcmd, uint8_t *resp, size_t cap)
 {
-    if (subcmd == 0x01) {
-        if (len < NS2_FRAME_HEADER_LEN + 8 || cap < 8 + 72) {
-            return 0;
-        }
-        const uint32_t addr = le32(&req[12]);
-        uint8_t data[64];
-        flash_read(addr, data, sizeof(data));
-        return NS2_FRAME_HEADER_LEN +
-               ns2_body_flash_read(&resp[8], cap - 8, addr, data, sizeof(data));
+    if (subcmd != 0x04) {
+        return NS2_FRAME_HEADER_LEN;
     }
-    if (subcmd == 0x04) {
-        if (len < NS2_FRAME_HEADER_LEN + 8 || cap < 8 + 72) {
-            return 0;
-        }
-        size_t rlen = req[8];
-        const uint32_t addr = le32(&req[12]);
-        if (rlen > 64) {
-            rlen = 64;
-        }
-        uint8_t data[64];
-        flash_read(addr, data, rlen);
-        return NS2_FRAME_HEADER_LEN +
-               ns2_body_flash_read(&resp[8], cap - 8, addr, data, rlen);
+    /* 请求帧 = 8B 帧头 + 8B magic（rlen + 3B 地址 + 填充），共 16B。 */
+    if (len < NS2_FRAME_HEADER_LEN + 8 || cap < NS2_FRAME_HEADER_LEN + 8 + 0x78) {
+        return 0;
     }
-    /* 写入/擦除子命令：本设备无用户可写仿真区，直接确认。 */
-    return NS2_FRAME_HEADER_LEN;
+    const size_t rlen = req[8];
+    if (rlen == 0 || rlen > 0x78) {
+        return 0;
+    }
+    const uint32_t addr = ((uint32_t)req[14] << 16) | ((uint32_t)req[13] << 8) | req[12];
+    const uint32_t addr_end = addr + rlen;
+    memset(&resp[16], 0xFF, rlen);
+    bool hit = false;
+    for (size_t i = 0; i < sizeof(s_mem_map) / sizeof(s_mem_map[0]); i++) {
+        const uint32_t block_start = s_mem_map[i].start;
+        const uint32_t block_end = block_start + s_mem_map[i].len;
+        if (block_end < addr || block_start > addr_end) {
+            continue;
+        }
+        hit = true;
+        if (s_mem_map[i].len == 0) {
+            continue;
+        }
+        const uint32_t overlap_start = addr > block_start ? addr : block_start;
+        const uint32_t overlap_end = addr_end < block_end ? addr_end : block_end;
+        memcpy(&resp[16] + (overlap_start - addr),
+               &s_mem_map[i].data[overlap_start - block_start],
+               overlap_end - overlap_start);
+    }
+    if (!hit) {
+        ESP_LOGW(TAG, "flash read 0x%06" PRIx32 " not implemented", addr);
+        return 0;
+    }
+    memcpy(&resp[8], &req[8], 8);
+    resp[9] = 0x00;
+    return NS2_FRAME_HEADER_LEN + 8 + rlen;
 }
 
 /** Command 0x03 初始化与连接建立（controller.md §6.2）。 */
@@ -387,6 +428,15 @@ static size_t handle_feature_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
 {
     const uint8_t mask = len >= 12 ? req[8] : 0;
     switch (subcmd) {
+    case 0x01: {
+        /* get feature info：4B 保留 + 特性位图（按键/摇杆全支持，IMU 与
+         * 未用字段为 Pro 布局，触觉可用），对齐已验证实现。 */
+        static const uint8_t feature_info[12] = {
+            0x00, 0x00, 0x00, 0x00, 0x07, 0x07, 0x01, 0x01, 0x00, 0x03, 0x00, 0x00,
+        };
+        memcpy(&resp[8], feature_info, sizeof(feature_info));
+        return NS2_FRAME_HEADER_LEN + sizeof(feature_info);
+    }
     case 0x02:
         s_ses.feature_mask = mask;
         break;
@@ -431,13 +481,14 @@ static size_t handle_pairing_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
         memcpy(&resp[11], s_ses.own_mac, 6);
         return NS2_FRAME_HEADER_LEN + 9;
     case 0x04:
-        /* 步骤 2：请求体 `00 [16B 主机公钥 A1 反序]`；LTK = A1 XOR B1（B1 为
-         * 固定公钥），应答体 `01 [16B B1]`。 */
+        /* 步骤 2：请求体 `00 [16B 主机公钥 A1 反序]`；LTK 以反序存储
+         * `R(A1) XOR R(B1)`（AES 密钥字节序约定，对齐已验证实现），
+         * 应答体 `01 [16B B1]`。 */
         if (len < NS2_FRAME_HEADER_LEN + 17 || cap < NS2_FRAME_HEADER_LEN + 17) {
             return 0;
         }
         for (int i = 0; i < 16; i++) {
-            s_pair.ltk[i] = (uint8_t)(req[9 + i] ^ ns2_pair_pubkey_b1[i]);
+            s_pair.ltk[i] = (uint8_t)(req[9 + (15 - i)] ^ ns2_pair_pubkey_b1[15 - i]);
         }
         s_pair.ltk_ready = true;
         resp[8] = 0x01;
@@ -445,30 +496,30 @@ static size_t handle_pairing_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
         return NS2_FRAME_HEADER_LEN + 17;
     case 0x02:
         /* 步骤 3：请求体 `00 [16B 挑战码 A2 反序]`；
-         * B2 = reverse(AES128_ECB(Key=reverse(LTK), Data=reverse(A2)))，
-         * 应答体 `01 [16B B2 反序]`。 */
+         * B2 = AES128_ECB(Key=存储 LTK, Data=reverse(A2))，应答体
+         * `01 [16B B2 原始输出]`（不再反转，对齐已验证实现）。 */
         if (!s_pair.ltk_ready || len < NS2_FRAME_HEADER_LEN + 17 ||
             cap < NS2_FRAME_HEADER_LEN + 17) {
             return 0;
         }
         {
             uint8_t a2[16];
-            uint8_t key[16];
-            uint8_t b2_reversed[16];
+            uint8_t b2[16];
             reverse_bytes(&req[9], a2, 16);
-            reverse_bytes(s_pair.ltk, key, 16);
-            if (!aes_ecb_block(key, a2, b2_reversed)) {
+            if (!aes_ecb_block(s_pair.ltk, a2, b2)) {
                 ESP_LOGE(TAG, "psa aes failed");
                 return 0;
             }
             resp[8] = 0x01;
-            reverse_bytes(b2_reversed, &resp[9], 16);
+            memcpy(&resp[9], b2, 16);
         }
         return NS2_FRAME_HEADER_LEN + 17;
     case 0x03:
-        /* 步骤 4：确认并持久化主机 MAC + LTK。 */
+        /* 步骤 4：确认并持久化主机 MAC + LTK，同时注入 NimBLE bonding
+         * store（rand/ediv 全 0），主机后续的标准加密请求即可用该 LTK。 */
         if (s_pair.mac_ready && s_pair.ltk_ready) {
             ble_creds_save(s_pair.host_mac, s_pair.ltk);
+            inject_ltk_to_ble_store(s_pair.host_mac, s_pair.ltk);
             s_pair.mac_ready = false;
             s_pair.ltk_ready = false;
             s_ses.state = SESSION_NORMAL;
@@ -490,7 +541,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
     const uint8_t cmd = data[0];
     const uint8_t subcmd = data[3];
 
-    uint8_t resp[ANSWER_PREFIX_LEN + 96];
+    uint8_t resp[ANSWER_PREFIX_LEN + 136];
     uint8_t *frame = &resp[ANSWER_PREFIX_LEN];
     memset(resp, 0, ANSWER_PREFIX_LEN);
     size_t resp_len;
@@ -533,6 +584,11 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
             resp_len = NS2_FRAME_HEADER_LEN + 4;
         }
         break;
+    case 0x16:
+        /* 未知功能命令（实机抓包：应答体 24 字节 0）。 */
+        memset(&frame[8], 0, 24);
+        resp_len = NS2_FRAME_HEADER_LEN + 24;
+        break;
     case NS2_CMD_VERSION:
         if (subcmd == 0x01) {
             ns2_body_version(&frame[8]);
@@ -561,12 +617,9 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
 void ns2_session_on_output(const uint8_t *data, size_t len)
 {
     /* Output Report 0x02：BLE 形态首字节 0x00，随后 2x16B LRA 参数包（§5.4）。
-     * 板卡无震动马达；M5 起原样经 USB OUT 转发给源手柄。 */
-    if (len == 0) {
-        return;
-    }
-    ESP_LOGI(TAG, "rumble report %uB:", (unsigned)len);
-    ESP_LOG_BUFFER_HEX(TAG, data, len);
+     * 板卡无震动马达；M5 起原样经 USB OUT 转发给源手柄，当前仅消费该帧。 */
+    (void)data;
+    (void)len;
 }
 
 void ns2_session_on_composite(const uint8_t *data, size_t len)
@@ -620,6 +673,11 @@ bool ns2_session_paired(void)
 bool ns2_session_host_registered(void)
 {
     return ble_controller_connected() && s_ses.state == SESSION_NORMAL;
+}
+
+bool ns2_session_waiting_pair(void)
+{
+    return ble_controller_connected() && s_ses.state == SESSION_CONNECTED_WAIT_PAIR;
 }
 
 void ns2_session_unpair(void)

@@ -25,14 +25,14 @@ static void nvs_init(void)
 void app_main(void)
 {
     /* 广播地址伪装必须在蓝牙控制器初始化前完成：public 广播的空中地址
-     * 由 controller 的 BD_ADDR 决定，host 侧改不动。Switch 2 主机在芯片层
-     * 过滤广播并匹配地址 OUI，故将 base MAC 换成 Nintendo OUI（98:E2:55，
-     * 实机抓包），蓝牙地址（base+2）随之派生；后缀沿用 eFuse，上电稳定。 */
+     * 由 controller 的 BD_ADDR 决定，host 侧改不动。实测主机不校验地址
+     * OUI（配对与回连均成功），但为与已验证实现保持一致，沿用任天堂
+     * 78:81:8C OUI；蓝牙地址（base+2）随之派生，后缀沿用 eFuse，上电稳定。 */
     uint8_t base[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     esp_read_mac(base, ESP_MAC_WIFI_STA);
-    base[0] = 0x98;
-    base[1] = 0xE2;
-    base[2] = 0x55;
+    base[0] = 0x78;
+    base[1] = 0x81;
+    base[2] = 0x8C;
     ESP_ERROR_CHECK(esp_base_mac_addr_set(base));
 
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);

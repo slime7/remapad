@@ -38,11 +38,6 @@ size_t ns2_frame_response(uint8_t *out, size_t cap, uint8_t cmd, uint8_t transpo
 /** Command 0x10 应答体：固件版本 1.0.14 + Pro Controller 类型码。 */
 void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN]);
 
-/** Command 0x02 读取应答体：4B 小端地址 + 数据（实机抓包，无长度前缀）。
- * 长度上限 0xFF；容量不足或超限返回 0，成功返回写入长度。 */
-size_t ns2_body_flash_read(uint8_t *out, size_t cap, uint32_t addr,
-                           const uint8_t *data, size_t len);
-
 #ifdef __cplusplus
 }
 #endif

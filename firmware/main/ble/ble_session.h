@@ -20,6 +20,13 @@ void ns2_session_on_sync(const uint8_t own_mac[6]);
 /** ACL 连接建立。 */
 void ns2_session_on_connect(uint16_t conn_handle);
 
+/** 记录一次主机协议活动（ATT 读写/订阅），刷新连接空闲计时。 */
+void ns2_session_touch(void);
+
+/** 当前连接是否已超时无活动：连接中、握手未完成且超过空闲时限。
+ * 供周期检查断开手机/PC 等只连不聊的回连方；主机初始化毫秒级到达，不受影响。 */
+bool ns2_session_host_idle_expired(void);
+
 /** 断连：复位会话并恢复发现广播。 */
 void ns2_session_on_disconnect(void);
 
@@ -53,6 +60,10 @@ bool ns2_session_paired(void);
 /** 当前连接中的主机是否已注册：凭证匹配回连，或本会话内完成 0x15 握手。
  * 属于协议层的配对成功证据，与 NVS 存储状态相互独立。 */
 bool ns2_session_host_registered(void);
+
+/** 当前连接是否为已通过 Nintendo 白名单、进入握手等待的主机。
+ * 被白名单立即断开的连接（手机/PC 回连）不算，避免控制面状态闪烁。 */
+bool ns2_session_waiting_pair(void);
 
 /** 解除配对：清除 NVS 凭证并切回标准发现广播；下次配对需重走 0x15。
  * 仅供控制面显式触发，「停止配对」不经过本函数。 */
