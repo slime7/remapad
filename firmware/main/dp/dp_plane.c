@@ -9,6 +9,7 @@
 #include "freertos/task.h"
 
 #include "ble_controller.h"
+#include "ble_creds.h"
 #include "ble_session.h"
 #include "ns2_report.h"
 #include "ns2_state.h"
@@ -80,6 +81,8 @@ static void dp_task(void *param)
 
 esp_err_t dp_plane_start(void)
 {
+    /* 凭证装载须在 host 同步（决定回连/发现广播）之前完成。 */
+    ble_creds_init();
     const esp_err_t err = ble_controller_start();
     if (err != ESP_OK) {
         return err;

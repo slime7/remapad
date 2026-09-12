@@ -35,7 +35,7 @@
 
 **验收（真机分档）**：① nRF Connect 可见广播且厂商数据逐字节一致、GATT 结构匹配；② Switch 2 "更改 Grip/顺序"界面发现并连接；③ 握手应答帧日志符合 §10.2 时序，合成输入在主机侧可见按键变化。
 
-### M3 — 配对、回连与凭证持久化　状态：未开始
+### M3 — 配对、回连与凭证持久化　状态：代码完成（build 通过，配对算法向量校验通过；实机配对/回连验收待烧录联调）
 
 - [ ] `ble_session.c` 实现 Command 0x15 四步配对（MAC 交换 → LTK = A1 XOR B1（固定常量 `5C F6 EE 79 2C DF 05 E1 BA 2B 63 25 C4 1A 5F 10`）→ AES-128-ECB 反序挑战（mbedtls）→ 确认），全程不触发 SMP；实机观察主机侧 SMP 行为并按文档拒绝。
 - [ ] 引入 `nvs_flash`，凭证存 NVS（[ADR 0009](adr/0009-ota-storage-flash-layout.md) 约定 BLE 配对密钥存 NVS）：主机 MAC + 16B LTK，记录语义对齐 controller.md §7.4 的 0x1FA000 结构（1B 数量 + 40B 记录项）。

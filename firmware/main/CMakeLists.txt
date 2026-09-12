@@ -6,6 +6,7 @@ set(remapad_pocketjs_requires
     esp_lcd_touch_cst816s
     bt
     nvs_flash
+    mbedtls
     pocketjs_package
     pocketjs_guest
     pocketjs_ui_core
@@ -24,6 +25,7 @@ idf_component_register(
         "ns2/ns2_frames.c"
         "ble/ble_controller.c"
         "ble/ble_session.c"
+        "ble/ble_creds.c"
         "dp/dp_plane.c"
     INCLUDE_DIRS
         "."

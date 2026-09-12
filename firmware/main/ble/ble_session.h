@@ -38,6 +38,12 @@ uint8_t ns2_session_report_format(void);
 /** 特性掩码 bit5（触觉震动）是否开启，影响 0x09 状态标志字节。 */
 bool ns2_session_rumble_enabled(void);
 
+/** UI 手动配对：切换到标准发现广播（目标 MAC 全零）。 */
+void ns2_session_start_pairing_mode(void);
+
+/** 结束手动配对：按凭证状态恢复回连或发现广播。 */
+void ns2_session_stop_pairing_mode(void);
+
 #ifdef __cplusplus
 }
 #endif

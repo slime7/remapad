@@ -357,6 +357,16 @@ bool ble_controller_connected(void)
     return s_ctl.connected;
 }
 
+bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6])
+{
+    struct ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(conn_handle, &desc) != 0) {
+        return false;
+    }
+    memcpy(out_mac, desc.peer_id_addr.val, 6);
+    return true;
+}
+
 bool ble_controller_input_notify_ready(uint8_t report_format)
 {
     if (report_format == 5) {

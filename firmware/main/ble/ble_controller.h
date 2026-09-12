@@ -22,6 +22,9 @@ esp_err_t ble_controller_start(void);
 /** 是否处于 ACL 连接中。 */
 bool ble_controller_connected(void);
 
+/** 读取对端主机蓝牙地址（NimBLE 存储序，即显示序反转，与配对线格式一致）。 */
+bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6]);
+
 /** 指定输入报告格式（0x05 / 0x09）的 CCCD 是否已由主机开启。 */
 bool ble_controller_input_notify_ready(uint8_t report_format);
 

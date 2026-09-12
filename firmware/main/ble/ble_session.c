@@ -5,8 +5,10 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "psa/crypto.h"
 
 #include "ble_controller.h"
+#include "ble_creds.h"
 #include "ns2_frames.h"
 #include "ns2_report.h"
 
@@ -18,13 +20,18 @@ static const char *TAG = "remapad_blses";
 /** 会话状态：休眠/唤醒广播顺延到后续里程碑（见 docs/ROADMAP.md M3）。 */
 typedef enum {
     SESSION_ADV_DISCOVERY = 0,
+    SESSION_ADV_RECONNECT,
     SESSION_CONNECTED_WAIT_PAIR,
     SESSION_NORMAL,
 } session_state_t;
 
-/** 出厂数据区仿真基址（controller.md §7.2）；配对区 0x1FA000 在 M3 接入 NVS。 */
+/** 出厂数据区仿真基址（controller.md §7.2）。 */
 #define FACTORY_BASE 0x013000u
 #define FACTORY_SIZE 2048u
+
+/** 配对信息区仿真基址（controller.md §7.4），结构对齐 0x1FA000。 */
+#define PAIRING_BASE 0x1FA000u
+#define PAIRING_IMAGE_SIZE 256u
 
 static struct {
     session_state_t state;
@@ -34,6 +41,14 @@ static struct {
     uint8_t player_leds;
 } s_ses;
 
+/** 0x15 配对会话中间态：主机 MAC 与派生 LTK（线格式字节序）。 */
+static struct {
+    uint8_t host_mac[6];
+    bool mac_ready;
+    uint8_t ltk[16];
+    bool ltk_ready;
+} s_pair;
+
 static uint8_t s_factory[FACTORY_SIZE];
 
 /** 帧内 4 字节小端读取。 */
@@ -41,6 +56,40 @@ static uint32_t le32(const uint8_t *p)
 {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
            ((uint32_t)p[3] << 24);
+}
+
+/** 16 字节整体反转（AES 挑战与注入 LTK 的字节序变换，controller.md §3.2）。 */
+static void reverse16(const uint8_t *in, uint8_t *out)
+{
+    for (int i = 0; i < 16; i++) {
+        out[i] = in[15 - i];
+    }
+}
+
+/** AES-128-ECB 单块加密（PSA Crypto；IDF 6.1 的 mbedtls 4 已移除 legacy API）。 */
+static bool aes_ecb_block(const uint8_t key[16], const uint8_t in[16], uint8_t out[16])
+{
+    static bool crypto_inited;
+    if (!crypto_inited) {
+        if (psa_crypto_init() != PSA_SUCCESS) {
+            return false;
+        }
+        crypto_inited = true;
+    }
+    psa_key_attributes_t attrs = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_usage_flags(&attrs, PSA_KEY_USAGE_ENCRYPT);
+    psa_set_key_algorithm(&attrs, PSA_ALG_ECB_NO_PADDING);
+    psa_set_key_type(&attrs, PSA_KEY_TYPE_AES);
+    psa_set_key_bits(&attrs, 128);
+    psa_key_id_t key_id = 0;
+    if (psa_import_key(&attrs, key, 16, &key_id) != PSA_SUCCESS) {
+        return false;
+    }
+    size_t olen = 0;
+    const psa_status_t status = psa_cipher_encrypt(key_id, PSA_ALG_ECB_NO_PADDING,
+                                                   in, 16, out, 16, &olen);
+    psa_destroy_key(key_id);
+    return status == PSA_SUCCESS && olen == 16;
 }
 
 /** 出厂数据区：序列号、VID/PID、机身配色与摇杆校准（controller.md §7.2）。
@@ -71,9 +120,31 @@ static void factory_init(void)
     memcpy(&s_factory[0x00E8], stick_cal, sizeof(stick_cal));
 }
 
-/** SPI Flash 读取仿真：仅出厂数据区有效，其余地址按未初始化返回 0xFF。 */
+/** 配对区镜像：1B 数量 + 40B 记录项（MAC@+0x08、LTK@+0x1A，controller.md §7.4）。 */
+static void pairing_region_image(uint8_t out[PAIRING_IMAGE_SIZE])
+{
+    memset(out, 0x00, PAIRING_IMAGE_SIZE);
+    const size_t count = ble_creds_count();
+    out[0] = (uint8_t)count;
+    for (size_t i = 0; i < count && i < 5; i++) {
+        const ns2_cred_record_t *rec = ble_creds_get(i);
+        memcpy(&out[0x08 + i * 0x28], rec->mac, 6);
+        memcpy(&out[0x1A + i * 0x28], rec->ltk, 16);
+    }
+}
+
+/** SPI Flash 读取仿真：出厂数据区与配对区有效，其余地址按未初始化返回 0xFF。 */
 static void flash_read(uint32_t addr, uint8_t *out, size_t len)
 {
+    if (addr >= PAIRING_BASE && (uint64_t)addr + len <= PAIRING_BASE + 0x1000u) {
+        uint8_t image[PAIRING_IMAGE_SIZE];
+        pairing_region_image(image);
+        for (size_t i = 0; i < len; i++) {
+            const uint32_t offset = addr + (uint32_t)i - PAIRING_BASE;
+            out[i] = offset < PAIRING_IMAGE_SIZE ? image[offset] : 0xFF;
+        }
+        return;
+    }
     if (addr >= FACTORY_BASE && (uint64_t)addr + len <= FACTORY_BASE + FACTORY_SIZE) {
         memcpy(out, &s_factory[addr - FACTORY_BASE], len);
         return;
@@ -83,8 +154,8 @@ static void flash_read(uint32_t addr, uint8_t *out, size_t len)
 
 /** 31 字节手柄广播载荷（controller.md §2.1）：Flags 3B + 厂商数据 28B。
  * 偏移：5-6 Company ID、7-9 协议头、10-11 VID、12-13 PID、16 状态位、
- * 17-22 目标主机 MAC 反序、23 尾部标志。 */
-static void build_adv_payload(uint8_t out[31])
+ * 17-22 目标主机 MAC 反序、23 尾部标志。有凭证时构造回连广播。 */
+static void build_adv_payload(uint8_t out[31], bool reconnect)
 {
     static const uint8_t tpl[31] = {
         0x02, 0x01, 0x06,
@@ -97,6 +168,21 @@ static void build_adv_payload(uint8_t out[31])
         0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
     memcpy(out, tpl, 31);
+    if (reconnect && ble_creds_count() > 0) {
+        const ns2_cred_record_t *rec = ble_creds_get(0);
+        memcpy(&out[17], rec->mac, 6);
+        s_ses.state = SESSION_ADV_RECONNECT;
+    } else {
+        s_ses.state = SESSION_ADV_DISCOVERY;
+    }
+}
+
+/** 按凭证状态恢复广播：已配对回连，否则标准发现。 */
+static void advertise_for_creds(void)
+{
+    uint8_t adv[31];
+    build_adv_payload(adv, ble_creds_count() > 0);
+    ble_controller_advertise(adv);
 }
 
 void ns2_session_on_sync(const uint8_t own_mac[6])
@@ -105,25 +191,30 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     memcpy(s_ses.own_mac, own_mac, 6);
     ESP_LOGI(TAG, "host synced, own MAC %02x:%02x:%02x:%02x:%02x:%02x",
              own_mac[0], own_mac[1], own_mac[2], own_mac[3], own_mac[4], own_mac[5]);
-    uint8_t adv[31];
-    build_adv_payload(adv);
-    s_ses.state = SESSION_ADV_DISCOVERY;
-    ble_controller_advertise(adv);
+    advertise_for_creds();
 }
 
 void ns2_session_on_connect(uint16_t conn_handle)
 {
-    s_ses.state = SESSION_CONNECTED_WAIT_PAIR;
-    ESP_LOGI(TAG, "connected (conn=%u), waiting host init sequence", conn_handle);
+    uint8_t peer[6];
+    bool known = false;
+    if (ble_controller_peer_mac(conn_handle, peer)) {
+        for (size_t i = 0; i < ble_creds_count(); i++) {
+            if (memcmp(ble_creds_get(i)->mac, peer, 6) == 0) {
+                known = true;
+                break;
+            }
+        }
+    }
+    s_ses.state = known ? SESSION_NORMAL : SESSION_CONNECTED_WAIT_PAIR;
+    ESP_LOGI(TAG, "connected (conn=%u, %s), waiting host init sequence",
+             conn_handle, known ? "paired host" : "unpaired host");
 }
 
 void ns2_session_on_disconnect(void)
 {
-    s_ses.state = SESSION_ADV_DISCOVERY;
-    ESP_LOGI(TAG, "disconnected, resume discovery advertising");
-    uint8_t adv[31];
-    build_adv_payload(adv);
-    ble_controller_advertise(adv);
+    ESP_LOGI(TAG, "disconnected, resume advertising");
+    advertise_for_creds();
 }
 
 /** Command 0x02 SPI Flash 读取：0x01 固定 64B 块、0x04 通用读取（controller.md §6.2）。 */
@@ -157,12 +248,12 @@ static size_t handle_flash_cmd(const uint8_t *req, size_t len, uint8_t subcmd, u
     return NS2_FRAME_HEADER_LEN;
 }
 
-/** Command 0x03 初始化与连接建立（controller.md §6.2）；0x07/0x08/0x09 配对注入在 M3 落地。 */
+/** Command 0x03 初始化与连接建立（controller.md §6.2）。 */
 static size_t handle_init_cmd(const uint8_t *req, size_t len, uint8_t subcmd, uint8_t *resp)
 {
     switch (subcmd) {
     case 0x01:
-        ESP_LOGI(TAG, "wake advertising request=%u (M3 pending)", req[8]);
+        ESP_LOGI(TAG, "wake advertising request=%u (deferred)", req[8]);
         return NS2_FRAME_HEADER_LEN;
     case 0x0A:
         if (len >= 9 && (req[8] == NS2_REPORT_ID_05 || req[8] == NS2_REPORT_ID_09)) {
@@ -171,16 +262,21 @@ static size_t handle_init_cmd(const uint8_t *req, size_t len, uint8_t subcmd, ui
         }
         return NS2_FRAME_HEADER_LEN;
     case 0x07:
-        if (len >= 14) {
-            ESP_LOGI(TAG, "pairing inject (M3 pending): %02x:%02x:%02x:%02x:%02x:%02x",
-                     req[8], req[9], req[10], req[11], req[12], req[13]);
+        /* 直接注入配对信息：6B 主机 MAC（反序）+ 16B LTK（反序）。
+         * MAC 按线格式原样存储；LTK 反转回派生形态（0x15/0x04 路径的 A1^B1）。 */
+        if (len >= NS2_FRAME_HEADER_LEN + 22) {
+            uint8_t ltk[16];
+            reverse16(&req[14], ltk);
+            ble_creds_save(&req[8], ltk);
+            s_ses.state = SESSION_NORMAL;
         }
         return NS2_FRAME_HEADER_LEN;
     case 0x08:
-        ESP_LOGI(TAG, "pairing clear (M3 pending)");
+        ble_creds_clear();
+        s_ses.state = SESSION_CONNECTED_WAIT_PAIR;
         return NS2_FRAME_HEADER_LEN;
     case 0x09:
-        ESP_LOGI(TAG, "pairing save (M3 pending)");
+        /* 凭证在 0x15/0x03 与 0x03/0x07 时即写 NVS，无需额外动作。 */
         return NS2_FRAME_HEADER_LEN;
     case 0x03:
     case 0x0D:
@@ -250,6 +346,69 @@ static size_t handle_feature_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
     return NS2_FRAME_HEADER_LEN + 4;
 }
 
+/** Command 0x15 私有配对四步（controller.md §3）：MAC 交换 -> 公钥交换 ->
+ * AES-128-ECB 挑战 -> 确认保存；全程不涉及标准 SMP。 */
+static size_t handle_pairing_cmd(const uint8_t *req, size_t len, uint8_t subcmd,
+                                 uint8_t *resp, size_t cap)
+{
+    switch (subcmd) {
+    case 0x01:
+        /* 步骤 1：请求体携带主机 MAC（反序线格式），应答自身 MAC。 */
+        if (len >= NS2_FRAME_HEADER_LEN + 6) {
+            memcpy(s_pair.host_mac, &req[8], 6);
+            s_pair.mac_ready = true;
+        }
+        if (cap < NS2_FRAME_HEADER_LEN + 6) {
+            return 0;
+        }
+        ns2_body_mac_reversed(&resp[8], s_ses.own_mac);
+        return NS2_FRAME_HEADER_LEN + 6;
+    case 0x04:
+        /* 步骤 2：LTK = A1 XOR B1（B1 为固定公钥），应答 B1。 */
+        if (len < NS2_FRAME_HEADER_LEN + 16 || cap < NS2_FRAME_HEADER_LEN + 16) {
+            return 0;
+        }
+        for (int i = 0; i < 16; i++) {
+            s_pair.ltk[i] = (uint8_t)(req[8 + i] ^ ns2_pair_pubkey_b1[i]);
+        }
+        s_pair.ltk_ready = true;
+        memcpy(&resp[8], ns2_pair_pubkey_b1, 16);
+        return NS2_FRAME_HEADER_LEN + 16;
+    case 0x02:
+        /* 步骤 3：B2 = reverse(AES128_ECB(Key=reverse(LTK), Data=reverse(A2)))。 */
+        if (!s_pair.ltk_ready || len < NS2_FRAME_HEADER_LEN + 16 ||
+            cap < NS2_FRAME_HEADER_LEN + 16) {
+            return 0;
+        }
+        {
+            uint8_t a2[16];
+            uint8_t key[16];
+            uint8_t b2_reversed[16];
+            reverse16(&req[8], a2);
+            reverse16(s_pair.ltk, key);
+            if (!aes_ecb_block(key, a2, b2_reversed)) {
+                ESP_LOGE(TAG, "psa aes failed");
+                return 0;
+            }
+            reverse16(b2_reversed, &resp[8]);
+        }
+        return NS2_FRAME_HEADER_LEN + 16;
+    case 0x03:
+        /* 步骤 4：确认并持久化主机 MAC + LTK。 */
+        if (s_pair.mac_ready && s_pair.ltk_ready) {
+            ble_creds_save(s_pair.host_mac, s_pair.ltk);
+            s_pair.mac_ready = false;
+            s_pair.ltk_ready = false;
+            s_ses.state = SESSION_NORMAL;
+        }
+        resp[8] = 0x01;
+        return NS2_FRAME_HEADER_LEN + 1;
+    default:
+        ESP_LOGW(TAG, "pairing subcmd 0x%02x unsupported", subcmd);
+        return NS2_FRAME_HEADER_LEN;
+    }
+}
+
 void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
 {
     if (len < NS2_FRAME_HEADER_LEN) {
@@ -292,8 +451,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
         }
         break;
     case NS2_CMD_PAIRING:
-        ESP_LOGI(TAG, "pairing step 0x%02x received (M3 pending)", subcmd);
-        resp_len = NS2_FRAME_HEADER_LEN;
+        resp_len = handle_pairing_cmd(data, len, subcmd, resp, sizeof(resp));
         break;
     default:
         ESP_LOGW(TAG, "unhandled command 0x%02x/0x%02x", cmd, subcmd);
@@ -340,4 +498,18 @@ uint8_t ns2_session_report_format(void)
 bool ns2_session_rumble_enabled(void)
 {
     return (s_ses.feature_mask & 0x20) != 0;
+}
+
+void ns2_session_start_pairing_mode(void)
+{
+    uint8_t adv[31];
+    build_adv_payload(adv, false);
+    ble_controller_advertise(adv);
+    ESP_LOGI(TAG, "pairing mode: discovery advertising");
+}
+
+void ns2_session_stop_pairing_mode(void)
+{
+    advertise_for_creds();
+    ESP_LOGI(TAG, "pairing mode stopped");
 }
