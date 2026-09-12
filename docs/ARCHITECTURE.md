@@ -216,7 +216,7 @@ BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应
 - JavaScript guest 和资源优先使用 8 MB Octal PSRAM。
 - `remapad-pjs` owner task 的栈（288 KB）同样分配在 PSRAM，因为 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。主任务栈保持 32 KB，只负责启动 owner task。内部 RAM 因此留给 DMA 缓冲和协议栈，启动后可用量约 360 KB。
 - CPU 运行在 240 MHz。UI 每帧把解释执行的 Vue Vapor bundle 加软件 RGB565 渲染跑在一个核上，默认的 160 MHz 会把整个周期吃满并饿死空闲任务。
-- 当前实现使用一个按最大视口分配的 PSRAM RGB565 scratch buffer；`render_strip` 每次接收精确的 full-width、region-height 容量。渲染完成后 strip 经 esp_lcd 的 `psram_dma_direct` 路径被 SPI EDMA 直读提交面板（S3 的 AHB GDMA v1 对外部内存无对齐约束），传输前由 `panel_transfer` 原地完成 RGB565 大小端交换并做缓存写回。
+- 当前实现使用一个按最大视口分配的 PSRAM RGB565 scratch buffer；`render_strip` 每次接收精确的 full-width、region-height 容量。渲染完成后 strip 经 esp_lcd 的 `psram_dma_direct` 路径被 SPI EDMA 直读提交面板（S3 的 AHB GDMA v1 对外部内存无对齐约束，PSRAM 缓存写回由 spi_master 的 PSRAM DMA 路径自动处理），传输前由 `panel_transfer` 原地完成 RGB565 大小端交换；`draw_bitmap` 返回只代表事务入队，`panel_transfer` 以 trans_done 回调等待最后一笔分块传输完成，之后调用方才能复用 strip 缓冲，避免下一块区域的改写与仍在飞行的 DMA 竞争。
 - 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、SPI2 40 MHz、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
 - ESP32-S3 没有本项目所需的 P4 PPA；使用 `pocketjs_render_rgb565` 的软件路径即可。
 

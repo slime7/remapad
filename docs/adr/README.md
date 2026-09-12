@@ -32,11 +32,14 @@
 | [0004](0004-use-local-pocketjs-checkout.md) | active | PocketJS 组件与原生归档改由本地 checkout 提供，Web 预览切换为官方开发主机 |
 | [0005](0005-vendor-pocketjs-idf-components.md) | active | ESP-IDF 组件与原生归档固定在本仓库，pocketjs 仅作开发参考 |
 | [0006](0006-product-owner-task-for-pocketjs-guest.md) | active | 由产品 owner task 承载 PocketJS guest 生命周期 |
-| [0007](0007-esp-lcd-panel-touch-bsp.md) | active | 显示与触摸 BSP 采用 esp_lcd 内置驱动与 Registry 触摸组件 |
+| [0007](0007-esp-lcd-panel-touch-bsp.md) | active | 显示与触摸 BSP 采用 esp_lcd 内置驱动与 Registry 触摸组件；strip 提交复用语义由 0008 部分取代 |
+| [0008](0008-panel-transfer-completion-gate.md) | active | 面板提交增加传输完成门控，部分取代 0007 的颜色缓冲复用语义 |
 
 `0002` 仍作为硬件 bridge 与控制面分层的决策依据；其自定义打包和 host 接入范围由 `0003` 取代。旧 ADR 文件正文保持不变。
 
 `0004` 仍作为 Web 预览采用官方 `hosts/web` 开发主机的决策依据；其固件组件与原生归档取自 PocketJS checkout 的范围由 `0005` 取代。旧 ADR 文件正文保持不变。
+
+`0007` 仍作为显示与触摸 BSP 选型（esp_lcd 内置 ST7789、Registry CST816S、LEDC 背光）的决策依据；其 strip 提交中颜色缓冲必须待 `trans_done` 门控后才可复用的语义由 `0008` 部分取代。旧 ADR 文件正文保持不变。
 
 ## 创建 ADR 脚本用法
 
