@@ -17,7 +17,7 @@
 
 USB 输入设备、目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 Web 预览可以交互就认为真实 USB 或 BLE 链路已经可用。
 
-板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；USB 输入、BLE 数据面与电池等其余外设仍待实现。
+板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)、[ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，进度见 [ROADMAP.md](ROADMAP.md)）但主机互操作待实机验证；USB 输入与电池等其余外设仍待实现。
 
 ## 最短步骤
 
@@ -198,13 +198,13 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 
 ## 最终产品数据面（当前规划）
 
-后续固件工作按以下顺序拆分：
+后续固件工作按以下顺序拆分（进度跟踪见 [ROADMAP.md](ROADMAP.md)，BLE 链路先行、USB 输入殿后）：
 
-1. 接入 ESP-IDF USB host，接收并解析输入设备报告。
-2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。
-3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。
-4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。
-5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。
+1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（未开始，需先确认 VBUS 供电与 USB mux 切换）
+2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。（已完成，`firmware/main/ns2/`）
+3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。（代码完成，`firmware/main/ble/` + `firmware/main/dp/`，当前由合成输入源驱动，实机互操作待验证）
+4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。（配对/回连/NVS 凭证代码完成，唤醒广播顺延；震动解析记录，M5 转发 USB）
+5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。（配对/连接已真实化，电池仍为占位）
 
 USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge 只作为控制面，数据面应使用 ESP-IDF 原生任务和队列。
 
@@ -274,9 +274,9 @@ Get-CimInstance Win32_Process |
 
 不要按 `node.exe` 或 `python.exe` 之类的进程名批量结束，这些是多个项目共用的进程。
 
-### BLE 没有发现 NS2 手柄
+### 屏幕上没有出现 BLE 手柄广播
 
-当前固件尚未实现 USB→NS2→BLE 数据面，也没有配对广播或 GATT 服务。请先阅读 [controller.md](controller.md)，不要仅通过修改 PocketJS manifest 或 UI bridge 宣称已支持 NS2。
+BLE 手柄外设已接入（`firmware/main/ble/`，见 [ROADMAP.md](ROADMAP.md)）：开机后设备以厂商数据广播出现（nRF Connect 可见 Company ID `0x0553`），但**主机互操作尚未实机验证**——Switch 2 能否发现、连接并完成 0x15 配对取决于协议逆向细节，验证前不要宣称支持 NS2。排查顺序：先看启动日志有无 `host synced` 与 GATT 句柄表，再确认广播载荷，最后对照 [controller.md](controller.md) 逐段核对。USB 输入源尚未接入（M5），当前上报的是合成测试输入。
 
 ### `unsupported QuickJS source; review immutable-buffer patch before upgrading`
 
