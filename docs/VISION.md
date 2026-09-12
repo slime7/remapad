@@ -55,3 +55,4 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
   - 丰富常用嵌入式基础组件库（列表滚动组件、开关 Switch、进度条 Progress、表单项）。
   - 按实际板卡补充 ESP-IDF 产品 BSP 的其余部分，实现 USB host 接收和 GPIO 等外设接入（面板提交与触摸采样已在 Phase 1 完成）。
   - 按 [controller.md](controller.md) 完成 NS2 报告编码、BLE 广播/GATT、配对状态机和配对凭证持久化。
+  - 阶段执行采用"BLE 手柄链路先行、USB 输入殿后"的顺序；里程碑拆解、验收标准与风险跟踪见 [ROADMAP.md](ROADMAP.md)。
