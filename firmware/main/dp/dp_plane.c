@@ -8,66 +8,91 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "battery.h"
 #include "ble_controller.h"
 #include "ble_creds.h"
 #include "ble_session.h"
+#include "dp_source.h"
+#include "ns2_output.h"
 #include "ns2_report.h"
 #include "ns2_state.h"
 
 static const char *TAG = "remapad_dp";
 
-/** 调试注入状态：bridge（owner task）写入、dp_task 读取递减，临界区保护。 */
-static portMUX_TYPE s_debug_mux = portMUX_INITIALIZER_UNLOCKED;
-static volatile uint32_t s_debug_buttons;
-static volatile uint32_t s_debug_hold_ticks;
-
 #define DP_TICK_MS 5
 
-/** 合成输入源：仅提供静置状态（摇杆居中、无按键）与电源/特性字段，
- *  按键输入全部来自调试注入，主机侧不应出现任何自动变化。 */
+/** 合成输入源：仅提供静置状态（摇杆居中、无按键），电源/特性字段取自
+ *  会话与电池驱动；按键输入全部来自调试注入，主机侧不应出现任何自动
+ *  变化。M5 的 USB host 手柄源按 dp_source_t 再注册一路。 */
 static void synthetic_sample(ns2_controller_state_t *state)
 {
-    ns2_state_defaults(state);
     state->battery_level = 8;
-    state->battery_mv = 4120;
+    state->battery_mv = (uint16_t)battery_get_voltage_mv();
+    state->external_power = battery_is_charging();
     state->rumble_enabled = ns2_session_rumble_enabled();
+}
+
+static const dp_source_t s_synthetic_source = {
+    .name = "synthetic",
+    .sample = synthetic_sample,
+};
+
+/** BLE 输出通道：把编码后的报告体经 NimBLE 通知发送。 */
+static void ble_send_report(uint8_t report_id, const uint8_t *body, size_t len, void *user)
+{
+    (void)user;
+    (void)len;
+    if (report_id == NS2_REPORT_ID_05) {
+        ble_controller_notify_input_05(body);
+    } else {
+        ble_controller_notify_input_09(body);
+    }
+}
+
+static bool ble_report_ready(uint8_t report_id, void *user)
+{
+    (void)user;
+    return ble_controller_connected() && ble_controller_input_notify_ready(report_id);
+}
+
+static const ns2_output_sink_t s_ble_sink = {
+    .send_report = ble_send_report,
+    .ready = ble_report_ready,
+    .user = NULL,
+};
+
+/** 主机反馈监听：结构化事件当前记录日志；M5 的 USB OUT / 桥接转发在此
+ *  按目标设备编码后下发。 */
+static void feedback_listener(ns2_feedback_type_t type, const void *payload, void *user)
+{
+    (void)user;
+    switch (type) {
+    case NS2_FEEDBACK_RUMBLE: {
+        const ns2_rumble_event_t *rumble = payload;
+        ESP_LOGI(TAG, "feedback rumble: L=%u R=%u (forward target pending M5)",
+                 (unsigned)rumble->left_on, (unsigned)rumble->right_on);
+        break;
+    }
+    case NS2_FEEDBACK_PLAYER_LED:
+        ESP_LOGI(TAG, "feedback player LED 0x%x", *(const uint8_t *)payload);
+        break;
+    case NS2_FEEDBACK_HAPTIC_SAMPLE:
+        ESP_LOGI(TAG, "feedback haptic sample 0x%02x", *(const uint8_t *)payload);
+        break;
+    default:
+        break;
+    }
 }
 
 static void dp_task(void *param)
 {
     ns2_controller_state_t state;
-    uint8_t counter09 = 0;
-    uint32_t counter05 = 0;
     TickType_t wake = xTaskGetTickCount();
 
-    ESP_LOGI(TAG, "data plane task running, tick=%dms, source=synthetic", DP_TICK_MS);
+    ESP_LOGI(TAG, "data plane task running, tick=%dms, source=synthetic+inject", DP_TICK_MS);
     for (;;) {
-        synthetic_sample(&state);
-        uint32_t debug_buttons = 0;
-        portENTER_CRITICAL(&s_debug_mux);
-        if (s_debug_hold_ticks > 0) {
-            debug_buttons = s_debug_buttons;
-            s_debug_hold_ticks--;
-            if (s_debug_hold_ticks == 0) {
-                s_debug_buttons = 0;
-            }
-        }
-        portEXIT_CRITICAL(&s_debug_mux);
-        state.buttons |= debug_buttons;
-        if (ble_controller_connected()) {
-            const uint8_t format = ns2_session_report_format();
-            if (ble_controller_input_notify_ready(format)) {
-                if (format == NS2_REPORT_ID_05) {
-                    uint8_t report[NS2_INPUT_05_LEN];
-                    ns2_encode_input_05(report, &state, counter05++);
-                    ble_controller_notify_input_05(report);
-                } else {
-                    uint8_t report[NS2_INPUT_09_LEN];
-                    ns2_encode_input_09(report, &state, counter09++);
-                    ble_controller_notify_input_09(report);
-                }
-            }
-        }
+        dp_source_sample(&state);
+        ns2_output_send(&state);
         /* vTaskDelayUntil 内部自行推进 wake；再手动累加会把实际周期翻倍。 */
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(DP_TICK_MS));
     }
@@ -75,18 +100,7 @@ static void dp_task(void *param)
 
 void dp_plane_debug_key(uint32_t buttons_mask, uint32_t hold_ms)
 {
-    if (hold_ms < DP_TICK_MS) {
-        hold_ms = DP_TICK_MS;
-    }
-    if (hold_ms > 5000) {
-        hold_ms = 5000;
-    }
-    portENTER_CRITICAL(&s_debug_mux);
-    s_debug_buttons |= buttons_mask;
-    s_debug_hold_ticks = hold_ms / DP_TICK_MS;
-    portEXIT_CRITICAL(&s_debug_mux);
-    ESP_LOGI(TAG, "debug key inject: mask=0x%08lx hold=%lums", (unsigned long)buttons_mask,
-             (unsigned long)hold_ms);
+    dp_source_inject(buttons_mask, hold_ms);
 }
 
 esp_err_t dp_plane_start(void)
@@ -97,6 +111,10 @@ esp_err_t dp_plane_start(void)
     if (err != ESP_OK) {
         return err;
     }
+    battery_init();
+    dp_source_register(&s_synthetic_source);
+    ns2_output_set_sink(&s_ble_sink);
+    ns2_output_set_feedback_listener(feedback_listener, NULL);
     if (xTaskCreate(dp_task, "remapad-dp", 4096, NULL, 5, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }

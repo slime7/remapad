@@ -2,6 +2,8 @@ set(remapad_pocketjs_requires
     esp_timer
     esp_lcd
     esp_driver_ledc
+    esp_driver_gpio
+    esp_driver_usb_serial_jtag
     esp_lcd_touch
     esp_lcd_touch_cst816s
     bt
@@ -18,18 +20,26 @@ idf_component_register(
         "main.c"
         "pocketjs_host.c"
         "bridge/js_bridge.c"
+        "config/app_config.c"
+        "console/cli.c"
         "drivers/panel.c"
         "drivers/backlight.c"
         "drivers/touch.c"
+        "drivers/battery.c"
+        "drivers/pwr_key.c"
         "ns2/ns2_report.c"
         "ns2/ns2_frames.c"
+        "ns2/ns2_output.c"
         "ble/ble_controller.c"
         "ble/ble_session.c"
         "ble/ble_creds.c"
         "dp/dp_plane.c"
+        "dp/dp_source.c"
     INCLUDE_DIRS
         "."
         "bridge"
+        "config"
+        "console"
         "drivers"
         "ns2"
         "ble"

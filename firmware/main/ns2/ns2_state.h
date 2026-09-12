@@ -55,6 +55,9 @@ typedef struct {
     uint16_t battery_mv;
     /** 特性掩码 bit5（触觉震动）开启标志，影响 0x09 状态标志字节。 */
     bool rumble_enabled;
+    /** NFC 状态字节（Report 0x09 偏移 0x0C）：0x00 空闲，0x01-0x07 感应中。
+     *  由 amiibo 预置数据驱动（ns2_output），无预置时保持 0x00。 */
+    uint8_t nfc_state;
 } ns2_controller_state_t;
 
 /** 复位为静置默认：摇杆居中、无按键、无外设数据。 */
@@ -71,6 +74,7 @@ static inline void ns2_state_defaults(ns2_controller_state_t *state)
     state->fully_charged = false;
     state->battery_mv = 0;
     state->rumble_enabled = false;
+    state->nfc_state = 0;
 }
 
 #ifdef __cplusplus

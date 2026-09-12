@@ -134,8 +134,13 @@ remapad/
         ├── main.c
         ├── pocketjs_host.c
         ├── pocketjs_host.h
-        ├── bridge/            # 产品控制面预留
-        └── drivers/           # panel/backlight/touch BSP 与 battery 等预留
+        ├── bridge/            # 产品控制面（UI 命令/事件 + 外部队列入口）
+        ├── config/            # 用户设置持久化（NVS：亮度/角色/手柄身份）
+        ├── console/           # 串口 CLI（USB-Serial/JTAG 行命令）
+        ├── drivers/           # panel/backlight/touch BSP 与 battery/pwr_key
+        ├── ns2/               # NS2 报告编码、帧构造与输出封装
+        ├── ble/               # NimBLE 手柄外设、会话与凭证
+        └── dp/                # 数据面任务与输入源抽象
 ```
 
 仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。

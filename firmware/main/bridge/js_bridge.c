@@ -13,6 +13,8 @@
 #include "freertos/task.h"
 
 #include "backlight.h"
+#include "app_config.h"
+#include "battery.h"
 #include "ble_controller.h"
 #include "ble_session.h"
 #include "dp_plane.h"
@@ -22,17 +24,24 @@
 
 static const char *TAG = "remapad_bridge";
 
-#define REMAPAD_FW_VERSION "v0.3.5"
+#define REMAPAD_FW_VERSION "v0.4.0"
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
 #define REMAPAD_EVENT_MAX 320
 
-/** battery.c 仍是预留占位；在真实 ADC 驱动接入前上报固定值。 */
-#define REMAPAD_BATTERY_MV 4120
-#define REMAPAD_BATTERY_PCT 88
-
+/** battery.c 是电池数据获取的唯一入口；真实 ADC 接入前上报占位值。 */
 #define REMAPAD_REBOOT_DELAY_US (150 * 1000LL)
+
+/** 外部命令/事件槽：PWR 按键与串口 CLI 等非 owner task 上下文的入口。
+ * guest eval 只允许在 owner task 上执行（QuickJS 栈守卫约束），外部任务
+ * 只把字符串拷进队列，js_bridge_service 每帧在 owner task 上取出处理。 */
+#define REMAPAD_EXT_MSG_LEN 160
+#define REMAPAD_EXT_QUEUE_LEN 4
+
+typedef struct {
+    char data[REMAPAD_EXT_MSG_LEN];
+} ext_msg_slot_t;
 
 typedef struct {
     char data[REMAPAD_BRIDGE_CMD_MAX];
@@ -43,6 +52,8 @@ static struct {
     bridge_cmd_slot_t queue[REMAPAD_BRIDGE_QUEUE_LEN];
     size_t queue_head;
     size_t queue_len;
+    QueueHandle_t ext_cmds;
+    QueueHandle_t ext_events;
     const char *last_pairing_state; /* 字面量常量指针，用于变化检测。 */
     bool usb_role_host; /* UI 请求的角色；host 数据面未接入，仅记录。 */
     int64_t reboot_at_us;
@@ -52,6 +63,17 @@ static struct {
 esp_err_t js_bridge_init(void)
 {
     memset(&s_bridge, 0, sizeof(s_bridge));
+    s_bridge.ext_cmds = xQueueCreate(REMAPAD_EXT_QUEUE_LEN, sizeof(ext_msg_slot_t));
+    s_bridge.ext_events = xQueueCreate(REMAPAD_EXT_QUEUE_LEN, sizeof(ext_msg_slot_t));
+    if (s_bridge.ext_cmds == NULL || s_bridge.ext_events == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    /* USB 角色与手柄身份从持久化配置恢复（桥接角色永不落盘）。 */
+    s_bridge.usb_role_host = app_config_get()->usb_role == APP_CONFIG_USB_HOST;
+    ns2_session_set_identity(app_config_get()->ctrl_type == APP_CONFIG_CTRL_JOYCON,
+                             app_config_get()->body_color,
+                             app_config_get()->button_color,
+                             app_config_get()->grip_color);
     return ESP_OK;
 }
 
@@ -184,11 +206,14 @@ static void handle_get_system_status(int id)
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"systemStatus\",\"id\":%d,\"battery\":{\"voltageMv\":%d,"
-             "\"percentage\":%d,\"charging\":false},\"backlight\":%u,\"mode\":\"ble\","
+             "\"percentage\":%d,\"charging\":%s},\"backlight\":%u,\"screenOn\":%s,"
+             "\"mode\":\"ble\","
              "\"pairing\":\"%s\",\"controller\":%s,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
              "\"uptimeMs\":%lld,"
              "\"heapFree\":%u,\"heapSize\":%u,\"psramFree\":%u}",
-             id, REMAPAD_BATTERY_MV, REMAPAD_BATTERY_PCT, backlight_get(),
+             id, (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
+             battery_is_charging() ? "true" : "false",
+             backlight_get(), app_config_get()->screen_on ? "true" : "false",
              real_pairing_state(),
              (ns2_session_waiting_pair() || ns2_session_host_registered())
                  ? "\"pro-controller-2\"" : "null",
@@ -199,6 +224,26 @@ static void handle_get_system_status(int id)
              (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     reply_raw(event);
+}
+
+/** 设置背光并持久化（UI 命令与串口 CLI 共用）。 */
+void js_bridge_set_brightness(int brightness)
+{
+    if (brightness < 0) {
+        brightness = 0;
+    }
+    if (brightness > 100) {
+        brightness = 100;
+    }
+    const esp_err_t err = backlight_set((uint8_t)brightness);
+    if (err == ESP_OK && brightness > 0) {
+        /* 亮屏操作隐含恢复息屏状态；息屏走 js_bridge_screen_power。 */
+        app_config_set_brightness((uint8_t)brightness);
+        if (!app_config_get()->screen_on) {
+            app_config_set_screen_on(true);
+        }
+    }
+    ESP_LOGI(TAG, "backlight -> %u%%", backlight_get());
 }
 
 static void handle_set_backlight(int id, const char *cmd)
@@ -213,13 +258,75 @@ static void handle_set_backlight(int id, const char *cmd)
         reply_raw(event);
         return;
     }
-    const esp_err_t err = backlight_set((uint8_t)brightness);
+    js_bridge_set_brightness(brightness);
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
-             "{\"t\":\"backlightSet\",\"id\":%d,\"brightness\":%u,\"success\":%s}",
-             id, backlight_get(), err == ESP_OK ? "true" : "false");
+             "{\"t\":\"backlightSet\",\"id\":%d,\"brightness\":%u,\"success\":true}",
+             id, backlight_get());
     reply_raw(event);
-    ESP_LOGI(TAG, "backlight -> %u%%", backlight_get());
+}
+
+/** 外部任务提交命令 JSON：拷入队列，owner task 每帧取出走同一分发路径。 */
+esp_err_t js_bridge_submit_command(const char *cmd_json)
+{
+    if (cmd_json == NULL || s_bridge.ext_cmds == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ext_msg_slot_t slot;
+    const size_t len = strlen(cmd_json);
+    if (len >= sizeof(slot.data)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    strcpy(slot.data, cmd_json);
+    if (xQueueSend(s_bridge.ext_cmds, &slot, 0) != pdTRUE) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+/** 外部任务向 UI 广播事件 JSON：同样经队列在 owner task 上回发。 */
+void js_bridge_post_event(const char *event_json)
+{
+    if (event_json == NULL || s_bridge.ext_events == NULL) {
+        return;
+    }
+    ext_msg_slot_t slot;
+    if (strlen(event_json) >= sizeof(slot.data)) {
+        ESP_LOGW(TAG, "ext event too long, dropped");
+        return;
+    }
+    strcpy(slot.data, event_json);
+    xQueueSend(s_bridge.ext_events, &slot, 0);
+}
+
+/** 息屏 / 亮屏（PWR 键与串口 CLI 共用）：息屏背光归零，亮屏恢复持久化
+ *  亮度；状态落盘并向 UI 广播。可在任意任务上下文调用（事件经队列转移
+ *  到 owner task 回发）。 */
+void js_bridge_screen_power(bool on)
+{
+    const app_config_t *cfg = app_config_get();
+    if (on == cfg->screen_on) {
+        return;
+    }
+    app_config_set_screen_on(on);
+    const uint8_t target = on ? (cfg->brightness > 0 ? cfg->brightness : 40u) : 0u;
+    const esp_err_t err = backlight_set(target);
+    char event[REMAPAD_EXT_MSG_LEN];
+    snprintf(event, sizeof(event), "{\"t\":\"screenPowerChanged\",\"on\":%s}",
+             on ? "true" : "false");
+    js_bridge_post_event(event);
+    ESP_LOGI(TAG, "screen power -> %s (backlight %u%%, %s)", on ? "on" : "off",
+             (unsigned)target, esp_err_to_name(err));
+}
+
+static void handle_set_screen_power(int id, const char *cmd)
+{
+    const bool on = strstr(cmd, "\"on\":true") != NULL;
+    js_bridge_screen_power(on);
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event), "{\"t\":\"screenPowerSet\",\"id\":%d,\"on\":%s}",
+             id, app_config_get()->screen_on ? "true" : "false");
+    reply_raw(event);
 }
 
 static void handle_set_usb_role(int id, const char *cmd)
@@ -227,7 +334,9 @@ static void handle_set_usb_role(int id, const char *cmd)
     size_t role_len = 0;
     const char *role = cmd_string(cmd, "role", &role_len);
     const bool want_host = role != NULL && role_len == 4 && strncmp(role, "host", 4) == 0;
-    const bool known = want_host || (role != NULL && role_len == 6 && strncmp(role, "device", 6) == 0);
+    const bool want_otg = role != NULL && role_len == 3 && strncmp(role, "otg", 3) == 0;
+    const bool known = want_host || want_otg ||
+                       (role != NULL && role_len == 6 && strncmp(role, "device", 6) == 0);
     if (!known) {
         char event[REMAPAD_EVENT_MAX];
         snprintf(event, sizeof(event),
@@ -237,9 +346,22 @@ static void handle_set_usb_role(int id, const char *cmd)
         reply_raw(event);
         return;
     }
+    /* 桥接（otg）双端禁切：USB PHY 切换会断开 COM（无人值守时无法烧录），
+     * 且桥接数据面未接入。UI 与 PWR 长按路径都会被这里挡下。 */
+    if (want_otg) {
+        char event[REMAPAD_EVENT_MAX];
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"error\",\"id\":%d,\"code\":\"NOT_SWITCHABLE\","
+                 "\"message\":\"桥接模式暂不可切换\"}",
+                 id);
+        reply_raw(event);
+        ESP_LOGI(TAG, "usb role otg rejected (bridge mode locked)");
+        return;
+    }
     s_bridge.usb_role_host = want_host;
-    /* USB PHY/OTG 切换属于数据面，尚未接入：这里只记录请求并如实上报，
-     * 不触碰 RTC_CNTL USB mux。接入后按 docs/hardware.md 的机制实现。 */
+    app_config_set_usb_role(want_host ? APP_CONFIG_USB_HOST : APP_CONFIG_USB_DEVICE);
+    /* USB PHY/OTG 切换属于数据面，尚未接入：这里只记录并持久化请求，如实
+     * 上报，不触碰 RTC_CNTL USB mux。接入后按 docs/hardware.md 的机制实现。 */
     char event[REMAPAD_EVENT_MAX];
     if (want_host) {
         snprintf(event, sizeof(event),
@@ -258,7 +380,8 @@ static void handle_set_usb_role(int id, const char *cmd)
              "{\"t\":\"usbRoleChanged\",\"role\":\"%s\",\"active\":%s}",
              want_host ? "host" : "device", want_host ? "false" : "true");
     reply_raw(broadcast);
-    ESP_LOGI(TAG, "usb role request -> %s (phy untouched)", want_host ? "host" : "device");
+    ESP_LOGI(TAG, "usb role request -> %s (persisted, phy untouched)",
+             want_host ? "host" : "device");
 }
 
 static void handle_start_pairing(int id)
@@ -347,6 +470,53 @@ static void handle_debug_key(int id, const char *cmd)
     reply_raw(event);
 }
 
+static void handle_get_controller_config(int id)
+{
+    const app_config_t *cfg = app_config_get();
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"controllerConfig\",\"id\":%d,\"config\":{\"type\":\"%s\","
+             "\"bodyColor\":%lu,\"buttonColor\":%lu,\"gripColor\":%lu}}",
+             id, cfg->ctrl_type == APP_CONFIG_CTRL_JOYCON ? "joycon" : "pro",
+             (unsigned long)cfg->body_color, (unsigned long)cfg->button_color,
+             (unsigned long)cfg->grip_color);
+    reply_raw(event);
+}
+
+/** 手柄身份配置：类型 + 配色持久化并即时下发 BLE 会话（出厂块随下次
+ *  广播/握手生效）。颜色选择 UI 预留，字段先全链路贯通。 */
+static void handle_set_controller_config(int id, const char *cmd)
+{
+    size_t type_len = 0;
+    const char *type = cmd_string(cmd, "type", &type_len);
+    const bool joycon = type != NULL && type_len == 6 && strncmp(type, "joycon", 6) == 0;
+    const bool pro = type != NULL && type_len == 3 && strncmp(type, "pro", 3) == 0;
+    if (!joycon && !pro) {
+        char event[REMAPAD_EVENT_MAX];
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"error\",\"id\":%d,\"code\":\"BAD_REQUEST\","
+                 "\"message\":\"unknown controller type\"}",
+                 id);
+        reply_raw(event);
+        return;
+    }
+    const uint32_t body = (uint32_t)cmd_number(cmd, "bodyColor") & 0xFFFFFFu;
+    const uint32_t button = (uint32_t)cmd_number(cmd, "buttonColor") & 0xFFFFFFu;
+    const uint32_t grip = (uint32_t)cmd_number(cmd, "gripColor") & 0xFFFFFFu;
+    app_config_set_controller(joycon ? APP_CONFIG_CTRL_JOYCON : APP_CONFIG_CTRL_PRO,
+                              body, button, grip);
+    ns2_session_set_identity(joycon, body, button, grip);
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"controllerConfigSet\",\"id\":%d,\"success\":true,"
+             "\"config\":{\"type\":\"%s\",\"bodyColor\":%lu,\"buttonColor\":%lu,"
+             "\"gripColor\":%lu}}",
+             id, joycon ? "joycon" : "pro", (unsigned long)body,
+             (unsigned long)button, (unsigned long)grip);
+    reply_raw(event);
+    ESP_LOGI(TAG, "controller config -> %s (persisted)", joycon ? "joycon" : "pro");
+}
+
 static void handle_cmd(const char *cmd)
 {
     const int id = cmd_id(cmd);
@@ -356,8 +526,14 @@ static void handle_cmd(const char *cmd)
         handle_get_system_status(id);
     } else if (cmd_has(cmd, "\"t\":\"setBacklight\"")) {
         handle_set_backlight(id, cmd);
+    } else if (cmd_has(cmd, "\"t\":\"setScreenPower\"")) {
+        handle_set_screen_power(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"setUsbRole\"")) {
         handle_set_usb_role(id, cmd);
+    } else if (cmd_has(cmd, "\"t\":\"getControllerConfig\"")) {
+        handle_get_controller_config(id);
+    } else if (cmd_has(cmd, "\"t\":\"setControllerConfig\"")) {
+        handle_set_controller_config(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"startPairing\"")) {
         handle_start_pairing(id);
     } else if (cmd_has(cmd, "\"t\":\"stopPairing\"")) {
@@ -394,6 +570,11 @@ static void pairing_state_poll(void)
     }
 }
 
+const char *js_bridge_pairing_state(void)
+{
+    return real_pairing_state();
+}
+
 void js_bridge_service(void)
 {
     pairing_state_poll();
@@ -402,6 +583,15 @@ void js_bridge_service(void)
         ESP_LOGI(TAG, "rebooting now (USB returns to Serial/JTAG COM mode)");
         vTaskDelay(pdMS_TO_TICKS(50));
         esp_restart();
+    }
+
+    /* 外部任务（PWR / 串口 CLI）的命令与事件在 owner task 上出队处理。 */
+    ext_msg_slot_t ext;
+    while (xQueueReceive(s_bridge.ext_events, &ext, 0) == pdTRUE) {
+        reply_raw(ext.data);
+    }
+    while (xQueueReceive(s_bridge.ext_cmds, &ext, 0) == pdTRUE) {
+        handle_cmd(ext.data);
     }
 
     while (s_bridge.queue_len > 0) {

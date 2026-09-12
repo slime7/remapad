@@ -62,6 +62,14 @@
 
 **验收**：NS2 手柄插板 → Switch 2 收到真实手柄输入；主机震动可传到手柄；模式页 host 角色真实生效。
 
+## 阶段补强（2026-09，M5 前的控制面与数据面收口）　状态：已完成（实机联调随 M2/M3 验收执行）
+
+- [x] **输入/输出解耦**：`dp/dp_source.c` 输入源抽象（注册制，合成源现役，USB/桥接源按 [usb-input-plan.md](usb-input-plan.md) 预留）+ `ns2/ns2_output.c` NS2 输出封装（`ns2_output_send` 按需按键构建报告、会话格式自适应、计数器内聚；主机震动/LED/触觉采样解析为结构化事件分发；`battery.c` 唯一电池入口；amiibo 镜像预置 API 与 Report 0x09 NFC 状态字节预留）。
+- [x] **用户设置持久化**：`config/app_config.c`（NVS，内部 RAM 栈提交任务）：背光亮度、连接模式、手柄身份（类型 + 配色）随命令落盘、开机恢复；息屏不跨重启。
+- [x] **手柄设置页（UI）**：类型 Pro（默认）/JoyCon 组合（HBW10067/HCW10068 序列号展示）、颜色选择预留；固件侧身份应用到出厂块与广播 PID（JoyCon 单连接以 L 身份，实机验证前仅记录）。
+- [x] **PWR 按键**（`drivers/pwr_key.c`）：短按息屏/亮屏；长按 3-6s 切连接模式（device ↔ host）；桥接 otg 双端禁切（COM 断开保护），SYS_EN 电源保持待电源 BSP。
+- [x] **串口 CLI**（`console/cli.c`，主控制台切 USB-Serial/JTAG）：status/key/backlight/screen/mode/pairing/reboot 行命令，经 bridge 外部队列走同一路径；PC 端 `scripts/uartctl.py`。
+
 ## 风险与依赖
 
 - **协议精度风险**：controller.md 全部为逆向结论，广播/GATT/配对/时序均需实机迭代；预留真机调试窗口，不符处在 controller.md 增补勘误小节。

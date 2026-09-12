@@ -23,6 +23,10 @@ CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_FREERTOS_HZ=1000
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
 
+# 串口 CLI 复用唯一的 Type-C（USB-Serial/JTAG）：主控制台切到 USJ，日志
+# 与行命令输入共用 COM 口；日志走非阻塞 vfs，未连接时丢弃不阻塞任务。
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
 # The PocketJS UI runs an interpreted Vue Vapor bundle plus the software RGB565
 # renderer on one core, so the SoC runs at its rated 240 MHz instead of the
 # 160 MHz default.

@@ -12,13 +12,28 @@
 #include "ble_controller.h"
 #include "ble_creds.h"
 #include "ns2_frames.h"
+#include "ns2_output.h"
 #include "ns2_report.h"
 
 static const char *TAG = "remapad_blses";
 
-/** 发现广播与出厂块对外的 PID：Pro Controller 2（0x2069），与序列号
- * 格式、配色一并对齐已验证可完成配对的开源实现。 */
-#define NS2_ADV_PID 0x2069
+/** 发现广播与出厂块对外的 PID：Pro Controller 2（0x2069）默认，JoyCon 组合
+ *  模式切换为 Joy-Con 2 (L)（0x2067）；由手柄身份配置驱动。 */
+#define NS2_PID_PRO 0x2069
+#define NS2_PID_JOYCON_L 0x2067
+
+/** 手柄身份：类型 + 出厂块配色（0 = 沿用默认占位）。控制面经
+ *  ns2_session_set_identity 下发（持久化在 app_config）。 */
+static struct {
+    bool joycon;
+    uint32_t body_color;
+    uint32_t button_color;
+    uint32_t grip_color;
+} s_identity;
+
+/** 出厂数据区仿真基址（controller.md §7.2）。 */
+#define FACTORY_BASE 0x013000u
+#define FACTORY_SIZE 2048u
 
 /** 会话状态：休眠/唤醒广播顺延到后续里程碑（见 docs/ROADMAP.md M3）。 */
 typedef enum {
@@ -27,10 +42,6 @@ typedef enum {
     SESSION_CONNECTED_WAIT_PAIR,
     SESSION_NORMAL,
 } session_state_t;
-
-/** 出厂数据区仿真基址（controller.md §7.2）。 */
-#define FACTORY_BASE 0x013000u
-#define FACTORY_SIZE 2048u
 
 static struct {
     session_state_t state;
@@ -50,6 +61,12 @@ static struct {
 } s_pair;
 
 static uint8_t s_factory[FACTORY_SIZE];
+
+/** host 同步完成标志（身份变更时判断是否重建出厂块与广播）。 */
+static bool s_synced;
+
+/** 广播恢复前置声明（身份变更时复用）。 */
+static void resume_advertising(void);
 
 /** 0x13000 出厂数据块（实机抓包布局）：`01 00` + 序列号@2 + `00 00`
  * + VID/PID@18 + 版本@22 + 机身配色@25，尾部 0xFF。 */
@@ -110,8 +127,15 @@ static bool aes_ecb_block(const uint8_t key[16], const uint8_t in[16], uint8_t o
     return status == PSA_SUCCESS && olen == 16;
 }
 
+/** 当前身份的广播 / 出厂 PID。 */
+static uint16_t identity_pid(void)
+{
+    return s_identity.joycon ? NS2_PID_JOYCON_L : NS2_PID_PRO;
+}
+
 /** 出厂数据区：序列号、VID/PID、机身配色与摇杆校准（controller.md §7.2）。
- * 校准取中位 2048、行程 ±2047/2048，与编码器 0-4095 直发语义保持 1:1。 */
+ * 校准取中位 2048、行程 ±2047/2048，与编码器 0-4095 直发语义保持 1:1。
+ * 序列号与配色按手柄身份配置生成（Pro: HEJ 前缀；JoyCon L: HBW 前缀）。 */
 static void factory_init(void)
 {
     memset(s_factory, 0xFF, sizeof(s_factory));
@@ -119,20 +143,24 @@ static void factory_init(void)
     s_factory[0x0011] = 0x00;
     s_factory[0x0012] = 0x7E;
     s_factory[0x0013] = 0x05;
-    s_factory[0x0014] = (uint8_t)(NS2_ADV_PID & 0xFF);
-    s_factory[0x0015] = (uint8_t)(NS2_ADV_PID >> 8);
-    s_factory[0x0019] = 0xE8;
-    s_factory[0x001A] = 0x5D;
-    s_factory[0x001B] = 0x22;
-    s_factory[0x001C] = 0x3C;
-    s_factory[0x001D] = 0x3C;
-    s_factory[0x001E] = 0x3C;
-    s_factory[0x001F] = 0xF0;
-    s_factory[0x0020] = 0xF0;
-    s_factory[0x0021] = 0xF0;
-    s_factory[0x0022] = 0x2E;
-    s_factory[0x0023] = 0x2E;
-    s_factory[0x0024] = 0x2E;
+    s_factory[0x0014] = (uint8_t)(identity_pid() & 0xFF);
+    s_factory[0x0015] = (uint8_t)(identity_pid() >> 8);
+    /* 机身/按键/高光/握把配色：未配置时沿用深灰占位。 */
+    const uint32_t body = s_identity.body_color != 0 ? s_identity.body_color : 0x232323;
+    const uint32_t button = s_identity.button_color != 0 ? s_identity.button_color : 0x3c3c3c;
+    const uint32_t grip = s_identity.grip_color != 0 ? s_identity.grip_color : 0x2e2e2e;
+    s_factory[0x0019] = (uint8_t)(body >> 16);
+    s_factory[0x001A] = (uint8_t)(body >> 8);
+    s_factory[0x001B] = (uint8_t)(body);
+    s_factory[0x001C] = (uint8_t)(button >> 16);
+    s_factory[0x001D] = (uint8_t)(button >> 8);
+    s_factory[0x001E] = (uint8_t)(button);
+    s_factory[0x001F] = (uint8_t)(button >> 16);
+    s_factory[0x0020] = (uint8_t)(button >> 8);
+    s_factory[0x0021] = (uint8_t)(button);
+    s_factory[0x0022] = (uint8_t)(grip >> 16);
+    s_factory[0x0023] = (uint8_t)(grip >> 8);
+    s_factory[0x0024] = (uint8_t)(grip);
     static const uint8_t stick_cal[9] = {0x00, 0x08, 0x80, 0xFF, 0xF7, 0x7F, 0x00, 0x08, 0x80};
     memcpy(&s_factory[0x00A8], stick_cal, sizeof(stick_cal));
     memcpy(&s_factory[0x00E8], stick_cal, sizeof(stick_cal));
@@ -142,19 +170,52 @@ static void factory_init(void)
     memset(s_mem_factory, 0xFF, sizeof(s_mem_factory));
     s_mem_factory[0] = 0x01;
     s_mem_factory[1] = 0x00;
-    /* 序列号格式对齐真机（HEJ 前缀 + 数字），主机可能校验其形态。 */
-    memcpy(&s_mem_factory[2], "HEJ71001123456", 14);
+    /* 序列号格式对齐真机（3 字母前缀 + 11 位数字），主机可能校验其形态：
+     * Pro 用 HEJ 前缀；JoyCon 组合按左侧手柄用 HBW 前缀（右为 HCW，仅
+     * UI 展示，单连接以 L 身份广播）。 */
+    memcpy(&s_mem_factory[2], s_identity.joycon ? "HBW1006700000" : "HEJ71001123456", 14);
     s_mem_factory[18] = 0x7E;
     s_mem_factory[19] = 0x05;
-    s_mem_factory[20] = (uint8_t)(NS2_ADV_PID & 0xFF);
-    s_mem_factory[21] = (uint8_t)(NS2_ADV_PID >> 8);
+    s_mem_factory[20] = (uint8_t)(identity_pid() & 0xFF);
+    s_mem_factory[21] = (uint8_t)(identity_pid() >> 8);
     s_mem_factory[22] = 0x01;
     s_mem_factory[23] = 0x06;
     s_mem_factory[24] = 0x01;
-    static const uint8_t body_colors[12] = {
-        0x23, 0x23, 0x23, 0x63, 0xB9, 0x7A, 0xE6, 0xE6, 0xE6, 0x32, 0x32, 0x32,
+    const uint8_t body_colors[12] = {
+        (uint8_t)(body >> 16), (uint8_t)(body >> 8), (uint8_t)(body),
+        (uint8_t)(button >> 16), (uint8_t)(button >> 8), (uint8_t)(button),
+        (uint8_t)(button >> 16), (uint8_t)(button >> 8), (uint8_t)(button),
+        (uint8_t)(grip >> 16), (uint8_t)(grip >> 8), (uint8_t)(grip),
     };
     memcpy(&s_mem_factory[25], body_colors, sizeof(body_colors));
+}
+
+/** 控制面下发手柄身份（类型 + 配色）：更新出厂块；host 已同步时立即
+ *  重建，下次广播/握手生效。 */
+void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
+                              uint32_t button_rgb, uint32_t grip_rgb)
+{
+    const bool changed = s_identity.joycon != joycon ||
+                         s_identity.body_color != body_rgb ||
+                         s_identity.button_color != button_rgb ||
+                         s_identity.grip_color != grip_rgb;
+    if (!changed) {
+        return;
+    }
+    s_identity.joycon = joycon;
+    s_identity.body_color = body_rgb;
+    s_identity.button_color = button_rgb;
+    s_identity.grip_color = grip_rgb;
+    if (s_synced) {
+        factory_init();
+        /* 广播 PID 随身份变化，重建当前广播载荷。 */
+        if (!ble_controller_connected()) {
+            resume_advertising();
+        }
+    }
+    ESP_LOGI(TAG, "controller identity -> %s (body=%06lx btn=%06lx grip=%06lx)",
+             joycon ? "joycon-l" : "pro", (unsigned long)body_rgb,
+             (unsigned long)button_rgb, (unsigned long)grip_rgb);
 }
 
 /** 31 字节手柄广播载荷（controller.md §2.1）：Flags 3B + 厂商数据 28B。
@@ -162,17 +223,20 @@ static void factory_init(void)
  * 17-22 目标主机 MAC 反序、23 尾部标志。有凭证时构造回连广播。 */
 static void build_adv_payload(uint8_t out[31], bool reconnect)
 {
+    const uint16_t pid = identity_pid();
     static const uint8_t tpl[31] = {
         0x02, 0x01, 0x06,
         0x1B, 0xFF,
         0x53, 0x05, 0x01, 0x00, 0x03,
         0x7E, 0x05,
-        (uint8_t)(NS2_ADV_PID & 0xFF), (uint8_t)(NS2_ADV_PID >> 8),
+        0x00, 0x00,
         0x00, 0x01, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
     memcpy(out, tpl, 31);
+    out[12] = (uint8_t)(pid & 0xFF);
+    out[13] = (uint8_t)(pid >> 8);
     if (reconnect && ble_creds_count() > 0) {
         const ns2_cred_record_t *rec = ble_creds_get(0);
         memcpy(&out[17], rec->mac, 6);
@@ -203,6 +267,7 @@ static void resume_advertising(void)
 void ns2_session_on_sync(const uint8_t own_mac[6])
 {
     factory_init();
+    s_synced = true;
     memcpy(s_ses.own_mac, own_mac, 6);
     ESP_LOGI(TAG, "host synced, own MAC %02x:%02x:%02x:%02x:%02x:%02x",
              own_mac[0], own_mac[1], own_mac[2], own_mac[3], own_mac[4], own_mac[5]);
@@ -420,6 +485,7 @@ static size_t handle_led_cmd(const uint8_t *req, size_t len, uint8_t subcmd)
         return NS2_FRAME_HEADER_LEN;
     }
     ESP_LOGI(TAG, "player LED mask -> 0x%x", s_ses.player_leds);
+    ns2_output_emit_player_led(s_ses.player_leds);
     return NS2_FRAME_HEADER_LEN;
 }
 
@@ -560,10 +626,13 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
     case 0x09:
         resp_len = handle_led_cmd(data, len, subcmd);
         break;
-    case 0x0A:
-        ESP_LOGI(TAG, "haptic sample 0x%02x", subcmd == 0x02 && len >= 9 ? data[8] : subcmd);
+    case 0x0A: {
+        const uint8_t sample = subcmd == 0x02 && len >= 9 ? data[8] : subcmd;
+        ESP_LOGI(TAG, "haptic sample 0x%02x", sample);
+        ns2_output_emit_haptic_sample(sample);
         resp_len = NS2_FRAME_HEADER_LEN;
         break;
+    }
     case 0x0C:
         resp_len = handle_feature_cmd(data, len, subcmd, frame);
         break;
@@ -617,9 +686,21 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport)
 void ns2_session_on_output(const uint8_t *data, size_t len)
 {
     /* Output Report 0x02：BLE 形态首字节 0x00，随后 2x16B LRA 参数包（§5.4）。
-     * 板卡无震动马达；M5 起原样经 USB OUT 转发给源手柄，当前仅消费该帧。 */
-    (void)data;
-    (void)len;
+     * 板卡无震动马达：解析为结构化震动事件经 ns2_output 分发给监听者
+     * （当前记录日志，M5 起转发给 USB 源手柄 / 桥接 PC）。 */
+    if (len < 1 + 32) {
+        ESP_LOGW(TAG, "output report too short (%u)", (unsigned)len);
+        return;
+    }
+    ns2_rumble_event_t event;
+    memcpy(event.raw, &data[1], sizeof(event.raw));
+    /* LRA 状态字 bit6 = 启用标志（controller.md §5.4）。 */
+    event.left_on = (event.raw[0] & 0x40) != 0;
+    event.right_on = (event.raw[16] & 0x40) != 0;
+    ESP_LOGI(TAG, "rumble: L=%u R=%u (0x%02x/0x%02x)",
+             (unsigned)event.left_on, (unsigned)event.right_on,
+             event.raw[0], event.raw[16]);
+    ns2_output_emit_rumble(&event);
 }
 
 void ns2_session_on_composite(const uint8_t *data, size_t len)

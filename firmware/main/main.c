@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -7,10 +8,14 @@
 #include "esp_mac.h"
 #include "nvs_flash.h"
 
+#include "app_config.h"
+#include "bridge/js_bridge.h"
+#include "console/cli.h"
 #include "dp_plane.h"
+#include "drivers/pwr_key.h"
 #include "pocketjs_host.h"
 
-/** NVS 存放 PHY 校准与（M3 起）BLE 配对凭证；擦除恢复仅发生在介质损坏场景。 */
+/** NVS 存放 PHY 校准、BLE 配对凭证与用户设置；擦除恢复仅发生在介质损坏场景。 */
 static void nvs_init(void)
 {
     esp_err_t err = nvs_flash_init();
@@ -20,6 +25,22 @@ static void nvs_init(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
+}
+
+/** PWR 按键事件（pwr-key 任务上下文）：短按息屏/亮屏，长按 3-6s 切换
+ *  连接模式（device ↔ host，桥接锁定；经 bridge 外部队列走持久化路径）。 */
+static void pwr_key_handler(pwr_key_event_t event, void *user)
+{
+    (void)user;
+    if (event == PWR_KEY_SHORT) {
+        js_bridge_screen_power(!app_config_get()->screen_on);
+        return;
+    }
+    const bool to_host = app_config_get()->usb_role != APP_CONFIG_USB_HOST;
+    char json[64];
+    snprintf(json, sizeof(json), "{\"t\":\"setUsbRole\",\"role\":\"%s\",\"id\":0}",
+             to_host ? "host" : "device");
+    js_bridge_submit_command(json);
 }
 
 void app_main(void)
@@ -43,6 +64,7 @@ void app_main(void)
     ESP_LOGI("remapad_app", "PSRAM free: %" PRIu32 " bytes", (uint32_t)psram_free);
 
     nvs_init();
+    ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(remapad_pocketjs_start());
     ESP_LOGI("remapad_app", "PocketJS owner task started");
 
@@ -50,5 +72,15 @@ void app_main(void)
     const esp_err_t dp_err = dp_plane_start();
     if (dp_err != ESP_OK) {
         ESP_LOGE("remapad_app", "data plane start failed: %s", esp_err_to_name(dp_err));
+    }
+
+    /* 串口 CLI 与 PWR 按键失败不阻断启动（记日志即可）。 */
+    const esp_err_t cli_err = remapad_cli_start();
+    if (cli_err != ESP_OK) {
+        ESP_LOGE("remapad_app", "cli start failed: %s", esp_err_to_name(cli_err));
+    }
+    const esp_err_t pwr_err = pwr_key_start(pwr_key_handler, NULL);
+    if (pwr_err != ESP_OK) {
+        ESP_LOGE("remapad_app", "pwr key start failed: %s", esp_err_to_name(pwr_err));
     }
 }

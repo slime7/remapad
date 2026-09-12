@@ -15,6 +15,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
+#include "app_config.h"
 #include "backlight.h"
 #include "bridge/js_bridge.h"
 #include "panel.h"
@@ -40,7 +41,8 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_POCKETJS_TASK_PRIORITY 5
 #define REMAPAD_POCKETJS_MAX_LAG_US 500000
 #define REMAPAD_POCKETJS_STOP_TIMEOUT_MS 5000
-#define REMAPAD_BACKLIGHT_PCT 40
+/** 持久化亮度缺失时的兜底值（app_config 加载后通常有用户设定值）。 */
+#define REMAPAD_BACKLIGHT_PCT_DEFAULT 40
 
 typedef struct {
     pocketjs_package_t *package;
@@ -282,8 +284,13 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
                  frame->raster_density,
                  plan.region_count);
         runtime->first_frame_logged = true;
-        /* 背光在首帧提交成功后点亮，避免开机时闪出未初始化的面板内容。 */
-        esp_err_t backlight_result = backlight_set(REMAPAD_BACKLIGHT_PCT);
+        /* 背光在首帧提交成功后点亮（持久化亮度，开机恒为亮屏态），避免
+         * 开机时闪出未初始化的面板内容。 */
+        uint8_t brightness = app_config_get()->brightness;
+        if (brightness == 0) {
+            brightness = REMAPAD_BACKLIGHT_PCT_DEFAULT;
+        }
+        esp_err_t backlight_result = backlight_set(brightness);
         if (backlight_result != ESP_OK) {
             ESP_LOGW(TAG, "backlight on failed: %s", esp_err_to_name(backlight_result));
         }

@@ -142,7 +142,6 @@ EIM 安装路径不同时改用实际的 `Microsoft.*.PowerShell_profile.ps1` �
 把 `COM3` 替换为实际端口。若开发板没有自动进入下载模式，按板卡说明操作 BOOT/EN。串口监视器使用 `Ctrl + ]` 退出。
 
 `idf.py build` 在 `firmware/build/` 下生成三个可烧录文件，偏移与 `firmware/build/flash_project_args` 一致：
-
 | 文件 | 烧录偏移 |
 | :--- | :--- |
 | `build/bootloader/bootloader.bin` | `0x0` |
@@ -180,6 +179,26 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 
 乐鑫的 Flash Download Tool 也可以直接加载这个合并镜像。ESP-IDF 的 esptool 随 Python 环境安装，命令名是 `esptool`（`esptool.py` 在新版中已弃用）。不确定端口时用 `Get-PnpDevice -Class Ports | Where-Object Status -eq OK` 列出当前串口。
 
+## 串口 CLI 与 PWR 按键
+
+固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。项目自带 [scripts/uartctl.py](../scripts/uartctl.py)（依赖 pyserial）：
+
+```powershell
+python scripts/uartctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长
+python scripts/uartctl.py -p COM3 key a           # 注入 A 键（home / lr 同理）
+python scripts/uartctl.py -p COM3 backlight 60    # 背光并持久化
+python scripts/uartctl.py -p COM3 screen off      # 息屏（on 恢复）
+python scripts/uartctl.py -p COM3 mode host       # 连接模式（otg 被固件拒绝）
+python scripts/uartctl.py -p COM3 pairing start   # 配对广播开关
+python scripts/uartctl.py -p COM3 reboot          # 软重启回 COM 模式
+```
+
+不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。
+
+PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚暂不驱动：USB 供电下锁存被旁路，电池供电场景待电源 BSP 阶段接入。
+
+用户设置（背光亮度、连接模式、手柄类型与配色）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态不跨重启保留。USB 输入与桥接模式的推进方案（当前仅架构预留）见 [usb-input-plan.md](usb-input-plan.md)。
+
 ## 关键文件
 
 - [ui/pocket.json](../ui/pocket.json)：应用清单和应用侧 capability。
@@ -188,13 +207,20 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 - [firmware/components/](../firmware/components)：固定的官方 ESP-IDF 组件与 ESP32-S3 原生归档。
 - [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
 - [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：package、guest、binding、renderer 生命周期与 `remapad-pjs` owner task。
-- [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率和 FreeRTOS 预设。
+- [firmware/main/config/app_config.c](../firmware/main/config/app_config.c)：用户设置 NVS 持久化（亮度 / 连接模式 / 手柄身份）。
+- [firmware/main/console/cli.c](../firmware/main/console/cli.c)：串口行命令 CLI（USB-Serial/JTAG）。
+- [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按切模式）。
+- [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制，USB 源预留）。
+- [firmware/main/ns2/ns2_output.c](../firmware/main/ns2/ns2_output.c)：NS2 输出封装（按键构建报告、结构化反馈、电池、amiibo 预置）。
+- [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。
 - [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
+- [scripts/uartctl.py](../scripts/uartctl.py)：串口 CLI 的 PC 端客户端。
 - [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 - [docs/hardware.md](hardware.md)：目标板卡的 SoC/存储、屏幕、触摸、外设、GPIO 分配和板级注意事项。
+- [docs/usb-input-plan.md](usb-input-plan.md)：USB 输入接收与桥接模式方案预案（仅架构）。
 
 ## 最终产品数据面（当前规划）
 

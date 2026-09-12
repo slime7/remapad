@@ -69,6 +69,11 @@ bool ns2_session_waiting_pair(void);
  * 仅供控制面显式触发，「停止配对」不经过本函数。 */
 void ns2_session_unpair(void);
 
+/** 下发手柄身份（类型 + 机身/按键/握把配色 0xRRGGBB）：更新出厂块序列号 /
+ * PID / 配色，host 已同步时立即重建并在下次广播生效。 */
+void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
+                              uint32_t button_rgb, uint32_t grip_rgb);
+
 #ifdef __cplusplus
 }
 #endif

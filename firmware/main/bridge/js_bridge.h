@@ -31,8 +31,24 @@ void js_bridge_attach(pocketjs_guest_t *guest);
 /** native surface 回调：把 guest 发来的命令 JSON 入队（owner task 上下文）。 */
 esp_err_t js_bridge_enqueue(const char *cmd_json);
 
+/** 外部任务（PWR 按键 / 串口 CLI）提交命令 JSON：拷入队列，由 owner task
+ *  在 js_bridge_service 里走同一分发路径；不阻塞调用方。 */
+esp_err_t js_bridge_submit_command(const char *cmd_json);
+
+/** 外部任务向 UI 广播事件 JSON：经队列由 owner task 回发给 guest。 */
+void js_bridge_post_event(const char *event_json);
+
 /** owner task 每帧调用：驱动配对状态机定时流转并处理命令队列。 */
 void js_bridge_service(void);
+
+/** 设置背光并持久化（UI 命令与串口 CLI 共用；0-100）。 */
+void js_bridge_set_brightness(int brightness);
+
+/** 息屏 / 亮屏（PWR 键与串口 CLI 共用）：状态落盘并向 UI 广播。 */
+void js_bridge_screen_power(bool on);
+
+/** 当前 UI 六态配对状态字符串（串口 CLI status 用）。 */
+const char *js_bridge_pairing_state(void);
 
 #ifdef __cplusplus
 }

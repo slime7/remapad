@@ -105,8 +105,10 @@ void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],
     ns2_pack_stick(state->stick_lx, state->stick_ly, &out[0x05]);
     ns2_pack_stick(state->stick_rx, state->stick_ry, &out[0x08]);
     /* 状态标志：特性位 5（触觉）开启时 0x38，否则 0x30。
-     * 0x0C NFC 状态、0x0D 耳机状态、0x0E 运动数据长度本阶段均为 0。 */
+     * 0x0C NFC 状态由 amiibo 预置数据驱动（空闲 0x00）；0x0D 耳机状态、
+     * 0x0E 运动数据长度本阶段均为 0。 */
     out[0x0B] = state->rumble_enabled ? 0x38 : 0x30;
+    out[0x0C] = state->nfc_state;
 }
 
 void ns2_encode_input_09_usb(uint8_t out[NS2_INPUT_09_LEN + 1],
