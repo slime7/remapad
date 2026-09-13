@@ -6,6 +6,9 @@
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "backlight.h"
 #include "panel.h"
@@ -37,7 +40,8 @@ static const char *TAG = "boot_splash";
 #define SPLASH_DPAD_CX (SPLASH_MARK_X + 24)
 #define SPLASH_DPAD_HALF 12
 #define SPLASH_DPAD_THICK 6
-#define SPLASH_DOTS_CX (SPLASH_MARK_X + SPLASH_MARK_W - 20)
+/* 四个按键点贴机身右侧：中心留出点半径 + 14 px，与左侧十字键的 12 px 边距接近。 */
+#define SPLASH_DOTS_CX (SPLASH_MARK_X + SPLASH_MARK_W - 32)
 #define SPLASH_DOT_COUNT 4
 #define SPLASH_DOT_OFFSET_X 14
 #define SPLASH_DOT_OFFSET_Y 16
@@ -62,6 +66,11 @@ static const char *TAG = "boot_splash";
 #define SPLASH_AA_SAMPLE(sample) (2 * (sample) + 1)
 #define SPLASH_AA_SAMPLES (SPLASH_SUBSAMPLES * SPLASH_SUBSAMPLES)
 
+/* 阶段权重表容量与动画刷新周期：进度条按「阶段预计耗时 + 阶段内经过时间」
+ * 推进，长阶段（guest 创建、mount、eval）期间条子持续前进而不是停在格上。 */
+#define SPLASH_STAGE_MAX 24
+#define SPLASH_ANIM_MS 100
+
 /** 像素缓冲 + 它在整屏逻辑坐标里的位置；所有绘制都按逻辑坐标并裁到这个窗口。 */
 typedef struct {
     uint16_t *pixels;
@@ -85,7 +94,17 @@ typedef struct {
     uint16_t *dots;
     uint16_t *bar;
     int filled;
+    int highlight;
+    uint16_t fill_color;
+    int stage;
+    size_t stage_count;
+    uint32_t stage_base_ms;
+    uint32_t total_ms;
+    uint32_t stage_ms[SPLASH_STAGE_MAX];
+    int64_t stage_started_us;
     bool active;
+    bool failed;
+    bool anim_running;
 } splash_state_t;
 
 static splash_state_t s_splash;
@@ -330,9 +349,77 @@ static uint16_t *splash_alloc(size_t pixels)
                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 }
 
-esp_err_t boot_splash_begin(uint8_t brightness_pct)
+/** 重画两个动态区域：内容没变化就不传输，避免启动期无谓的 SPI 流量。 */
+static void splash_render(int filled, int highlight, uint16_t fill_color)
 {
-    if (s_splash.active) {
+    const bool dots_changed = highlight != s_splash.highlight;
+    const bool bar_changed = filled != s_splash.filled || fill_color != s_splash.fill_color;
+    if (!dots_changed && !bar_changed) {
+        return;
+    }
+    if (dots_changed) {
+        const splash_canvas_t dots = splash_dots_canvas();
+        splash_clear(&dots);
+        splash_paint_dots(&dots, highlight);
+    }
+    if (bar_changed) {
+        const splash_canvas_t bar = splash_bar_canvas();
+        splash_clear(&bar);
+        splash_paint_track(&bar, filled, fill_color);
+    }
+    s_splash.filled = filled;
+    s_splash.highlight = highlight;
+    s_splash.fill_color = fill_color;
+    splash_flush(dots_changed);
+}
+
+/** 一次相位推进：阶段权重给锚点，阶段内按经过时间线性前进，超时停在阶段末。 */
+static void splash_anim_step(void)
+{
+    if (s_splash.failed) {
+        const int filled = s_splash.filled > SPLASH_TRACK_H ? s_splash.filled : SPLASH_TRACK_H;
+        splash_render(filled, s_splash.highlight, SPLASH_COLOR_ERROR);
+        return;
+    }
+    uint32_t elapsed_ms = 0;
+    const int64_t elapsed_us = esp_timer_get_time() - s_splash.stage_started_us;
+    if (elapsed_us > 0) {
+        elapsed_ms = (uint32_t)(elapsed_us / 1000);
+    }
+    const uint32_t expected_ms = s_splash.stage_ms[s_splash.stage];
+    if (elapsed_ms > expected_ms) {
+        elapsed_ms = expected_ms;
+    }
+    const uint32_t covered_ms = s_splash.stage_base_ms + elapsed_ms;
+    const int filled = (int)((uint64_t)SPLASH_TRACK_W * covered_ms / s_splash.total_ms);
+    const int highlight =
+        (int)((uint64_t)SPLASH_DOT_COUNT * covered_ms / s_splash.total_ms) % SPLASH_DOT_COUNT;
+    splash_render(filled, highlight, SPLASH_COLOR_PRIMARY);
+}
+
+/** 动画任务：唯一绘制者，退出前释放两块区域缓冲（end 只负责停表）。 */
+static void splash_anim_task(void *param)
+{
+    (void)param;
+    while (s_splash.active) {
+        splash_anim_step();
+        vTaskDelay(pdMS_TO_TICKS(s_splash.failed ? 1000 : SPLASH_ANIM_MS));
+    }
+    heap_caps_free(s_splash.dots);
+    heap_caps_free(s_splash.bar);
+    s_splash.dots = NULL;
+    s_splash.bar = NULL;
+    s_splash.anim_running = false;
+    vTaskDelete(NULL);
+}
+
+esp_err_t boot_splash_begin(uint8_t brightness_pct, const uint32_t *stage_ms, size_t stage_count)
+{
+    if (s_splash.active || stage_ms == NULL || stage_count == 0 ||
+        stage_count > SPLASH_STAGE_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_splash.anim_running) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -371,8 +458,27 @@ esp_err_t boot_splash_begin(uint8_t brightness_pct)
         ESP_LOGE(TAG, "splash region buffers unavailable");
         return ESP_ERR_NO_MEM;
     }
-    s_splash.filled = 0;
+    uint32_t total_ms = 0;
+    for (size_t i = 0; i < stage_count; ++i) {
+        s_splash.stage_ms[i] = stage_ms[i];
+        total_ms += stage_ms[i];
+    }
+    s_splash.stage_count = stage_count;
+    s_splash.total_ms = total_ms == 0 ? 1 : total_ms;
+    s_splash.stage = 0;
+    s_splash.stage_base_ms = 0;
+    s_splash.stage_started_us = esp_timer_get_time();
+    /* -1 让首帧动画无条件重画两个区域（缓冲是未初始化的 PSRAM）。 */
+    s_splash.filled = -1;
+    s_splash.highlight = -1;
+    s_splash.fill_color = SPLASH_COLOR_PRIMARY;
+    s_splash.failed = false;
     s_splash.active = true;
+    if (xTaskCreate(splash_anim_task, "boot-splash", 3072, NULL, 2, NULL) != pdPASS) {
+        ESP_LOGW(TAG, "splash animation task unavailable, static splash kept");
+    } else {
+        s_splash.anim_running = true;
+    }
 
     /* 背光在启动画面落屏之后点亮：提前点亮会先闪出未初始化的面板内容。 */
     const esp_err_t backlight_result = backlight_set(brightness_pct);
@@ -384,46 +490,56 @@ esp_err_t boot_splash_begin(uint8_t brightness_pct)
     return ESP_OK;
 }
 
-void boot_splash_progress(int step, int total)
+void boot_splash_progress(int step)
 {
-    if (!s_splash.active || total <= 0) {
+    if (!s_splash.active || s_splash.failed) {
         return;
     }
-    const int clamped = splash_clamp(step, 0, total);
-    s_splash.filled = SPLASH_TRACK_W * clamped / total;
-
-    const splash_canvas_t dots = splash_dots_canvas();
-    splash_clear(&dots);
-    splash_paint_dots(&dots, clamped % SPLASH_DOT_COUNT);
-
-    const splash_canvas_t bar = splash_bar_canvas();
-    splash_clear(&bar);
-    splash_paint_track(&bar, s_splash.filled, SPLASH_COLOR_PRIMARY);
-
-    splash_flush(true);
+    int index = step - 1;
+    if (index < 0) {
+        index = 0;
+    }
+    if (index > (int)s_splash.stage_count - 1) {
+        index = (int)s_splash.stage_count - 1;
+    }
+    uint32_t base_ms = 0;
+    for (int i = 0; i < index; ++i) {
+        base_ms += s_splash.stage_ms[i];
+    }
+    s_splash.stage = index;
+    s_splash.stage_base_ms = base_ms;
+    s_splash.stage_started_us = esp_timer_get_time();
 }
 
 void boot_splash_fail(void)
 {
-    if (!s_splash.active) {
+    if (!s_splash.active || s_splash.failed) {
         return;
     }
-    /* 失败时进度条改错误色并留一个可见的最小长度：停在哪个阶段一眼可见。 */
-    const int filled = s_splash.filled > SPLASH_TRACK_H ? s_splash.filled : SPLASH_TRACK_H;
-    const splash_canvas_t bar = splash_bar_canvas();
-    splash_clear(&bar);
-    splash_paint_track(&bar, filled, SPLASH_COLOR_ERROR);
-    splash_flush(false);
-    boot_splash_end();
-    ESP_LOGE(TAG, "boot splash marked failed at %d px", filled);
+    /* 失败时进度条改错误色并留一个可见的最小长度：停在哪个阶段一眼可见。
+     * 画面留在屏上，动画任务继续持有缓冲，等人工复位。 */
+    s_splash.failed = true;
+    ESP_LOGE(TAG, "boot splash marked failed at stage %d", s_splash.stage + 1);
 }
 
 void boot_splash_end(void)
 {
-    heap_caps_free(s_splash.dots);
-    heap_caps_free(s_splash.bar);
-    s_splash.dots = NULL;
-    s_splash.bar = NULL;
-    s_splash.filled = 0;
+    if (!s_splash.active) {
+        return;
+    }
     s_splash.active = false;
+    if (s_splash.anim_running) {
+        /* 动画任务是自己退出的那个：等它释放缓冲，最多 300 ms。 */
+        for (int waited = 0; waited < 300 && s_splash.anim_running; ++waited) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+    }
+    if (!s_splash.anim_running) {
+        heap_caps_free(s_splash.dots);
+        heap_caps_free(s_splash.bar);
+        s_splash.dots = NULL;
+        s_splash.bar = NULL;
+    }
+    s_splash.filled = -1;
+    s_splash.highlight = -1;
 }

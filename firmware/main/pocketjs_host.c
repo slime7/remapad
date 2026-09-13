@@ -64,6 +64,25 @@ static const char *const REMAPAD_BOOT_STAGES[] = {
 #define REMAPAD_BOOT_STAGE_COUNT \
     (sizeof(REMAPAD_BOOT_STAGES) / sizeof(REMAPAD_BOOT_STAGES[0]))
 
+/* 与阶段表一一对应的预计耗时（毫秒，实机测量值）：启动画面的进度条按它把
+ * 时间轴拉开，避免十几个阶段挤在同一格里或者长阶段停在原地。阶段耗时变化
+ * 时只需调整这里的权重，进度条依旧由经过时间驱动。 */
+static const uint32_t REMAPAD_BOOT_STAGE_MS[REMAPAD_BOOT_STAGE_COUNT] = {
+    110,   /* package_open */
+    5,     /* package_select */
+    20,    /* guest_create */
+    5,     /* ui_core_create */
+    5,     /* ui_qjs_create */
+    115,   /* feed_pak */
+    5,     /* mount */
+    5,     /* native_bridge_surface */
+    16240, /* guest_eval */
+    5,     /* renderer_create */
+    5,     /* target_create */
+    5,     /* strip_buffer */
+    5,     /* tick_hz */
+};
+
 typedef struct {
     pocketjs_package_t *package;
     pocketjs_guest_t *guest;
@@ -166,7 +185,7 @@ static const char *boot_stage(size_t index)
     if (index >= REMAPAD_BOOT_STAGE_COUNT) {
         index = REMAPAD_BOOT_STAGE_COUNT - 1U;
     }
-    boot_splash_progress((int)index + 1, (int)REMAPAD_BOOT_STAGE_COUNT);
+    boot_splash_progress((int)index + 1);
     return REMAPAD_BOOT_STAGES[index];
 }
 
@@ -324,10 +343,6 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
                  frame->raster_density,
                  plan.region_count);
         runtime->first_frame_logged = true;
-        /* 首帧落屏即完成交接：释放启动画面缓冲，面板内容从此由 PocketJS
-         * 的 damage 窗口维护。 */
-        boot_splash_end();
-        ESP_LOGI(TAG, "PocketJS UI ready, boot splash handed over");
         /* 背光通常已由启动画面点亮（持久化亮度，开机恒为亮屏态）；这里再设
          * 一次是面板可用但启动画面不可用时的兜底。 */
         esp_err_t backlight_result = backlight_set(effective_brightness());
@@ -393,7 +408,8 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
     /* 面板就绪后立刻画启动画面并点亮背光：guest 的 mount/eval 要几秒钟，
      * 这段时间屏幕已经有内容，开机不再是黑屏等待。 */
     if (runtime->panel_ready) {
-        const esp_err_t splash_result = boot_splash_begin(effective_brightness());
+        const esp_err_t splash_result = boot_splash_begin(
+            effective_brightness(), REMAPAD_BOOT_STAGE_MS, REMAPAD_BOOT_STAGE_COUNT);
         if (splash_result != ESP_OK) {
             ESP_LOGW(TAG, "boot splash unavailable: %s", esp_err_to_name(splash_result));
         }
@@ -537,6 +553,11 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
 
     js_bridge_attach(runtime->guest);
     ESP_LOGI(TAG, "native bridge ready: __nativeBridge.postMessage -> js_bridge");
+
+    /* 初始化到此结束：启动画面停表，缓冲在动画任务退出时释放，画面从此由
+     * PocketJS 的 damage 窗口维护。 */
+    boot_splash_end();
+    ESP_LOGI(TAG, "PocketJS UI ready, boot splash handed over");
 
     return ESP_OK;
 
