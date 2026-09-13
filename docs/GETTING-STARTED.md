@@ -277,7 +277,7 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 ### 启动 mount 阶段出现 `task_wdt` 告警
 
-从 `app_main` 到首帧就绪之间有一个约 5 到 6 秒的窗口，期间 owner task 连续占用一个核，空闲任务得不到调度，`task_wdt` 会打印 `IDLE0` 未按时喂狗的告警。`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。若后续对启动时间有要求，需要在 BSP 阶段优化 mount 耗时，而不是简单调大看门狗超时。
+从 `app_main` 到首帧就绪之间有一个十几秒的窗口（当前构建实测：启动画面约 1.6 秒落屏，约 18 秒首帧就绪，背光随启动画面点亮），期间 owner task 连续占用一个核，空闲任务得不到调度，`task_wdt` 会打印 `IDLE0` 未按时喂狗的告警。`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。若后续对启动时间有要求，需要在 BSP 阶段优化 mount 耗时，而不是简单调大看门狗超时。
 
 ### 运行时反复 `task_wdt` 告警并且 UI 掉帧
 
