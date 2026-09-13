@@ -15,17 +15,16 @@
  * 官方示例（02_ESP_IDF_ST7789_LVGL）：
  * https://github.com/waveshareteam/ESP32-S3-Touch-LCD-1.69/tree/main/examples/esp-idf/02_ESP_IDF_ST7789_LVGL
  *
- * 像素时钟按微雪例程的 40 MHz。曾试过 80 MHz 以压缩整屏传输时间，但面板与
- * 排线按 40 MHz 的写周期设计，超频会出现画面竖条（窗口命令期时序裕量不足），
- * 且条带管线里传输本来就被渲染盖住（实测每帧等待 DMA 不足 1 ms），40 MHz
- * 不构成瓶颈，因此回到例程验证过的取值。 */
+ * 像素时钟取 SPI2 的上限 80 MHz：条带管线里传输本就基本被渲染盖住，取上限
+ * 是为了压缩整帧重绘时的串行等待与 DMA 占线时间（整帧 240x280 约 13.5 ms，
+ * 40 MHz 时约 27 ms）。取值依据见 docs/adr/0018。 */
 #define REMAPAD_LCD_H_RES 240
 #define REMAPAD_LCD_V_RES 280
 #define REMAPAD_LCD_SPI_HOST SPI2_HOST
-#define REMAPAD_LCD_PIXEL_CLK_HZ (40 * 1000 * 1000)
+#define REMAPAD_LCD_PIXEL_CLK_HZ (80 * 1000 * 1000)
 #define REMAPAD_LCD_CMD_BITS 8
 #define REMAPAD_LCD_PARAM_BITS 8
-/* 同步传输的等待上限：整帧 240x280 在 40 MHz 下约 27 ms，留足余量。 */
+/* 同步传输的等待上限：整帧 240x280 在 80 MHz 下约 13.5 ms，留足余量。 */
 #define REMAPAD_PANEL_TIMEOUT_MS 200
 
 #define REMAPAD_LCD_GPIO_SCLK 6

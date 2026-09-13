@@ -262,7 +262,7 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 ### 烧录后没有屏幕画面
 
-面板由 `drivers/panel.c` 驱动（esp_lcd 内置 ST7789，SPI2 40 MHz，见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）。正常时序是：`firmware/main/boot_splash.c` 在面板与触摸初始化成功后自绘启动画面，背光随启动画面落屏由 `drivers/backlight.c` 点亮，随后每个启动阶段推进一次进度条；PocketJS UI 首帧提交成功后启动画面交出屏幕并释放缓冲。若画面不可见，先看串口日志：`panel init failed` 表示面板初始化失败（此时固件跳过启动画面，退回无面板渲染，帧只进 PSRAM）；有启动画面日志但屏幕黑，再检查背光（`GPIO15` 需要显式驱动，若 `backlight init failed` 会有对应日志）与面板排线；日志里没有启动画面但 UI 正常，说明是从旧镜像启动，重新烧录即可。修改面板方向/偏移配置时要对照 [hardware.md](hardware.md) 与微雪官方示例，不要凭空猜测初始化序列。
+面板由 `drivers/panel.c` 驱动（esp_lcd 内置 ST7789，SPI2 80 MHz，见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）。正常时序是：`firmware/main/boot_splash.c` 在面板与触摸初始化成功后自绘启动画面，背光随启动画面落屏由 `drivers/backlight.c` 点亮，随后每个启动阶段推进一次进度条；PocketJS UI 首帧提交成功后启动画面交出屏幕并释放缓冲。若画面不可见，先看串口日志：`panel init failed` 表示面板初始化失败（此时固件跳过启动画面，退回无面板渲染，帧只进 PSRAM）；有启动画面日志但屏幕黑，再检查背光（`GPIO15` 需要显式驱动，若 `backlight init failed` 会有对应日志）与面板排线；日志里没有启动画面但 UI 正常，说明是从旧镜像启动，重新烧录即可。修改面板方向/偏移配置时要对照 [hardware.md](hardware.md) 与微雪官方示例，不要凭空猜测初始化序列。
 
 ### 启动时崩溃重启，崩溃位置每次都不一样
 

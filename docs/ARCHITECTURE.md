@@ -226,8 +226,8 @@ BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应
 - `remapad-pjs` owner task 的栈（288 KB）同样分配在 PSRAM，因为 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。主任务栈保持 32 KB，只负责启动 owner task。内部 RAM 因此留给 DMA 缓冲和协议栈，启动后可用量约 360 KB。
 - CPU 运行在 240 MHz。UI 每帧把解释执行的 Vue Vapor bundle 加软件 RGB565 渲染跑在一个核上，默认的 160 MHz 会把整个周期吃满并饿死空闲任务。
 - 渲染输出走 32 行高的条带：三条 240 × 32 的 strip 缓冲（共 45 kB）优先分配内部 RAM，`render_strip` 每次接收 full-width × 条高的容量与一条行带矩形；行带比视口窄时按行压缩成紧凑布局（x = 0 的窗口同样要压缩，否则整体错行），字节序交换由面板传输统一负责。提交走 `panel_transfer_async`（只入队并交回完成序号），调用方在轮到某个 strip 槽时用 `panel_wait_seq` 等该槽上一笔传输结束，渲染因此可与 DMA 重叠。
-- 显示通路按 60 Hz tick 做预算，实测瓶颈在 CPU 侧的软件 RGB565 光栅化而不是面板传输：整屏 6.72 万像素的位移帧在一次扫描里要花 0.5–0.65 µs/像素（掩码构建、字形图集与纹理采样为主，本机加速回调只占其中很小一部分）。因此 damage 按 32 行行带切分，行带在同一帧内按绝对行序自上而下渲染并提交，不切字段；静止帧稳定 60 Hz，整幅 240 × 280 帧的渲染实测约 50 ms。完整测量、隔行方案被否决的理由与 40/80 MHz 的取值理由见 [ADR 0017](adr/0017-display-path-and-scroll-frame-budget.md)。
-- 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、SPI2 40 MHz、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
+- 显示通路按 60 Hz tick 做预算，实测瓶颈在 CPU 侧的软件 RGB565 光栅化而不是面板传输：整屏 6.72 万像素的位移帧在一次扫描里要花 0.5–0.65 µs/像素（掩码构建、字形图集与纹理采样为主，本机加速回调只占其中很小一部分）。因此 damage 按 32 行行带切分，行带在同一帧内按绝对行序自上而下渲染并提交，不切字段；静止帧稳定 60 Hz，整幅 240 × 280 帧的渲染实测约 50 ms。完整测量与隔行方案被否决的理由见 [ADR 0017](adr/0017-display-path-and-scroll-frame-budget.md)，面板 SPI2 时钟取上限 80 MHz 的理由见 [ADR 0018](adr/0018-panel-spi2-clock-80mhz.md)。
+- 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，SPI2 取上限 80 MHz；选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
 - ESP32-S3 没有本项目所需的 P4 PPA；`firmware/main/render_accel.c` 用本机整数实现接管渲染器的填充、A8 掩码混合与 PSM5650 直拷回调（与官方 P4 适配层同一套 ABI），其余仍走 `pocketjs_render_rgb565` 的软件路径。
 
 ## Flash 分区

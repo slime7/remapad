@@ -52,7 +52,7 @@ static const char *TAG = "remapad_pocketjs";
  * 带宽会拖住渲染）；实测把这个值放大到 140 行并不会更快，说明渲染成本
  * 主要不在缓冲位置上，条带小一些更省内部 RAM。 */
 #define REMAPAD_STRIP_ROWS 32
-/** 面板单次提交的等待上限，整帧 240x280 在 40 MHz 下约 27 ms。 */
+/** 面板单次提交的等待上限，整帧 240x280 在 80 MHz 下约 13.5 ms。 */
 #define REMAPAD_PANEL_TRANSFER_TIMEOUT_MS 200
 /** 行带粒度：与 strip 条高一致，damage 折成行带后按「绝对行 / 条高」编号。 */
 #define REMAPAD_BAND_ROWS REMAPAD_STRIP_ROWS
