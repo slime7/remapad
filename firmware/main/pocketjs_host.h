@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esp_err.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {

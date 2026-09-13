@@ -38,17 +38,14 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
   const backlightLevel = () =>
     Math.max(1, Math.min(BACKLIGHT_LEVELS, Math.round(hw.backlight / BACKLIGHT_STEP)));
 
-  const scroller = usePageScroll(
+  const contentRef = usePageScroll(
     props.active,
     true,
     () => 34 + 56 + 16 + 44 + 16 + INFO_H + BOTTOM_PAD_H,
   );
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
-      <View
-        class="w-full flex-col px-4 pt-[34] gap-4"
-        style={{ translateY: -scroller.offset() }}
-      >
+      <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-4">
         <View class={STYLE.backlightRow}>
             <Icon glyph={ICON.brightnessHigh} class="shrink-0 text-base" color={COLOR.primary} />
             <View focusable onPress={() => changeBacklight(-BACKLIGHT_STEP)} class={STYLE.surfaceBtn}>

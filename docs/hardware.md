@@ -138,7 +138,7 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 
 ## 产品 BSP 接入状态
 
-面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 40 MHz）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。此外 `pwr_key.c`（GPIO40 采样，短按息屏 / 长按切连接模式）、`buzzer.c`（GPIO42 LEDC tone，长按 3 秒提示音）与 BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）已接入；`battery.c` 已编译但仍是占位采样（真实 ADC 与充电状态待电源 BSP）。
+面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 取微雪例程的 40 MHz，理由见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。此外 `pwr_key.c`（GPIO40 采样，短按息屏 / 长按切连接模式）、`buzzer.c`（GPIO42 LEDC tone，长按 3 秒提示音）与 BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）已接入；`battery.c` 已编译但仍是占位采样（真实 ADC 与充电状态待电源 BSP）。
 
 尚未接入的硬件：
 

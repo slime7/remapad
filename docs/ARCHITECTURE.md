@@ -145,7 +145,7 @@ remapad/
 
 仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
 
-UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 50 ms（240×280，成本在 Vue Vapor 的逐节点挂载，不在宿主 op 或样式解析）。因此 `ui/src/App.tsx` 首帧只挂壳、状态栏、底栏与首页，其余 6 页在首帧之后每帧补挂一页，切页只翻转各页根节点的 `hidden`；页面容器层因此被移除，新增页面要登记到 `DEFERRED_TABS` 并自行承担 `hidden` 切换（见 [ADR 0015](adr/0015-restore-deferred-page-mount-after-first-frame.md)）。
+UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 50 ms（240×280，成本在 Vue Vapor 的逐节点挂载，不在宿主 op 或样式解析）。`ui/src/App.tsx` 因此在首次渲染里一次挂完七个页面，首屏只在全部建树完成后提交，等待期由固件启动画面覆盖；把建树摊到首帧之后会让首帧后仍有数秒的阻塞帧（切页与滚动都在这段时间里卡住）。切页只翻转各页根节点的 `hidden`，App 没有页面容器层也没有待挂队列，新增页面直接写在 JSX 里（见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
 
 ## 构建链路
 
@@ -225,9 +225,10 @@ BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应
 - JavaScript guest 和资源优先使用 8 MB Octal PSRAM。
 - `remapad-pjs` owner task 的栈（288 KB）同样分配在 PSRAM，因为 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。主任务栈保持 32 KB，只负责启动 owner task。内部 RAM 因此留给 DMA 缓冲和协议栈，启动后可用量约 360 KB。
 - CPU 运行在 240 MHz。UI 每帧把解释执行的 Vue Vapor bundle 加软件 RGB565 渲染跑在一个核上，默认的 160 MHz 会把整个周期吃满并饿死空闲任务。
-- 当前实现使用一个按最大视口分配的 PSRAM RGB565 scratch buffer；`render_strip` 每次接收精确的 full-width、region-height 容量。渲染完成后 strip 经 esp_lcd 的 `psram_dma_direct` 路径被 SPI EDMA 直读提交面板（S3 的 AHB GDMA v1 对外部内存无对齐约束，PSRAM 缓存写回由 spi_master 的 PSRAM DMA 路径自动处理），传输前由 `panel_transfer` 原地完成 RGB565 大小端交换；`draw_bitmap` 返回只代表事务入队，`panel_transfer` 以 trans_done 回调等待最后一笔分块传输完成，之后调用方才能复用 strip 缓冲，避免下一块区域的改写与仍在飞行的 DMA 竞争。
+- 渲染输出走 32 行高的条带：三条 240 × 32 的 strip 缓冲（共 45 kB）优先分配内部 RAM，`render_strip` 每次接收 full-width × 条高的容量与一条行带矩形；行带比视口窄时按行压缩成紧凑布局（x = 0 的窗口同样要压缩，否则整体错行），字节序交换由面板传输统一负责。提交走 `panel_transfer_async`（只入队并交回完成序号），调用方在轮到某个 strip 槽时用 `panel_wait_seq` 等该槽上一笔传输结束，渲染因此可与 DMA 重叠。
+- 显示通路按 60 Hz tick 做预算，实测瓶颈在 CPU 侧的软件 RGB565 光栅化而不是面板传输：整屏 6.72 万像素的位移帧在一次扫描里要花 0.5–0.65 µs/像素（掩码构建、字形图集与纹理采样为主，本机加速回调只占其中很小一部分）。因此 damage 按 32 行行带切分，行带在同一帧内按绝对行序自上而下渲染并提交，不切字段；静止帧稳定 60 Hz，整幅 240 × 280 帧的渲染实测约 50 ms。完整测量、隔行方案被否决的理由与 40/80 MHz 的取值理由见 [ADR 0017](adr/0017-display-path-and-scroll-frame-budget.md)。
 - 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、SPI2 40 MHz、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
-- ESP32-S3 没有本项目所需的 P4 PPA；使用 `pocketjs_render_rgb565` 的软件路径即可。
+- ESP32-S3 没有本项目所需的 P4 PPA；`firmware/main/render_accel.c` 用本机整数实现接管渲染器的填充、A8 掩码混合与 PSM5650 直拷回调（与官方 P4 适配层同一套 ABI），其余仍走 `pocketjs_render_rgb565` 的软件路径。
 
 ## Flash 分区
 

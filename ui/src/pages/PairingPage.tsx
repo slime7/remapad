@@ -3,8 +3,8 @@
  * 设备开机即按凭证回连或发发现广播，配对不需要打开本页；本页只负责手动
  * 开关发现广播与按下确认键。JoyCon 是左右两只各自独立连接，主机的 Grip/
  * 顺序界面只用于调整顺序与确认，因此确认按钮触发固件左右双机配对，Pro 则
- * 注入 L+R 按键。内容单屏放得下，静态页不挂滚动。页面按需挂载，切页由
- * 根节点翻转 hidden 完成（见 docs/adr/0014-page-mount-on-demand-progressive-fill.md）。
+ * 注入 L+R 按键。内容单屏放得下，静态页不挂滚动。七个页面在首屏前一次挂完，
+ * 切页由根节点翻转 hidden 完成（见 docs/adr/0016-mount-all-pages-before-first-frame.md）。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';

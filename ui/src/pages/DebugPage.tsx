@@ -39,7 +39,7 @@ export function DebugPage(props: { active: () => boolean }) {
     }
   });
 
-  const scroller = usePageScroll(
+  const contentRef = usePageScroll(
     props.active,
     true,
     () => 34 + 15 + 8 + KEYS_CARD_H + BOTTOM_PAD_H,
@@ -59,10 +59,7 @@ export function DebugPage(props: { active: () => boolean }) {
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
-      <View
-        class="w-full flex-col px-4 pt-[34] gap-2"
-        style={{ translateY: -scroller.offset() }}
-      >
+      <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
         <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
           按键指令
         </Text>

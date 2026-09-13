@@ -31,13 +31,10 @@ const ITEMS: SettingsItem[] = [
 export function SettingsPage(props: { active: () => boolean; onGo: (tab: TabKey) => void }) {
   const contentH = () =>
     TOP_PAD + ITEMS.length * ITEM_H + (ITEMS.length - 1) * ITEM_GAP + BOTTOM_PAD_H;
-  const scroller = usePageScroll(props.active, true, contentH);
+  const contentRef = usePageScroll(props.active, true, contentH);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
-      <View
-        class="w-full flex-col px-4 pt-[34] gap-2"
-        style={{ translateY: -scroller.offset() }}
-      >
+      <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
         {ITEMS.map((item) => (
           <View
             key={item.key}

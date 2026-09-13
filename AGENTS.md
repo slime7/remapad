@@ -22,13 +22,13 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法构建。
   - 样式使用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
   - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，编译器与框架来源为仓库内的 `ui/vendor/pocketjs` 快照。
-  - 页面由 `ui/src/App.tsx` 组织：首帧只挂壳、状态栏、底栏与首页，其余页面在首帧之后每帧补挂一页（见 [ADR 0015](docs/adr/0015-restore-deferred-page-mount-after-first-frame.md)）；新增页面必须登记到 `DEFERRED_TABS`，并由页面根节点自己翻转 `hidden`。
+  - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部七个页面，建树等待期由固件启动画面覆盖，因此首屏出现时各页节点都已建好、切页与点击不会有空白期（见 [ADR 0016](docs/adr/0016-mount-all-pages-before-first-frame.md)）；切页只翻转各页根节点的 `hidden`，App 没有待挂队列，新增页面直接写进 JSX，由页面根节点自己翻转 `hidden`。
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言编写。
   - 硬件绑定微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏）；规格与引脚见 [docs/hardware.md](docs/hardware.md)。
   - QuickJS guest 的创建、mount、eval 与逐帧 UI turn 必须由同一个任务承载，且该任务栈要大于 guest 的 `stack_limit`；当前由 `firmware/main/pocketjs_host.c` 的 `remapad-pjs` owner task 承担（栈在 PSRAM）。改动调度或栈预算前先读 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的“为什么由产品 task 承载 guest 生命周期”。
   - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；六个组件与 ESP32-S3 原生归档固定在 `firmware/components/`，由 ESP-IDF 默认发现，构建不依赖 PocketJS checkout，也不要把它改回外部路径。产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
-  - `main/` 下的 `bridge/`（控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入）、`config/`（NVS 用户设置持久化）、`console/`（串口 CLI）、`dp/`（数据面任务与输入源抽象）、`ns2/`（NS2 编码、序列号命名规则与输出封装）、`ble/`（NimBLE 手柄外设、双身份会话与分槽凭证）、`drivers/`（panel/touch/backlight/pwr_key/buzzer/battery）和顶层 `boot_splash.c`（UI 就绪前的启动画面，随面板启动点亮背光）都已编译进固件；模块边界见 [docs/adr/0011](docs/adr/0011-controller-dataplane-module-boundary.md)，USB 输入与桥接模式仍是架构预留（方案预案见 [docs/usb-input-plan.md](docs/usb-input-plan.md)），新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
+  - `main/` 下的 `bridge/`（控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入）、`config/`（NVS 用户设置持久化：setter 只置内存表脏标记，提交任务每 1 分钟检查一次，确有改动才写一次 NVS）、`console/`（串口 CLI）、`dp/`（数据面任务与输入源抽象）、`ns2/`（NS2 编码、序列号命名规则与输出封装）、`ble/`（NimBLE 手柄外设、双身份会话与分槽凭证）、`drivers/`（panel/touch/backlight/pwr_key/buzzer/battery）、顶层 `boot_splash.c`（UI 就绪前的启动画面，随面板启动点亮背光）与 `render_accel.c`（S3 上接管渲染器填充/掩码混合/直拷回调的本机整数实现）都已编译进固件；模块边界见 [docs/adr/0011](docs/adr/0011-controller-dataplane-module-boundary.md)，显示通路的条带划分与整幅刷新取值见 [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md)，USB 输入与桥接模式仍是架构预留（方案预案见 [docs/usb-input-plan.md](docs/usb-input-plan.md)），新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
 
 ## 项目核心操作命令
 
@@ -81,5 +81,6 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | 产品定位、服务受众、非目标边界变动 | [docs/VISION.md](docs/VISION.md) |
 | 跨层数据协议、核心图元、宏常量与状态模型变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | USB 输入、NS2 报告、BLE 广播/GATT、配对或绑定状态变动 | [docs/controller.md](docs/controller.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
+| 显示通路的条带划分/整幅刷新取值、滚动帧预算或面板时钟变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md) |
 | 环境依赖、操作指令、目录结构变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
 | 产生新的长期架构决策与技术选型取舍 | 使用 [scripts/create_adr.py](scripts/create_adr.py) 新建 ADR 并更新 [docs/adr/README.md](docs/adr/README.md) |

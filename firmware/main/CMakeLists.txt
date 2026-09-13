@@ -20,6 +20,7 @@ idf_component_register(
         "main.c"
         "boot_splash.c"
         "pocketjs_host.c"
+        "render_accel.c"
         "bridge/js_bridge.c"
         "config/app_config.c"
         "console/cli.c"

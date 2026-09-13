@@ -61,13 +61,10 @@ function RoleCard(props: {
 }
 
 export function ModePage(props: { active: () => boolean }) {
-  const scroller = usePageScroll(props.active, true, () => CONTENT_H + BOTTOM_PAD_H);
+  const contentRef = usePageScroll(props.active, true, () => CONTENT_H + BOTTOM_PAD_H);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
-      <View
-        class="w-full flex-col px-4 pt-[34] gap-2"
-        style={{ translateY: -scroller.offset() }}
-      >
+      <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
         <RoleCard
           role="device"
           selected={hw.usbRole === 'device'}

@@ -13,7 +13,9 @@ extern "C" {
  * 用户设置持久化（NVS 命名空间 "remapad"，键 "cfg"）：背光亮度、手柄身份
  * 配置（类型 + 机身配色）与上报固件版本。USB 连接模式只在内存中生效、
  * 不落盘，开机恒为串口。内存表在 app_config_init 时读入，setter 只改内存
- * 表并投递快照；落盘由内部 RAM 栈的提交任务执行（与 ble_creds 同一模式：
+ * 表并置脏标记；落盘由内部 RAM 栈的提交任务每 1 分钟检查一次，确有改动才
+ * 写一次 NVS（每次写入都要擦 flash 页，切选项这类高频改动不能改一次写一
+ * 次，代价是断电会丢最近一个周期内的改动）。提交任务与 ble_creds 同一模式：
  * owner task 栈在 PSRAM，flash 写入的禁缓存窗口内访问 PSRAM 栈会触发 cache
  * 异常重启，任何任务上下文都不得直接写 flash）。
  */
@@ -63,7 +65,7 @@ void app_config_set_usb_role(app_config_usb_role_t role);
 void app_config_set_controller(app_config_ctrl_type_t type,
                                uint32_t body_rgb, uint32_t button_rgb, uint32_t grip_rgb);
 
-/** 覆盖上报固件版本（假升级完成时递增），立即落盘。 */
+/** 覆盖上报固件版本（假升级完成时递增），随周期检查落盘。 */
 void app_config_set_fw_version(const uint8_t ver[3]);
 
 #ifdef __cplusplus

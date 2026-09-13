@@ -4,7 +4,6 @@
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -22,37 +21,19 @@ static const char *TAG = "remapad_config";
 /** 旧版（无固件版本字段）的记录长度。 */
 #define CONFIG_BLOB_LEN_V1 16
 
-#define CONFIG_COMMIT_QUEUE_LEN 4
-
 #define CONFIG_DEFAULT_BRIGHTNESS 40
+
+/** 落盘检查周期：设置项改动只置内存表的脏标记，由提交任务每 1 分钟检查
+ * 一次，确有改动才写一次 NVS。每次落盘都要擦写 flash 页，切选项这类高频
+ * 改动不能改一次写一次；代价是断电会丢掉最近一个周期内的改动。 */
+#define CONFIG_COMMIT_PERIOD_MS (60 * 1000)
 
 static struct {
     app_config_t cfg;
     SemaphoreHandle_t lock;
-    QueueHandle_t commit_queue;
+    /** 内存表存在未落盘的改动（由 lock 保护）。 */
+    bool dirty;
 } s_appcfg;
-
-/** NVS 写任务：内部 RAM 栈（ble_creds 同款约束，见模块头注释）。 */
-static void commit_task(void *param)
-{
-    uint8_t blob[CONFIG_BLOB_LEN];
-    while (xQueueReceive(s_appcfg.commit_queue, blob, portMAX_DELAY) == pdTRUE) {
-        nvs_handle_t handle;
-        const esp_err_t err = nvs_open(CONFIG_NS, NVS_READWRITE, &handle);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "nvs open failed: %s", esp_err_to_name(err));
-            continue;
-        }
-        esp_err_t set = nvs_set_blob(handle, CONFIG_KEY, blob, CONFIG_BLOB_LEN);
-        if (set == ESP_OK) {
-            set = nvs_commit(handle);
-        }
-        nvs_close(handle);
-        if (set != ESP_OK) {
-            ESP_LOGE(TAG, "commit failed: %s", esp_err_to_name(set));
-        }
-    }
-}
 
 /** 锁内序列化配置快照。 */
 static void serialize_locked(uint8_t blob[CONFIG_BLOB_LEN])
@@ -78,24 +59,64 @@ static void serialize_locked(uint8_t blob[CONFIG_BLOB_LEN])
     blob[18] = s_appcfg.cfg.fw_version[2];
 }
 
-static void schedule_commit(void)
+/** 置脏标记：改动只落在内存表，落盘由提交任务的周期检查统一完成。 */
+static void mark_dirty(void)
 {
-    if (s_appcfg.commit_queue == NULL) {
-        return;
-    }
-    uint8_t blob[CONFIG_BLOB_LEN];
     if (s_appcfg.lock != NULL && xSemaphoreTake(s_appcfg.lock, portMAX_DELAY) == pdTRUE) {
-        serialize_locked(blob);
+        s_appcfg.dirty = true;
         xSemaphoreGive(s_appcfg.lock);
     }
-    xQueueSend(s_appcfg.commit_queue, blob, portMAX_DELAY);
+}
+
+/** 写一次 NVS；失败保留脏标记，下个周期重试。 */
+static esp_err_t write_blob(const uint8_t *blob)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(CONFIG_NS, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs open failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    err = nvs_set_blob(handle, CONFIG_KEY, blob, CONFIG_BLOB_LEN);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "commit failed: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+
+/** NVS 提交任务：内部 RAM 栈（ble_creds 同款约束，见模块头注释）。
+ * 每 CONFIG_COMMIT_PERIOD_MS 醒一次，脏标记为假时直接回去睡，不碰 flash。 */
+static void commit_task(void *param)
+{
+    (void)param;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_COMMIT_PERIOD_MS));
+        if (s_appcfg.lock == NULL ||
+            xSemaphoreTake(s_appcfg.lock, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        if (!s_appcfg.dirty) {
+            xSemaphoreGive(s_appcfg.lock);
+            continue;
+        }
+        uint8_t blob[CONFIG_BLOB_LEN];
+        serialize_locked(blob);
+        s_appcfg.dirty = false;
+        xSemaphoreGive(s_appcfg.lock);
+        if (write_blob(blob) != ESP_OK) {
+            mark_dirty();
+        }
+    }
 }
 
 esp_err_t app_config_init(void)
 {
     s_appcfg.lock = xSemaphoreCreateMutex();
-    s_appcfg.commit_queue = xQueueCreate(CONFIG_COMMIT_QUEUE_LEN, CONFIG_BLOB_LEN);
-    if (s_appcfg.lock == NULL || s_appcfg.commit_queue == NULL ||
+    if (s_appcfg.lock == NULL ||
         xTaskCreate(commit_task, "appcfg", 4096, NULL, 2, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
@@ -170,7 +191,7 @@ void app_config_set_brightness(uint8_t pct)
         s_appcfg.cfg.brightness = pct;
         xSemaphoreGive(s_appcfg.lock);
     }
-    schedule_commit();
+    mark_dirty();
 }
 
 void app_config_set_screen_on(bool on)
@@ -179,7 +200,7 @@ void app_config_set_screen_on(bool on)
         s_appcfg.cfg.screen_on = on;
         xSemaphoreGive(s_appcfg.lock);
     }
-    schedule_commit();
+    mark_dirty();
 }
 
 void app_config_set_usb_role(app_config_usb_role_t role)
@@ -202,7 +223,7 @@ void app_config_set_controller(app_config_ctrl_type_t type,
         s_appcfg.cfg.grip_color = grip_rgb;
         xSemaphoreGive(s_appcfg.lock);
     }
-    schedule_commit();
+    mark_dirty();
 }
 
 void app_config_set_fw_version(const uint8_t ver[3])
@@ -213,5 +234,5 @@ void app_config_set_fw_version(const uint8_t ver[3])
         s_appcfg.cfg.fw_version[2] = ver[2];
         xSemaphoreGive(s_appcfg.lock);
     }
-    schedule_commit();
+    mark_dirty();
 }

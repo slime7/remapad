@@ -7,7 +7,6 @@
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
-import { usePageScroll } from '../hooks/usePageScroll';
 import { hw } from '../hooks/useHardware';
 import { COLOR, STYLE } from '../theme';
 import { BottomPlaceholder } from '../components/BottomPlaceholder';
@@ -33,13 +32,11 @@ export function HomePage(props: {
     usbState() === 'gamepad' ? COLOR.tertiary : usbState() === 'computer' ? COLOR.primary : usbState() === 'adb' ? COLOR.secondary : COLOR.outline;
   const btConnected = () => hw.pairing === 'connected';
 
-  // 首页内容固定一屏，不参与滚动。
-  const scroller = usePageScroll(props.active, false);
+  // 首页内容固定一屏，不参与滚动，也就不需要注册滚动。
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
         class="w-full flex-col items-center px-4 pt-[38]"
-        style={{ translateY: -scroller.offset() }}
       >
         <View class="flex-row gap-2 shrink-0">
           <StateCircle glyph={usbGlyph()} iconColor={usbColor()} onPress={() => props.onGo('mode')} />

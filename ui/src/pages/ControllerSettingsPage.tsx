@@ -134,11 +134,11 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
           { label: '右序列号', value: JOYCON_SERIAL_RIGHT, hidden: true },
         ];
 
-  const scroller = usePageScroll(props.active, true, () => contentHeight(isJoycon()) + BOTTOM_PAD_H);
+  const contentRef = usePageScroll(props.active, true, () => contentHeight(isJoycon()) + BOTTOM_PAD_H);
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
-      <View class="w-full flex-col px-4 pt-[34] gap-2" style={{ translateY: -scroller.offset() }}>
+      <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
         <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
           手柄类型
         </Text>

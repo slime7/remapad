@@ -20,6 +20,7 @@
 #include "boot_splash.h"
 #include "bridge/js_bridge.h"
 #include "panel.h"
+#include "render_accel.h"
 #include "touch.h"
 
 #include "pocketjs/guest.h"
@@ -44,6 +45,22 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_POCKETJS_STOP_TIMEOUT_MS 5000
 /** 持久化亮度缺失时的兜底值（app_config 加载后通常有用户设定值）。 */
 #define REMAPAD_BACKLIGHT_PCT_DEFAULT 40
+/** strip 缓冲数量：渲染下一条时，前几条仍在被 DMA 读取。 */
+#define REMAPAD_STRIP_BUFFER_COUNT 3
+/** 单条 strip 的逻辑高度：整屏 damage 会被切成这个高度的条带。一条
+ * 240 × 32 × 2 = 15 kB，三条共 45 kB，能稳定落进内部 RAM（PSRAM 的写入
+ * 带宽会拖住渲染）；实测把这个值放大到 140 行并不会更快，说明渲染成本
+ * 主要不在缓冲位置上，条带小一些更省内部 RAM。 */
+#define REMAPAD_STRIP_ROWS 32
+/** 面板单次提交的等待上限，整帧 240x280 在 40 MHz 下约 27 ms。 */
+#define REMAPAD_PANEL_TRANSFER_TIMEOUT_MS 200
+/** 行带粒度：与 strip 条高一致，damage 折成行带后按「绝对行 / 条高」编号。 */
+#define REMAPAD_BAND_ROWS REMAPAD_STRIP_ROWS
+/** 行带表上限：视口高度 / 条高，280 / 32 = 9 条（最后一条不足条高）。 */
+#define REMAPAD_BAND_MAX 16
+/** strip 缓冲的 DMA 对齐（面板驱动的约定值）。 */
+#define REMAPAD_STRIP_ALIGN 64
+
 
 /* PocketJS 启动阶段：串口失败日志的标签与启动画面进度共用同一份顺序。 */
 static const char *const REMAPAD_BOOT_STAGES[] = {
@@ -102,8 +119,16 @@ typedef struct {
     uint64_t window_turn_us;
     uint64_t window_render_us;
     uint32_t window_frames;
-    uint16_t *strip_buffer;
+    uint64_t window_damage_px;
+    uint16_t *strip_buffers[REMAPAD_STRIP_BUFFER_COUNT];
     size_t strip_capacity_pixels;
+    uint32_t strip_slot;
+    /** 每个 strip 槽上一次提交的完成序号；0 表示还没提交过（等待立即通过）。 */
+    uint32_t strip_tokens[REMAPAD_STRIP_BUFFER_COUNT];
+    /** 行带表：本帧 damage 折成的行带，画完一条清一条。 */
+    bool band_pending[REMAPAD_BAND_MAX];
+    int32_t band_x0[REMAPAD_BAND_MAX];
+    int32_t band_x1[REMAPAD_BAND_MAX];
     bool first_frame_logged;
     bool panel_ready;
 } remapad_pocketjs_runtime_t;
@@ -112,9 +137,11 @@ static remapad_pocketjs_runtime_t s_runtime;
 
 static void release_resources(remapad_pocketjs_runtime_t *runtime)
 {
-    if (runtime->strip_buffer != NULL) {
-        heap_caps_free(runtime->strip_buffer);
-        runtime->strip_buffer = NULL;
+    for (size_t index = 0; index < REMAPAD_STRIP_BUFFER_COUNT; ++index) {
+        if (runtime->strip_buffers[index] != NULL) {
+            heap_caps_free(runtime->strip_buffers[index]);
+            runtime->strip_buffers[index] = NULL;
+        }
     }
     if (runtime->target != NULL) {
         pocketjs_rgb565_target_destroy(runtime->target);
@@ -168,6 +195,7 @@ static esp_err_t destroy_runtime(remapad_pocketjs_runtime_t *runtime)
     release_resources(runtime);
     return ESP_OK;
 }
+
 
 static esp_err_t scaled_dimension(uint32_t logical, uint32_t scale, size_t *out)
 {
@@ -255,6 +283,7 @@ static esp_err_t sample_input(pocketjs_ui_input_t *input, void *user_data)
     return ESP_OK;
 }
 
+
 static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_data)
 {
     remapad_pocketjs_runtime_t *runtime = user_data;
@@ -274,59 +303,154 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
         pocketjs_rgb565_abort(runtime->renderer, runtime->target);
         return result;
     }
+
+    const pocketjs_rgb565_accelerator_t *accelerator = render_accel();
+
+    /* damage 折成行带表：行带是渲染与提交的最小单位，一条行带内多个 region 的
+     * 横向范围合并成一个区间。本帧的每条行带都在本帧画完——隔行刷新在实机滚动
+     * 时留下相邻行带相差一帧的纵向错位，观感上不可接受，因此不做字段切分。
+     * 切点落在绝对行网格上，同一块屏幕在连续帧里恒属同一条行带。 */
+    const uint32_t logical_height = frame->logical_height;
+    const uint32_t band_count =
+        (logical_height + REMAPAD_BAND_ROWS - 1U) / REMAPAD_BAND_ROWS;
+    if (band_count == 0U || band_count > REMAPAD_BAND_MAX) {
+        pocketjs_rgb565_abort(runtime->renderer, runtime->target);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    /* 整屏重画（full_redraw）时按整屏补一条区域，不依赖渲染器是否给出 region。 */
+    if (plan.region_count == 0U && plan.full_redraw) {
+        plan.region_count = 1U;
+        plan.regions[0] = (pocketjs_rgb565_rect_t){
+            .x = 0U,
+            .y = 0U,
+            .width = frame->logical_width,
+            .height = frame->logical_height,
+        };
+    }
     for (uint32_t index = 0; index < plan.region_count; ++index) {
         const pocketjs_rgb565_rect_t region = plan.regions[index];
-        size_t region_height = 0;
-        result = scaled_dimension(region.height, scale, &region_height);
-        if (result != ESP_OK || region_height == 0U ||
-            physical_width > SIZE_MAX / region_height) {
+        if (region.width == 0U || region.height == 0U) {
+            continue;
+        }
+        const int32_t x0 = (int32_t)region.x;
+        const int32_t x1 = (int32_t)(region.x + region.width);
+        const uint32_t first_band = region.y / REMAPAD_BAND_ROWS;
+        uint32_t last_band =
+            (region.y + region.height - 1U) / REMAPAD_BAND_ROWS;
+        if (last_band >= band_count) {
+            last_band = band_count - 1U;
+        }
+        for (uint32_t band = first_band; band <= last_band; ++band) {
+            if (runtime->band_pending[band]) {
+                if (x0 < runtime->band_x0[band]) {
+                    runtime->band_x0[band] = x0;
+                }
+                if (x1 > runtime->band_x1[band]) {
+                    runtime->band_x1[band] = x1;
+                }
+            } else {
+                runtime->band_pending[band] = true;
+                runtime->band_x0[band] = x0;
+                runtime->band_x1[band] = x1;
+            }
+        }
+    }
+    /* 行带按绝对行序自上而下渲染并提交：整幅内容在一帧内写完，面板扫描与本帧
+     * 写入之间只剩一个撕裂边界，不再有隔行留下的相邻行带错位。 */
+    for (uint32_t band_index = 0; band_index < band_count; ++band_index) {
+        if (!runtime->band_pending[band_index]) {
+            continue;
+        }
+        const uint32_t band_y = band_index * REMAPAD_BAND_ROWS;
+        uint32_t band_rows = logical_height - band_y;
+        if (band_rows > REMAPAD_BAND_ROWS) {
+            band_rows = REMAPAD_BAND_ROWS;
+        }
+        const pocketjs_rgb565_rect_t band = {
+            .x = (uint32_t)runtime->band_x0[band_index],
+            .y = band_y,
+            .width = (uint32_t)(runtime->band_x1[band_index] -
+                                runtime->band_x0[band_index]),
+            .height = band_rows,
+        };
+        runtime->band_pending[band_index] = false;
+        const int band_x = (int)(band.x * scale);
+        size_t band_width = 0;
+        result = scaled_dimension(band.width, scale, &band_width);
+        if (result != ESP_OK || band_width == 0U ||
+            (size_t)band_x + band_width > physical_width) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return ESP_ERR_INVALID_SIZE;
         }
-        const int region_y = (int)(region.y * scale);
-        const int region_x = (int)(region.x * scale);
-        const int region_width = (int)(region.width * scale);
-        if (region_width <= 0 || (size_t)region_width > physical_width) {
+        size_t band_height = 0;
+        result = scaled_dimension(band.height, scale, &band_height);
+        if (result != ESP_OK || band_height == 0U ||
+            physical_width > SIZE_MAX / band_height) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return ESP_ERR_INVALID_SIZE;
         }
-        const size_t region_pixels = physical_width * region_height;
-        if (region_pixels > runtime->strip_capacity_pixels) {
+        const size_t band_pixels = physical_width * band_height;
+        if (band_pixels > runtime->strip_capacity_pixels) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return ESP_ERR_INVALID_SIZE;
         }
-        memset(runtime->strip_buffer, 0, region_pixels * sizeof(*runtime->strip_buffer));
+        /* 本条渲染进空闲缓冲：先等这个槽上一次的传输结束。三条缓冲轮转，
+         * 队列里最多留三笔在飞，前几笔 DMA 与当前渲染重叠。 */
+        const size_t slot = runtime->strip_slot;
+        uint16_t *strip = runtime->strip_buffers[slot];
+        runtime->strip_slot = (slot + 1U) % REMAPAD_STRIP_BUFFER_COUNT;
+        result = panel_wait_seq(runtime->strip_tokens[slot],
+                                REMAPAD_PANEL_TRANSFER_TIMEOUT_MS);
+        if (result != ESP_OK) {
+            pocketjs_rgb565_abort(runtime->renderer, runtime->target);
+            return result;
+        }
         pocketjs_rgb565_render_stats_t stats = {
             .struct_size = sizeof(stats),
         };
         result = pocketjs_rgb565_render_strip(
             runtime->renderer,
-            frame, runtime->strip_buffer, region_pixels, region, NULL, &stats);
+            frame, strip, band_pixels, band, accelerator, &stats);
         if (result != ESP_OK) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return result;
         }
-        /* strip 每行按视口全宽布局，renderer 只写 region 横向区间；先按行
-         * 搬移为紧凑布局，再只把这个区间提交面板，避免把区间外的清零像素
-         * 当作黑色刷进画面。 */
-        for (size_t row = 0; row < region_height; ++row) {
-            memmove(runtime->strip_buffer + row * region_width,
-                    runtime->strip_buffer + row * physical_width + region_x,
-                    (size_t)region_width * sizeof(*runtime->strip_buffer));
+        /* renderer 先把条带缓冲里 region 覆盖的那块填成背景色，再画内容，
+         * 调用方因此不必预先清零：传输范围永远落在它填过的那块里。
+         *
+         * strip 的行距是视口全宽，面板只按窗口尺寸线性读走一块连续数据，
+         * 所以窗口只要窄于视口就得按行压成紧凑布局——与它起始于哪一列无关
+         * （x=0 而宽度不足时会整体错行，实机表现为斜向/竖向条纹）。压缩时
+         * 目标地址恒不高于源地址，逐元素前向复制不会覆盖尚未读出的像素；
+         * 字节序转换由面板传输统一负责。 */
+        if (band_width != physical_width) {
+            /* 逐行前向压缩（目标地址恒不高于源地址），按 32 位成对搬运。 */
+            for (size_t line = 0; line < band_height; ++line) {
+                const uint16_t *source = strip + line * physical_width + band_x;
+                uint16_t *target = strip + line * band_width;
+                size_t column = 0;
+                for (; column + 2U <= band_width; column += 2U) {
+                    uint32_t pair = 0;
+                    memcpy(&pair, source + column, sizeof(pair));
+                    memcpy(target + column, &pair, sizeof(pair));
+                }
+                for (; column < band_width; ++column) {
+                    target[column] = source[column];
+                }
+            }
         }
-        /* 面板传输失败时放弃本帧事务。 */
+        /* 面板传输失败时放弃本帧事务。spi_master 按提交顺序完成事务，窗口
+         * 命令因此不会与上一笔数据交叉；缓冲的复用由上面的按槽等待保证。 */
         if (runtime->panel_ready) {
-            result = panel_transfer(
-                runtime->strip_buffer,
-                region_x,
-                region_y,
-                region_width,
-                (int)region_height);
+            result = panel_transfer_async(strip, band_x, (int)(band.y * scale),
+                                          (int)band_width, (int)band_height,
+                                          &runtime->strip_tokens[slot]);
             if (result != ESP_OK) {
                 pocketjs_rgb565_abort(runtime->renderer, runtime->target);
                 return result;
             }
         }
+        runtime->window_damage_px += (uint64_t)band_width * (uint64_t)band_height;
     }
 
     result = pocketjs_rgb565_commit(runtime->renderer, runtime->target, frame);
@@ -365,24 +489,38 @@ static esp_err_t allocate_strip_buffer(
         return ESP_ERR_INVALID_SIZE;
     }
 
-    runtime->strip_capacity_pixels = width * height;
+    /* 条带缓冲按固定条高分配，而不是整屏：渲染写入目标是内存带宽的瓶颈，
+     * 小条才能进内部 RAM（见 REMAPAD_STRIP_ROWS）。 */
+    runtime->strip_capacity_pixels = width * REMAPAD_STRIP_ROWS * contract->raster_density;
+    (void)height;
     if (runtime->strip_capacity_pixels > SIZE_MAX / sizeof(uint16_t)) {
         return ESP_ERR_INVALID_SIZE;
     }
 
     const size_t bytes = runtime->strip_capacity_pixels * sizeof(uint16_t);
-    runtime->strip_buffer = heap_caps_aligned_alloc(
-        16, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (runtime->strip_buffer == NULL) {
-        runtime->strip_buffer = heap_caps_aligned_alloc(
-            16, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    const char *where = "internal";
+    for (size_t index = 0; index < REMAPAD_STRIP_BUFFER_COUNT; ++index) {
+        /* strip 既是 renderer 的写入目标也是 EDMA 的读取源。滚动的整屏帧要写
+         * 134 kB，PSRAM 的写带宽会把渲染卡在内存上，因此优先要内部 RAM，
+         * 要不到时退回 PSRAM（功能不变，只是渲染变慢）。 */
+        uint16_t *buffer = heap_caps_aligned_alloc(
+            REMAPAD_STRIP_ALIGN, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
+        if (buffer == NULL) {
+            buffer = heap_caps_aligned_alloc(
+                REMAPAD_STRIP_ALIGN, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            where = "psram";
+        }
+        if (buffer == NULL) {
+            runtime->strip_capacity_pixels = 0;
+            return ESP_ERR_NO_MEM;
+        }
+        memset(buffer, 0, bytes);
+        runtime->strip_buffers[index] = buffer;
     }
-    if (runtime->strip_buffer == NULL) {
-        runtime->strip_capacity_pixels = 0;
-        return ESP_ERR_NO_MEM;
-    }
-
-    memset(runtime->strip_buffer, 0, bytes);
+    ESP_LOGI(TAG, "strip buffers: %u x %u bytes in %s, internal free=%u psram free=%u",
+             (unsigned)REMAPAD_STRIP_BUFFER_COUNT, (unsigned)bytes, where,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     return ESP_OK;
 }
 
@@ -525,6 +663,11 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
     pocketjs_rgb565_renderer_config_t renderer_config;
     pocketjs_rgb565_renderer_config_defaults(&renderer_config);
     renderer_config.scale = pocketjs_package_remapad_contract.raster_density;
+    /* 加速回调是本机整数实现（S3 无 PPA），比通用软件光栅快，阈值因此放到
+     * 最低：小到一行的字形与纹理也走加速路径，避免「先建掩码再整块回退」。 */
+    renderer_config.min_fill_pixels = 1;
+    renderer_config.min_blend_pixels = 1;
+    renderer_config.min_srm_pixels = 1;
     result = pocketjs_rgb565_renderer_create(
         &renderer_config,
         &runtime->renderer);
@@ -656,21 +799,21 @@ static void pocketjs_owner_task(void *opaque)
         js_bridge_service();
 
         if (esp_timer_get_time() >= report_due) {
+            const uint32_t frames_in_window =
+                runtime->window_frames == 0U ? 1U : runtime->window_frames;
             ESP_LOGI(TAG,
                      "frames=%" PRIu32 " avg_turn_us=%" PRIu32
-                     " avg_render_us=%" PRIu32 " max_turn_us=%" PRIu32
-                     " max_render_us=%" PRIu32,
+                     " avg_render_us=%" PRIu32 " avg_damage_px=%" PRIu32
+                     " max_turn_us=%" PRIu32 " max_render_us=%" PRIu32,
                      runtime->frames,
-                     runtime->window_frames == 0U
-                         ? 0U
-                         : (uint32_t)(runtime->window_turn_us / runtime->window_frames),
-                     runtime->window_frames == 0U
-                         ? 0U
-                         : (uint32_t)(runtime->window_render_us / runtime->window_frames),
+                     (uint32_t)(runtime->window_turn_us / frames_in_window),
+                     (uint32_t)(runtime->window_render_us / frames_in_window),
+                     (uint32_t)(runtime->window_damage_px / frames_in_window),
                      runtime->max_turn_us, runtime->max_render_us);
             runtime->window_frames = 0U;
             runtime->window_turn_us = 0U;
             runtime->window_render_us = 0U;
+            runtime->window_damage_px = 0U;
             report_due += INT64_C(5000000);
         }
     }
