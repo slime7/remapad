@@ -17,6 +17,7 @@
 #include "app_config.h"
 #include "backlight.h"
 #include "bridge/js_bridge.h"
+#include "buzzer.h"
 #include "dp_source.h"
 #include "ns2_state.h"
 
@@ -38,6 +39,7 @@ static void cli_help(void)
     cli_print("  key a|home|lr       inject debug key");
     cli_print("  backlight 0-100     set + persist backlight");
     cli_print("  screen on|off       screen power");
+    cli_print("  beep [ms]           buzzer hint tone (default 120)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  pairing start|stop  pairing advertising");
     cli_print("  reboot              restart into COM mode");
@@ -101,9 +103,21 @@ static void cli_screen(const char *arg)
     }
 }
 
+/** 蜂鸣器自检：不依赖 PWR 按键，便于确认提示音通路与背光互不影响。 */
+static void cli_beep(const char *arg)
+{
+    const int value = arg[0] == '\0' ? 120 : atoi(arg);
+    if (value <= 0 || value > 1000) {
+        cli_print("err beep 1-1000 ms");
+        return;
+    }
+    buzzer_beep((uint32_t)value);
+    cli_print("ok beep queued");
+}
+
 static void cli_mode(const char *arg)
 {
-    /* 走 bridge 命令路径：otg 在 bridge 内拒绝并回复，角色持久化也一并生效。 */
+    /* 走 bridge 命令路径：otg 在 bridge 内拒绝并回复；角色只对本次运行生效。 */
     if (strcmp(arg, "device") == 0 || strcmp(arg, "host") == 0) {
         char json[64];
         snprintf(json, sizeof(json), "{\"t\":\"setUsbRole\",\"role\":\"%s\",\"id\":0}", arg);
@@ -150,6 +164,8 @@ static void cli_dispatch(char *line)
         cli_backlight(arg);
     } else if (strcmp(line, "screen") == 0) {
         cli_screen(arg);
+    } else if (strcmp(line, "beep") == 0) {
+        cli_beep(arg);
     } else if (strcmp(line, "mode") == 0) {
         cli_mode(arg);
     } else if (strcmp(line, "pairing") == 0) {
