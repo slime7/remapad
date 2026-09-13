@@ -191,13 +191,15 @@ python scripts/uartctl.py -p COM3 screen off      # 息屏（on 恢复）
 python scripts/uartctl.py -p COM3 mode host       # 连接模式（otg 被固件拒绝）
 python scripts/uartctl.py -p COM3 pairing start   # 配对广播开关
 python scripts/uartctl.py -p COM3 reboot          # 软重启回 COM 模式
+python scripts/uartctl.py -p COM3 log --seconds 20   # 只读设备日志 20 秒
+python scripts/uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完整启动日志
 ```
 
-不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。注意两点：打开 USB-Serial/JTAG 口通常会把设备复位一次（USJ 特性），所以每次 `uartctl.py` 调用后 `uptime` 会归零属正常现象，连续操作建议用交互模式；抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
+不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。`log` 子命令只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：打开 USB-Serial/JTAG 口通常会把设备复位一次（USJ 特性），所以每次 `uartctl.py` 调用后 `uptime` 会归零属正常现象，连续操作建议用交互模式；抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
 
-PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚暂不驱动：USB 供电下锁存被旁路，电池供电场景待电源 BSP 阶段接入。
+PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚暂不驱动：USB 供电下锁存被旁路，电池供电场景待电源 BSP 阶段接入。
 
-用户设置（背光亮度、连接模式、手柄类型与配色）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态不跨重启保留。USB 输入与桥接模式的推进方案（当前仅架构预留）见 [usb-input-plan.md](usb-input-plan.md)。
+用户设置（背光亮度、手柄类型与配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。USB 输入与桥接模式的推进方案（当前仅架构预留）见 [usb-input-plan.md](usb-input-plan.md)。
 
 ## 关键文件
 
@@ -275,9 +277,9 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 `ui/src/index.tsx` 现在会在挂载前补齐缺失的 `console.warn` / `console.error`，转发到 native `console.log`（经 QuickJS `js_print` 进串口）。如果又看到这个报错，先确认那段垫片还在。诊断时还可以临时提高 `Error.stackTraceLimit`：QuickJS 默认只保留 10 层栈帧，栈溢出会被截断成看不出形态的短栈。
 
-### 启动 mount 阶段出现 `task_wdt` 告警
+### 启动 guest eval 阶段出现 `task_wdt` 告警
 
-从 `app_main` 到首帧就绪之间有一个十几秒的窗口（当前构建实测：启动画面约 1.6 秒落屏，约 18 秒首帧就绪，背光随启动画面点亮），期间 owner task 连续占用一个核，空闲任务得不到调度，`task_wdt` 会打印 `IDLE0` 未按时喂狗的告警。`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。若后续对启动时间有要求，需要在 BSP 阶段优化 mount 耗时，而不是简单调大看门狗超时。
+从 `app_main` 到首帧就绪之间有一个十几秒的窗口（当前构建实测：启动画面约 1.6 秒落屏，约 18 秒首帧就绪，背光随启动画面点亮），其中 `guest_eval` 占约 16 秒（阶段权重表按实测填写），期间 owner task 连续占用一个核，空闲任务得不到调度，`task_wdt` 会打印 `IDLE0` 未按时喂狗的告警。`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。若后续对启动时间有要求，需要在 BSP 阶段优化 guest eval 耗时（编译与执行整包 JS），而不是简单调大看门狗超时。
 
 ### 运行时反复 `task_wdt` 告警并且 UI 掉帧
 
