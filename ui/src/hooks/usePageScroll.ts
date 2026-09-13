@@ -35,8 +35,32 @@ export function usePageScroll(
 ) {
   const maxOffset = () =>
     scrollable && contentH !== undefined ? Math.max(0, contentH() - PAGE_VIEW_H) : 0;
-  // overscroll 0：边缘硬夹住，没有橡皮筋，滚到底就停。
+  // overscroll 0：拖拽在边缘硬夹住，没有橡皮筋。
   const scroller = createScroller({ max: maxOffset, overscroll: 0 });
+
+  /**
+   * 松手：落点越界的抛掷改写成到边界的补间。框架的 fling 撞到边缘会转交
+   * 边缘弹簧，实测会冲过边界约 70 px 再弹回；这里在松手瞬间换成确定性停止。
+   */
+  const release = (velocity: number) => {
+    scroller.endDrag(velocity);
+    if (scroller.state() !== 'fling') {
+      return;
+    }
+    const max = maxOffset();
+    const projected = scroller.projectFling(velocity);
+    if (projected >= 0 && projected <= max) {
+      return;
+    }
+    const bound = projected < 0 ? 0 : max;
+    const distance = Math.abs(bound - scroller.offset());
+    // 三次缓出的起始速度是 3·距离/时长，取能对齐松手速度的时长，停下前不产生二次加速；
+    // 上界避免慢速甩动被拖长。
+    const speed = Math.max(Math.abs(velocity), 1);
+    const durMs = Math.min(1000, Math.max(150, (3000 * distance) / speed));
+    scroller.scrollTo(bound, { durMs });
+  };
+
   const entry: Entry = {
     active,
     scroller,
@@ -46,10 +70,10 @@ export function usePageScroll(
         onDown: () => scroller.stop(),
         onPanStart: () => scroller.beginDrag(),
         onPanMove: (c) => scroller.drag(-c.fdy),
-        onPanEnd: (c) => scroller.endDrag(-c.vy),
+        onPanEnd: (c) => release(-c.vy),
         onCancel: () => {
           if (scroller.state() === 'tracking') {
-            scroller.endDrag(0);
+            release(0);
           }
         },
       }),
