@@ -44,13 +44,10 @@ interface TypeOption {
   title: string;
 }
 
-/** 序列号行：两行结构固定，非当前形态的那行用 hidden 收起，避免切换时重建节点。 */
-interface SerialRow {
-  label: string;
-  value: string;
-  hidden: boolean;
-}
+/** 序列号槽位：0 = Pro 单手柄 / JoyCon 左，1 = JoyCon 右（Pro 形态收起）。 */
+type SerialSlot = 0 | 1;
 
+/** 序列号占位值与固件 ns2_serial 产出同规则：前缀 + 10 位数字 + 校验位。 */
 const PRO_SERIAL = 'HEJ71001123456';
 const JOYCON_SERIAL_LEFT = 'HBW10067012342';
 const JOYCON_SERIAL_RIGHT = 'HCW10068012341';
@@ -99,7 +96,15 @@ function TypeCard(props: {
   );
 }
 
-function InfoRow(props: { label: string; value: string; hidden?: boolean }) {
+/**
+ * 序列号行：两行都是常驻节点，切换形态只重写文本与 hidden。
+ *
+ * 三个字段必须以表达式传入（编译器会包成逐属性 getter，框架读 props 时解包并
+ * 跟踪依赖）。若改成在组件里拼数组再 map —— 或让列表构造读到响应式状态 ——
+ * 该状态一变整段列表就会重挂：实测一次切换要重建 13 个原生节点，实机按每节点
+ * 约 50 ms 的建树成本计会卡半秒以上。
+ */
+function InfoRow(props: { label: string; value: string; hidden: boolean }) {
   return (
     <View
       class={
@@ -121,18 +126,27 @@ function InfoRow(props: { label: string; value: string; hidden?: boolean }) {
 export function ControllerSettingsPage(props: { active: () => boolean }) {
   const config = () => hw.controllerConfig;
   const isJoycon = () => config().type === 'joycon';
-  // 序列号与固件 ns2_serial 生成的常量一致：前缀 + 10 位数字 + 校验位
-  // （S = 偶位和 + 3×奇位和，校验位 = (10 − S mod 10) mod 10）。
-  const serialRows = (): SerialRow[] =>
-    isJoycon()
-      ? [
-          { label: '左序列号', value: JOYCON_SERIAL_LEFT, hidden: false },
-          { label: '右序列号', value: JOYCON_SERIAL_RIGHT, hidden: false },
-        ]
-      : [
-          { label: '序列号', value: PRO_SERIAL, hidden: false },
-          { label: '右序列号', value: JOYCON_SERIAL_RIGHT, hidden: true },
-        ];
+  // 序列号规则：前缀 + 10 位数字 + 校验位（S = 偶位和 + 3×奇位和，
+  // 校验位 = (10 − S mod 10) mod 10），与固件 ns2_serial 一致。
+  const serialLabel = (slot: SerialSlot): string => {
+    if (slot === 1) {
+      return '右序列号';
+    }
+    return isJoycon() ? '左序列号' : '序列号';
+  };
+  /**
+   * 序列号取值按当前形态算。真机上机身配色与序列号属于同一份身份，配色可选后
+   * 这里要一并按 bodyColor 取值；若 NS2 不校验配色与序列号的对应关系，也可以
+   * 复用同一份序列号。两种做法都只改这个函数，绑定方式不变。
+   */
+  const serialValue = (slot: SerialSlot): string => {
+    if (slot === 1) {
+      return JOYCON_SERIAL_RIGHT;
+    }
+    return isJoycon() ? JOYCON_SERIAL_LEFT : PRO_SERIAL;
+  };
+  /** Pro 形态只有一条序列号：槽位 1 收 hidden，节点常驻不重建。 */
+  const serialHidden = (slot: SerialSlot): boolean => slot === 1 && !isJoycon();
 
   const contentRef = usePageScroll(props.active, true, () => contentHeight(isJoycon()) + BOTTOM_PAD_H);
 
@@ -154,9 +168,8 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
           <Text class="text-sm font-bold shrink-0" style={{ textColor: COLOR.onSurface }}>
             序列号信息
           </Text>
-          {serialRows().map((row) => (
-            <InfoRow label={row.label} value={row.value} hidden={row.hidden} />
-          ))}
+          <InfoRow label={serialLabel(0)} value={serialValue(0)} hidden={serialHidden(0)} />
+          <InfoRow label={serialLabel(1)} value={serialValue(1)} hidden={serialHidden(1)} />
         </View>
 
         <View class={STYLE.actionCard}>

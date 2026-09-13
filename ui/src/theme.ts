@@ -92,9 +92,14 @@ export const STYLE = {
   pairMainStop: 'w-[76] h-[76] rounded-full bg-[#8a1a1e] flex-col items-center justify-center shrink-0 active:bg-[#a02a2e] transition-colors duration-150',
   pairAux: 'w-[76] h-[76] rounded-full bg-[#14263e] flex-col items-center justify-center shrink-0 active:bg-[#1c3350] transition-colors duration-150',
 
-  /** 模式页/手柄设置页的选项卡（未选中 / 选中）。 */
-  optionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-3 gap-3 active:bg-[#14263e] transition-colors duration-150',
-  optionCardSel: 'w-full shrink-0 rounded-[16] bg-[#9ecefe] flex-row items-center px-3 py-3 gap-3 active:bg-[#b8dbff] transition-colors duration-150',
+  /**
+   * 模式页/手柄设置页的选项卡（未选中 / 选中）。
+   * 这两条不带 transition-colors：选中态要一步到位。加过渡后切换要连画 9 帧
+   * （150 ms），每帧重画两张卡片（约 2.2 万像素，实机上每帧 11–14 ms），
+   * 点下去像慢半拍。
+   */
+  optionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-3 gap-3 active:bg-[#14263e]',
+  optionCardSel: 'w-full shrink-0 rounded-[16] bg-[#9ecefe] flex-row items-center px-3 py-3 gap-3 active:bg-[#b8dbff]',
 } as const;
 
 /**
