@@ -13,9 +13,6 @@ static const char *TAG = "remapad_ns2out";
 /** NTAG215 用户区完整镜像（ amiibo dump 通行尺寸：135 页 × 4B = 540B）。 */
 #define NS2_AMIIBO_MAX 540
 
-/** 会话当前报告格式（0x05/0x09）。ns2 层不反向包含 ble 头，链接期解析。 */
-extern uint8_t ns2_session_report_format(void);
-
 static struct {
     ns2_output_sink_t sink;
     ns2_feedback_fn feedback_fn;
@@ -50,7 +47,8 @@ void ns2_output_set_feedback_listener(ns2_feedback_fn fn, void *user)
 
 void ns2_output_send(const ns2_controller_state_t *state)
 {
-    if (s_out.sink.send_report == NULL) {
+    if (s_out.sink.session_count == NULL || s_out.sink.session_info == NULL ||
+        s_out.sink.send_report == NULL) {
         return;
     }
     /* 电池字段以 ns2_output_set_battery 的最新值为准（输入源可能不带电池）。 */
@@ -61,18 +59,25 @@ void ns2_output_send(const ns2_controller_state_t *state)
         merged.charging = s_out.charging;
         merged.external_power = s_out.external_power;
     }
-    const uint8_t format = ns2_session_report_format();
-    if (s_out.sink.ready != NULL && !s_out.sink.ready(format, s_out.sink.user)) {
-        return;
-    }
-    if (format == NS2_REPORT_ID_05) {
-        uint8_t report[NS2_INPUT_05_LEN];
-        ns2_encode_input_05(report, &merged, s_out.counter05++);
-        s_out.sink.send_report(format, report, sizeof(report), s_out.sink.user);
-    } else {
-        uint8_t report[NS2_INPUT_09_LEN];
-        ns2_encode_input_09(report, &merged, s_out.counter09++);
-        s_out.sink.send_report(format, report, sizeof(report), s_out.sink.user);
+    const size_t sessions = s_out.sink.session_count(s_out.sink.user);
+    for (size_t i = 0; i < sessions; i++) {
+        uint8_t identity = NS2_ID_PRO;
+        uint8_t format = NS2_REPORT_ID_09;
+        if (!s_out.sink.session_info(i, &identity, &format, s_out.sink.user)) {
+            continue;
+        }
+        /* JoyCon 组合按会话身份切分按键与摇杆（各会上报半边状态）。 */
+        ns2_controller_state_t split;
+        ns2_state_for_identity(&split, &merged, identity);
+        if (format == NS2_REPORT_ID_05) {
+            uint8_t report[NS2_INPUT_05_LEN];
+            ns2_encode_input_05(report, &split, s_out.counter05++);
+            s_out.sink.send_report(i, format, report, sizeof(report), s_out.sink.user);
+        } else {
+            uint8_t report[NS2_INPUT_09_LEN];
+            ns2_encode_input_09(report, &split, s_out.counter09++);
+            s_out.sink.send_report(i, format, report, sizeof(report), s_out.sink.user);
+        }
     }
 }
 

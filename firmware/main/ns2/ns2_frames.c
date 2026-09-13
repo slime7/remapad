@@ -2,6 +2,9 @@
 
 #include <string.h>
 
+#include "app_config.h"
+#include "ns2_state.h"
+
 /** 官方手柄当前固件返回的固定公钥（controller.md §3.2）。 */
 const uint8_t ns2_pair_pubkey_b1[NS2_PAIR_PUBKEY_LEN] = {
     0x5C, 0xF6, 0xEE, 0x79, 0x2C, 0xDF, 0x05, 0xE1,
@@ -34,14 +37,18 @@ size_t ns2_frame_response(uint8_t *out, size_t cap, uint8_t cmd, uint8_t transpo
     return NS2_FRAME_HEADER_LEN + body_len;
 }
 
-void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN])
+void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN], uint8_t identity)
 {
-    /* 固件版本 1.0.14、手柄类型 0x02（Pro Controller）、BT 栈补丁 0.0.12；
-     * 音频 DSP 固件未实现，按参考实现填 0xFF。 */
-    out[0] = 0x01;
-    out[1] = 0x00;
-    out[2] = 0x0E;
-    out[3] = 0x02;
+    /* 固件版本取持久化值（默认 1.6.1，主机固件更新事件由假升级会话递增）；
+     * 手柄类型按当前会话身份（0x00 JC L / 0x01 JC R / 0x02 Pro）；
+     * BT 栈补丁 0.0.12，音频 DSP 固件未实现，按参考实现填 0xFF。 */
+    const uint8_t *ver = app_config_get()->fw_version;
+    out[0] = ver[0];
+    out[1] = ver[1];
+    out[2] = ver[2];
+    out[3] = identity == NS2_ID_JOYCON_L ? 0x00u
+             : identity == NS2_ID_JOYCON_R ? 0x01u
+                                           : 0x02u;
     out[4] = 0x0C;
     out[5] = 0x00;
     out[6] = 0x00;

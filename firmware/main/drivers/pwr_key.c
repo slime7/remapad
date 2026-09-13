@@ -10,6 +10,8 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 
+#include "buzzer.h"
+
 /* PWR 键经电源功能电路接 SYS_OUT（GPIO40）；板上应有外部上拉，内部上拉
  * 仅作悬空兜底。SYS_EN（GPIO41）为电源保持脚，此处刻意不驱动。 */
 #define PWR_KEY_GPIO GPIO_NUM_40
@@ -33,6 +35,7 @@ static void pwr_key_task(void *param)
 {
     pwr_state_t state = PWR_IDLE;
     int64_t pressed_at_us = 0;
+    bool long_hint_beeped = false;
 
     ESP_LOGI(TAG, "pwr key polling on GPIO%d", PWR_KEY_GPIO);
     for (;;) {
@@ -42,6 +45,7 @@ static void pwr_key_task(void *param)
         case PWR_IDLE:
             if (level_low) {
                 pressed_at_us = now;
+                long_hint_beeped = false;
                 state = PWR_DOWN;
             }
             break;
@@ -63,6 +67,11 @@ static void pwr_key_task(void *param)
                 /* 按住超出长按窗：进入忽略态，避免在未知硬件切电阈值边缘
                  * 触发软件动作。 */
                 state = PWR_IGNORE;
+            } else if (!long_hint_beeped && now - pressed_at_us >= PWR_KEY_LONG_MIN_US) {
+                /* 到达 3 秒长按窗：短鸣一声提示「可以松开」。 */
+                long_hint_beeped = true;
+                buzzer_beep(120);
+                ESP_LOGI(TAG, "long press hint beep");
             }
             break;
         case PWR_IGNORE:

@@ -28,12 +28,17 @@ extern "C" {
  *   由会话层经 ns2_output_amiibo_read 分块取用。
  */
 
-/** 输出通道：把编码后的报告体发往一个 NS2 主机链路（BLE 现役，USB 预留）。 */
+/** 输出通道：把编码后的报告体发往 NS2 主机链路（BLE 现役，USB 预留）。
+ * 通道可承载多个并发的输出会话（BLE 连接；JoyCon 组合为左右两条），
+ * ns2_output_send 按会话身份切分状态后逐会话编码发送。 */
 typedef struct {
-    /** 按报告格式发送通知；report_id 为 NS2_REPORT_ID_05 / _09。 */
-    void (*send_report)(uint8_t report_id, const uint8_t *body, size_t len, void *user);
-    /** 通道是否就绪（未就绪时静默丢弃本周期报告，如 CCCD 未开）。 */
-    bool (*ready)(uint8_t report_id, void *user);
+    /** 当前活跃会话数。 */
+    size_t (*session_count)(void *user);
+    /** 第 index 个会话的身份（ns2_identity_t）与报告格式（0x05 / 0x09）。 */
+    bool (*session_info)(size_t index, uint8_t *identity, uint8_t *report_format, void *user);
+    /** 向第 index 个会话发送编码好的报告体（连接未订阅时由通道内部丢弃）。 */
+    void (*send_report)(size_t index, uint8_t report_id, const uint8_t *body, size_t len,
+                        void *user);
     void *user;
 } ns2_output_sink_t;
 

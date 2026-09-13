@@ -8,6 +8,33 @@ static uint8_t btn_bit(uint32_t buttons, uint32_t mask, uint8_t shift)
     return (uint8_t)(((buttons & mask) != 0) << shift);
 }
 
+void ns2_state_for_identity(ns2_controller_state_t *out,
+                            const ns2_controller_state_t *in, uint8_t identity)
+{
+    *out = *in;
+    if (identity == NS2_ID_PRO) {
+        return;
+    }
+    /* JoyCon 组合按左右分摊同一份规范化状态：左半保留 L 侧按键、十字键与
+     * 左摇杆，右半保留 A/B/X/Y 与右摇杆；GL/GR 近似对应导轨 SL/SR。单只
+     * JoyCon 2 无 NFC，状态字节清零；电池/震动特性两半一致。 */
+    if (identity == NS2_ID_JOYCON_L) {
+        out->buttons &= NS2_BTN_L | NS2_BTN_ZL | NS2_BTN_MINUS | NS2_BTN_CAPTURE |
+                        NS2_BTN_LSTICK | NS2_BTN_GL |
+                        NS2_BTN_DPAD_UP | NS2_BTN_DPAD_DOWN |
+                        NS2_BTN_DPAD_LEFT | NS2_BTN_DPAD_RIGHT;
+        out->stick_rx = NS2_STICK_CENTER;
+        out->stick_ry = NS2_STICK_CENTER;
+    } else {
+        out->buttons &= NS2_BTN_R | NS2_BTN_ZR | NS2_BTN_PLUS | NS2_BTN_HOME |
+                        NS2_BTN_A | NS2_BTN_B | NS2_BTN_X | NS2_BTN_Y |
+                        NS2_BTN_RSTICK | NS2_BTN_GR;
+        out->stick_lx = NS2_STICK_CENTER;
+        out->stick_ly = NS2_STICK_CENTER;
+    }
+    out->nfc_state = 0;
+}
+
 /** Report 0x09 电源状态：bit0 外部供电、bit1 充电中、bits2-5 电量等级。 */
 static uint8_t power_byte(const ns2_controller_state_t *state)
 {

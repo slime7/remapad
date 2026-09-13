@@ -40,6 +40,12 @@ typedef struct {
     uint32_t body_color;
     uint32_t button_color;
     uint32_t grip_color;
+    /**
+     * 上报给主机的手柄固件版本（主.次.修订），0x10 版本查询、0x7E40 与
+     * 0x13000 出厂块的版本字段共用。默认 1.6.1；主机的固件更新推送由
+     * 假升级会话接收，完成后递增并落盘（假装升级到新版本）。
+     */
+    uint8_t fw_version[3];
 } app_config_t;
 
 /** 读入 NVS 配置到内存表（无记录时用默认值）。须在 nvs_init 之后调用。 */
@@ -53,6 +59,9 @@ void app_config_set_screen_on(bool on);
 void app_config_set_usb_role(app_config_usb_role_t role);
 void app_config_set_controller(app_config_ctrl_type_t type,
                                uint32_t body_rgb, uint32_t button_rgb, uint32_t grip_rgb);
+
+/** 覆盖上报固件版本（假升级完成时递增），立即落盘。 */
+void app_config_set_fw_version(const uint8_t ver[3]);
 
 #ifdef __cplusplus
 }

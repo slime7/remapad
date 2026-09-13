@@ -21,6 +21,11 @@ void ns2_pack_stick(uint16_t x, uint16_t y, uint8_t out[3]);
 /** 摇杆 12 位紧凑解包，与 ns2_pack_stick 互逆。 */
 void ns2_unpack_stick(const uint8_t in[3], uint16_t *x, uint16_t *y);
 
+/** 按手柄身份切分规范化状态（JoyCon 组合的左右分摊）：Pro 原样拷贝；
+ * L 保留 L 侧按键/十字键/左摇杆，R 保留 A/B/X/Y/右摇杆，NFC 状态清零。 */
+void ns2_state_for_identity(ns2_controller_state_t *out,
+                            const ns2_controller_state_t *in, uint8_t identity);
+
 /** 编码 Input Report 0x09（Pro Controller 2 专用，BLE 通知体，无 Report ID）。
  * counter 为 8 位循环计数，由数据面任务维护。 */
 void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],

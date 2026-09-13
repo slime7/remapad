@@ -40,6 +40,18 @@ enum {
 #define NS2_STICK_CENTER 2048
 #define NS2_STICK_MAX 4095
 
+/**
+ * 手柄身份：单连接 Pro（NS2_ID_PRO）或 JoyCon 组合的左右两只（L/R 双连接，
+ * 各自独立的序列号、PID、广播地址与配对凭证）。凭证存储与广播/会话层都
+ * 按此枚举分槽。
+ */
+typedef enum {
+    NS2_ID_PRO = 0,
+    NS2_ID_JOYCON_L = 1,
+    NS2_ID_JOYCON_R = 2,
+    NS2_ID_COUNT = 3,
+} ns2_identity_t;
+
 typedef struct {
     uint32_t buttons;
     uint16_t stick_lx;

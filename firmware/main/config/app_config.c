@@ -14,9 +14,13 @@ static const char *TAG = "remapad_config";
 #define CONFIG_NS "remapad"
 #define CONFIG_KEY "cfg"
 
-/** 序列化格式：版本字节 + 字段（尾部保留对齐）。 */
-#define CONFIG_BLOB_LEN 16
+/** 序列化格式：版本字节 + 字段（尾部保留对齐）。v1 长度 16；引入固件版本
+ * 字段后扩到 24（[16..18] 固件版本），读回兼容 16 字节旧记录（新字段用
+ * 默认值），首次保存即写新长度。 */
+#define CONFIG_BLOB_LEN 24
 #define CONFIG_BLOB_VERSION 1
+/** 旧版（无固件版本字段）的记录长度。 */
+#define CONFIG_BLOB_LEN_V1 16
 
 #define CONFIG_COMMIT_QUEUE_LEN 4
 
@@ -68,6 +72,9 @@ static void serialize_locked(uint8_t blob[CONFIG_BLOB_LEN])
     blob[11] = (uint8_t)(s_appcfg.cfg.grip_color >> 16);
     blob[12] = (uint8_t)(s_appcfg.cfg.grip_color >> 8);
     blob[13] = (uint8_t)(s_appcfg.cfg.grip_color);
+    blob[16] = s_appcfg.cfg.fw_version[0];
+    blob[17] = s_appcfg.cfg.fw_version[1];
+    blob[18] = s_appcfg.cfg.fw_version[2];
 }
 
 static void schedule_commit(void)
@@ -99,6 +106,10 @@ esp_err_t app_config_init(void)
     s_appcfg.cfg.body_color = 0;
     s_appcfg.cfg.button_color = 0;
     s_appcfg.cfg.grip_color = 0;
+    /* 上报固件版本默认 1.6.1（与出厂块历史值一致，高于抓包样本 1.0.14）。 */
+    s_appcfg.cfg.fw_version[0] = 0x01;
+    s_appcfg.cfg.fw_version[1] = 0x06;
+    s_appcfg.cfg.fw_version[2] = 0x01;
 
     nvs_handle_t handle;
     const esp_err_t err = nvs_open(CONFIG_NS, NVS_READONLY, &handle);
@@ -118,7 +129,7 @@ esp_err_t app_config_init(void)
     if (get != ESP_OK) {
         return get;
     }
-    if (len < CONFIG_BLOB_LEN || blob[0] != CONFIG_BLOB_VERSION) {
+    if ((len != CONFIG_BLOB_LEN && len != CONFIG_BLOB_LEN_V1) || blob[0] != CONFIG_BLOB_VERSION) {
         ESP_LOGW(TAG, "corrupted config blob (len=%u v=%u), using defaults",
                  (unsigned)len, (unsigned)blob[0]);
         return ESP_OK;
@@ -133,6 +144,11 @@ esp_err_t app_config_init(void)
     s_appcfg.cfg.body_color = ((uint32_t)blob[5] << 16) | ((uint32_t)blob[6] << 8) | blob[7];
     s_appcfg.cfg.button_color = ((uint32_t)blob[8] << 16) | ((uint32_t)blob[9] << 8) | blob[10];
     s_appcfg.cfg.grip_color = ((uint32_t)blob[11] << 16) | ((uint32_t)blob[12] << 8) | blob[13];
+    if (len >= CONFIG_BLOB_LEN) {
+        s_appcfg.cfg.fw_version[0] = blob[16];
+        s_appcfg.cfg.fw_version[1] = blob[17];
+        s_appcfg.cfg.fw_version[2] = blob[18];
+    }
     ESP_LOGI(TAG, "loaded config: brightness=%u screen=%u role=%u type=%u",
              s_appcfg.cfg.brightness, (unsigned)s_appcfg.cfg.screen_on,
              (unsigned)s_appcfg.cfg.usb_role, (unsigned)s_appcfg.cfg.ctrl_type);
@@ -184,6 +200,17 @@ void app_config_set_controller(app_config_ctrl_type_t type,
         s_appcfg.cfg.body_color = body_rgb;
         s_appcfg.cfg.button_color = button_rgb;
         s_appcfg.cfg.grip_color = grip_rgb;
+        xSemaphoreGive(s_appcfg.lock);
+    }
+    schedule_commit();
+}
+
+void app_config_set_fw_version(const uint8_t ver[3])
+{
+    if (s_appcfg.lock != NULL && xSemaphoreTake(s_appcfg.lock, portMAX_DELAY) == pdTRUE) {
+        s_appcfg.cfg.fw_version[0] = ver[0];
+        s_appcfg.cfg.fw_version[1] = ver[1];
+        s_appcfg.cfg.fw_version[2] = ver[2];
         xSemaphoreGive(s_appcfg.lock);
     }
     schedule_commit();

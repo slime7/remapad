@@ -37,27 +37,32 @@ static const dp_source_t s_synthetic_source = {
     .sample = synthetic_sample,
 };
 
-/** BLE 输出通道：把编码后的报告体经 NimBLE 通知发送。 */
-static void ble_send_report(uint8_t report_id, const uint8_t *body, size_t len, void *user)
+/** BLE 输出通道：把编码好的报告体经 NimBLE 通知发到对应连接。 */
+static void ble_send_report(size_t index, uint8_t report_id, const uint8_t *body,
+                            size_t len, void *user)
 {
     (void)user;
     (void)len;
-    if (report_id == NS2_REPORT_ID_05) {
-        ble_controller_notify_input_05(body);
-    } else {
-        ble_controller_notify_input_09(body);
-    }
+    ns2_session_deliver_report(index, report_id, body);
 }
 
-static bool ble_report_ready(uint8_t report_id, void *user)
+static size_t ble_session_count(void *user)
 {
     (void)user;
-    return ble_controller_connected() && ble_controller_input_notify_ready(report_id);
+    return ns2_session_output_count();
+}
+
+static bool ble_session_info(size_t index, uint8_t *identity, uint8_t *report_format,
+                             void *user)
+{
+    (void)user;
+    return ns2_session_output_info(index, identity, report_format);
 }
 
 static const ns2_output_sink_t s_ble_sink = {
+    .session_count = ble_session_count,
+    .session_info = ble_session_info,
     .send_report = ble_send_report,
-    .ready = ble_report_ready,
     .user = NULL,
 };
 

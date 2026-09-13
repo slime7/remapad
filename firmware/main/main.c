@@ -12,6 +12,7 @@
 #include "bridge/js_bridge.h"
 #include "console/cli.h"
 #include "dp_plane.h"
+#include "drivers/buzzer.h"
 #include "drivers/pwr_key.h"
 #include "pocketjs_host.h"
 
@@ -67,6 +68,11 @@ void app_main(void)
     ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(remapad_pocketjs_start());
     ESP_LOGI("remapad_app", "PocketJS owner task started");
+
+    /* 蜂鸣器供 PWR 长按提示使用；初始化失败只影响提示音，不阻断启动。 */
+    if (buzzer_init() != ESP_OK) {
+        ESP_LOGE("remapad_app", "buzzer init failed");
+    }
 
     /* 数据面失败不阻断屏幕 UI 启动。 */
     const esp_err_t dp_err = dp_plane_start();

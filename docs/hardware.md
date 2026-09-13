@@ -1,6 +1,6 @@
 # Remapad 目标硬件参考
 
-本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。面板、触摸与背光 BSP 已接入固件（见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；USB 输入、BLE、电池、IMU、RTC 与蜂鸣器尚未实现，这些外设仍只有硬件事实。
+本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。面板、触摸与背光 BSP 已接入固件（见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄链路、蜂鸣器（GPIO42 LEDC tone）、电池占位采样与 PWR 按键已接入；USB 输入、IMU 与 RTC 仍只有硬件事实。
 
 板卡为微雪 (Waveshare) **ESP32-S3-Touch-LCD-1.69**，SKU 27350；本文档的规格、引脚与地址来自微雪官方文档 <https://docs.waveshare.net/ESP32-S3-Touch-LCD-1.69>。
 
@@ -136,13 +136,15 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 
 以上为芯片与 IDF v6.1 源码事实；本固件尚未接入 USB host，接入时按本文实施并以实机验证为准。
 
-## 产品 BSP 尚未实现的范围
+## 产品 BSP 接入状态
 
-面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 40 MHz）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。以下外设目前只有硬件事实，固件没有接入：
+面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 40 MHz）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。此外 `pwr_key.c`（GPIO40 采样，短按息屏 / 长按切连接模式）、`buzzer.c`（GPIO42 LEDC tone，长按 3 秒提示音）与 BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）已接入；`battery.c` 已编译但仍是占位采样（真实 ADC 与充电状态待电源 BSP）。
 
-- 电池 ADC 采样与充电状态（`drivers/battery.c` 仍为占位，未编译）；
-- IMU、RTC、蜂鸣器的驱动与状态上报；
-- USB host 输入接收与 NS2 报告编码；
-- BLE 广播、GATT 与配对状态机。
+尚未接入的硬件：
+
+- IMU（QMI8658C）与 RTC（PCF85063ATL）的驱动与状态上报；
+- USB host 输入接收与 NS2 报告编码（方案见 [usb-input-plan.md](usb-input-plan.md)）；
+- 电池真实 ADC 采样与充电状态（当前上报占位值）；
+- SYS_EN（GPIO41）电源保持驱动（USB 供电下锁存被旁路，待电池接入）。
 
 屏幕事实已写入 `firmware/pocket.host.json`：`input.touch` 随触摸采样接入一并声明。

@@ -346,16 +346,17 @@ static void handle_set_usb_role(int id, const char *cmd)
         reply_raw(event);
         return;
     }
-    /* 桥接（otg）双端禁切：USB PHY 切换会断开 COM（无人值守时无法烧录），
-     * 且桥接数据面未接入。UI 与 PWR 长按路径都会被这里挡下。 */
+    /* 桥接（otg）开发期临时禁用防误操作：USB PHY 切换会断开 COM（无人
+     * 值守时无法烧录），数据面也未接入。UI 已移除该选项，这里静默跳过：
+     * 不应用、不报错，回复当前角色，待 M5 数据面接入后恢复。 */
     if (want_otg) {
         char event[REMAPAD_EVENT_MAX];
         snprintf(event, sizeof(event),
-                 "{\"t\":\"error\",\"id\":%d,\"code\":\"NOT_SWITCHABLE\","
-                 "\"message\":\"桥接模式暂不可切换\"}",
-                 id);
+                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"%s\",\"active\":%s}",
+                 id, s_bridge.usb_role_host ? "host" : "device",
+                 s_bridge.usb_role_host ? "false" : "true");
         reply_raw(event);
-        ESP_LOGI(TAG, "usb role otg rejected (bridge mode locked)");
+        ESP_LOGI(TAG, "usb role otg skipped (dev-time lock, no error surfaced)");
         return;
     }
     s_bridge.usb_role_host = want_host;
@@ -424,6 +425,20 @@ static void handle_unpair(int id)
              id, real_pairing_state());
     reply_raw(event);
     ESP_LOGI(TAG, "unpair -> %s", real_pairing_state());
+}
+
+/** 配对页「按下 LR」：Pro 走调试注入（部分注册界面用它确认）；JoyCon 组合
+ * 交给会话层——确保左右双广播在发并注入 L+R（组合确认动作）。 */
+static void handle_press_lr(int id)
+{
+    if (app_config_get()->ctrl_type == APP_CONFIG_CTRL_JOYCON) {
+        ns2_session_press_lr();
+    } else {
+        dp_plane_debug_key(NS2_BTN_L | NS2_BTN_R, 1000);
+    }
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event), "{\"t\":\"pressLrAck\",\"id\":%d,\"success\":true}", id);
+    reply_raw(event);
 }
 
 static void handle_reboot(int id)
@@ -540,6 +555,8 @@ static void handle_cmd(const char *cmd)
         handle_stop_pairing(id);
     } else if (cmd_has(cmd, "\"t\":\"unpair\"")) {
         handle_unpair(id);
+    } else if (cmd_has(cmd, "\"t\":\"pressLr\"")) {
+        handle_press_lr(id);
     } else if (cmd_has(cmd, "\"t\":\"debugKey\"")) {
         handle_debug_key(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"reboot\"")) {

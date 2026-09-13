@@ -93,7 +93,7 @@ static const ble_uuid128_t uuid_ext2c =
                      0x7d, 0x42, 0x58, 0x92, 0x51, 0x3f, 0x48, 0xcc);
 static const ble_uuid128_t uuid_ext2e =
     BLE_UUID128_INIT(0xf9, 0xc0, 0xfc, 0x5f, 0x75, 0x32, 0x58, 0x82,
-                     0x19, 0x46, 0x3e, 0xec, 0x6c, 0x86, 0x92, 0x74);
+                     0xad, 0x49, 0xfe, 0x89, 0xbe, 0xe9, 0x7d, 0xab);
 static const ble_uuid128_t uuid_ext32 =
     BLE_UUID128_INIT(0x80, 0xb3, 0xe8, 0x09, 0x98, 0x6f, 0xaf, 0x8e,
                      0xb5, 0x40, 0x55, 0x69, 0x7e, 0xbc, 0xac, 0x3d);
@@ -113,16 +113,35 @@ static struct {
     uint16_t answer2;
 } s_h;
 
-static struct {
-    bool connected;
+/** 并发连接槽：JoyCon 组合模式下左右两只同时在线。 */
+#define BLE_CTL_CONN_MAX 2
+
+/** 广播实例：0 走 BLE5 扩展 PDU、1 走 legacy PDU（Pro 单身份双形态兼容
+ * 新旧主机）；JoyCon 双身份各占一个实例（均 legacy PDU，静态随机地址）。 */
+#define ADV_INSTANCE_EXT 0
+#define ADV_INSTANCE_LEGACY 1
+#define ADV_INSTANCE_MAX 2
+
+typedef struct {
+    bool used;
     uint16_t conn_handle;
+    uint8_t identity; /* ns2_identity_t */
     bool input05_notify;
     bool input09_notify;
     bool answer_notify;
     bool answer2_notify;
     uint8_t last_input05[63];
     uint8_t last_input09[63];
-} s_ctl;
+} conn_slot_t;
+
+static conn_slot_t s_conn[BLE_CTL_CONN_MAX];
+
+/** 每实例广播身份与地址：接收连接时按本机地址反查身份；JoyCon 双身份
+ * 各占一个实例（静态随机地址），Pro 单身份两实例共用公共伪装地址。 */
+static uint8_t s_adv_identity[ADV_INSTANCE_MAX];
+static uint8_t s_adv_addr[ADV_INSTANCE_MAX][6];
+static bool s_adv_addr_valid[ADV_INSTANCE_MAX];
+static uint8_t s_own_public[6];
 
 void ble_store_config_init(void);
 
@@ -225,20 +244,31 @@ static int read_flat(struct ble_gatt_access_ctxt *ctxt, const void *data, size_t
     return os_mbuf_append(ctxt->om, data, len) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
+static conn_slot_t *conn_slot(uint16_t conn_handle)
+{
+    for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
+        if (s_conn[i].used && s_conn[i].conn_handle == conn_handle) {
+            return &s_conn[i];
+        }
+    }
+    return NULL;
+}
+
 static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
                       struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
     const uintptr_t tag = (uintptr_t)arg;
+    conn_slot_t *slot = conn_slot(conn_handle);
 
-    /* 任意 ATT 访问都算主机活动，刷新空闲计时。 */
-    ns2_session_touch();
+    /* 任意 ATT 访问都算主机活动，刷新所在连接的空闲计时。 */
+    ns2_session_touch(conn_handle);
 
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
         switch (tag) {
         case CHR_INPUT05:
-            return read_flat(ctxt, s_ctl.last_input05, sizeof(s_ctl.last_input05));
+            return read_flat(ctxt, slot ? slot->last_input05 : (uint8_t[63]){0}, 63);
         case CHR_INPUT09:
-            return read_flat(ctxt, s_ctl.last_input09, sizeof(s_ctl.last_input09));
+            return read_flat(ctxt, slot ? slot->last_input09 : (uint8_t[63]){0}, 63);
         case CHR_BASE_STATUS: {
             /* 真机读值（已验证实现基线）。 */
             static const uint8_t base_status[7] = {0x04, 0x00, 0x05, 0x00, 0x01, 0x01, 0x00};
@@ -275,16 +305,17 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     ble_hs_mbuf_to_flat(ctxt->om, buf, sizeof(buf), &len);
     switch (tag) {
     case CHR_RUMBLE:
-        ns2_session_on_output(buf, len);
+        ns2_session_on_output(buf, len, conn_handle);
         break;
     case CHR_CMD:
-        ns2_session_on_command(buf, len, NS2_FRAME_TRANSPORT_BLE);
+        ns2_session_on_command(buf, len, NS2_FRAME_TRANSPORT_BLE, conn_handle);
         break;
     case CHR_COMPOSITE:
-        ns2_session_on_composite(buf, len);
+        ns2_session_on_composite(buf, len, conn_handle);
         break;
     case CHR_FWUPG:
-        ESP_LOGW(TAG, "fw upgrade write %uB ignored", len);
+        /* 固件升级数据块（0x0018 WRITE NO RSP）：交给会话的假升级会话。 */
+        ns2_session_on_fw_upgrade(buf, len);
         break;
     case CHR_BASE_CONFIG:
         ESP_LOGI(TAG, "vendor base config write %uB", len);
@@ -345,55 +376,106 @@ static void request_conn_params(uint16_t conn_handle)
     }
 }
 
+/** 按本机地址反查广播实例（连接落在哪个广播上）；Pro 模式两实例同址，
+ * 返回首个命中。未命中返回 -1。 */
+static int adv_instance_by_addr(const uint8_t addr[6])
+{
+    for (size_t i = 0; i < ADV_INSTANCE_MAX; i++) {
+        if (s_adv_addr_valid[i] && memcmp(s_adv_addr[i], addr, 6) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+/** 接收连接的实例是否需要继续广播：JoyCon 双身份下另一只还在等回连，
+ * 只停接收实例；Pro 单身份停全部。 */
+static void stop_advertising_for(uint8_t identity)
+{
+    for (size_t i = 0; i < ADV_INSTANCE_MAX; i++) {
+        if (s_adv_identity[i] == identity || identity == NS2_ID_PRO) {
+            ble_gap_ext_adv_stop((uint8_t)i);
+        }
+    }
+}
+
 static int gap_event_cb(struct ble_gap_event *event, void *arg)
 {
     switch (event->type) {
-    case BLE_GAP_EVENT_CONNECT:
-        if (event->connect.status == 0) {
-            s_ctl.connected = true;
-            s_ctl.conn_handle = event->connect.conn_handle;
-            ESP_LOGI(TAG, "ACL connected (conn=%u)", event->connect.conn_handle);
-            /* 只有接收连接的实例会自动停，另一实例需手动停，避免连接期间
-             * 继续广播。 */
-            ble_controller_adv_stop();
-            ns2_session_on_connect(event->connect.conn_handle);
-            request_conn_params(event->connect.conn_handle);
-        } else {
-            ESP_LOGW(TAG, "connect failed rc=%d, restart adv", event->connect.status);
-            ns2_session_on_disconnect();
+    case BLE_GAP_EVENT_CONNECT: {
+        if (event->connect.status != 0) {
+            ESP_LOGW(TAG, "connect failed rc=%d, resume via session", event->connect.status);
+            ns2_session_on_connect_fail();
+            break;
         }
+        conn_slot_t *slot = NULL;
+        for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
+            if (!s_conn[i].used) {
+                slot = &s_conn[i];
+                break;
+            }
+        }
+        if (slot == NULL) {
+            ESP_LOGW(TAG, "no free conn slot, terminating %u", event->connect.conn_handle);
+            ble_gap_terminate(event->connect.conn_handle, BLE_CTL_DISCONNECT_CONN_FAIL);
+            break;
+        }
+        struct ble_gap_conn_desc desc;
+        uint8_t identity = NS2_ID_PRO;
+        if (ble_gap_conn_find(event->connect.conn_handle, &desc) == 0) {
+            const int inst = adv_instance_by_addr(desc.our_ota_addr.val);
+            if (inst >= 0) {
+                identity = s_adv_identity[inst];
+                stop_advertising_for(identity);
+            } else {
+                /* 双实例同址（Pro）：任一连接后都无需继续广播。 */
+                ble_controller_adv_stop();
+            }
+        }
+        memset(slot, 0, sizeof(*slot));
+        slot->used = true;
+        slot->conn_handle = event->connect.conn_handle;
+        slot->identity = identity;
+        ESP_LOGI(TAG, "ACL connected (conn=%u, identity=%u)",
+                 event->connect.conn_handle, (unsigned)identity);
+        ns2_session_on_connect(event->connect.conn_handle, identity);
+        request_conn_params(event->connect.conn_handle);
         break;
-    case BLE_GAP_EVENT_DISCONNECT:
-        s_ctl.connected = false;
-        s_ctl.conn_handle = 0;
-        s_ctl.input05_notify = false;
-        s_ctl.input09_notify = false;
-        s_ctl.answer_notify = false;
-        s_ctl.answer2_notify = false;
-        ESP_LOGI(TAG, "disconnected reason=0x%02x", event->disconnect.reason);
-        ns2_session_on_disconnect();
+    }
+    case BLE_GAP_EVENT_DISCONNECT: {
+        conn_slot_t *slot = conn_slot(event->disconnect.conn.conn_handle);
+        const uint8_t identity = slot ? slot->identity : NS2_ID_PRO;
+        if (slot != NULL) {
+            memset(slot, 0, sizeof(*slot));
+        }
+        ESP_LOGI(TAG, "disconnected reason=0x%02x (identity=%u)",
+                 event->disconnect.reason, (unsigned)identity);
+        ns2_session_on_disconnect(event->disconnect.conn.conn_handle, identity);
         break;
+    }
     case BLE_GAP_EVENT_ADV_COMPLETE:
-        /* 连接建立会让广播实例自动完成；仅在未连接时恢复广播。 */
+        /* 广播超时/连接占用在会话层按身份恢复（本工程广播不限时长，
+         * 此事件基本只在连接建立后出现，会话的断连路径已覆盖）。 */
         ESP_LOGD(TAG, "adv complete");
-        if (!s_ctl.connected) {
-            ns2_session_on_disconnect();
-        }
         break;
-    case BLE_GAP_EVENT_SUBSCRIBE:
-        ns2_session_touch();
-        if (event->subscribe.attr_handle == s_h.input05) {
-            s_ctl.input05_notify = event->subscribe.cur_notify != 0;
-        } else if (event->subscribe.attr_handle == s_h.input09) {
-            s_ctl.input09_notify = event->subscribe.cur_notify != 0;
-        } else if (event->subscribe.attr_handle == s_h.answer) {
-            s_ctl.answer_notify = event->subscribe.cur_notify != 0;
-        } else if (event->subscribe.attr_handle == s_h.answer2) {
-            s_ctl.answer2_notify = event->subscribe.cur_notify != 0;
+    case BLE_GAP_EVENT_SUBSCRIBE: {
+        conn_slot_t *slot = conn_slot(event->subscribe.conn_handle);
+        ns2_session_touch(event->subscribe.conn_handle);
+        if (slot != NULL) {
+            if (event->subscribe.attr_handle == s_h.input05) {
+                slot->input05_notify = event->subscribe.cur_notify != 0;
+            } else if (event->subscribe.attr_handle == s_h.input09) {
+                slot->input09_notify = event->subscribe.cur_notify != 0;
+            } else if (event->subscribe.attr_handle == s_h.answer) {
+                slot->answer_notify = event->subscribe.cur_notify != 0;
+            } else if (event->subscribe.attr_handle == s_h.answer2) {
+                slot->answer2_notify = event->subscribe.cur_notify != 0;
+            }
         }
         ESP_LOGI(TAG, "subscribe 0x%04x notify=%d",
                  event->subscribe.attr_handle, event->subscribe.cur_notify);
         break;
+    }
     case BLE_GAP_EVENT_MTU:
         ESP_LOGI(TAG, "MTU -> %u", event->mtu.value);
         break;
@@ -407,25 +489,24 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
     return 0;
 }
 
-/** 广播实例：0 走 BLE5 扩展 PDU（ADV_EXT_IND + AUX_ADV_IND），1 走 legacy
- * PDU（ADV_IND）。两种形态同时发：手机等通用扫描器只见 legacy，而较新的
- * 主机固件可能只在扩展扫描里发现新控制器；双实例兼容新旧两类主机。 */
-#define ADV_INSTANCE_EXT 0
-#define ADV_INSTANCE_LEGACY 1
-
-static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t payload[31])
+/** 启动一个广播实例。addr 非 NULL 时以静态随机地址广播（JoyCon 双身份）。 */
+static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t payload[31],
+                               const uint8_t addr[6])
 {
+    if (instance >= ADV_INSTANCE_MAX) {
+        return;
+    }
     if (ble_gap_ext_adv_active(instance)) {
         ble_gap_ext_adv_stop(instance);
     }
     struct ble_gap_ext_adv_params params = {0};
     /* NS2 主机的芯片层过滤只认经扩展广播 HCI 路径下发的广播：已验证可被
-     * 发现的开源实现与真机抓包均为 public 地址、30ms 间隔。扩展 PDU 按规范
-     * 不可同时 connectable 与 scannable，扩展实例只做可连接广播。 */
+     * 发现的开源实现与真机抓包均为 30ms 间隔。扩展 PDU 按规范不可同时
+     * connectable 与 scannable，扩展实例只做可连接广播。 */
     params.legacy_pdu = legacy_pdu;
     params.connectable = 1;
     params.scannable = legacy_pdu;
-    params.own_addr_type = BLE_OWN_ADDR_PUBLIC;
+    params.own_addr_type = addr != NULL ? BLE_OWN_ADDR_RANDOM : BLE_OWN_ADDR_PUBLIC;
     params.primary_phy = BLE_HCI_LE_PHY_1M;
     params.secondary_phy = BLE_HCI_LE_PHY_1M;
     params.itvl_min = 0x30; /* 48 x 0.625ms = 30ms */
@@ -439,6 +520,20 @@ static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t p
          * 路径会再次恢复广播，这里只需提示。 */
         ESP_LOGW(TAG, "adv %u configure rc=%d", instance, rc_conf);
         return;
+    }
+    if (addr != NULL) {
+        ble_addr_t random_addr = {.type = BLE_ADDR_RANDOM};
+        memcpy(random_addr.val, addr, 6);
+        const int rc_addr = ble_gap_ext_adv_set_addr(instance, &random_addr);
+        if (rc_addr != 0) {
+            ESP_LOGW(TAG, "adv %u set addr rc=%d", instance, rc_addr);
+            return;
+        }
+        memcpy(s_adv_addr[instance], addr, 6);
+        s_adv_addr_valid[instance] = true;
+    } else {
+        memcpy(s_adv_addr[instance], s_own_public, 6);
+        s_adv_addr_valid[instance] = true;
     }
     struct os_mbuf *om = os_msys_get_pkthdr(31, 0);
     if (om == NULL) {
@@ -467,84 +562,128 @@ static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t p
         ESP_LOGE(TAG, "adv %u start rc=%d", instance, rc);
         return;
     }
-    ESP_LOGI(TAG, "advertising started (instance=%u, %s pdu)", instance,
-             legacy_pdu ? "legacy" : "extended");
+    ESP_LOGI(TAG, "advertising started (instance=%u, %s pdu, identity=%u)", instance,
+             legacy_pdu ? "legacy" : "extended", (unsigned)s_adv_identity[instance]);
 }
 
-void ble_controller_advertise(const uint8_t payload[31])
+void ble_controller_adv_start(uint8_t instance, const uint8_t payload[31],
+                              const uint8_t addr[6])
 {
+    if (instance >= ADV_INSTANCE_MAX) {
+        return;
+    }
+    /* 实例身份由会话层随载荷一并告知：Pro 单身份（双实例同址），JoyCon
+     * 双身份各占一实例。addr 为 NULL 时沿用公共伪装地址。 */
+    if (addr != NULL) {
+        s_adv_identity[instance] =
+            (addr[5] & 0xC0) == 0xC0 && (addr[0] & 0x01) != 0 ? NS2_ID_JOYCON_R
+                                                              : NS2_ID_JOYCON_L;
+    } else {
+        s_adv_identity[instance] = NS2_ID_PRO;
+    }
     ESP_LOG_BUFFER_HEX(TAG, payload, 31);
-    adv_start_instance(ADV_INSTANCE_EXT, 0, payload);
-    adv_start_instance(ADV_INSTANCE_LEGACY, 1, payload);
+    adv_start_instance(instance, addr != NULL ? 1 : (instance == ADV_INSTANCE_LEGACY),
+                       payload, addr);
 }
 
-static void notify(uint16_t attr_handle, bool enabled, const uint8_t *data, size_t len)
+void ble_controller_adv_stop(void)
 {
-    if (!s_ctl.connected || !enabled) {
+    for (uint8_t i = 0; i < ADV_INSTANCE_MAX; i++) {
+        ble_gap_ext_adv_stop(i);
+    }
+}
+
+static void notify(uint16_t conn_handle, uint16_t attr_handle, bool enabled,
+                   const uint8_t *data, size_t len)
+{
+    if (!enabled) {
         return;
     }
     struct os_mbuf *om = ble_hs_mbuf_from_flat(data, (uint16_t)len);
     if (om == NULL) {
         return;
     }
-    ble_gatts_notify_custom(s_ctl.conn_handle, attr_handle, om);
+    ble_gatts_notify_custom(conn_handle, attr_handle, om);
 }
 
-void ble_controller_notify_input_05(const uint8_t report[63])
+bool ble_controller_connected(void)
 {
-    memcpy(s_ctl.last_input05, report, 63);
-    notify(s_h.input05, s_ctl.input05_notify, report, 63);
+    for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
+        if (s_conn[i].used) {
+            return true;
+        }
+    }
+    return false;
 }
 
-void ble_controller_notify_input_09(const uint8_t report[63])
+size_t ble_controller_conn_count(void)
 {
-    memcpy(s_ctl.last_input09, report, 63);
-    notify(s_h.input09, s_ctl.input09_notify, report, 63);
+    size_t n = 0;
+    for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
+        if (s_conn[i].used) {
+            n++;
+        }
+    }
+    return n;
 }
 
-void ble_controller_notify_answer(const uint8_t *frame, size_t len)
+void ble_controller_notify_input_05(uint16_t conn_handle, const uint8_t report[63])
 {
-    /* 上限对齐 ns2_session_on_command 的应答缓冲（14B 前缀 + 8B 帧头 +
-     * 0x78 最大读取体）。 */
-    if (len > 160) {
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL) {
         return;
     }
-    notify(s_h.answer2, s_ctl.answer2_notify, frame, len);
+    memcpy(slot->last_input05, report, 63);
+    notify(conn_handle, s_h.input05, slot->input05_notify, report, 63);
+}
+
+void ble_controller_notify_input_09(uint16_t conn_handle, const uint8_t report[63])
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL) {
+        return;
+    }
+    memcpy(slot->last_input09, report, 63);
+    notify(conn_handle, s_h.input09, slot->input09_notify, report, 63);
+}
+
+void ble_controller_notify_answer(uint16_t conn_handle, const uint8_t *frame, size_t len)
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL || len > 160) {
+        return;
+    }
+    /* 上限对齐 ns2_session_on_command 的应答缓冲（14B 前缀 + 8B 帧头 +
+     * 0x78 最大读取体）。 */
+    notify(conn_handle, s_h.answer2, slot->answer2_notify, frame, len);
 }
 
 /** 周期检查连接空闲：握手未完成且超时无协议活动的主机（手机/PC 回连）
  * 主动断开，释放广播；主机初始化序列毫秒级到达，不受影响。 */
 static void host_idle_timer_cb(void *arg)
 {
-    if (ns2_session_host_idle_expired()) {
-        ESP_LOGW(TAG, "host idle timeout, disconnecting");
-        ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
+    for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
+        if (s_conn[i].used && ns2_session_conn_idle_expired(s_conn[i].conn_handle)) {
+            ESP_LOGW(TAG, "host idle timeout, disconnecting conn=%u",
+                     s_conn[i].conn_handle);
+            ble_gap_terminate(s_conn[i].conn_handle, BLE_CTL_DISCONNECT_USER_TERM);
+        }
     }
+    ns2_session_tick();
 }
 
-void ble_controller_adv_stop(void)
+void ble_controller_disconnect(uint8_t hci_reason)
 {
-    ble_gap_ext_adv_stop(ADV_INSTANCE_EXT);
-    ble_gap_ext_adv_stop(ADV_INSTANCE_LEGACY);
-}
-
-bool ble_controller_connected(void)
-{
-    return s_ctl.connected;
-}
-
-bool ble_controller_disconnect(uint8_t hci_reason)
-{
-    if (!s_ctl.connected) {
-        return false;
+    for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
+        if (s_conn[i].used) {
+            const int rc = ble_gap_terminate(s_conn[i].conn_handle, hci_reason);
+            if (rc != 0) {
+                ESP_LOGW(TAG, "gap terminate rc=%d", rc);
+            } else {
+                ESP_LOGI(TAG, "terminate initiated (conn=%u)", s_conn[i].conn_handle);
+            }
+        }
     }
-    const int rc = ble_gap_terminate(s_ctl.conn_handle, hci_reason);
-    if (rc != 0) {
-        ESP_LOGW(TAG, "gap terminate rc=%d", rc);
-        return false;
-    }
-    ESP_LOGI(TAG, "terminate initiated (conn=%u)", s_ctl.conn_handle);
-    return true;
 }
 
 bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6])
@@ -557,12 +696,23 @@ bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6])
     return true;
 }
 
-bool ble_controller_input_notify_ready(uint8_t report_format)
+bool ble_controller_input_notify_ready(uint16_t conn_handle, uint8_t report_format)
 {
-    if (report_format == 5) {
-        return s_ctl.input05_notify;
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL) {
+        return false;
     }
-    return s_ctl.input09_notify;
+    return report_format == 5 ? slot->input05_notify : slot->input09_notify;
+}
+
+bool ble_controller_conn_identity(uint16_t conn_handle, uint8_t *identity)
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL) {
+        return false;
+    }
+    *identity = slot->identity;
+    return true;
 }
 
 static void on_sync(void)
@@ -574,13 +724,12 @@ static void on_sync(void)
         ESP_LOGE(TAG, "ensure addr rc=%d", rc);
         return;
     }
+    ble_hs_id_copy_addr(BLE_ADDR_PUBLIC, s_own_public, NULL);
     /* 对齐已验证实现：声明更大的首选 MTU，连接后偏好 2M PHY。 */
     ble_att_set_preferred_mtu(512);
     ble_gap_set_prefered_default_le_phy(BLE_HCI_LE_PHY_2M_PREF_MASK,
                                         BLE_HCI_LE_PHY_2M_PREF_MASK);
-    uint8_t own_mac[6];
-    ble_hs_id_copy_addr(BLE_ADDR_PUBLIC, own_mac, NULL);
-    ns2_session_on_sync(own_mac);
+    ns2_session_on_sync(s_own_public);
 }
 
 static void on_reset(int reason)
@@ -598,7 +747,10 @@ static void host_task(void *param)
 esp_err_t ble_controller_start(void)
 {
     memset(&s_h, 0, sizeof(s_h));
-    memset(&s_ctl, 0, sizeof(s_ctl));
+    memset(s_conn, 0, sizeof(s_conn));
+    memset(s_adv_identity, 0, sizeof(s_adv_identity));
+    memset(s_adv_addr, 0, sizeof(s_adv_addr));
+    memset(s_adv_addr_valid, 0, sizeof(s_adv_addr_valid));
 
     const esp_err_t err = nimble_port_init();
     if (err != ESP_OK) {

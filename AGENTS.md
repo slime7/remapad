@@ -27,7 +27,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
   - 硬件绑定微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏）；规格与引脚见 [docs/hardware.md](docs/hardware.md)。
   - QuickJS guest 的创建、mount、eval 与逐帧 UI turn 必须由同一个任务承载，且该任务栈要大于 guest 的 `stack_limit`；当前由 `firmware/main/pocketjs_host.c` 的 `remapad-pjs` owner task 承担（栈在 PSRAM）。改动调度或栈预算前先读 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的“为什么由产品 task 承载 guest 生命周期”。
   - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；六个组件与 ESP32-S3 原生归档固定在 `firmware/components/`，由 ESP-IDF 默认发现，构建不依赖 PocketJS checkout，也不要把它改回外部路径。产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
-  - `main/` 下的 `bridge/`（控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入）、`config/`（NVS 用户设置持久化）、`console/`（串口 CLI）、`dp/`（数据面任务与输入源抽象）、`ns2/`（NS2 编码与输出封装）、`ble/`（NimBLE 手柄外设、会话与凭证）和 `drivers/`（panel/touch/backlight/pwr_key/battery）都已编译进固件；模块边界见 [docs/adr/0011](docs/adr/0011-controller-dataplane-module-boundary.md)，USB 输入与桥接模式仍是架构预留（方案预案见 [docs/usb-input-plan.md](docs/usb-input-plan.md)），新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
+  - `main/` 下的 `bridge/`（控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入）、`config/`（NVS 用户设置持久化）、`console/`（串口 CLI）、`dp/`（数据面任务与输入源抽象）、`ns2/`（NS2 编码、序列号命名规则与输出封装）、`ble/`（NimBLE 手柄外设、双身份会话与分槽凭证）和 `drivers/`（panel/touch/backlight/pwr_key/buzzer/battery）都已编译进固件；模块边界见 [docs/adr/0011](docs/adr/0011-controller-dataplane-module-boundary.md)，USB 输入与桥接模式仍是架构预留（方案预案见 [docs/usb-input-plan.md](docs/usb-input-plan.md)），新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
 
 ## 项目核心操作命令
 
