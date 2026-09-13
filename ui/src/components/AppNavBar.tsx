@@ -55,7 +55,7 @@ export function AppNavBar(props: {
   };
   return (
     <View class="absolute left-[8] right-[8] bottom-[8] h-[64] flex-row gap-2 z-40">
-      <View focusable onPress={() => pick('home')} class="grow h-[64]">
+      <View focusable onPress={() => pick('home')} class="grow h-[64] flex-col items-center justify-center">
         <Image
           class="absolute left-0 top-0 w-[64] h-[64]"
           src={statusActive() ? HOME_BG.onL : HOME_BG.offL}
@@ -68,50 +68,46 @@ export function AppNavBar(props: {
           class="absolute left-[88] top-0 w-[64] h-[64]"
           src={statusActive() ? HOME_BG.onR : HOME_BG.offR}
         />
-        <View class="absolute inset-0 flex-col items-center justify-center">
-          <Icon
-            glyph={ICON.home}
-            class="shrink-0 text-xl"
-            color={props.disabled() ? COLOR.disabled : statusActive() ? COLOR.onTertiaryContainer : COLOR.onSecondaryContainer}
-          />
-          <Text
-            class={props.disabled() || !statusActive() ? 'text-xs' : 'text-xs font-bold'}
-            style={{
-              textColor: props.disabled()
-                ? COLOR.disabled
-                : statusActive()
-                  ? COLOR.onTertiaryContainer
-                  : COLOR.onSecondaryContainer,
-            }}
-          >
-            状态
-          </Text>
-        </View>
+        <Icon
+          glyph={ICON.home}
+          class="shrink-0 text-xl"
+          color={props.disabled() ? COLOR.disabled : statusActive() ? COLOR.onTertiaryContainer : COLOR.onSecondaryContainer}
+        />
+        <Text
+          class={props.disabled() || !statusActive() ? 'text-xs' : 'text-xs font-bold'}
+          style={{
+            textColor: props.disabled()
+              ? COLOR.disabled
+              : statusActive()
+                ? COLOR.onTertiaryContainer
+                : COLOR.onSecondaryContainer,
+          }}
+        >
+          状态
+        </Text>
       </View>
-      <View focusable onPress={() => pick('settings')} class="w-[64] h-[64] shrink-0">
+      <View focusable onPress={() => pick('settings')} class="w-[64] h-[64] shrink-0 flex-col items-center justify-center">
         <Image
           class="absolute left-0 top-0 w-[64] h-[64]"
           src={settingsActive() ? SET_BG.on : SET_BG.off}
         />
-        <View class="absolute inset-0 flex-col items-center justify-center">
-          <Icon
-            glyph={ICON.settings}
-            class="shrink-0 text-xl"
-            color={props.disabled() ? COLOR.disabled : settingsActive() ? COLOR.onPrimaryContainer : COLOR.onSurfaceVariant}
-          />
-          <Text
-            class={props.disabled() || !settingsActive() ? 'text-xs' : 'text-xs font-bold'}
-            style={{
-              textColor: props.disabled()
-                ? COLOR.disabled
-                : settingsActive()
-                  ? COLOR.onPrimaryContainer
-                  : COLOR.onSurfaceVariant,
-            }}
-          >
-            设置
-          </Text>
-        </View>
+        <Icon
+          glyph={ICON.settings}
+          class="shrink-0 text-xl"
+          color={props.disabled() ? COLOR.disabled : settingsActive() ? COLOR.onPrimaryContainer : COLOR.onSurfaceVariant}
+        />
+        <Text
+          class={props.disabled() || !settingsActive() ? 'text-xs' : 'text-xs font-bold'}
+          style={{
+            textColor: props.disabled()
+              ? COLOR.disabled
+              : settingsActive()
+                ? COLOR.onPrimaryContainer
+                : COLOR.onSurfaceVariant,
+          }}
+        >
+          设置
+        </Text>
       </View>
     </View>
   );

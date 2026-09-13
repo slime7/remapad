@@ -8,6 +8,7 @@ import { ref } from 'vue';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { usePageScroll } from '../hooks/usePageScroll';
+import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { sendDebugKey } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
@@ -43,6 +44,8 @@ export function DebugPage(props: { active: () => boolean }) {
     props.active,
     () => 34 + 15 + 8 + KEYS_CARD_H + 8 + BOTTOM_PLACEHOLDER_H,
   );
+  /** 分帧填充：标题、卡片、按钮行、两个按键、整行按键、底部占位。 */
+  const step = useMountCursor(7);
 
   const keyBtnClass = (key: DebugKey, base: 'fixed' | 'grow' | 'full') => {
     const on = flashKey.value === key;
@@ -58,34 +61,46 @@ export function DebugPage(props: { active: () => boolean }) {
     flashKey.value === key ? COLOR.onPrimaryContainer : COLOR.onSurface;
 
   return (
-    <View class="w-full h-full overflow-hidden">
+    <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
         class="w-full flex-col px-4 pt-[34] gap-2"
         style={{ translateY: -scroller.offset() }}
       >
-        <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          按键指令
-        </Text>
-        <View class={STYLE.actionCard}>
-          <View class="w-full flex-row gap-2">
-            <View focusable onPress={() => press('a')} class={keyBtnClass('a', 'fixed')}>
-              <Text class="text-sm font-bold" style={{ textColor: keyTextColor('a') }}>
-                A
-              </Text>
-            </View>
-            <View focusable onPress={() => press('home')} class={keyBtnClass('home', 'grow')}>
-              <Text class="text-sm font-bold" style={{ textColor: keyTextColor('home') }}>
-                唤醒 HOME
-              </Text>
-            </View>
+        {step() >= 1 ? (
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+            按键指令
+          </Text>
+        ) : null}
+        {step() >= 2 ? (
+          <View class={STYLE.actionCard}>
+            {step() >= 3 ? (
+              <View class="w-full flex-row gap-2">
+                {step() >= 4 ? (
+                  <View focusable onPress={() => press('a')} class={keyBtnClass('a', 'fixed')}>
+                    <Text class="text-sm font-bold" style={{ textColor: keyTextColor('a') }}>
+                      A
+                    </Text>
+                  </View>
+                ) : null}
+                {step() >= 5 ? (
+                  <View focusable onPress={() => press('home')} class={keyBtnClass('home', 'grow')}>
+                    <Text class="text-sm font-bold" style={{ textColor: keyTextColor('home') }}>
+                      唤醒 HOME
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            {step() >= 6 ? (
+              <View focusable onPress={() => press('lr')} class={keyBtnClass('lr', 'full')}>
+                <Text class="text-sm font-bold" style={{ textColor: keyTextColor('lr') }}>
+                  配对 L+R
+                </Text>
+              </View>
+            ) : null}
           </View>
-          <View focusable onPress={() => press('lr')} class={keyBtnClass('lr', 'full')}>
-            <Text class="text-sm font-bold" style={{ textColor: keyTextColor('lr') }}>
-              配对 L+R
-            </Text>
-          </View>
-        </View>
-        <BottomPlaceholder />
+        ) : null}
+        {step() >= 7 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );

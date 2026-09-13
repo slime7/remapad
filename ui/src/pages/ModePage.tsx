@@ -7,6 +7,7 @@
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
+import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { hw, setUsbRole } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
@@ -59,37 +60,45 @@ export function ModePage(props: { active: () => boolean }) {
     props.active,
     () => 34 + CARD_H * 2 + 8 * 2 + 20 * 2 + BOTTOM_PLACEHOLDER_H,
   );
+  /** 分帧填充：两张角色卡、两行说明、底部占位。 */
+  const step = useMountCursor(5);
   return (
-    <View class="w-full h-full overflow-hidden">
+    <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
         class="w-full flex-col px-4 pt-[34] gap-2"
         style={{ translateY: -scroller.offset() }}
       >
-        <RoleCard
-          role="device"
-          selected={hw.usbRole === 'device'}
-          title="串口"
-          lines={['烧录 / 日志']}
-          glyph={ICON.adb}
-          onSelect={() => setUsbRole('device')}
-        />
-        <RoleCard
-          role="host"
-          selected={hw.usbRole === 'host'}
-          title="手柄"
-          lines={['手柄输入 → NS2']}
-          glyph={ICON.gamepad}
-          onSelect={() => setUsbRole('host')}
-        />
-        {hw.roleMessage ? (
+        {step() >= 1 ? (
+          <RoleCard
+            role="device"
+            selected={hw.usbRole === 'device'}
+            title="串口"
+            lines={['烧录 / 日志']}
+            glyph={ICON.adb}
+            onSelect={() => setUsbRole('device')}
+          />
+        ) : null}
+        {step() >= 2 ? (
+          <RoleCard
+            role="host"
+            selected={hw.usbRole === 'host'}
+            title="手柄"
+            lines={['手柄输入 → NS2']}
+            glyph={ICON.gamepad}
+            onSelect={() => setUsbRole('host')}
+          />
+        ) : null}
+        {step() >= 3 && hw.roleMessage ? (
           <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
             {hw.roleMessage}
           </Text>
         ) : null}
-        <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          重启后回到串口
-        </Text>
-        <BottomPlaceholder />
+        {step() >= 4 ? (
+          <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+            重启后回到串口
+          </Text>
+        ) : null}
+        {step() >= 5 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );

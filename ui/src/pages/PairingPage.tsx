@@ -3,7 +3,8 @@
  * 设备开机即按凭证回连或发发现广播，配对不需要打开本页；本页只负责手动
  * 开关发现广播与按下确认键。JoyCon 是左右两只各自独立连接，主机的 Grip/
  * 顺序界面只用于调整顺序与确认，因此确认按钮触发固件左右双机配对，Pro 则
- * 注入 L+R 按键。内容单屏放得下，静态页不挂滚动。
+ * 注入 L+R 按键。内容单屏放得下，静态页不挂滚动。页面按需挂载，切页由
+ * 根节点翻转 hidden 完成（见 docs/adr/0014-page-mount-on-demand-progressive-fill.md）。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
@@ -13,13 +14,13 @@ import { BottomPlaceholder } from '../components/BottomPlaceholder';
 import { SPINNER_FRAMES } from '../spinner';
 import { pairingColor, pairingLabel } from '../utils';
 
-export function PairingPage() {
+export function PairingPage(props: { active: () => boolean }) {
   const spinnerSrc = createSpriteAnimation(SPINNER_FRAMES, { frameStep: 3 });
   // Vue Vapor：条件以函数形式在 JSX 内调用才会被渲染作用跟踪。
   const isBusy = () => hw.pairing === 'scanning' || hw.pairing === 'pairing';
 
   return (
-    <View class="w-full h-full overflow-hidden">
+    <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View class="w-full flex-col items-center pt-[38]">
         <View class="w-full h-[40] flex-row items-center justify-center gap-2 shrink-0">
           {isBusy() ? <Image class="w-[20] h-[20] shrink-0" src={spinnerSrc.value} /> : null}

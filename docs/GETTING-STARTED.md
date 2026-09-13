@@ -220,6 +220,7 @@ PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**�
 - [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
 - [scripts/uartctl.py](../scripts/uartctl.py)：串口 CLI 的 PC 端客户端。
 - [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
+- [ui/src/App.tsx](../ui/src/App.tsx) 与 [ui/src/hooks/useProgressiveMount.ts](../ui/src/hooks/useProgressiveMount.ts)：首帧只挂首页、其余页面按需挂载并逐帧自上而下填充的页面调度（新增页面必须在这里登记并分块，见 [ADR 0014](adr/0014-page-mount-on-demand-progressive-fill.md)）。
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 - [docs/hardware.md](hardware.md)：目标板卡的 SoC/存储、屏幕、触摸、外设、GPIO 分配和板级注意事项。

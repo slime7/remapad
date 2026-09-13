@@ -9,6 +9,7 @@
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
+import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { hw, setControllerConfig } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
@@ -85,11 +86,10 @@ function TypeCard(props: {
 
 function InfoRow(props: { label: string; value: string }) {
   return (
-    <View class="w-full h-[22] shrink-0 flex-row items-center">
+    <View class="w-full h-[22] shrink-0 flex-row items-center justify-between">
       <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
         {props.label}
       </Text>
-      <View class="grow" />
       <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>
         {props.value}
       </Text>
@@ -114,58 +114,69 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
     props.active,
     () => 34 + CARD_H * 2 + 8 * 2 + 15 + SERIAL_CARD_H + 8 + COLOR_CARD_H + 8 + BOTTOM_PLACEHOLDER_H,
   );
+  /** 分帧填充：类型标签、两张类型卡、序列号卡、颜色卡、底部占位。 */
+  const step = useMountCursor(6);
 
   return (
-    <View class="w-full h-full overflow-hidden">
+    <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
         class="w-full flex-col px-4 pt-[34] gap-2"
         style={{ translateY: -scroller.offset() }}
       >
-        <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          手柄类型
-        </Text>
-        {TYPE_OPTIONS.map((option) => (
-          <TypeCard
-            option={option}
-            selected={config().type === option.type}
-            onSelect={() => setControllerConfig({ ...config(), type: option.type })}
-            active={props.active}
-          />
-        ))}
-
-        <View class={STYLE.infoCard}>
-          <Text class="text-sm font-bold shrink-0" style={{ textColor: COLOR.onSurface }}>
-            序列号信息
+        {step() >= 1 ? (
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+            手柄类型
           </Text>
-          {serials().map((row) => (
-            <InfoRow label={row.label} value={row.value} />
-          ))}
-        </View>
+        ) : null}
+        {TYPE_OPTIONS.map((option, index) =>
+          step() >= index + 2 ? (
+            <TypeCard
+              option={option}
+              selected={config().type === option.type}
+              onSelect={() => setControllerConfig({ ...config(), type: option.type })}
+              active={props.active}
+            />
+          ) : null,
+        )}
 
-        <View class={STYLE.actionCard}>
-          <View class="w-full h-[18] flex-row items-center shrink-0">
-            <Text class="text-sm font-bold grow" style={{ textColor: COLOR.onSurface }}>
-              机身颜色
+        {step() >= 4 ? (
+          <View class={STYLE.infoCard}>
+            <Text class="text-sm font-bold shrink-0" style={{ textColor: COLOR.onSurface }}>
+              序列号信息
             </Text>
-            <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
-              {rgbLabel(config().bodyColor)} · 即将支持
-            </Text>
-          </View>
-          <View class="flex-row gap-2 mt-2 shrink-0">
-            {COLOR_PRESETS.map((preset) => (
-              <View
-                key={preset.label}
-                class="w-[24] h-[24] rounded-full shrink-0"
-                style={{
-                  bgColor: `#${preset.rgb.toString(16).padStart(6, '0')}`,
-                  borderColor: preset.rgb === config().bodyColor ? COLOR.primary : COLOR.outlineVariant,
-                  borderWidth: 1,
-                }}
-              />
+            {serials().map((row) => (
+              <InfoRow label={row.label} value={row.value} />
             ))}
           </View>
-        </View>
-        <BottomPlaceholder />
+        ) : null}
+
+        {step() >= 5 ? (
+          <View class={STYLE.actionCard}>
+            <View class="w-full h-[18] flex-row items-center shrink-0">
+              <Text class="text-sm font-bold grow" style={{ textColor: COLOR.onSurface }}>
+                机身颜色
+              </Text>
+              <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
+                {rgbLabel(config().bodyColor)} · 即将支持
+              </Text>
+            </View>
+            <View class="flex-row gap-2 mt-2 shrink-0">
+              {COLOR_PRESETS.map((preset) => (
+                <View
+                  key={preset.label}
+                  class="w-[24] h-[24] rounded-full shrink-0"
+                  style={{
+                    bgColor: `#${preset.rgb.toString(16).padStart(6, '0')}`,
+                    borderColor:
+                      preset.rgb === config().bodyColor ? COLOR.primary : COLOR.outlineVariant,
+                    borderWidth: 1,
+                  }}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
+        {step() >= 6 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );

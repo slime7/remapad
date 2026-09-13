@@ -86,6 +86,7 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 - `<Image>` 通过资源名称引用 PAK 中的图像；图片在构建期处理，不在 ESP32 上解析 SVG。
 - `createSpriteAnimation` 只描述资源帧选择，实际资源仍由官方编译器和 PAK 管理。
 - 长文案放不进可视区时用 `ui/src/components/MarqueeText.tsx`（自定义横向滚动文本）：框架的单行 `Text` 不自动换行，组件按「静止 2 秒 → 匀速左移到底 → 到底停留 1 秒 → 跳回起点」循环，放得下则全程静止；可视宽度由调用方以逻辑像素传入（框架不回读布局），滚动相位取 `virtualNow()`，文本宽度经 `getOps().measureText(text, slot)` 量取，宿主不提供该操作时退回静态文本。
+- 页面组织：`ui/src/App.tsx` 首帧只挂壳、状态栏、底栏与首页，其余页面首次进入时才建外层容器；App 不再有页面容器层，切页由每个页面根节点翻转 `hidden` 完成（`props.active()`），页内再用 `ui/src/hooks/useProgressiveMount.ts` 的 `useMountCursor` 按帧、自上而下放行填充块（原生建树约每节点 50 ms，选型见 [ADR 0014](adr/0014-page-mount-on-demand-progressive-fill.md)）。新增页面必须登记到 App 的挂载分支、页内分块，并由根节点自己负责 `hidden`。
 
 入口保持官方 Vue Vapor 形式：
 

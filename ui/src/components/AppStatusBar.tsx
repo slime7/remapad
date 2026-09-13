@@ -19,10 +19,9 @@ export function AppStatusBar() {
         class="shrink-0 text-sm"
         color={usbOn ? COLOR.primary : COLOR.onSurfaceVariant}
       />
-      <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+      <Text class="text-xs grow" style={{ textColor: COLOR.onSurfaceVariant }}>
         {usbRoleLabel(hw.usbRole)}
       </Text>
-      <View class="grow" />
       <Icon
         glyph={btConnected ? ICON.bluetoothConnected : ICON.bluetoothDisabled}
         class="shrink-0 text-sm"

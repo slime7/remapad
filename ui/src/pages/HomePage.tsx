@@ -1,7 +1,9 @@
 /**
  * 状态页（首页）：两个圆形连接状态（USB 链路 / NS2 蓝牙），其余留白。
  * 圆形可点击：左进模式选择，右进手柄配对。
- * 其余页面在首帧之后逐页补挂（见 App.tsx），补挂期间在留白处显示加载提示。
+ * 其余页面首次进入时才挂载并逐帧填充（见 App.tsx 与
+ * docs/adr/0014-page-mount-on-demand-progressive-fill.md），填充期间在本页留白
+ * 处显示加载提示。切页由本页根节点翻转 hidden 完成。
  * Vue Vapor：状态推导以函数形式在 JSX 内调用才会被渲染作用跟踪。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
@@ -39,7 +41,7 @@ export function HomePage(props: {
 
   const scroller = usePageScroll(props.active, () => 38 + 56 + BOTTOM_PLACEHOLDER_H);
   return (
-    <View class="w-full h-full overflow-hidden">
+    <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
         class="w-full flex-col items-center px-4 pt-[38]"
         style={{ translateY: -scroller.offset() }}

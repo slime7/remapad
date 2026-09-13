@@ -145,6 +145,8 @@ remapad/
 
 仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
 
+UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 50 ms（240×280，成本在 Vue Vapor 的逐节点挂载，不在宿主 op 或样式解析）。因此 `ui/src/App.tsx` 首帧只挂壳、状态栏、底栏与首页，其余页面首次进入时才建外层容器，页内由 `ui/src/hooks/useProgressiveMount.ts` 每帧放行一个填充块（外层容器先出现、兄弟块自上而下），切页只翻转各页根节点的 `hidden`；页面容器层因此被移除，新增页面要自行承担 `hidden` 切换与分块（见 [ADR 0014](adr/0014-page-mount-on-demand-progressive-fill.md)）。
+
 ## 构建链路
 
 ### UI 包

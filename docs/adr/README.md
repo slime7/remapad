@@ -38,13 +38,16 @@
 | [0010](0010-nimble-ble-controller-stack.md) | active | BLE 手柄外设采用 ESP-IDF 内置 NimBLE 栈，SMP 关闭、配对由应用层 Command 0x15 承担 |
 | [0011](0011-controller-dataplane-module-boundary.md) | active | 控制器数据面按 ns2/ble/dp/usb 四模块分层，数据流单点汇合于 dp_task |
 | [0012](0012-firmware-boot-splash-before-ui.md) | active | 固件在 PocketJS UI 就绪前自绘启动画面并提前点亮背光 |
-| [0013](0013-defer-page-mount-after-first-frame.md) | active | 首帧只挂载首页，其余页面按帧补挂并在首页显示加载提示 |
+| [0013](0013-defer-page-mount-after-first-frame.md) | active | 首帧只挂载首页，其余页面按帧补挂并在首页显示加载提示；补挂时机由 0014 取代 |
+| [0014](0014-page-mount-on-demand-progressive-fill.md) | active | 页面改为按需挂载并逐帧自顶向下填充，外层容器先出现 |
 
 `0002` 仍作为硬件 bridge 与控制面分层的决策依据；其自定义打包和 host 接入范围由 `0003` 取代。旧 ADR 文件正文保持不变。
 
 `0004` 仍作为 Web 预览采用官方 `hosts/web` 开发主机的决策依据；其固件组件与原生归档取自 PocketJS checkout 的范围由 `0005` 取代。旧 ADR 文件正文保持不变。
 
 `0007` 仍作为显示与触摸 BSP 选型（esp_lcd 内置 ST7789、Registry CST816S、LEDC 背光）的决策依据；其 strip 提交中颜色缓冲必须待 `trans_done` 门控后才可复用的语义由 `0008` 部分取代。旧 ADR 文件正文保持不变。
+
+`0013` 仍作为「首帧不全量挂载页面」这一取舍的依据；其首帧后每帧补挂一页的时机与页面填充方式由 `0014` 取代，**页面根节点自行翻转 hidden、按需挂载分块填充的约定以 0014 为准**。旧 ADR 文件正文保持不变。
 
 ## 创建 ADR 脚本用法
 
