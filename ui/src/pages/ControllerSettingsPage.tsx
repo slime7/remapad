@@ -27,7 +27,7 @@ interface TypeOption {
 
 const TYPE_OPTIONS: TypeOption[] = [
   { type: 'pro', title: 'Pro 手柄', desc: '单设备 · PID 0x2069 · 默认' },
-  { type: 'joycon', title: 'JoyCon 组合', desc: '左 + 右 · 实机验证前仅记录' },
+  { type: 'joycon', title: 'JoyCon 组合', desc: '左 + 右同时连接 · 配对页按下 LR' },
 ];
 
 /** 预留色卡（机身配色候选，0xRRGGBB）；选择功能实装前不可点。 */
@@ -90,11 +90,13 @@ function InfoRow(props: { label: string; value: string }) {
 export function ControllerSettingsPage(props: { active: () => boolean }) {
   const config = () => hw.controllerConfig;
   const isJoycon = () => config().type === 'joycon';
+  // 序列号与固件 ns2_serial 生成的常量一致：前缀 + 10 位数字 + 校验位
+  // （S = 偶位和 + 3×奇位和，校验位 = (10 − S mod 10) mod 10）。
   const serials = () =>
     isJoycon()
       ? [
-          { label: '左序列号', value: 'HBW1006700000' },
-          { label: '右序列号', value: 'HCW1006800000' },
+          { label: '左序列号', value: 'HBW10067012342' },
+          { label: '右序列号', value: 'HCW10068012341' },
         ]
       : [{ label: '序列号', value: 'HEJ71001123456' }];
 

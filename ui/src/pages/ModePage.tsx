@@ -1,6 +1,7 @@
-/** 模式页：USB 三种角色——串口调试、桥接（PC 输入转发）、手柄（实体手柄转发）。
- *  角色选择经固件持久化；桥接（otg）双端禁切（USB PHY 切换会断开 COM，
- *  且数据面未接入），点击只给出提示。运行时 Text 是单行图元（官方契约
+/** 模式页：USB 两种角色——串口调试、手柄（实体手柄转发）。角色选择经固件
+ *  持久化。桥接（otg）开发期临时禁用防误操作：USB PHY 切换会断开 COM 串口，
+ *  数据面也未接入，UI 直接不展示该选项，后端对 otg 请求同样静默跳过，
+ *  待 M5 数据面接入后恢复三选项。运行时 Text 是单行图元（官方契约
  *  "one inline run"），多行描述按行拆成多个 Text 节点；卡片不固定高度，
  *  用 py-3 留白，图标随内容垂直居中。 */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
@@ -56,7 +57,7 @@ function RoleCard(props: {
 export function ModePage(props: { active: () => boolean }) {
   const scroller = usePageScroll(
     props.active,
-    () => 34 + CARD_H * 3 + 8 * 3 + 20 + BOTTOM_PLACEHOLDER_H,
+    () => 34 + CARD_H * 2 + 8 * 2 + 20 + BOTTOM_PLACEHOLDER_H,
   );
   return (
     <View class="w-full h-full overflow-hidden">
@@ -71,14 +72,6 @@ export function ModePage(props: { active: () => boolean }) {
           lines={['烧录 / 日志']}
           glyph={ICON.adb}
           onSelect={() => setUsbRole('device')}
-        />
-        <RoleCard
-          role="otg"
-          selected={hw.usbRole === 'otg'}
-          title="桥接"
-          lines={['电脑输入 → NS2', '数据面接入前暂不可切换']}
-          glyph={ICON.computer}
-          onSelect={() => setUsbRole('otg')}
         />
         <RoleCard
           role="host"

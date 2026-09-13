@@ -1,9 +1,14 @@
 /**
- * 悬浮底部菜单：状态 / 配对 / 模式 / 设置 / 系统 五个导航键，绝对定位悬浮
- * 在所有页面之上，图标为构建期光栅化的 SVG（nav-*.svg，配色变体随状态切换）。
- * 贴近屏幕角落的「状态 / 设置」取 rounded-[24]，中间三键取 rounded-[16]；
- * 配色规则与旧版一致：状态键 active 用 tertiary 家族，其余键用 primary 家族，
- * disabled 时仅前景置灰。
+ * 悬浮底部菜单：状态 + 设置两个大按钮，绝对定位悬浮在所有页面之上。
+ * 按钮背景是构建期光栅化的 SVG（nav-*.svg）：PocketJS 原生表面只有单一
+ * radius 字段，做不了「单个按钮贴屏幕角的一角 24、其余三角 16」的单角
+ * 圆角，因此按钮形状整体画进 SVG。宽键 128×64 拆成左右两个 64×64 半图
+ * （预览 wasm 核心对超过 64 的一边渲染异常），左下角 24、其余三角 16，
+ * 接缝落在 x=64 实心区；方键 64×64 单图，右下角 24、其余三角 16。圆角
+ * 曲线必须用三次贝塞尔（C）表达——官方烘焙器对 path 圆弧指令（A）光栅
+ * 化错位，与分辨率无关。图标与文字放在绝对定位覆盖层内居中，配色行为
+ * 与旧版一致：状态键 tertiary 家族、设置键 primary 家族，disabled 时仅
+ * 前景置灰、背景保持当前 on/off 形态。
  * 滚动页在内容末尾放 BottomPlaceholder 垫高，避免最后一段被菜单遮挡。
  * disabled() 为真时（如配对进行中）忽略切换并置灰按钮，锁定当前页面。
  *
@@ -11,91 +16,95 @@
  * 渲染作用内才会被跟踪），setup 期赋值的常量不会随 props 更新。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
-import { COLOR, STYLE } from '../theme';
+import { Icon, ICON } from '../icons';
+import { COLOR } from '../theme';
 
-export type TabKey = 'home' | 'pairing' | 'mode' | 'settings' | 'controller' | 'system' | 'debug';
+export type TabKey =
+  | 'home'
+  | 'settings'
+  | 'controller'
+  | 'pairing'
+  | 'mode'
+  | 'system'
+  | 'debug';
 
-interface NavTab {
-  key: TabKey;
-  label: string;
-  svg: 'home' | 'bt' | 'mode' | 'set' | 'sys';
-}
-
-/** 顺序即布局：两端为角落键（rounded-24），中间三键（rounded-16）。 */
-const TABS: NavTab[] = [
-  { key: 'home', label: '状态', svg: 'home' },
-  { key: 'pairing', label: '配对', svg: 'bt' },
-  { key: 'mode', label: '模式', svg: 'mode' },
-  { key: 'settings', label: '设置', svg: 'set' },
-  { key: 'system', label: '系统', svg: 'sys' },
-];
-
-/** 图标资源名必须是完整字面量（构建期按字面量扫描打包），不接受拼接。 */
-const NAV_SRC: Record<NavTab['svg'], { on: string; off: string; dis: string }> = {
-  home: { on: 'nav-home-on.svg', off: 'nav-home-off.svg', dis: 'nav-home-dis.svg' },
-  bt: { on: 'nav-bt-on.svg', off: 'nav-bt-off.svg', dis: 'nav-bt-dis.svg' },
-  mode: { on: 'nav-mode-on.svg', off: 'nav-mode-off.svg', dis: 'nav-mode-dis.svg' },
-  set: { on: 'nav-set-on.svg', off: 'nav-set-off.svg', dis: 'nav-set-dis.svg' },
-  sys: { on: 'nav-sys-on.svg', off: 'nav-sys-off.svg', dis: 'nav-sys-dis.svg' },
+/** 背景资源名必须是完整字面量（构建期按字面量扫描打包），不接受拼接。 */
+const HOME_BG = {
+  onL: 'nav-home-on-l.svg',
+  onR: 'nav-home-on-r.svg',
+  offL: 'nav-home-off-l.svg',
+  offR: 'nav-home-off-r.svg',
 };
-
-/** 各键 active/背景家族：状态键 pink 家族，其余 blue 家族。 */
-const PINK_TABS: TabKey[] = ['home'];
+const SET_BG = { on: 'nav-set-on.svg', off: 'nav-set-off.svg' };
 
 export function AppNavBar(props: {
   tab: TabKey;
   disabled: () => boolean;
   onChange: (tab: TabKey) => void;
 }) {
+  const statusActive = () => props.tab === 'home';
+  const settingsActive = () => props.tab === 'settings';
   const pick = (next: TabKey) => {
     if (!props.disabled()) {
       props.onChange(next);
     }
   };
   return (
-    <View class="absolute left-4 right-4 bottom-4 h-[64] flex-row gap-2 z-40">
-      {TABS.map((item) => {
-        const active = () => props.tab === item.key;
-        const pink = PINK_TABS.includes(item.key);
-        const corner = item.key === 'home' || item.key === 'settings';
-        const bg = () => {
-          if (!props.disabled()) {
-            if (active()) {
-              return pink ? STYLE.navHomeOn : corner ? STYLE.navCornerOn : STYLE.navMidOn;
-            }
-          }
-          return pink ? STYLE.navHomeOff : corner ? STYLE.navCornerOff : STYLE.navMidOff;
-        };
-        const iconSrc = () =>
-          props.disabled()
-            ? NAV_SRC[item.svg].dis
-            : active()
-              ? NAV_SRC[item.svg].on
-              : NAV_SRC[item.svg].off;
-        const labelColor = () =>
-          props.disabled()
-            ? COLOR.disabled
-            : active()
-              ? pink
-                ? COLOR.onTertiaryContainer
-                : COLOR.onPrimaryContainer
-              : pink
-                ? COLOR.onSecondaryContainer
-                : COLOR.onSurfaceVariant;
-        return (
-          <View
-            key={item.key}
-            focusable
-            onPress={() => pick(item.key)}
-            class={bg()}
+    <View class="absolute left-[20] right-[20] bottom-4 h-[64] flex-row gap-2 z-40">
+      <View focusable onPress={() => pick('home')} class="w-[128] h-[64] shrink-0">
+        <Image
+          class="absolute left-0 top-0 w-[64] h-[64]"
+          src={statusActive() ? HOME_BG.onL : HOME_BG.offL}
+        />
+        <Image
+          class="absolute left-[64] top-0 w-[64] h-[64]"
+          src={statusActive() ? HOME_BG.onR : HOME_BG.offR}
+        />
+        <View class="absolute left-0 top-0 w-[128] h-[64] flex-col items-center justify-center">
+          <Icon
+            glyph={ICON.home}
+            class="shrink-0 text-xl"
+            color={props.disabled() ? COLOR.disabled : statusActive() ? COLOR.onTertiaryContainer : COLOR.onSecondaryContainer}
+          />
+          <Text
+            class={props.disabled() || !statusActive() ? 'text-xs' : 'text-xs font-bold'}
+            style={{
+              textColor: props.disabled()
+                ? COLOR.disabled
+                : statusActive()
+                  ? COLOR.onTertiaryContainer
+                  : COLOR.onSecondaryContainer,
+            }}
           >
-            <Image class="w-[20] h-[20] shrink-0" src={iconSrc()} />
-            <Text class="text-xs shrink-0" style={{ textColor: labelColor() }}>
-              {item.label}
-            </Text>
-          </View>
-        );
-      })}
+            状态
+          </Text>
+        </View>
+      </View>
+      <View focusable onPress={() => pick('settings')} class="w-[64] h-[64] shrink-0">
+        <Image
+          class="absolute left-0 top-0 w-[64] h-[64]"
+          src={settingsActive() ? SET_BG.on : SET_BG.off}
+        />
+        <View class="absolute left-0 top-0 w-[64] h-[64] flex-col items-center justify-center">
+          <Icon
+            glyph={ICON.settings}
+            class="shrink-0 text-xl"
+            color={props.disabled() ? COLOR.disabled : settingsActive() ? COLOR.onPrimaryContainer : COLOR.onSurfaceVariant}
+          />
+          <Text
+            class={props.disabled() || !settingsActive() ? 'text-xs' : 'text-xs font-bold'}
+            style={{
+              textColor: props.disabled()
+                ? COLOR.disabled
+                : settingsActive()
+                  ? COLOR.onPrimaryContainer
+                  : COLOR.onSurfaceVariant,
+            }}
+          >
+            设置
+          </Text>
+        </View>
+      </View>
     </View>
   );
 }

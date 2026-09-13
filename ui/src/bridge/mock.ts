@@ -143,14 +143,9 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       break;
 
     case 'setUsbRole': {
-      // 桥接（otg）双端禁切：USB PHY 切换会断开 COM，数据面也未接入。
+      // 桥接（otg）开发期临时禁用防误操作：后端静默跳过，不应用也不报错。
       if (cmd.role === 'otg') {
-        reply({
-          t: 'error',
-          id,
-          code: 'NOT_SWITCHABLE',
-          message: '桥接模式暂不可切换',
-        });
+        reply({ t: 'usbRoleSet', id, role: state.usbRole, active: state.usbRoleActive });
         break;
       }
       state.usbRole = cmd.role;
@@ -202,6 +197,11 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       state.controller = null;
       setPairing(reply, 'idle');
       reply({ t: 'unpairResult', id, state: 'idle', message: '已解除配对' });
+      break;
+
+    case 'pressLr':
+      // 浏览器预览没有双机配对流程，只回执成功供按钮反馈。
+      reply({ t: 'pressLrAck', id, success: true });
       break;
 
     case 'triggerRumble':

@@ -137,6 +137,18 @@ export function unpair(): void {
   });
 }
 
+/**
+ * 配对页「按下 LR」：Pro 手柄向主机注入 L+R 按键（部分界面用它确认注册）；
+ * JoyCon 组合触发固件的左右双机配对（两台身份同时广播/确认）。
+ */
+export function pressLr(): void {
+  hardware.send({ t: 'pressLr' }, (msg) => {
+    if (msg.t === 'pressLrAck' && !msg.success) {
+      hw.pairingMessage = '当前状态无法执行 LR 配对';
+    }
+  });
+}
+
 export function setUsbRole(role: UsbRole): void {
   hardware.send({ t: 'setUsbRole', role }, (msg) => {
     if (msg.t === 'usbRoleSet') {

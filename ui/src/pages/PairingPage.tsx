@@ -1,12 +1,12 @@
 /**
  * 配对页：状态流转 + 大号开始/停止按钮 + 配对 L+R 确认按钮。
- * 主机 Grip/顺序界面需要同时按下 L 和 R 才完成注册，该按钮是配对流程
- * 的必经步骤。内容单屏放得下，静态页不挂滚动。
+ * Pro 手柄部分注册界面需要按下 L+R 确认；JoyCon 组合以左右同时连为准，
+ * 该按钮触发固件左右双机配对。内容单屏放得下，静态页不挂滚动。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { COLOR, STYLE } from '../theme';
-import { hw, sendDebugKey, startPairing, stopPairing } from '../hooks/useHardware';
+import { hw, pressLr, sendDebugKey, startPairing, stopPairing } from '../hooks/useHardware';
 import { BottomPlaceholder } from '../components/BottomPlaceholder';
 import { pairingColor, pairingLabel } from '../utils';
 
@@ -59,7 +59,13 @@ export function PairingPage() {
             </Text>
           </View>
           {isBusy() ? (
-            <View focusable onPress={() => sendDebugKey('lr')} class={STYLE.pairAux}>
+            <View
+              focusable
+              onPress={() =>
+                hw.controllerConfig.type === 'joycon' ? pressLr() : sendDebugKey('lr')
+              }
+              class={STYLE.pairAux}
+            >
               <Text class="text-sm font-bold" style={{ textColor: COLOR.onSurface }}>
                 配对
               </Text>

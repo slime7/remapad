@@ -95,18 +95,6 @@ export const STYLE = {
   /** 模式页/手柄设置页的选项卡（未选中 / 选中）。 */
   optionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-3 gap-3 active:bg-[#14263e] transition-colors duration-150',
   optionCardSel: 'w-full shrink-0 rounded-[16] bg-[#9ecefe] flex-row items-center px-3 py-3 gap-3 active:bg-[#b8dbff] transition-colors duration-150',
-
-  /**
-   * 底部导航（5 键，SVG 图标）：两端的「状态 / 设置」贴近屏幕角落取
-   * rounded-[24]，中间三键取 rounded-[16]；状态键沿用 secondary/tertiary
-   * 家族配色，其余键沿用 blue 家族配色，禁用态只变前景色。
-   */
-  navHomeOn: 'w-[35] h-[64] shrink-0 rounded-[24] bg-[#fd9ace] flex-col items-center justify-center active:bg-[#ffafd7] transition-colors duration-150',
-  navHomeOff: 'w-[35] h-[64] shrink-0 rounded-[24] bg-[#34202c] flex-col items-center justify-center active:bg-[#4a2f40] transition-colors duration-150',
-  navMidOn: 'w-[35] h-[64] shrink-0 rounded-[16] bg-[#9ecefe] flex-col items-center justify-center active:bg-[#b8dbff] transition-colors duration-150',
-  navMidOff: 'w-[35] h-[64] shrink-0 rounded-[16] bg-[#14263e] flex-col items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
-  navCornerOn: 'w-[35] h-[64] shrink-0 rounded-[24] bg-[#9ecefe] flex-col items-center justify-center active:bg-[#b8dbff] transition-colors duration-150',
-  navCornerOff: 'w-[35] h-[64] shrink-0 rounded-[24] bg-[#14263e] flex-col items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
 } as const;
 
 /**

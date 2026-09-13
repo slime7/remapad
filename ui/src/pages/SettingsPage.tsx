@@ -1,6 +1,6 @@
 /**
- * 设置页：rounded-16 列表（手柄设置 / 调试）。配对、模式与系统已在底部
- * 导航，触摸上下滚动。
+ * 设置页：rounded-16 列表菜单（手柄设置 / 配对 / 模式 / 系统 / 调试）。
+ * 底部导航只有状态与设置两个键，其余功能页都从这里进入，触摸上下滚动。
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
@@ -22,6 +22,9 @@ interface SettingsItem {
 
 const ITEMS: SettingsItem[] = [
   { key: 'controller', title: '手柄设置', glyph: ICON.gamepad },
+  { key: 'pairing', title: '手柄配对', glyph: ICON.bluetooth },
+  { key: 'mode', title: '模式切换', glyph: ICON.swapHoriz },
+  { key: 'system', title: '系统', glyph: ICON.settings },
   { key: 'debug', title: '调试', glyph: ICON.bug },
 ];
 
