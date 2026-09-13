@@ -8,6 +8,9 @@
     "build": "node scripts/pocketjs.mjs build",
     "dev": "node scripts/pocketjs.mjs web",
     "native": "node scripts/pocketjs.mjs native",
+    "test:e2e": "pnpm --filter remapad-ui run test:e2e",
+    "test:e2e:headed": "pnpm --filter remapad-ui run test:e2e:headed",
+    "test:firmware": "node scripts/firmware-test.mjs",
     "lint": "pnpm --filter remapad-ui run lint",
     "lint:fix": "pnpm --filter remapad-ui run lint:fix"
   }

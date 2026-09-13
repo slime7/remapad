@@ -17,6 +17,9 @@ dist/
 ui/dist/
 # 官方编译器在入口目录生成又删除的类型检查临时目录
 ui/src/.pocketjs-app-check-*/
+# Playwright 端到端测试的运行产物
+ui/test-results/
+ui/playwright-report/
 .pocket/
 ui/.pocket/
 npm-debug.log*

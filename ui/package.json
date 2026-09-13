@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@pocketjs/framework": "file:vendor/pocketjs",
@@ -18,11 +21,12 @@
     "@babel/core": "^7",
     "@babel/preset-typescript": "^7",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.62.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@tailwindcss/cli": "^4.3.2",
     "@tailwindcss/typography": "^0.5.20",
-    "@vue/compiler-vapor": "3.6.0-rc.1",
     "@vue/compiler-sfc": "3.6.0-rc.1",
+    "@vue/compiler-vapor": "3.6.0-rc.1",
     "babel-preset-solid": "^1.9.15",
     "esbuild": "^0.28.2",
     "eslint": "^10.9.1",
