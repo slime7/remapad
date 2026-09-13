@@ -173,6 +173,8 @@ ui/src + ui/pocket.json + firmware/pocket.host.json
 
 `firmware/main/pocketjs_host.c` 按官方 smoke 示例组织资源生命周期，但把整套流程放在产品自己的 `remapad-pjs` owner task 上运行：
 
+面板、触摸与背光初始化成功后，owner task 先用 `boot_splash_begin` 自绘一帧启动画面（几何标记 + 阶段进度条）并点亮背光，再按下面的顺序加载 UI；每个启动阶段经 `boot_splash_progress` 推进一次进度，首帧提交成功后 `boot_splash_end` 释放画面缓冲，显示与背光从此归 PocketJS 渲染路径所有（选型与代价见 [ADR 0012](adr/0012-firmware-boot-splash-before-ui.md)）。
+
 1. 使用生成的包字节调用 `pocketjs_package_open`。
 2. 使用生成的 host contract 调用 `pocketjs_package_select`，完成目标和 ABI 校验。
 3. 用官方默认值创建 guest，设置 4 MB JavaScript heap、256 KB 栈预算，并优先使用 PSRAM。
@@ -181,7 +183,7 @@ ui/src + ui/pocket.json + firmware/pocket.host.json
 6. 创建 RGB565 renderer 和 render target，并分配一个可复用的 PSRAM strip scratch buffer。
 7. 进入固定 tick 循环：`sample_input` 提供输入，`pocketjs_ui_turn` 执行一次 UI turn，再完成 prepare、render strip、commit/abort。
 
-当前 `sample_input` 由 `drivers/touch.c` 采样 CST816T 填入官方 `pocketjs_ui_touch_t` 触点（单点，id 恒为 0），每个成功渲染的 strip 在事务内经 `drivers/panel.c` 的 `panel_transfer` 提交到 ST7789V2，全部 region 传输成功后才 `commit`。面板或触摸初始化失败时不阻断启动：面板失败退回纯渲染 bring-up（帧仍渲染进 PSRAM 后丢弃），触摸失败则每帧零触点。触摸事实已声明进 `firmware/pocket.host.json` 的 `input.touch`。
+当前 `sample_input` 由 `drivers/touch.c` 采样 CST816T 填入官方 `pocketjs_ui_touch_t` 触点（单点，id 恒为 0），每个成功渲染的 strip 在事务内经 `drivers/panel.c` 的 `panel_transfer` 提交到 ST7789V2，全部 region 传输成功后才 `commit`。面板或触摸初始化失败时不阻断启动：面板失败退回纯渲染 bring-up（帧仍渲染进 PSRAM 后丢弃）并跳过启动画面，触摸失败则每帧零触点。触摸事实已声明进 `firmware/pocket.host.json` 的 `input.touch`。
 
 ### 为什么由产品 task 承载 guest 生命周期
 

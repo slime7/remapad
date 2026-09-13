@@ -71,6 +71,7 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 - USB 角色（`usbRole`: device=插电脑 COM 口，host=插手柄）目前只由固件记录并如实上报 `usbRoleActive`；USB OTG PHY 切换属于数据面，未接入前任何代码都不触碰 RTC_CNTL USB mux，复位后永远回到默认的 USB-Serial/JTAG（COM 设备模式），"重启回 COM 模式"因此天然成立。
 - 配对与连接状态已接入真实 BLE 会话（NimBLE 手柄外设，进度见 [ROADMAP.md](ROADMAP.md)）：bridge 的 `startPairing` 触发固件侧发现广播，`stopPairing` 退出配对模式、并断开已连接但注册握手未完成的主机（`pairing` 态由连接驱动，不断开则停止永远无法退出）；解除配对由显式 `unpair` 命令完成（清除 NVS 凭证并切回发现广播）。广播时机为开机即广播——有凭证发回连广播等待主机回连，无凭证发发现广播等待主机搜索，断开后按同一规则自动恢复；手动配对期间恒发标准发现广播。已连接但始终停留在握手等待态的主机（手机/PC 自动回连）由空闲超时主动断开（3 秒无协议活动，主机毫秒级初始化序列不受影响）；主机连接地址是随机地址，不能按 OUI 识别。配对成功的判定走协议证据——主机初始化/0x15 握手完成（或凭证匹配回连）记为主机已注册，NVS 凭证则是重启后仍成立的持久化证据，两者独立；配对六态由此实时推导并经 `pairingStateChanged` 推送，配对进行中 UI 底部导航锁定在配对页。Command 0x15 私有配对与 NVS 凭证见 [controller.md](controller.md) 与 [ADR 0010](adr/0010-nimble-ble-controller-stack.md)。电池字段仍是 `battery.c` 预留占位值（真实 ADC 随 M5 接入）。
 - 手柄身份与配对凭证按 `ns2_identity_t`（Pro / JoyCon L / JoyCon R）分槽（`ble_creds`，NVS v2 格式，旧单表记录迁移进 Pro 槽）：切换手柄类型后主机眼中是另一台设备，配对信息不共用。Pro 为单连接双 PDU 广播；JoyCon 组合为左右双连接（`CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2`），各占一个广播实例与静态随机 AdvA（NimBLE 每实例地址仅支持 RANDOM，与真机 public 形态不同，主机兼容性待实机验证），序列号 / PID / 出厂块（0x7E40 与 0x13000）按连接身份提供，输入报告按身份切分左右半边。配对页「按下 LR」（`pressLr` 命令）在 JoyCon 组合下等价组合确认。会话层面向连接分槽（最多 2 个），桥接命令 / 应答 / 通知都带连接上下文。
+- 配对对外的心智模型是「开机即配对、无需界面」：有凭证发回连广播、无凭证发发现广播（见上一条），主机侧配对记录在首次连接握手时完成，用户不需要在屏幕上做任何确认动作；屏幕上的配对页只用于观察会话状态、手动进出配对模式或解除配对，主机 Grip / 手柄顺序界面只用于调整手柄顺序与确认 JoyCon 已配对。JoyCon 组合保持左右两条独立连接与两条独立凭证（各占一个广播实例），屏幕 UI 不做合并成单个设备的展示。
 - 主机推送的手柄固件更新按「接受并假装升级」处理：0x0018 升级数据块写入被计数接收，静默 10 秒视为完成，上报版本（app_config 持久化，0x10 查询与两个出厂块共用）递增落盘；真实升级协议无公开文档，需抓包后再对齐（见 controller.md §12）。
 - 调试注入是控制面进入数据面的唯一低频通道：bridge 的 `debugKey` 命令经 `dp_source_inject()` 在数据面当前输入状态上叠加一次按键按下并按时长自动释放（A/HOME 约 250ms，配对 L+R 约 1s，对应主机 Grip/顺序界面的配对确认动作；UI 调试页「按键指令」区），采样与编码仍由数据面任务独立完成，不引入高频路径。
 - 输入获取与 NS2 输出已解耦为两个稳定接口（`firmware/main/dp/dp_source.h` 与 `firmware/main/ns2/ns2_output.h`，ADR 0011 边界内）：新增输入设备（USB 手柄、桥接 PC、UART 注入）只需实现 `dp_source_t` 并注册，首个注册源拥有摇杆/电池字段，后续源叠加按键，调试注入最后叠加；输出侧 `ns2_output_send()` 接收规范化状态（可只填需要输出的按键），内部按会话格式编码并经注册的输出通道（现役 BLE 通知，USB 预留）发送。主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等）经反馈监听者分发，M5 起转发给插入的手柄或桥接 PC。电池经 `battery.c` 唯一入口 + `ns2_output_set_battery` 随报告上发；amiibo 镜像经 `ns2_output_amiibo_stage` 预置（传输方式待定），Report 0x09 的 NFC 状态字节随预置汇报。USB 输入/桥接的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
@@ -84,6 +85,7 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 - `<Text>` 使用构建期收集的字符集和 baked font atlas；字号应使用 PocketJS 支持的 Tailwind 插槽。Inter 未映射的码点（中文等）经应用目录 `fonts.json` 声明的回退字体面（当前为 Noto Sans SC）烘焙进同一图集。
 - `<Image>` 通过资源名称引用 PAK 中的图像；图片在构建期处理，不在 ESP32 上解析 SVG。
 - `createSpriteAnimation` 只描述资源帧选择，实际资源仍由官方编译器和 PAK 管理。
+- 长文案放不进可视区时用 `ui/src/components/MarqueeText.tsx`（自定义横向滚动文本）：框架的单行 `Text` 不自动换行，组件按「静止 2 秒 → 匀速左移到底 → 到底停留 1 秒 → 跳回起点」循环，放得下则全程静止；可视宽度由调用方以逻辑像素传入（框架不回读布局），滚动相位取 `virtualNow()`，文本宽度经 `getOps().measureText(text, slot)` 量取，宿主不提供该操作时退回静态文本。
 
 入口保持官方 Vue Vapor 形式：
 
