@@ -57,7 +57,11 @@ export function HomePage(props: {
         <View class="grow w-full flex-col items-center justify-center">
           {/* 常驻节点，按 class 收起：加载提示会出现/消失，不能用条件渲染反复卸载重建。 */}
           <View class={props.loading() ? 'flex-col items-center gap-2' : 'hidden'}>
-            <Image class="w-[24] h-[24] shrink-0" src={spinnerSrc.value} />
+            {/* 收起时不读动画帧：否则常驻的 Image 会每 3 帧换一次图（实测每帧约 +9 ms）。 */}
+            <Image
+              class="w-[24] h-[24] shrink-0"
+              src={props.loading() ? spinnerSrc.value : SPINNER_FRAMES[0]}
+            />
             <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
               加载中…
             </Text>
