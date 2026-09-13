@@ -61,7 +61,8 @@ static void serialize_locked(uint8_t blob[CONFIG_BLOB_LEN])
     blob[0] = CONFIG_BLOB_VERSION;
     blob[1] = s_appcfg.cfg.brightness;
     blob[2] = s_appcfg.cfg.screen_on ? 1u : 0u;
-    blob[3] = s_appcfg.cfg.usb_role;
+    /* [3] 曾是 USB 角色：该字段不落盘（重启恒为串口），保留字节写 0。 */
+    blob[3] = 0;
     blob[4] = s_appcfg.cfg.ctrl_type;
     blob[5] = (uint8_t)(s_appcfg.cfg.body_color >> 16);
     blob[6] = (uint8_t)(s_appcfg.cfg.body_color >> 8);
@@ -137,8 +138,8 @@ esp_err_t app_config_init(void)
     s_appcfg.cfg.brightness = blob[1] > 100 ? 100u : blob[1];
     /* 息屏状态不跨重启保留：复位后恒为亮屏，NVS 值仅作落盘格式占位。 */
     s_appcfg.cfg.screen_on = true;
-    s_appcfg.cfg.usb_role = blob[3] == APP_CONFIG_USB_HOST ? APP_CONFIG_USB_HOST
-                                                           : APP_CONFIG_USB_DEVICE;
+    /* USB 角色不跨重启保留：开机恒为串口（device），旧记录里的角色一并忽略。 */
+    s_appcfg.cfg.usb_role = APP_CONFIG_USB_DEVICE;
     s_appcfg.cfg.ctrl_type = blob[4] == APP_CONFIG_CTRL_JOYCON ? APP_CONFIG_CTRL_JOYCON
                                                                : APP_CONFIG_CTRL_PRO;
     s_appcfg.cfg.body_color = ((uint32_t)blob[5] << 16) | ((uint32_t)blob[6] << 8) | blob[7];
@@ -188,7 +189,6 @@ void app_config_set_usb_role(app_config_usb_role_t role)
                                                             : APP_CONFIG_USB_DEVICE;
         xSemaphoreGive(s_appcfg.lock);
     }
-    schedule_commit();
 }
 
 void app_config_set_controller(app_config_ctrl_type_t type,

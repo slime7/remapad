@@ -361,8 +361,9 @@ static void handle_set_usb_role(int id, const char *cmd)
     }
     s_bridge.usb_role_host = want_host;
     app_config_set_usb_role(want_host ? APP_CONFIG_USB_HOST : APP_CONFIG_USB_DEVICE);
-    /* USB PHY/OTG 切换属于数据面，尚未接入：这里只记录并持久化请求，如实
-     * 上报，不触碰 RTC_CNTL USB mux。接入后按 docs/hardware.md 的机制实现。 */
+    /* USB PHY/OTG 切换属于数据面，尚未接入：这里只记录本次运行的角色（不
+     * 落盘，重启回到串口），如实上报，不触碰 RTC_CNTL USB mux。接入后按
+     * docs/hardware.md 的机制实现。 */
     char event[REMAPAD_EVENT_MAX];
     if (want_host) {
         snprintf(event, sizeof(event),
@@ -381,7 +382,7 @@ static void handle_set_usb_role(int id, const char *cmd)
              "{\"t\":\"usbRoleChanged\",\"role\":\"%s\",\"active\":%s}",
              want_host ? "host" : "device", want_host ? "false" : "true");
     reply_raw(broadcast);
-    ESP_LOGI(TAG, "usb role request -> %s (persisted, phy untouched)",
+    ESP_LOGI(TAG, "usb role request -> %s (runtime only, phy untouched)",
              want_host ? "host" : "device");
 }
 

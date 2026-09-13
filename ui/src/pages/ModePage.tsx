@@ -1,5 +1,5 @@
-/** 模式页：USB 两种角色——串口调试、手柄（实体手柄转发）。角色选择经固件
- *  持久化。桥接（otg）开发期临时禁用防误操作：USB PHY 切换会断开 COM 串口，
+/** 模式页：USB 两种角色——串口调试、手柄（实体手柄转发）。角色只对本次运行
+ *  生效，重启回到串口（固件不写 NVS）。桥接（otg）开发期临时禁用防误操作：USB PHY 切换会断开 COM 串口，
  *  数据面也未接入，UI 直接不展示该选项，后端对 otg 请求同样静默跳过，
  *  待 M5 数据面接入后恢复三选项。运行时 Text 是单行图元（官方契约
  *  "one inline run"），多行描述按行拆成多个 Text 节点；卡片不固定高度，
@@ -57,7 +57,7 @@ function RoleCard(props: {
 export function ModePage(props: { active: () => boolean }) {
   const scroller = usePageScroll(
     props.active,
-    () => 34 + CARD_H * 2 + 8 * 2 + 20 + BOTTOM_PLACEHOLDER_H,
+    () => 34 + CARD_H * 2 + 8 * 2 + 20 * 2 + BOTTOM_PLACEHOLDER_H,
   );
   return (
     <View class="w-full h-full overflow-hidden">
@@ -86,6 +86,9 @@ export function ModePage(props: { active: () => boolean }) {
             {hw.roleMessage}
           </Text>
         ) : null}
+        <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+          重启后回到串口
+        </Text>
         <BottomPlaceholder />
       </View>
     </View>
