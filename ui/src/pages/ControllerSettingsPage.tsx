@@ -20,14 +20,24 @@ const GAP = 8;
 const LABEL_H = 15;
 /** 信息行高度。 */
 const ROW_H = 22;
-/** 类型卡高度：py-3 上下 24 + 标题行 18。 */
-const CARD_H = 24 + 18;
-/** 序列号卡高度：py-2 上下 16 + 标题行 18 + 两行信息（按最大形态估）。 */
-const SERIAL_CARD_H = 16 + 18 + ROW_H * 2;
+/** 类型卡高度：py-3 上下 24 + 图标行 29（text-2xl 槽位 cell 高）。 */
+const CARD_H = 24 + 29;
+/** 序列号卡高度：py-2 上下 16 + 标题行 18 + 序列号行 22 × 行数。 */
+const INFO_CARD_H = 16 + 18 + ROW_H * 2;
 /** 颜色卡高度：py-3 上下 24 + 标题行 18 + mt-2 8 + 色块 24。 */
 const COLOR_CARD_H = 24 + 18 + 8 + 24;
-/** 内容高度按最大形态（JoyCon 两行序列号）估一次，误差由底部垫高兜底。 */
-const CONTENT_H = TOP_PAD + LABEL_H + CARD_H * 2 + SERIAL_CARD_H + COLOR_CARD_H + GAP * 5;
+
+/**
+ * 内容高度按当前形态算：JoyCon 的序列号卡多一行，其余与 Pro 相同。
+ * 框架不回读布局，max 由 scroller 每帧读取，切换形态后滚动范围随之更新。
+ */
+const contentHeight = (joycon: boolean) =>
+  TOP_PAD +
+  LABEL_H +
+  CARD_H * 2 +
+  (joycon ? INFO_CARD_H : INFO_CARD_H - ROW_H) +
+  COLOR_CARD_H +
+  GAP * 4;
 
 interface TypeOption {
   type: ControllerType;
@@ -124,7 +134,7 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
           { label: '右序列号', value: JOYCON_SERIAL_RIGHT, hidden: true },
         ];
 
-  const scroller = usePageScroll(props.active, true, () => CONTENT_H + BOTTOM_PAD_H);
+  const scroller = usePageScroll(props.active, true, () => contentHeight(isJoycon()) + BOTTOM_PAD_H);
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>

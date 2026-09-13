@@ -62,7 +62,7 @@ export const STYLE_IDS: Record<string, number> = {
   "shrink-0 text-2xl": 54,
   "w-full flex-col items-center px-4 pt-[38]": 55,
   "flex-row gap-2 shrink-0": 56,
-  "w-full h-[120] shrink-0": 57,
+  "w-full h-[80] shrink-0": 57,
   "w-full flex-col px-4 pt-[34] gap-2": 58,
   "shrink-0 text-lg": 59,
   "text-sm ml-3 grow": 60,

@@ -1,27 +1,62 @@
 /**
- * 页面级动能滚动：全应用共用一个纵向手势，只有「当前可见且内容可滚动」的
- * 页面才挂载它（enable/disable 切换），其余页面连 claim 都不会发生。
+ * 页面级动能滚动：全应用只注册一个纵向手势，区域 getter 就是它的开关 ——
+ * 「当前可见且可滚动」的页面返回整屏矩形，其余页面返回 null，本帧不再接管
+ * 新落下的触点（官方 ownership 规则在按下沿判定）。
  *
- * 不能每个页面各挂一个手势：全屏手势之间按「最后注册者优先」竞争 pan
- * claim，后注册的页面会永远抢走可见页的滚动。
+ * 不能每个页面各挂一个手势：官方优先级即注册顺序、后注册者抢先，后建的页面
+ * 会一直抢走可见页的滚动；而 dispose 后重注册会连带取消进行中的触点。
  */
 import { onScopeDispose, watchEffect } from 'vue';
 import { attachGesture, type GestureHandle } from '@pocketjs/framework/vue-vapor/gesture';
 import { createScroller, type Scroller } from '@pocketjs/framework/vue-vapor/kinetics';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 
-/** 页面视口高度：状态栏是覆盖层，页面在整屏 280 内滚动。 */
-const PAGE_VIEW_H = 280;
+/** 页面视口：状态栏是覆盖层，页面在整屏 240 × 280 内滚动。 */
+const PAGE_REGION = { x: 0, y: 0, w: 240, h: 280 };
+const PAGE_VIEW_H = PAGE_REGION.h;
 
 interface Entry {
   active: () => boolean;
   scroller: Scroller;
-  attach: () => GestureHandle;
+  release: (velocity: number) => void;
 }
 
-const entries: Entry[] = [];
 let handle: GestureHandle | null = null;
+/** 当前接管手势的页面。 */
 let owner: Entry | null = null;
+/** 本次触点归谁：途中切页也不会把后续位移喂给新页面。 */
+let dragging: Entry | null = null;
+
+/** 松手收尾：把位移交回按下时记住的那一页。 */
+function endDrag(velocity: number): void {
+  const entry = dragging;
+  dragging = null;
+  entry?.release(velocity);
+}
+
+/** 懒注册：整应用一个识别器，区域 getter 决定它当前是否接管触点。 */
+function gesture(): GestureHandle {
+  if (handle === null) {
+    handle = attachGesture({
+      axis: 'y',
+      region: { rect: () => (owner === null ? null : PAGE_REGION) },
+      onDown: () => owner?.scroller.stop(),
+      onPanStart: () => {
+        dragging = owner;
+        dragging?.scroller.beginDrag();
+      },
+      onPanMove: (c) => dragging?.scroller.drag(-c.fdy),
+      onPanEnd: (c) => endDrag(-c.vy),
+      onCancel: () => {
+        if (dragging !== null && dragging.scroller.state() === 'tracking') {
+          dragging.release(0);
+        }
+        dragging = null;
+      },
+    });
+  }
+  return handle;
+}
 
 /**
  * @param active 页面是否可见
@@ -35,12 +70,18 @@ export function usePageScroll(
 ) {
   const maxOffset = () =>
     scrollable && contentH !== undefined ? Math.max(0, contentH() - PAGE_VIEW_H) : 0;
-  // overscroll 0：拖拽在边缘硬夹住，没有橡皮筋。
-  const scroller = createScroller({ max: maxOffset, overscroll: 0 });
+  // overscroll 0：拖拽在边缘硬夹住（官方默认 48 是橡皮筋行程）；extent 是橡皮筋的
+  // 渐近线，固定为页面视口。
+  const scroller = createScroller({
+    max: maxOffset,
+    extent: () => PAGE_VIEW_H,
+    overscroll: 0,
+  });
 
   /**
-   * 松手：落点越界的抛掷改写成到边界的补间。框架的 fling 撞到边缘会转交
-   * 边缘弹簧，实测会冲过边界约 70 px 再弹回；这里在松手瞬间换成确定性停止。
+   * 松手：落点越界的抛掷改写成到边界的补间。官方的 snap 钩子是同一位置的入口，
+   * 但它对每次松手都生效；这里只接管越界的那部分，界内仍走原生 fling。框架的
+   * fling 撞到边缘会转交边缘弹簧，实测会冲过边界约 70 px 再弹回。
    */
   const release = (velocity: number) => {
     scroller.endDrag(velocity);
@@ -61,47 +102,23 @@ export function usePageScroll(
     scroller.scrollTo(bound, { durMs });
   };
 
-  const entry: Entry = {
-    active,
-    scroller,
-    attach: () =>
-      attachGesture({
-        axis: 'y',
-        onDown: () => scroller.stop(),
-        onPanStart: () => scroller.beginDrag(),
-        onPanMove: (c) => scroller.drag(-c.fdy),
-        onPanEnd: (c) => release(-c.vy),
-        onCancel: () => {
-          if (scroller.state() === 'tracking') {
-            release(0);
-          }
-        },
-      }),
-  };
-  entries.push(entry);
+  const entry: Entry = { active, scroller, release };
+  gesture();
 
-  // 可见性变化时启停手势；可滚动性由调用方定死，不再随内容高度变化。
+  // 可见性变化只切换接管权；可滚动性由调用方一次定死。
   watchEffect(() => {
-    const wanted = active() && scrollable;
-    if (wanted && owner !== entry) {
-      handle?.dispose();
-      handle = entry.attach();
+    if (active() && scrollable) {
       owner = entry;
-    } else if (!wanted && owner === entry) {
-      handle?.dispose();
-      handle = null;
+    } else if (owner === entry) {
       owner = null;
     }
   });
   onScopeDispose(() => {
-    const index = entries.indexOf(entry);
-    if (index >= 0) {
-      entries.splice(index, 1);
-    }
     if (owner === entry) {
-      handle?.dispose();
-      handle = null;
       owner = null;
+    }
+    if (dragging === entry) {
+      dragging = null;
     }
   });
 
