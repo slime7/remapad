@@ -13,6 +13,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 5. [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：查阅具有长期影响的既定架构决策与选型取舍。
 6. [控制器协议参考 (docs/controller.md)](docs/controller.md)：掌握 USB→NS2→BLE 数据面的协议范围、配对和广播验证边界。
 7. [目标硬件参考 (docs/hardware.md)](docs/hardware.md)：掌握目标板卡的 SoC/存储、屏幕与触摸器件、外设地址、GPIO 分配和板级注意事项。
+8. [测试策略与回归规则 (docs/TESTING.md)](docs/TESTING.md)：掌握 UI 端到端测试与固件主机端单元测试的运行方式、断言分层，以及「先写用例再修 bug」的回归规则。
 
 ## 项目工程架构与工作区划分
 
@@ -36,6 +37,8 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | :--- | :--- | :--- |
 | **依赖安装** | `pnpm install` | 安装前端工作区依赖 |
 | **代码检查** | `pnpm run lint` | 执行前端 ESLint 静态代码检查 |
+| **UI 端到端测试** | `pnpm run test:e2e` | 用 Playwright 驱动触摸预览页里的真实产物，断言页面行为与屏幕像素；`pnpm run test:e2e:headed` 可看过程，规则见 [docs/TESTING.md](docs/TESTING.md) |
+| **固件主机端测试** | `pnpm run test:firmware` | 把与硬件无关的固件逻辑模块编译成开发机可执行文件并运行，秒级出结果（NS2 编码、序列号、命令帧、像素回调、输入源合成） |
 | **PocketJS 契约检查** | `pnpm run check` | 使用官方 CLI 和 `firmware/pocket.host.json` 校验清单、能力与视口 |
 | **前端资源编译** | `pnpm run compile` | 调用官方 PocketJS 编译器，输出 `.js` 与 `.pak` |
 | **前端应用打包** | `pnpm run build` | 调用官方 `pocket build --host-profile` 输出 `.pocket` |
@@ -57,6 +60,8 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 
 ## 项目特有约束
 
+- **缺陷修复先写用例**：改 UI 的 bug 之前，先在 `ui/tests/e2e/` 加一条能复现的用例（此时必须是红的），改完 `ui/src` 后用例转绿才算修完；固件里与硬件无关的逻辑缺陷同样先补 `firmware/test/` 的主机端用例。用例标题写用户看到的现象，不要把断言放宽来迁就实现，详细规则见 [docs/TESTING.md](docs/TESTING.md)。
+- **测试只用真源码**：端到端测试跑的是 `ui/dist` 的真实产物与官方 wasm 渲染核心，固件测试编译 `firmware/main/` 下的源码；`firmware/test/support/stubs/` 里的替身只用于补齐主机缺失的 ESP-IDF 头文件与硬件取值入口，不得把被测逻辑复制一份进测试。
 - **字体烘焙规则**：
   - PocketJS 不依赖宿主操作系统字体，新增文本的字号应使用 Tailwind 支持的标准插槽（如 `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`）。
   - 构建期会自动提取文本字符集并在烘焙阶段生成对应插槽的点阵图集。
@@ -83,4 +88,5 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | USB 输入、NS2 报告、BLE 广播/GATT、配对或绑定状态变动 | [docs/controller.md](docs/controller.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | 显示通路的条带划分/整幅刷新取值、滚动帧预算或面板时钟变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md), [docs/adr/0018](docs/adr/0018-panel-spi2-clock-80mhz.md) |
 | 环境依赖、操作指令、目录结构变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
+| 测试入口、用例范围、回归规则或断言分层变动 | [docs/TESTING.md](docs/TESTING.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
 | 产生新的长期架构决策与技术选型取舍 | 使用 [scripts/create_adr.py](scripts/create_adr.py) 新建 ADR 并更新 [docs/adr/README.md](docs/adr/README.md) |

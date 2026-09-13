@@ -179,7 +179,21 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 
 乐鑫的 Flash Download Tool 也可以直接加载这个合并镜像。ESP-IDF 的 esptool 随 Python 环境安装，命令名是 `esptool`（`esptool.py` 在新版中已弃用）。不确定端口时用 `Get-PnpDevice -Class Ports | Where-Object Status -eq OK` 列出当前串口。
 
++## 自动化测试
+
+两套测试都在开发机上跑，不需要真板；细节与回归规则见 [TESTING.md](TESTING.md)。
+
+```powershell
+pnpm run test:e2e         # UI 端到端：Playwright 驱动触摸预览页，断言行为与像素
+pnpm run test:firmware    # 固件主机端：把纯逻辑模块编译成本机可执行文件并运行
+```
+
+`test:e2e` 会自己按 `pnpm run dev` 的方式编译产物并拉起预览服务器（8130），本地已有 dev 会话时直接复用；加 `--headed`（根脚本是 `pnpm run test:e2e:headed`）可以看到点击过程。`test:firmware` 会自动探测本机编译器（MSVC / clang / gcc，可用 `CC` 指定），几秒钟出结果。
+
+改 UI 的 bug 时先在 `ui/tests/e2e/` 写一条能复现的用例，改完让用例转绿；改固件里与硬件无关的逻辑（NS2 编码、序列号、命令帧、像素回调、输入源合成）同理，先补 `firmware/test/` 下的用例。
+
 ## 串口 CLI 与 PWR 按键
+
 
 固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。项目自带 [scripts/uartctl.py](../scripts/uartctl.py)（依赖 pyserial）：
 
