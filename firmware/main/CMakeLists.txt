@@ -18,6 +18,7 @@ set(remapad_pocketjs_requires
 idf_component_register(
     SRCS
         "main.c"
+        "boot_splash.c"
         "pocketjs_host.c"
         "bridge/js_bridge.c"
         "config/app_config.c"
