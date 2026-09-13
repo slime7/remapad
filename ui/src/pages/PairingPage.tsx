@@ -10,18 +10,8 @@ import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { COLOR, STYLE } from '../theme';
 import { hw, pressLr, sendDebugKey, startPairing, stopPairing } from '../hooks/useHardware';
 import { BottomPlaceholder } from '../components/BottomPlaceholder';
+import { SPINNER_FRAMES } from '../spinner';
 import { pairingColor, pairingLabel } from '../utils';
-
-const SPINNER_FRAMES = [
-  'spinner-00.svg',
-  'spinner-01.svg',
-  'spinner-02.svg',
-  'spinner-03.svg',
-  'spinner-04.svg',
-  'spinner-05.svg',
-  'spinner-06.svg',
-  'spinner-07.svg',
-];
 
 export function PairingPage() {
   const spinnerSrc = createSpriteAnimation(SPINNER_FRAMES, { frameStep: 3 });
