@@ -1,7 +1,9 @@
 /**
  * 配对页：状态流转 + 大号开始/停止按钮 + 配对 L+R 确认按钮。
- * Pro 手柄部分注册界面需要按下 L+R 确认；JoyCon 组合以左右同时连为准，
- * 该按钮触发固件左右双机配对。内容单屏放得下，静态页不挂滚动。
+ * 设备开机即按凭证回连或发发现广播，配对不需要打开本页；本页只负责手动
+ * 开关发现广播与按下确认键。JoyCon 是左右两只各自独立连接，主机的 Grip/
+ * 顺序界面只用于调整顺序与确认，因此确认按钮触发固件左右双机配对，Pro 则
+ * 注入 L+R 按键。内容单屏放得下，静态页不挂滚动。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
@@ -36,7 +38,8 @@ export function PairingPage() {
           </Text>
         </View>
         <Text class="text-xs mt-1 text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          {hw.pairingMessage || (isBusy() ? '在 NS2 主机配对界面搜索本设备' : '')}
+          {hw.pairingMessage ||
+            (isBusy() ? '在 NS2 主机配对界面搜索本设备' : '配对无需打开本页，开机即自动广播')}
         </Text>
 
         <View class="flex-row items-center gap-2 mt-3 shrink-0">
@@ -75,6 +78,11 @@ export function PairingPage() {
             </View>
           ) : null}
         </View>
+        {isBusy() ? (
+          <Text class="text-xs mt-1 text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+            对应主机 Grip 界面确认
+          </Text>
+        ) : null}
         <BottomPlaceholder />
       </View>
     </View>

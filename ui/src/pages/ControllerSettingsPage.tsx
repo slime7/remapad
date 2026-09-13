@@ -2,7 +2,9 @@
  * 手柄设置页：手柄类型（Pro 默认 / JoyCon 组合）、序列号信息与机身颜色
  * 预留。类型选择经 bridge 持久化到固件 NVS 并应用于 NS2 出厂块（序列号 /
  * PID / 配色）；颜色选择 UI 预留，色块暂不可点，字段随配置先持久化。
- * JoyCon 组合显示左/右两条序列号（HBW10067 / HCW10068 前缀）。
+ * JoyCon 组合是左右两只各自独立连接（主机的 Grip/顺序界面只用于排序与
+ * 确认），序列号按 HBW10067 / HCW10068 前缀各显一条。类型说明行可能超出
+ * 卡片宽度，交给 MarqueeText 滚动展示。
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
@@ -10,6 +12,7 @@ import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR, STYLE } from '../theme';
 import { hw, setControllerConfig } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
+import { MarqueeText } from '../components/MarqueeText';
 import type { ControllerType } from '../bridge/protocol';
 
 /** 选项卡高度：py-3 上下 24 + 标题行 18 + 描述行 15。 */
@@ -18,6 +21,8 @@ const CARD_H = 24 + 18 + 15;
 const SERIAL_CARD_H = 16 + 18 + 22 * 2;
 /** 颜色卡高度：py-3 上下 24 + 标题行 18。 */
 const COLOR_CARD_H = 24 + 18;
+/** 类型卡说明行可视宽度：卡片 208 − px-3 左右 24 − 图标 24 − gap-3 12。 */
+const TYPE_DESC_W = 148;
 
 interface TypeOption {
   type: ControllerType;
@@ -27,7 +32,7 @@ interface TypeOption {
 
 const TYPE_OPTIONS: TypeOption[] = [
   { type: 'pro', title: 'Pro 手柄', desc: '单设备 · PID 0x2069 · 默认' },
-  { type: 'joycon', title: 'JoyCon 组合', desc: '左 + 右同时连接 · 配对页按下 LR' },
+  { type: 'joycon', title: 'JoyCon 组合', desc: '左右两只各自独立连接 · 主机 Grip 界面确认' },
 ];
 
 /** 预留色卡（机身配色候选，0xRRGGBB）；选择功能实装前不可点。 */
@@ -43,7 +48,12 @@ function rgbLabel(rgb: number): string {
   return `#${hex}`;
 }
 
-function TypeCard(props: { option: TypeOption; selected: boolean; onSelect: () => void }) {
+function TypeCard(props: {
+  option: TypeOption;
+  selected: boolean;
+  onSelect: () => void;
+  active: () => boolean;
+}) {
   return (
     <View
       focusable
@@ -62,12 +72,12 @@ function TypeCard(props: { option: TypeOption; selected: boolean; onSelect: () =
         >
           {props.option.title}
         </Text>
-        <Text
-          class="text-xs"
-          style={{ textColor: props.selected ? COLOR.onPrimary : COLOR.onSurfaceVariant }}
-        >
-          {props.option.desc}
-        </Text>
+        <MarqueeText
+          text={props.option.desc}
+          width={TYPE_DESC_W}
+          color={props.selected ? COLOR.onPrimary : COLOR.onSurfaceVariant}
+          active={props.active}
+        />
       </View>
     </View>
   );
@@ -119,6 +129,7 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
             option={option}
             selected={config().type === option.type}
             onSelect={() => setControllerConfig({ ...config(), type: option.type })}
+            active={props.active}
           />
         ))}
 
