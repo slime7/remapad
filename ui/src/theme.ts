@@ -66,11 +66,6 @@ export const STYLE = {
   modalCancelBtn: 'w-[84] h-[40] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
   modalDangerBtn: 'w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150',
 
-  /** 滚动页共用的滚动列：底部内边距统一垫高（值等于 BOTTOM_PAD_H）。 */
-  scrollColumn: 'w-full flex-col px-4 pt-[34] gap-2 pb-[120]',
-  scrollColumnGap4: 'w-full flex-col px-4 pt-[34] gap-4 pb-[120]',
-  scrollColumnCenter: 'w-full flex-col items-center px-4 pt-[38] pb-[120]',
-
   /** 列表行与信息卡。 */
   rowCard: 'w-full h-[44] shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 active:bg-[#14263e] transition-colors duration-150',
   infoCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2',

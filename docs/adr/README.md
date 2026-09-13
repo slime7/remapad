@@ -39,7 +39,8 @@
 | [0011](0011-controller-dataplane-module-boundary.md) | active | 控制器数据面按 ns2/ble/dp/usb 四模块分层，数据流单点汇合于 dp_task |
 | [0012](0012-firmware-boot-splash-before-ui.md) | active | 固件在 PocketJS UI 就绪前自绘启动画面并提前点亮背光 |
 | [0013](0013-defer-page-mount-after-first-frame.md) | active | 首帧只挂载首页，其余页面按帧补挂并在首页显示加载提示；补挂时机由 0014 取代 |
-| [0014](0014-page-mount-on-demand-progressive-fill.md) | active | 页面改为按需挂载并逐帧自顶向下填充，外层容器先出现 |
+| [0014](0014-page-mount-on-demand-progressive-fill.md) | active | 页面改为按需挂载并逐帧自顶向下填充，外层容器先出现；补挂时机由 0015 取代 |
+| [0015](0015-restore-deferred-page-mount-after-first-frame.md) | active | 恢复首帧后逐帧补挂页面，放弃按需挂载与分帧填充 |
 
 `0002` 仍作为硬件 bridge 与控制面分层的决策依据；其自定义打包和 host 接入范围由 `0003` 取代。旧 ADR 文件正文保持不变。
 
@@ -48,6 +49,8 @@
 `0007` 仍作为显示与触摸 BSP 选型（esp_lcd 内置 ST7789、Registry CST816S、LEDC 背光）的决策依据；其 strip 提交中颜色缓冲必须待 `trans_done` 门控后才可复用的语义由 `0008` 部分取代。旧 ADR 文件正文保持不变。
 
 `0013` 仍作为「首帧不全量挂载页面」这一取舍的依据；其首帧后每帧补挂一页的时机与页面填充方式由 `0014` 取代，**页面根节点自行翻转 hidden、按需挂载分块填充的约定以 0014 为准**。旧 ADR 文件正文保持不变。
+
+`0014` 的按需挂载与分帧填充实测让每次首次进入页面都停留在半成品状态，观感不如启动阶段一次挂完；其补挂时机与页面填充方式由 `0015` 取代，**页面在首帧后逐帧补挂、切页只翻 hidden、页面根节点自行翻转 hidden 的约定以 0015 为准**。旧 ADR 文件正文保持不变。
 
 ## 创建 ADR 脚本用法
 

@@ -5,7 +5,7 @@
  * 不能每个页面各挂一个手势：全屏手势之间按「最后注册者优先」竞争 pan
  * claim，后注册的页面会永远抢走可见页的滚动。
  */
-import { onScopeDispose, watch, watchEffect } from 'vue';
+import { onScopeDispose, watchEffect } from 'vue';
 import { attachGesture, type GestureHandle } from '@pocketjs/framework/vue-vapor/gesture';
 import { createScroller, type Scroller } from '@pocketjs/framework/vue-vapor/kinetics';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
@@ -15,7 +15,6 @@ const PAGE_VIEW_H = 280;
 
 interface Entry {
   active: () => boolean;
-  scrollable: () => boolean;
   scroller: Scroller;
   attach: () => GestureHandle;
 }
@@ -24,12 +23,22 @@ const entries: Entry[] = [];
 let handle: GestureHandle | null = null;
 let owner: Entry | null = null;
 
-export function usePageScroll(active: () => boolean, contentH: () => number) {
-  const maxOffset = () => Math.max(0, contentH() - PAGE_VIEW_H);
-  const scroller = createScroller({ max: maxOffset });
+/**
+ * @param active 页面是否可见
+ * @param scrollable 页面能不能滚动：由调用方一次定死，不再从内容高度推导
+ * @param contentH 内容高度（含末尾垫高）：可滚动页必传，用于夹住滚动范围
+ */
+export function usePageScroll(
+  active: () => boolean,
+  scrollable: boolean,
+  contentH?: () => number,
+) {
+  const maxOffset = () =>
+    scrollable && contentH !== undefined ? Math.max(0, contentH() - PAGE_VIEW_H) : 0;
+  // overscroll 0：边缘硬夹住，没有橡皮筋，滚到底就停。
+  const scroller = createScroller({ max: maxOffset, overscroll: 0 });
   const entry: Entry = {
     active,
-    scrollable: () => maxOffset() > 0,
     scroller,
     attach: () =>
       attachGesture({
@@ -47,10 +56,9 @@ export function usePageScroll(active: () => boolean, contentH: () => number) {
   };
   entries.push(entry);
 
-  // 可见性或可滚动性变化时启停手势；watchEffect 内读取 active()/contentH()
-  // 建立跟踪，tab 切换或内容增删都会重新求值。
+  // 可见性变化时启停手势；可滚动性由调用方定死，不再随内容高度变化。
   watchEffect(() => {
-    const wanted = active() && entry.scrollable();
+    const wanted = active() && scrollable;
     if (wanted && owner !== entry) {
       handle?.dispose();
       handle = entry.attach();
@@ -73,21 +81,7 @@ export function usePageScroll(active: () => boolean, contentH: () => number) {
     }
   });
 
-  // 内容变矮（如手柄类型在 Pro 与 JoyCon 之间切换）后当前位置可能越界，收回边界。
-  watch(maxOffset, (max) => {
-    if (scroller.offset() > max) {
-      scroller.scrollTo(max, { durMs: 120 });
-    }
-  });
-
   onFrame(() => {
-    // 框架的边缘弹簧（K=170 临界阻尼，常数固定在快照里）回位偏慢；进入
-    // spring 就地改走 120ms tween 回边界：拖拽越界的橡皮筋手感不变，松手
-    // 或惯性冲出边界后都快速弹回。手指按住时 stop() 仍可随时接住内容。
-    if (scroller.state() === 'spring') {
-      const pos = scroller.offset();
-      scroller.scrollTo(Math.max(0, Math.min(pos, maxOffset())), { durMs: 120 });
-    }
     scroller.step();
   });
   return scroller;

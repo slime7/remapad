@@ -9,6 +9,7 @@
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { COLOR, STYLE } from '../theme';
+import { BottomPlaceholder } from '../components/BottomPlaceholder';
 import { hw, pressLr, sendDebugKey, startPairing, stopPairing } from '../hooks/useHardware';
 import { SPINNER_FRAMES } from '../spinner';
 import { pairingColor, pairingLabel } from '../utils';
@@ -20,7 +21,7 @@ export function PairingPage(props: { active: () => boolean }) {
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
-      <View class="w-full flex-col items-center pt-[38] pb-[120]">
+      <View class="w-full flex-col items-center pt-[38]">
         <View class="w-full h-[40] flex-row items-center justify-center gap-2 shrink-0">
           {isBusy() ? <Image class="w-[20] h-[20] shrink-0" src={spinnerSrc.value} /> : null}
           <Text class="text-lg font-bold shrink-0" style={{ textColor: pairingColor(hw.pairing) }}>
@@ -73,6 +74,7 @@ export function PairingPage(props: { active: () => boolean }) {
             对应主机 Grip 界面确认
           </Text>
         ) : null}
+        <BottomPlaceholder />
       </View>
     </View>
   );

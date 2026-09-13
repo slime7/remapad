@@ -7,10 +7,9 @@
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
-import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { hw, setUsbRole } from '../hooks/useHardware';
-import { BOTTOM_PAD_H } from '../components/BottomPlaceholder';
+import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import type { UsbRole } from '../bridge/protocol';
 
 /** 卡片高度：py-3 上下 24 + 标题行 18 + 描述行 15（单行描述）。 */
@@ -62,48 +61,39 @@ function RoleCard(props: {
 }
 
 export function ModePage(props: { active: () => boolean }) {
-  const scroller = usePageScroll(props.active, () => CONTENT_H + BOTTOM_PAD_H);
-  /** 分帧填充：两张角色卡、两行说明（底部垫高在滚动列 padding 里）。 */
-  const step = useMountCursor(4);
+  const scroller = usePageScroll(props.active, true, () => CONTENT_H + BOTTOM_PAD_H);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
-        class={STYLE.scrollColumn}
+        class="w-full flex-col px-4 pt-[34] gap-2"
         style={{ translateY: -scroller.offset() }}
       >
-        {step() >= 1 ? (
-          <RoleCard
-            role="device"
-            selected={hw.usbRole === 'device'}
-            title="串口"
-            lines={['烧录 / 日志']}
-            glyph={ICON.adb}
-            onSelect={() => setUsbRole('device')}
-          />
-        ) : null}
-        {step() >= 2 ? (
-          <RoleCard
-            role="host"
-            selected={hw.usbRole === 'host'}
-            title="手柄"
-            lines={['手柄输入 → NS2']}
-            glyph={ICON.gamepad}
-            onSelect={() => setUsbRole('host')}
-          />
-        ) : null}
-        {step() >= 3 ? (
-          <Text
-            class={hw.roleMessage ? 'text-xs text-center shrink-0' : 'hidden'}
-            style={{ textColor: COLOR.onSurfaceVariant }}
-          >
-            {hw.roleMessage}
-          </Text>
-        ) : null}
-        {step() >= 4 ? (
-          <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-            重启后回到串口
-          </Text>
-        ) : null}
+        <RoleCard
+          role="device"
+          selected={hw.usbRole === 'device'}
+          title="串口"
+          lines={['烧录 / 日志']}
+          glyph={ICON.adb}
+          onSelect={() => setUsbRole('device')}
+        />
+        <RoleCard
+          role="host"
+          selected={hw.usbRole === 'host'}
+          title="手柄"
+          lines={['手柄输入 → NS2']}
+          glyph={ICON.gamepad}
+          onSelect={() => setUsbRole('host')}
+        />
+        <Text
+          class={hw.roleMessage ? 'text-xs text-center shrink-0' : 'hidden'}
+          style={{ textColor: COLOR.onSurfaceVariant }}
+        >
+          {hw.roleMessage}
+        </Text>
+        <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+          重启后回到串口
+        </Text>
+        <BottomPlaceholder />
       </View>
     </View>
   );

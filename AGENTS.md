@@ -22,7 +22,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法构建。
   - 样式使用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
   - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，编译器与框架来源为仓库内的 `ui/vendor/pocketjs` 快照。
-  - 页面由 `ui/src/App.tsx` 组织：首帧只挂壳、状态栏、底栏与首页，其余页面首次进入时才挂载，并在页内用 `ui/src/hooks/useProgressiveMount.ts` 逐帧自上而下填充（见 [ADR 0014](docs/adr/0014-page-mount-on-demand-progressive-fill.md)）；新增页面必须登记到 App 的挂载分支、页内分块，并由页面根节点自己翻转 `hidden`。
+  - 页面由 `ui/src/App.tsx` 组织：首帧只挂壳、状态栏、底栏与首页，其余页面在首帧之后每帧补挂一页（见 [ADR 0015](docs/adr/0015-restore-deferred-page-mount-after-first-frame.md)）；新增页面必须登记到 `DEFERRED_TABS`，并由页面根节点自己翻转 `hidden`。
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言编写。
   - 硬件绑定微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏）；规格与引脚见 [docs/hardware.md](docs/hardware.md)。
