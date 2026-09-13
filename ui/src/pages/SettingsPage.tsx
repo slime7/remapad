@@ -7,7 +7,7 @@ import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
-import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
+import { BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import type { TabKey } from '../components/AppNavBar';
 
 const ITEM_H = 44;
@@ -31,15 +31,15 @@ const ITEMS: SettingsItem[] = [
 
 export function SettingsPage(props: { active: () => boolean; onGo: (tab: TabKey) => void }) {
   const contentH = () =>
-    TOP_PAD + ITEMS.length * ITEM_H + ITEMS.length * ITEM_GAP + BOTTOM_PLACEHOLDER_H;
+    TOP_PAD + ITEMS.length * ITEM_H + (ITEMS.length - 1) * ITEM_GAP + BOTTOM_PAD_H;
   const scroller = usePageScroll(props.active, contentH);
-  /** 分帧填充：每行一块，最后一块是底部占位。 */
-  const step = useMountCursor(ITEMS.length + 1);
+  /** 分帧填充：每行一块（底部垫高在滚动列的 padding 里，不占节点）。 */
+  const step = useMountCursor(ITEMS.length);
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
-        class="w-full flex-col px-4 pt-[34] gap-2"
+        class={STYLE.scrollColumn}
         style={{ translateY: -scroller.offset() }}
       >
         {ITEMS.map((item, index) =>
@@ -58,7 +58,6 @@ export function SettingsPage(props: { active: () => boolean; onGo: (tab: TabKey)
             </View>
           ) : null,
         )}
-        {step() >= ITEMS.length + 1 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );

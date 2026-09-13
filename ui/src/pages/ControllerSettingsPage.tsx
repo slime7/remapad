@@ -12,24 +12,44 @@ import { usePageScroll } from '../hooks/usePageScroll';
 import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { hw, setControllerConfig } from '../hooks/useHardware';
-import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
+import { BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import { MarqueeText } from '../components/MarqueeText';
 import type { ControllerType } from '../bridge/protocol';
 
-/** 选项卡高度：py-3 上下 24 + 标题行 18 + 描述行 15。 */
+/** 滚动列顶部内边距与块间距，与内容高度公式共用（pt-[34] + gap-2）。 */
+const TOP_PAD = 34;
+const GAP = 8;
+/** 类型标签行高度（text-xs 单行）。 */
+const LABEL_H = 15;
+/** 信息行高度。 */
+const ROW_H = 22;
+/** 类型卡高度：py-3 上下 24 + 标题行 18 + 描述行 15。 */
 const CARD_H = 24 + 18 + 15;
-/** 序列号卡高度：py-2 上下 16 + 标题行 18 + 两行信息 22×2。 */
-const SERIAL_CARD_H = 16 + 18 + 22 * 2;
-/** 颜色卡高度：py-3 上下 24 + 标题行 18。 */
-const COLOR_CARD_H = 24 + 18;
+/** 序列号卡高度：py-2 上下 16 + 标题行 18 + 两行信息（按最大形态估）。 */
+const SERIAL_CARD_H = 16 + 18 + ROW_H * 2;
+/** 颜色卡高度：py-3 上下 24 + 标题行 18 + mt-2 8 + 色块 24。 */
+const COLOR_CARD_H = 24 + 18 + 8 + 24;
 /** 类型卡说明行可视宽度：卡片 208 − px-3 左右 24 − 图标 24 − gap-3 12。 */
 const TYPE_DESC_W = 148;
+/** 内容高度按最大形态（JoyCon 两行序列号）估一次，误差由滚动列底部垫高兜底。 */
+const CONTENT_H = TOP_PAD + LABEL_H + CARD_H * 2 + SERIAL_CARD_H + COLOR_CARD_H + GAP * 5;
 
 interface TypeOption {
   type: ControllerType;
   title: string;
   desc: string;
 }
+
+/** 序列号行：两行结构固定，非当前形态的那行用 hidden 收起，避免切换时重建节点。 */
+interface SerialRow {
+  label: string;
+  value: string;
+  hidden: boolean;
+}
+
+const PRO_SERIAL = 'HEJ71001123456';
+const JOYCON_SERIAL_LEFT = 'HBW10067012342';
+const JOYCON_SERIAL_RIGHT = 'HCW10068012341';
 
 const TYPE_OPTIONS: TypeOption[] = [
   { type: 'pro', title: 'Pro 手柄', desc: '单设备 · PID 0x2069 · 默认' },
@@ -84,9 +104,15 @@ function TypeCard(props: {
   );
 }
 
-function InfoRow(props: { label: string; value: string }) {
+function InfoRow(props: { label: string; value: string; hidden?: boolean }) {
   return (
-    <View class="w-full h-[22] shrink-0 flex-row items-center justify-between">
+    <View
+      class={
+        props.hidden
+          ? 'hidden'
+          : 'w-full h-[22] shrink-0 flex-row items-center justify-between'
+      }
+    >
       <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
         {props.label}
       </Text>
@@ -102,25 +128,25 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
   const isJoycon = () => config().type === 'joycon';
   // 序列号与固件 ns2_serial 生成的常量一致：前缀 + 10 位数字 + 校验位
   // （S = 偶位和 + 3×奇位和，校验位 = (10 − S mod 10) mod 10）。
-  const serials = () =>
+  const serialRows = (): SerialRow[] =>
     isJoycon()
       ? [
-          { label: '左序列号', value: 'HBW10067012342' },
-          { label: '右序列号', value: 'HCW10068012341' },
+          { label: '左序列号', value: JOYCON_SERIAL_LEFT, hidden: false },
+          { label: '右序列号', value: JOYCON_SERIAL_RIGHT, hidden: false },
         ]
-      : [{ label: '序列号', value: 'HEJ71001123456' }];
+      : [
+          { label: '序列号', value: PRO_SERIAL, hidden: false },
+          { label: '右序列号', value: JOYCON_SERIAL_RIGHT, hidden: true },
+        ];
 
-  const scroller = usePageScroll(
-    props.active,
-    () => 34 + CARD_H * 2 + 8 * 2 + 15 + SERIAL_CARD_H + 8 + COLOR_CARD_H + 8 + BOTTOM_PLACEHOLDER_H,
-  );
-  /** 分帧填充：类型标签、两张类型卡、序列号卡、颜色卡、底部占位。 */
-  const step = useMountCursor(6);
+  const scroller = usePageScroll(props.active, () => CONTENT_H + BOTTOM_PAD_H);
+  /** 分帧填充：类型标签、两张类型卡、序列号卡、颜色卡（底部垫高在滚动列 padding 里）。 */
+  const step = useMountCursor(5);
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
-        class="w-full flex-col px-4 pt-[34] gap-2"
+        class={STYLE.scrollColumn}
         style={{ translateY: -scroller.offset() }}
       >
         {step() >= 1 ? (
@@ -144,8 +170,8 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
             <Text class="text-sm font-bold shrink-0" style={{ textColor: COLOR.onSurface }}>
               序列号信息
             </Text>
-            {serials().map((row) => (
-              <InfoRow label={row.label} value={row.value} />
+            {serialRows().map((row) => (
+              <InfoRow label={row.label} value={row.value} hidden={row.hidden} />
             ))}
           </View>
         ) : null}
@@ -176,7 +202,6 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
             </View>
           </View>
         ) : null}
-        {step() >= 6 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );

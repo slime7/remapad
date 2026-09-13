@@ -5,7 +5,7 @@ import { usePageScroll } from '../hooks/usePageScroll';
 import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { hw, setBacklight } from '../hooks/useHardware';
-import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
+import { BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import { formatMb, formatUptime } from '../utils';
 
 const BACKLIGHT_STEP = 20;
@@ -32,7 +32,7 @@ function InfoRow(props: { label: string; value: string }) {
 }
 
 /** 分帧填充块数：背光滑轨、重启行、信息卡容器 + 6 行、底部占位。 */
-const FILL_BLOCKS = 10;
+const FILL_BLOCKS = 9;
 
 export function SystemPage(props: { active: () => boolean; onAskReboot: () => void }) {
   const changeBacklight = (delta: number) => {
@@ -44,13 +44,13 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
 
   const scroller = usePageScroll(
     props.active,
-    () => 34 + 56 + 16 + 44 + 16 + INFO_H + 16 + BOTTOM_PLACEHOLDER_H,
+    () => 34 + 56 + 16 + 44 + 16 + INFO_H + BOTTOM_PAD_H,
   );
   const step = useMountCursor(FILL_BLOCKS);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
-        class="w-full flex-col px-4 pt-[34] gap-4"
+        class={STYLE.scrollColumnGap4}
         style={{ translateY: -scroller.offset() }}
       >
         {step() >= 1 ? (
@@ -117,7 +117,6 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
           </View>
         ) : null}
 
-        {step() >= 10 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );

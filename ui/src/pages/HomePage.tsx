@@ -12,7 +12,7 @@ import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { hw } from '../hooks/useHardware';
 import { COLOR, STYLE } from '../theme';
-import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
+import { BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import { SPINNER_FRAMES } from '../spinner';
 import { usbLinkState } from '../utils';
 import type { TabKey } from '../components/AppNavBar';
@@ -39,11 +39,11 @@ export function HomePage(props: {
     usbState() === 'gamepad' ? COLOR.tertiary : usbState() === 'computer' ? COLOR.primary : usbState() === 'adb' ? COLOR.secondary : COLOR.outline;
   const btConnected = () => hw.pairing === 'connected';
 
-  const scroller = usePageScroll(props.active, () => 38 + 56 + BOTTOM_PLACEHOLDER_H);
+  const scroller = usePageScroll(props.active, () => 38 + 56 + BOTTOM_PAD_H);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
-        class="w-full flex-col items-center px-4 pt-[38]"
+        class={STYLE.scrollColumnCenter}
         style={{ translateY: -scroller.offset() }}
       >
         <View class="flex-row gap-2 shrink-0">
@@ -55,16 +55,14 @@ export function HomePage(props: {
           />
         </View>
         <View class="grow w-full flex-col items-center justify-center">
-          {props.loading() ? (
-            <View class="flex-col items-center gap-2">
-              <Image class="w-[24] h-[24] shrink-0" src={spinnerSrc.value} />
-              <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
-                加载中…
-              </Text>
-            </View>
-          ) : null}
+          {/* 常驻节点，按 class 收起：加载提示会出现/消失，不能用条件渲染反复卸载重建。 */}
+          <View class={props.loading() ? 'flex-col items-center gap-2' : 'hidden'}>
+            <Image class="w-[24] h-[24] shrink-0" src={spinnerSrc.value} />
+            <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
+              加载中…
+            </Text>
+          </View>
         </View>
-        <BottomPlaceholder />
       </View>
     </View>
   );

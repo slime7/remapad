@@ -11,7 +11,7 @@ import { usePageScroll } from '../hooks/usePageScroll';
 import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { sendDebugKey } from '../hooks/useHardware';
-import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
+import { BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import type { DebugKey } from '../bridge/protocol';
 
 /** 注入确认高亮的持续帧数：60Hz 下 9 帧约 150ms。 */
@@ -42,10 +42,10 @@ export function DebugPage(props: { active: () => boolean }) {
 
   const scroller = usePageScroll(
     props.active,
-    () => 34 + 15 + 8 + KEYS_CARD_H + 8 + BOTTOM_PLACEHOLDER_H,
+    () => 34 + 15 + 8 + KEYS_CARD_H + BOTTOM_PAD_H,
   );
-  /** 分帧填充：标题、卡片、按钮行、两个按键、整行按键、底部占位。 */
-  const step = useMountCursor(7);
+  /** 分帧填充：标题、卡片、按钮行、两个按键、整行按键（底部垫高在滚动列 padding 里）。 */
+  const step = useMountCursor(6);
 
   const keyBtnClass = (key: DebugKey, base: 'fixed' | 'grow' | 'full') => {
     const on = flashKey.value === key;
@@ -63,7 +63,7 @@ export function DebugPage(props: { active: () => boolean }) {
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
-        class="w-full flex-col px-4 pt-[34] gap-2"
+        class={STYLE.scrollColumn}
         style={{ translateY: -scroller.offset() }}
       >
         {step() >= 1 ? (
@@ -100,7 +100,6 @@ export function DebugPage(props: { active: () => boolean }) {
             ) : null}
           </View>
         ) : null}
-        {step() >= 7 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );

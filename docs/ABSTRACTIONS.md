@@ -87,6 +87,7 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 - `createSpriteAnimation` 只描述资源帧选择，实际资源仍由官方编译器和 PAK 管理。
 - 长文案放不进可视区时用 `ui/src/components/MarqueeText.tsx`（自定义横向滚动文本）：框架的单行 `Text` 不自动换行，组件按「静止 2 秒 → 匀速左移到底 → 到底停留 1 秒 → 跳回起点」循环，放得下则全程静止；可视宽度由调用方以逻辑像素传入（框架不回读布局），滚动相位取 `virtualNow()`，文本宽度经 `getOps().measureText(text, slot)` 量取，宿主不提供该操作时退回静态文本。
 - 页面组织：`ui/src/App.tsx` 首帧只挂壳、状态栏、底栏与首页，其余页面首次进入时才建外层容器；App 不再有页面容器层，切页由每个页面根节点翻转 `hidden` 完成（`props.active()`），页内再用 `ui/src/hooks/useProgressiveMount.ts` 的 `useMountCursor` 按帧、自上而下放行填充块（原生建树约每节点 50 ms，选型见 [ADR 0014](adr/0014-page-mount-on-demand-progressive-fill.md)）。新增页面必须登记到 App 的挂载分支、页内分块，并由根节点自己负责 `hidden`。
+- 同页会来回切换的状态用 `hidden` 收起而不是条件渲染：序列号行、状态提示行与首页加载提示都常驻，避免运行期反复卸载重建节点。滚动页共用 `theme` 的 `scrollColumn*` 样式，在滚动列底部以统一内边距垫高（数值为 `components/BottomPlaceholder.tsx` 的 `BOTTOM_PAD_H`），不再每页各放一个占位节点。
 
 入口保持官方 Vue Vapor 形式：
 

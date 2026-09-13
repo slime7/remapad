@@ -5,7 +5,7 @@
  * 不能每个页面各挂一个手势：全屏手势之间按「最后注册者优先」竞争 pan
  * claim，后注册的页面会永远抢走可见页的滚动。
  */
-import { onScopeDispose, watchEffect } from 'vue';
+import { onScopeDispose, watch, watchEffect } from 'vue';
 import { attachGesture, type GestureHandle } from '@pocketjs/framework/vue-vapor/gesture';
 import { createScroller, type Scroller } from '@pocketjs/framework/vue-vapor/kinetics';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
@@ -70,6 +70,13 @@ export function usePageScroll(active: () => boolean, contentH: () => number) {
       handle?.dispose();
       handle = null;
       owner = null;
+    }
+  });
+
+  // 内容变矮（如手柄类型在 Pro 与 JoyCon 之间切换）后当前位置可能越界，收回边界。
+  watch(maxOffset, (max) => {
+    if (scroller.offset() > max) {
+      scroller.scrollTo(max, { durMs: 120 });
     }
   });
 

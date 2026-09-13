@@ -10,11 +10,17 @@ import { usePageScroll } from '../hooks/usePageScroll';
 import { useMountCursor } from '../hooks/useProgressiveMount';
 import { COLOR, STYLE } from '../theme';
 import { hw, setUsbRole } from '../hooks/useHardware';
-import { BottomPlaceholder, BOTTOM_PLACEHOLDER_H } from '../components/BottomPlaceholder';
+import { BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import type { UsbRole } from '../bridge/protocol';
 
 /** 卡片高度：py-3 上下 24 + 标题行 18 + 描述行 15（单行描述）。 */
 const CARD_H = 24 + 18 + 15;
+/** 滚动列顶部内边距、块间距与单行说明高度，与内容高度公式共用。 */
+const TOP_PAD = 34;
+const GAP = 8;
+const LINE_H = 15;
+/** 内容高度按含状态提示行的上界估一次，误差由滚动列底部垫高兜底。 */
+const CONTENT_H = TOP_PAD + CARD_H * 2 + GAP * 4 + LINE_H * 2;
 
 function RoleCard(props: {
   role: UsbRole;
@@ -56,16 +62,13 @@ function RoleCard(props: {
 }
 
 export function ModePage(props: { active: () => boolean }) {
-  const scroller = usePageScroll(
-    props.active,
-    () => 34 + CARD_H * 2 + 8 * 2 + 20 * 2 + BOTTOM_PLACEHOLDER_H,
-  );
-  /** 分帧填充：两张角色卡、两行说明、底部占位。 */
-  const step = useMountCursor(5);
+  const scroller = usePageScroll(props.active, () => CONTENT_H + BOTTOM_PAD_H);
+  /** 分帧填充：两张角色卡、两行说明（底部垫高在滚动列 padding 里）。 */
+  const step = useMountCursor(4);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View
-        class="w-full flex-col px-4 pt-[34] gap-2"
+        class={STYLE.scrollColumn}
         style={{ translateY: -scroller.offset() }}
       >
         {step() >= 1 ? (
@@ -88,8 +91,11 @@ export function ModePage(props: { active: () => boolean }) {
             onSelect={() => setUsbRole('host')}
           />
         ) : null}
-        {step() >= 3 && hw.roleMessage ? (
-          <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+        {step() >= 3 ? (
+          <Text
+            class={hw.roleMessage ? 'text-xs text-center shrink-0' : 'hidden'}
+            style={{ textColor: COLOR.onSurfaceVariant }}
+          >
             {hw.roleMessage}
           </Text>
         ) : null}
@@ -98,7 +104,6 @@ export function ModePage(props: { active: () => boolean }) {
             重启后回到串口
           </Text>
         ) : null}
-        {step() >= 5 ? <BottomPlaceholder /> : null}
       </View>
     </View>
   );
