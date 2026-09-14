@@ -81,7 +81,7 @@ async function tapDialogText(app: RemapadApp, text: string): Promise<void> {
   await app.tapNode(nodes[index]);
 }
 
-test('关机需要确认，被外部供电拦下时给出提示', async ({ app }) => {
+test('关机需要确认，被外部供电拦下后界面恢复可用', async ({ app }) => {
   await app.goto();
   await openSystem(app);
 
@@ -92,15 +92,17 @@ test('关机需要确认，被外部供电拦下时给出提示', async ({ app }
   await expect.poll(() => app.hasVisibleText('关机？')).toBe(false);
   expect(await app.hasVisibleText('关机')).toBe(true);
 
-  // 确认：先进入关机中；固件在 USB 供电下关不掉，回报后界面收起遮罩并提示。
+  // 确认：先进入关机中；固件在 USB 供电下关不掉，回报后收起遮罩回到页面。
   await app.tapText('关机');
   await expect.poll(() => app.hasVisibleText('关机？')).toBe(true);
   await tapDialogText(app, '关机');
   await expect.poll(() => app.hasVisibleText('关机中')).toBe(true);
-  await expect
-    .poll(() => app.hasVisibleText('USB 供电下无法关机，请拔线后再试'), { timeout: 10_000 })
-    .toBe(true);
-  await expect.poll(() => app.hasVisibleText('关机中')).toBe(false);
+  await expect.poll(() => app.hasVisibleText('关机中'), { timeout: 10_000 }).toBe(false);
+  expect(await app.hasVisibleText('重启设备')).toBe(true);
+
+  // 遮罩没有卡住，按钮还能再用。
+  await app.tapText('关机');
+  await expect.poll(() => app.hasVisibleText('关机？')).toBe(true);
 });
 
 test('信息卡末行显示实时 FPS，离开系统页后停止采样', async ({ app }) => {
