@@ -12,9 +12,10 @@
 import { test, expect } from './fixtures';
 import { openControllerSettings } from './pages';
 
-/** 两张类型卡右侧留白处的采样点（卡内、避开图标与文字）。 */
-const CARD_PRO = { x: 200, y: 83 };
-const CARD_JOYCON = { x: 200, y: 144 };
+/** 两张类型卡右侧留白处的采样点（卡内、避开图标与文字；顶部无标签行，
+ *  首卡从 pt-[34] 起，卡高 53、卡距 8）。 */
+const CARD_PRO = { x: 200, y: 60 };
+const CARD_JOYCON = { x: 200, y: 121 };
 const SELECTED = '#9ecefe';
 const UNSELECTED = '#0c1a2c';
 

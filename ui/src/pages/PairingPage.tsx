@@ -28,10 +28,14 @@ export function PairingPage(props: { active: () => boolean }) {
             {pairingLabel(hw.pairing)}
           </Text>
         </View>
-        <Text class="text-xs mt-1 text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          {hw.pairingMessage ||
-            (isBusy() ? '在 NS2 主机配对界面搜索本设备' : '配对无需打开本页，开机即自动广播')}
-        </Text>
+        {hw.pairingMessage !== '' ? (
+          <Text
+            class="text-xs mt-1 text-center shrink-0"
+            style={{ textColor: COLOR.onSurfaceVariant }}
+          >
+            {hw.pairingMessage}
+          </Text>
+        ) : null}
 
         <View class="flex-row items-center gap-2 mt-3 shrink-0">
           <View
@@ -69,11 +73,6 @@ export function PairingPage(props: { active: () => boolean }) {
             </View>
           ) : null}
         </View>
-        {isBusy() ? (
-          <Text class="text-xs mt-1 text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-            对应主机 Grip 界面确认
-          </Text>
-        ) : null}
         <BottomPlaceholder />
       </View>
     </View>

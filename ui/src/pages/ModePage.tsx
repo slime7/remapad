@@ -19,7 +19,7 @@ const TOP_PAD = 34;
 const GAP = 8;
 const LINE_H = 15;
 /** 内容高度按含状态提示行的上界估一次，误差由滚动列底部垫高兜底。 */
-const CONTENT_H = TOP_PAD + CARD_H * 2 + GAP * 4 + LINE_H * 2;
+const CONTENT_H = TOP_PAD + CARD_H * 2 + GAP * 4 + LINE_H;
 
 function RoleCard(props: {
   role: UsbRole;
@@ -86,9 +86,6 @@ export function ModePage(props: { active: () => boolean }) {
           style={{ textColor: COLOR.onSurfaceVariant }}
         >
           {hw.roleMessage}
-        </Text>
-        <Text class="text-xs text-center shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          重启后回到串口
         </Text>
         <BottomPlaceholder />
       </View>

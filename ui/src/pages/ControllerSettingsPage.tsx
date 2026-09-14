@@ -17,13 +17,13 @@ import type { ControllerType } from '../bridge/protocol';
 /** 滚动列顶部内边距与块间距，与内容高度公式共用（pt-[34] + gap-2）。 */
 const TOP_PAD = 34;
 const GAP = 8;
-/** 类型标签行高度（text-xs 单行）。 */
-const LABEL_H = 15;
 /** 类型卡高度：py-3 上下 24 + 图标行 29（text-2xl 槽位 cell 高）。 */
 const CARD_H = 24 + 29;
+/** 信息行行高（text-xs 单行）。 */
+const ROW_H = 15;
 /** 信息行卡高度：py-2 上下 16 + 行高 15 × 行数 + 行距 8 ×（行数 − 1）。 */
-const INFO_CARD_H_PRO = 16 + LABEL_H * 2 + GAP;
-const INFO_CARD_H_JOYCON = 16 + LABEL_H * 4 + GAP * 3;
+const INFO_CARD_H_PRO = 16 + ROW_H * 2 + GAP;
+const INFO_CARD_H_JOYCON = 16 + ROW_H * 4 + GAP * 3;
 /** 颜色卡高度：py-3 上下 24 + 标题行 18 + mt-2 8 + 色块 24。 */
 const COLOR_CARD_H = 24 + 18 + 8 + 24;
 
@@ -33,7 +33,6 @@ const COLOR_CARD_H = 24 + 18 + 8 + 24;
  */
 const contentHeight = (joycon: boolean) =>
   TOP_PAD +
-  LABEL_H +
   CARD_H * 2 +
   (joycon ? INFO_CARD_H_JOYCON : INFO_CARD_H_PRO) +
   COLOR_CARD_H +
@@ -151,9 +150,6 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
-        <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          手柄类型
-        </Text>
         {TYPE_OPTIONS.map((option) => (
           <TypeCard
             option={option}
