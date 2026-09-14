@@ -44,6 +44,8 @@ export interface HardwareUiState {
   roleMessage: string;
   /** 本地推算的实时开机时长。 */
   uptimeMs: number;
+  /** 实测帧率（帧/秒）：只在系统页可见时采样，null = 尚无样本。 */
+  fps: number | null;
   /** 已发送重启命令。 */
   rebooting: boolean;
 }
@@ -75,15 +77,23 @@ export const hw = reactive<HardwareUiState>({
   usbRoleActive: true,
   roleMessage: '',
   uptimeMs: 0,
+  fps: null,
   rebooting: false,
 });
 
 const POLL_TICKS = 300; // 60Hz × 5s
 const tickHz: number = (globalThis as unknown as { ui?: { __tickHz?: number } }).ui?.__tickHz ?? 60;
+/** 帧率采样窗口：一秒的虚拟帧。健康时即一秒墙钟，掉帧时窗口相应拉长。 */
+const FPS_WINDOW_TICKS = tickHz;
 
 let started = false;
 let ticks = 0;
 let uptimeSyncTicks = 0;
+/** 采样开关（系统页可见时置位）、上次请求的帧号与当前窗口的锚点。 */
+let samplingFps = false;
+let fpsRequestFrame = -FPS_WINDOW_TICKS;
+let fpsAnchorFrame = -1;
+let fpsAnchorUptimeMs = 0;
 
 function applySystemStatus(msg: Extract<DeviceMsg, { t: 'systemStatus' }>): void {
   hw.battery = msg.battery;
@@ -106,6 +116,46 @@ function refreshStatus(): void {
       applySystemStatus(msg);
     }
   });
+}
+
+/**
+ * 采一次实时帧率：向设备要一份状态，用应答里的设备时钟和本地帧计数算
+ * 上一个窗口的实测帧率。进页后的第一个窗口只建立锚点，所以数字要等
+ * 约一秒；设备不回或命令失败时锚点不动，下一个窗口继续请求，不会卡住。
+ */
+function requestFrameRateSample(): void {
+  const frame = ticks;
+  fpsRequestFrame = frame;
+  hardware.send({ t: 'getSystemStatus' }, (msg) => {
+    if (msg.t !== 'systemStatus' || !samplingFps) {
+      return;
+    }
+    applySystemStatus(msg);
+    const elapsedMs = msg.uptimeMs - fpsAnchorUptimeMs;
+    if (fpsAnchorFrame >= 0 && elapsedMs > 0) {
+      hw.fps = ((frame - fpsAnchorFrame) * 1000) / elapsedMs;
+    }
+    fpsAnchorFrame = frame;
+    fpsAnchorUptimeMs = msg.uptimeMs;
+  });
+}
+
+/**
+ * 系统页可见时才采样实时帧率：进页立刻取一次设备时钟锚点并清掉旧读数，
+ * 离页停止采样（在飞的应答回来后不再写状态）。采样期间不再发常规的
+ * status 轮询——采样请求本身就把同一份状态带回来了，命令频率不翻倍。
+ */
+export function setFrameRateSampling(on: boolean): void {
+  if (on === samplingFps) {
+    return;
+  }
+  samplingFps = on;
+  hw.fps = null;
+  fpsAnchorFrame = -1;
+  fpsAnchorUptimeMs = 0;
+  if (on) {
+    requestFrameRateSample();
+  }
 }
 
 export function startPairing(): void {
@@ -254,8 +304,11 @@ export function useHardware(): void {
 
   onFrame(() => {
     ticks++;
-    if (ticks % POLL_TICKS === 0) {
+    if (ticks % POLL_TICKS === 0 && !samplingFps) {
       refreshStatus();
+    }
+    if (samplingFps && ticks - fpsRequestFrame >= FPS_WINDOW_TICKS) {
+      requestFrameRateSample();
     }
     if (ticks % tickHz === 0) {
       // 两次状态轮询之间按帧数本地推算 uptime，避免每帧改响应式状态。

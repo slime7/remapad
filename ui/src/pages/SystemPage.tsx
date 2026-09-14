@@ -1,9 +1,10 @@
-/** 系统页：背光调节（20%–100%，防误设黑屏）、重启、设备信息。 */
+/** 系统页：背光调节（20%–100%，防误设黑屏）、重启、设备信息与实时帧率。 */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
+import { watchEffect } from 'vue';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR, STYLE } from '../theme';
-import { hw, setBacklight } from '../hooks/useHardware';
+import { hw, setBacklight, setFrameRateSampling } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import { formatMb, formatUptime } from '../utils';
 
@@ -13,8 +14,8 @@ const BACKLIGHT_STEP = 20;
 const TRACK_W = 48;
 /** 桥接协议仍以 0–100 百分比传输背光，显示侧映射为 1–5 档位数字。 */
 const BACKLIGHT_LEVELS = 5;
-/** 设备信息卡高度：py-2 上下 16 + 六行 22。 */
-const INFO_H = 16 + 22 * 6;
+/** 设备信息卡高度：py-2 上下 16 + 七行 22。 */
+const INFO_H = 16 + 22 * 7;
 
 /** 信息行：标签在左、值在右，用 justify-between 顶开（省掉一个占位节点）。 */
 function InfoRow(props: { label: string; value: string }) {
@@ -37,6 +38,11 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
   };
   const backlightLevel = () =>
     Math.max(1, Math.min(BACKLIGHT_LEVELS, Math.round(hw.backlight / BACKLIGHT_STEP)));
+
+  // 帧率只在系统页可见时采样：离页停止，不为看不见的数字持续读设备状态。
+  watchEffect(() => {
+    setFrameRateSampling(props.active());
+  });
 
   const contentRef = usePageScroll(
     props.active,
@@ -96,6 +102,7 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
             value={`${hw.battery.percentage}% · ${(hw.battery.voltageMv / 1000).toFixed(2)}V${hw.battery.charging ? ' · 充电中' : ''}`}
           />
           <InfoRow label="运行时长" value={formatUptime(hw.uptimeMs)} />
+          <InfoRow label="FPS" value={hw.fps === null ? '--' : hw.fps.toFixed(1)} />
         </View>
 
         <BottomPlaceholder />
