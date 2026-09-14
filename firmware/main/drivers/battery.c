@@ -29,7 +29,7 @@ static const char *TAG = "driver_battery";
 #define BATTERY_NOMINAL_FULL_SCALE_MV 3100
 #define BATTERY_FULL_SCALE_CODE 4095
 
-/* 充电状态推断：板载 ETA6098 的充电状态输出只驱动板上指示灯，没有引到
+/* 充电状态推断：ETA6098 的 STAT 引脚在板上空置（核对原理图确认）、没有引到
  * GPIO；板上也没有 VBUS 检测脚，因此「是否在充电」无法测量，只能看采样
  * 电压的趋势。充电时端电压抬高并持续上升，放电时随电量下降，恒压阶段
  * 与静置状态电压持平——持平不动时保持上一次结论。 */

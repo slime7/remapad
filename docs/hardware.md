@@ -144,6 +144,6 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 
 - IMU（QMI8658C）与 RTC（PCF85063ATL）的驱动与状态上报；
 - USB host 输入接收与 NS2 报告编码（方案见 [usb-input-plan.md](usb-input-plan.md)）；
-- 充电状态与外部供电的测量：ETA6098 的充电状态输出只驱动板上指示灯，没有引到 GPIO，板上也没有 VBUS 检测脚；固件的充电标志是按采样电压趋势推断的，不是实测值（见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)）；
+- 充电状态与外部供电的测量：核对原理图后确认 ETA6098 的 STAT 引脚（9 脚）空置、没有引出任何网络，板上也没有 VBUS 检测网络；固件的充电标志是按采样电压趋势推断的，不是实测值（见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)）。要拿到实测值，得另加测量：在 VBUS / PMID 网络上取分压接空闲 GPIO（外部供电），或在电池回路串采样电阻、并一颗电量计（电量与充放电方向）；
 
 屏幕事实已写入 `firmware/pocket.host.json`：`input.touch` 随触摸采样接入一并声明。
