@@ -15,15 +15,16 @@ static const char *TAG = "remapad_ns2tgt";
 /** 扳机数字化阈值：NS2 只有数字 ZL/ZR，模拟扳机过半即按下。 */
 #define NS2_TRIGGER_THRESHOLD ((PAD_AXIS_MAX + 1) / 2)
 
-/** 私有按键位 → NS2 按键位（位置语义一一对应，不做二次重排）。 */
+/** 私有按键位 → NS2 按键位：私有用 PS 键名、NS2 用 Nintendo 标签，
+ *  两边按位置对齐（右→A、下→B、上→X、左→Y），不做二次重排。 */
 static const struct {
     uint32_t pad;
     uint32_t ns2;
 } s_button_map[] = {
-    {PAD_BTN_A, NS2_BTN_A},
-    {PAD_BTN_B, NS2_BTN_B},
-    {PAD_BTN_X, NS2_BTN_X},
-    {PAD_BTN_Y, NS2_BTN_Y},
+    {PAD_BTN_CIRCLE, NS2_BTN_A},   /* ○ 右 → A 右 */
+    {PAD_BTN_CROSS, NS2_BTN_B},    /* ✕ 下 → B 下 */
+    {PAD_BTN_TRIANGLE, NS2_BTN_X}, /* △ 上 → X 上 */
+    {PAD_BTN_SQUARE, NS2_BTN_Y},   /* □ 左 → Y 左 */
     {PAD_BTN_LB, NS2_BTN_L},
     {PAD_BTN_RB, NS2_BTN_R},
     {PAD_BTN_LSTICK, NS2_BTN_LSTICK},

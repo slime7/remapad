@@ -50,14 +50,14 @@ static const uint32_t s_xbox_btn_map[16] = {
     PAD_BTN_DPAD_UP, PAD_BTN_DPAD_DOWN, PAD_BTN_DPAD_LEFT, PAD_BTN_DPAD_RIGHT,
     PAD_BTN_START, PAD_BTN_BACK, PAD_BTN_LSTICK, PAD_BTN_RSTICK,
     PAD_BTN_LB, PAD_BTN_RB, PAD_BTN_GUIDE, 0,
-    PAD_BTN_B, PAD_BTN_A, PAD_BTN_Y, PAD_BTN_X,
+    PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_SQUARE, PAD_BTN_TRIANGLE,
 };
 
 /** PS：字节 0 低四位是方向键帽子开关（下方单独展开），
- *  面键按位置对应（Cross 在下、Circle 在右）。 */
+ *  面键就是私有格式的四个键位（Square 左、Cross 下、Circle 右、Triangle 上）。 */
 static const uint32_t s_ps_btn_map[24] = {
     0, 0, 0, 0,
-    PAD_BTN_Y, PAD_BTN_B, PAD_BTN_A, PAD_BTN_X,
+    PAD_BTN_SQUARE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_TRIANGLE,
     PAD_BTN_LB, PAD_BTN_RB, 0, 0,
     PAD_BTN_SHARE, PAD_BTN_START, PAD_BTN_LSTICK, PAD_BTN_RSTICK,
     PAD_BTN_GUIDE, PAD_BTN_TOUCHPAD, PAD_BTN_MUTE, 0,
@@ -107,7 +107,10 @@ static const pad_layout_t s_layouts[] = {
         .btn_map = s_xbox_btn_map,
     },
     {
-        /* DualShock 4 / DualSense 有线（Report ID 0x01）。 */
+        /* DualShock 4 / DualSense 有线（Report ID 0x01）：面键、摇杆、扳机、
+         * 触摸板按下与静音键（DualSense 才有）的位置两者一致；电量、运动与
+         * 触摸板坐标的偏移按 DualShock 4 的资料填，DualSense 这几处不同，
+         * 待抓包后按 PID 分行（见 ROADMAP 的家族表回填）。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_USB,
         .report_id = 0x01,
@@ -128,7 +131,8 @@ static const pad_layout_t s_layouts[] = {
         .btn_map = s_ps_btn_map,
     },
     {
-        /* DualShock 4 / DualSense 蓝牙（Report ID 0x11）：比有线多两个前导字节。 */
+        /* DualShock 4 蓝牙（Report ID 0x11）：比有线多两个前导字节。
+         * DualSense 蓝牙的 Report ID 与 DS4 不同（公开资料为 0x31），本轮未登记。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_BT,
         .report_id = 0x11,

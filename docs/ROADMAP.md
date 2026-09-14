@@ -32,6 +32,7 @@
 
 - [ ] 实机验收：PC 侧插 Xbox / PS / Steam 任一手柄 → NS2 主机的按键与摇杆正确；扳机按 50% 阈值触发 ZL/ZR；背键进 GL/GR；PC 侧拔线后状态回中不卡键；串口日志显示识别到的家族与型号。
 - [ ] 家族表按实测抓包回填：用 `cd pc ; uv run python bridge.py --dump` 抓 Xbox 有线 / Xbox 蓝牙 / PS 蓝牙 / Steam 原生布局的原始报告，核对并修正 `firmware/main/pad/pad_device.c` 家族表里的字段偏移（Steam 原生布局尚未登记，当前走 Xbox 兜底并置能力位标记）。
+- [ ] PS 侧按 PID 分行：DualShock 4 与 DualSense 的面键、摇杆、扳机、触摸板按下与静音键位置一致（静音键只有 DualSense 有），但电量、运动与触摸板坐标的偏移不同，DualSense 蓝牙的 Report ID 也不是 DS4 的 0x11；抓包后给家族表加上 PID 维度并按实测值登记。
 
 **USB host 直插（手柄插在板卡上）　状态：未开始**
 

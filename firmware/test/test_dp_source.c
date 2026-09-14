@@ -15,7 +15,7 @@
 
 static void primary_source(pad_state_t *state)
 {
-    state->buttons = PAD_BTN_A;
+    state->buttons = PAD_BTN_CIRCLE;
     state->axis[PAD_AXIS_LX] = 0x111;
     state->axis[PAD_AXIS_LY] = 0x222;
     state->axis[PAD_AXIS_RX] = 0x333;
@@ -31,7 +31,7 @@ static void primary_source(pad_state_t *state)
 /** 后续源只有按键能生效：摇杆、扳机与设备字段应当被忽略。 */
 static void secondary_source(pad_state_t *state)
 {
-    state->buttons = PAD_BTN_B;
+    state->buttons = PAD_BTN_CROSS;
     state->axis[PAD_AXIS_LX] = 0x999;
     state->axis[PAD_AXIS_RX] = 0x999;
     state->trigger[PAD_TRIGGER_L] = 0x999;
@@ -61,7 +61,7 @@ static void composition_rules(void)
 
     dp_source_register(&SOURCE_PRIMARY);
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_A);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CIRCLE);
     CHECK_EQ(state.axis[PAD_AXIS_LX], 0x111);
     CHECK_EQ(state.axis[PAD_AXIS_RY], 0x444);
     CHECK_EQ(state.trigger[PAD_TRIGGER_L], 0x555);
@@ -74,7 +74,7 @@ static void composition_rules(void)
     /* 第二个源只叠加按键：摇杆、扳机与设备字段仍是主源的。 */
     dp_source_register(&SOURCE_SECONDARY);
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_A | PAD_BTN_B));
+    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS));
     CHECK_EQ(state.axis[PAD_AXIS_LX], 0x111);
     CHECK_EQ(state.axis[PAD_AXIS_RX], 0x333);
     CHECK_EQ(state.trigger[PAD_TRIGGER_L], 0x555);
@@ -84,7 +84,7 @@ static void composition_rules(void)
     /* 第三个源同理。 */
     dp_source_register(&SOURCE_TERTIARY);
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_A | PAD_BTN_B | PAD_BTN_DPAD_UP));
+    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS | PAD_BTN_DPAD_UP));
     CHECK_EQ(state.axis[PAD_AXIS_LY], 0x222);
 
     /* 采样回调为空的源必须被拒绝，否则每帧都会空指针崩溃。 */
@@ -107,13 +107,13 @@ static void registration_limit(void)
     pad_state_t state;
     dp_source_sample(&state);
     /* 第四个源生效，第五个没有。 */
-    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_A | PAD_BTN_B | PAD_BTN_DPAD_UP));
+    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS | PAD_BTN_DPAD_UP));
 
     dp_source_inject(PAD_BTN_GUIDE, 100);
     dp_source_sample(&state);
     /* 注入叠加在合成结果之上。 */
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_A | PAD_BTN_B | PAD_BTN_DPAD_UP | PAD_BTN_GUIDE));
+             (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS | PAD_BTN_DPAD_UP | PAD_BTN_GUIDE));
 }
 
 static void debug_injection_holds_then_releases(void)
@@ -143,13 +143,13 @@ static void debug_injection_holds_then_releases(void)
 
     /* 上限为 60000ms（12000 次采样）：超过旧的 5s 上限仍按住，便于长按
      * 验证与主机 Grip 界面的组合确认。 */
-    dp_source_inject(PAD_BTN_B, 60000);
+    dp_source_inject(PAD_BTN_CROSS, 60000);
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_B, PAD_BTN_B);
+    CHECK_EQ(state.buttons & PAD_BTN_CROSS, PAD_BTN_CROSS);
     for (int i = 0; i < 1100; i++) {
         dp_source_sample(&state);
     }
-    CHECK_EQ(state.buttons & PAD_BTN_B, PAD_BTN_B);
+    CHECK_EQ(state.buttons & PAD_BTN_CROSS, PAD_BTN_CROSS);
     CHECK(dp_source_inject_active());
     dp_source_inject_release();
 }
@@ -217,8 +217,9 @@ static void debug_key_lookup(void)
     uint32_t mask = 0;
     uint32_t hold_ms = 0;
 
+    /* 键名是 NS2 的 a（右侧），掩码落到私有格式的 ○。 */
     CHECK(dp_source_key_lookup("a", 1, &mask, &hold_ms));
-    CHECK_EQ(mask, PAD_BTN_A);
+    CHECK_EQ(mask, PAD_BTN_CIRCLE);
     CHECK_EQ(hold_ms, 250);
 
     CHECK(dp_source_key_lookup("up", 2, &mask, &hold_ms));

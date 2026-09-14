@@ -484,7 +484,8 @@ static void handle_debug_key(int id, const char *cmd)
     uint32_t mask = 0;
     uint32_t hold_ms = 250;
     if (key != NULL && key_len == 1 && key[0] == 'a') {
-        mask = PAD_BTN_A;
+        /* 键名是 NS2 的 A 键，落在私有格式右侧的键位上（PS 的 ○）。 */
+        mask = PAD_BTN_CIRCLE;
     } else if (key != NULL && key_len == 4 && strncmp(key, "home", 4) == 0) {
         mask = PAD_BTN_GUIDE;
     } else if (key != NULL && key_len == 2 && strncmp(key, "lr", 2) == 0) {

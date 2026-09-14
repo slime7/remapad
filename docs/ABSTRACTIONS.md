@@ -178,7 +178,7 @@ classDiagram
     pad_feedback_t ..> pad_state_t : 反向链路（目标 → 输入设备）
 ```
 
-- 按键位按位置语义命名（`PAD_BTN_A` 右、`PAD_BTN_B` 下、`PAD_BTN_X` 上、`PAD_BTN_Y` 左），家族表把各家的物理键填进对应位置；背键与目标专属键（NS2 的 C 键）用扩展位占位。
+- 按键位按位置固定、键名沿用 PS（`PAD_BTN_TRIANGLE` 上、`PAD_BTN_CIRCLE` 右、`PAD_BTN_CROSS` 下、`PAD_BTN_SQUARE` 左）：Xbox 与 Nintendo 的 A/B/X/Y 标签位置不同，用 PS 名可以避免「A 到底指哪个键」的混淆，家族表把各家的物理键填进对应位置；背键与目标专属键（NS2 的 C 键）用扩展位占位。
 - 四轴与双扳机统一为 0-4095 整数、摇杆中位 2048，Y 轴统一成「上为正」，8% 死区在解析段套用并把剩余行程重新铺满；扳机保持模拟量，是否数字化由目标决定。
 - `caps` 标注这一帧里哪些字段真的来自设备（运动、触摸板、模拟扳机、背键、麦克风、电池、震动）；型号未识别时回落 Xbox 布局并置 `PAD_CAP_FALLBACK_LAYOUT`，结果仍可用但字段可能错位。
 - 目标只消费自己 `caps` 范围内的字段：不在集合里的部分（IMU、触摸板、麦克风）不映射，能力集合变化时提示一次，不逐帧刷日志。
@@ -214,18 +214,20 @@ sequenceDiagram
     RECV->>SRC: 状态回静置，按键不卡住
 ```
 
-家族与目标的按键对应关系（按位置对齐，因此 Xbox 的物理 A 与 PS 的 Cross 都落在 `PAD_BTN_B`、再到 `NS2_BTN_B`）：
+家族与目标的按键对应关系（按位置对齐，因此 Xbox 的物理 A 与 PS 的 Cross 都落在 `PAD_BTN_CROSS`、再到 `NS2_BTN_B`）：
 
 | 私有格式（位置语义） | Xbox 物理键 | PS 物理键 | Steam（原生布局） | NS2 目标 |
 | :--- | :--- | :--- | :--- | :--- |
-| `PAD_BTN_A`（右） | B | Circle | 未登记，走兜底 | `NS2_BTN_A` |
-| `PAD_BTN_B`（下） | A | Cross | 未登记，走兜底 | `NS2_BTN_B` |
-| `PAD_BTN_X`（上） | Y | Triangle | 未登记，走兜底 | `NS2_BTN_X` |
-| `PAD_BTN_Y`（左） | X | Square | 未登记，走兜底 | `NS2_BTN_Y` |
+| `PAD_BTN_CIRCLE`（○ 右） | B | Circle | 未登记，走兜底 | `NS2_BTN_A` |
+| `PAD_BTN_CROSS`（✕ 下） | A | Cross | 未登记，走兜底 | `NS2_BTN_B` |
+| `PAD_BTN_TRIANGLE`（△ 上） | Y | Triangle | 未登记，走兜底 | `NS2_BTN_X` |
+| `PAD_BTN_SQUARE`（□ 左） | X | Square | 未登记，走兜底 | `NS2_BTN_Y` |
 | `PAD_BTN_LB` / `PAD_BTN_RB` | LB / RB | L1 / R1 | 未登记，走兜底 | `NS2_BTN_L` / `NS2_BTN_R` |
 | `PAD_BTN_LSTICK` / `PAD_BTN_RSTICK` | 左/右摇杆按下 | L3 / R3 | 未登记，走兜底 | `NS2_BTN_LSTICK` / `NS2_BTN_RSTICK` |
 | `PAD_BTN_START` / `PAD_BTN_BACK` | Menu / View | Options / Share | 未登记，走兜底 | `NS2_BTN_PLUS` / `NS2_BTN_MINUS` |
 | `PAD_BTN_GUIDE` / `PAD_BTN_SHARE` | Guide / Share | PS 键 / 无 | 未登记，走兜底 | `NS2_BTN_HOME` / `NS2_BTN_CAPTURE` |
+| `PAD_BTN_TOUCHPAD`（触摸板按下） | 无 | 触摸板按下 | 未登记，走兜底 | 无对应键，不进报文 |
+| `PAD_BTN_MUTE`（静音） | 无 | DualSense 静音键 | 未登记，走兜底 | 无对应键，不进报文 |
 | `PAD_BTN_DPAD_*` | 十字键 | 十字键（帽子开关展开） | 未登记，走兜底 | `NS2_BTN_DPAD_*` |
 | `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键 / 背键 | 无 | 未登记，走兜底 | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
 | 扳机模拟量 ≥ 2048（50%） | LT / RT | L2 / R2 | 未登记，走兜底 | `NS2_BTN_ZL` / `NS2_BTN_ZR` |

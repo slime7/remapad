@@ -94,11 +94,11 @@ static void expect_buttons(uint32_t pad_buttons, uint8_t offset, uint8_t bit)
 static void face_buttons_keep_position_semantics(void)
 {
     prepare();
-    /* 位置语义一一对应：私有的 A（右）落到 NS2 的 A，其余同。 */
-    expect_buttons(PAD_BTN_A, 0x02, 1);
-    expect_buttons(PAD_BTN_B, 0x02, 0);
-    expect_buttons(PAD_BTN_X, 0x02, 3);
-    expect_buttons(PAD_BTN_Y, 0x02, 2);
+    /* 私有用 PS 键名、NS2 用 Nintendo 标签，按位置一一对应：○ 右 → A，其余同。 */
+    expect_buttons(PAD_BTN_CIRCLE, 0x02, 1);
+    expect_buttons(PAD_BTN_CROSS, 0x02, 0);
+    expect_buttons(PAD_BTN_TRIANGLE, 0x02, 3);
+    expect_buttons(PAD_BTN_SQUARE, 0x02, 2);
 }
 
 static void shoulders_dpad_and_system_keys(void)
@@ -208,7 +208,7 @@ static void unconsumed_caps_do_not_change_the_report(void)
     prepare();
     pad_state_t pad;
     pad_state_defaults(&pad);
-    pad.buttons = PAD_BTN_A;
+    pad.buttons = PAD_BTN_CIRCLE;
     /* 本轮 NS2 目标不吃运动、触摸板与麦克风：报文里只应体现按键。 */
     pad.caps = PAD_CAP_MOTION | PAD_CAP_TOUCHPAD | PAD_CAP_MIC;
     pad.motion.present = true;
@@ -229,7 +229,7 @@ static void unknown_model_still_reports_keys(void)
     /* 未识别型号走 Xbox 兜底：标了能力位也要照常出报文，主机侧不能没反应。 */
     pad_state_t pad;
     pad_state_defaults(&pad);
-    pad.buttons = PAD_BTN_B;
+    pad.buttons = PAD_BTN_CROSS;
     pad.caps = PAD_CAP_FALLBACK_LAYOUT;
     pad.family = PAD_FAMILY_UNKNOWN;
     target_send_pad(&pad);
@@ -238,7 +238,8 @@ static void unknown_model_still_reports_keys(void)
 }
 
 HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
-                {"面键按位置映射到 NS2 的 A/B/X/Y", face_buttons_keep_position_semantics},
+                {"面键按位置映射到 NS2 的 A/B/X/Y（私有用 PS 键名）",
+                 face_buttons_keep_position_semantics},
                 {"肩键、方向键、系统键与 C 键", shoulders_dpad_and_system_keys},
                 {"四颗背键按侧折进 GL / GR", back_buttons_fold_into_gl_and_gr},
                 {"扳机按 50% 阈值数字化成 ZL / ZR", analog_triggers_digitize_at_half},

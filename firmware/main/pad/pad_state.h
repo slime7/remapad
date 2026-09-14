@@ -16,8 +16,10 @@ extern "C" {
  *
  * 坐标约定：四轴与双扳机统一为 0-4095 整数，摇杆中位 `PAD_AXIS_CENTER`；
  * 轴向按数学意义取正——X 向右为正、Y 向上为正，输入侧负责把各家相反的
- * Y 轴翻过来。面键按 Nintendo 位置语义命名（A 右、B 下、X 上、Y 左），
- * 家族表决定各家的物理键落到哪个位置。
+ * Y 轴翻过来。面键沿用 PS 的键名按位置固定：Triangle 上、Circle 右、Cross 下、
+ * Square 左——Xbox 与 Nintendo 的 A/B/X/Y 标签位置各不相同（Xbox 的 A 在下、
+ * Nintendo 的 A 在右），用 PS 名可以避免「A 到底是哪个键」这类混淆，家族表
+ * 负责把各家的物理键填到对应位置。
  */
 
 #define PAD_AXIS_MIN 0
@@ -40,12 +42,12 @@ typedef enum {
     PAD_CONN_BT,
 } pad_conn_t;
 
-/** 按键位（位置语义）。扩展位放主机侧新增或第三方手柄的附加键。 */
+/** 按键位（位置语义，键名沿用 PS）。扩展位放主机侧新增或第三方手柄的附加键。 */
 enum {
-    PAD_BTN_A = 1u << 0,
-    PAD_BTN_B = 1u << 1,
-    PAD_BTN_X = 1u << 2,
-    PAD_BTN_Y = 1u << 3,
+    PAD_BTN_TRIANGLE = 1u << 0, /**< △ 上 */
+    PAD_BTN_CIRCLE = 1u << 1,   /**< ○ 右 */
+    PAD_BTN_CROSS = 1u << 2,    /**< ✕ 下 */
+    PAD_BTN_SQUARE = 1u << 3,   /**< □ 左 */
     PAD_BTN_LB = 1u << 4,
     PAD_BTN_RB = 1u << 5,
     PAD_BTN_LSTICK = 1u << 6,

@@ -36,20 +36,20 @@ static void xbox_face_buttons_map_by_position(void)
     pad_state_t state;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.family, PAD_FAMILY_XBOX);
-    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_B);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CROSS);
     CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
 
     report.data[2] = 0x20;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_A);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CIRCLE);
 
-    /* 物理 X 在左 → Y 位、物理 Y 在上 → X 位。 */
+    /* 物理 X 在左 → □ 位、物理 Y 在上 → △ 位。 */
     report.data[2] = 0x40;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_Y);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_SQUARE);
     report.data[2] = 0x80;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_X);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_TRIANGLE);
 }
 
 static void xbox_dpad_shoulders_and_sticks(void)
@@ -114,7 +114,7 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.family, PAD_FAMILY_PS);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_B | PAD_BTN_LB | PAD_BTN_RB | PAD_BTN_START | PAD_BTN_GUIDE |
+             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_LB | PAD_BTN_RB | PAD_BTN_START | PAD_BTN_GUIDE |
                         PAD_BTN_TOUCHPAD));
     CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
     CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MAX);
@@ -126,13 +126,20 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     CHECK(state.touch[PAD_TOUCH_LEFT].present);
     CHECK(state.touch[PAD_TOUCH_LEFT].pressed);
 
+    /* DualSense 在 PS 键与触摸板按下之外还多一个静音位（byte7 bit2）。 */
+    report.data[7] = 0x07;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons & (PAD_BTN_GUIDE | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE),
+             (uint32_t)(PAD_BTN_GUIDE | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
+    report.data[7] = 0x03;
+
     /* 帽子开关：向上时只出方向键上。 */
     report.data[5] = 0x00;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons & (PAD_BTN_DPAD_UP | PAD_BTN_DPAD_DOWN | PAD_BTN_DPAD_LEFT |
                               PAD_BTN_DPAD_RIGHT),
              (uint32_t)PAD_BTN_DPAD_UP);
-    CHECK_EQ(state.buttons & PAD_BTN_B, 0);
+    CHECK_EQ(state.buttons & PAD_BTN_CROSS, 0);
 
     /* 斜向：右上同时置两位。 */
     report.data[5] = 0x01;
@@ -173,7 +180,7 @@ static void unknown_model_falls_back_to_xbox_layout(void)
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.family, PAD_FAMILY_UNKNOWN);
     CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, PAD_CAP_FALLBACK_LAYOUT);
-    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_B);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CROSS);
 
     /* 空报告必须安全返回，不读越界。 */
     report.len = 0;
@@ -205,10 +212,10 @@ static void family_detection_and_steam_gap(void)
 }
 
 HOST_TEST_SUITE(suite_pad_device, "pad_device",
-                {"Xbox 面键按位置映射（物理 A 下 → B、物理 B 右 → A）",
+                {"Xbox 面键按位置映射（物理 A 下 → ✕、物理 B 右 → ○）",
                  xbox_face_buttons_map_by_position},
                 {"Xbox 方向键、肩键与摇杆量程", xbox_dpad_shoulders_and_sticks},
-                {"PS 报告：帽子开关、面键、电量与触摸板",
+                {"PS 报告：帽子开关、面键、电量、触摸板与静音键",
                  ps_report_parses_hat_face_buttons_and_battery},
                 {"摇杆死区与 Y 轴方向", stick_deadzone_and_y_direction},
                 {"未识别型号回落 Xbox 布局并标记兜底", unknown_model_falls_back_to_xbox_layout},
