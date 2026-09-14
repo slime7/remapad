@@ -10,7 +10,8 @@
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { AppStatusBar } from './components/AppStatusBar';
 import { AppNavBar, type TabKey } from './components/AppNavBar';
-import { useHardware, hw, rebootDevice } from './hooks/useHardware';
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { useHardware, hw, powerOffDevice, rebootDevice } from './hooks/useHardware';
 import { ref } from 'vue';
 import { HomePage } from './pages/HomePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -28,6 +29,7 @@ export default function App() {
   useHardware();
   const tab = ref<TabKey>('home');
   const rebootAsk = ref(false);
+  const powerOffAsk = ref(false);
   /** 配对进行中锁定底部导航，保证流程在配对页内完成。 */
   const pairingBusy = () => hw.pairing === 'scanning' || hw.pairing === 'pairing';
 
@@ -41,6 +43,11 @@ export default function App() {
     rebootDevice();
   };
 
+  const confirmPowerOff = () => {
+    powerOffAsk.value = false;
+    powerOffDevice();
+  };
+
   return (
     <View class={STYLE.appRoot}>
       <AppStatusBar />
@@ -51,49 +58,39 @@ export default function App() {
         <ControllerSettingsPage active={() => tab.value === 'controller'} />
         <PairingPage active={() => tab.value === 'pairing'} />
         <ModePage active={() => tab.value === 'mode'} />
-        <SystemPage active={() => tab.value === 'system'} onAskReboot={() => (rebootAsk.value = true)} />
+        <SystemPage
+          active={() => tab.value === 'system'}
+          onAskReboot={() => (rebootAsk.value = true)}
+          onAskPowerOff={() => (powerOffAsk.value = true)}
+        />
         <DebugPage active={() => tab.value === 'debug'} />
       </View>
       <AppNavBar tab={tab.value} disabled={pairingBusy} onChange={goToTab} />
 
-      {/* 重启确认：官方 Modal 的 portal 层按 480x272 fallback 视口定位，
-          在 240x280 上会错位，这里用本应用的绝对定位遮罩实现。 */}
       {rebootAsk.value ? (
-        <View class={STYLE.scrim}>
-          <View class={STYLE.modalBox}>
-            <Text class="text-base font-bold" style={{ textColor: COLOR.onSurface }}>
-              重启设备？
-            </Text>
-            <Text class="text-xs text-center mt-1" style={{ textColor: COLOR.onSurfaceVariant }}>
-              重启后回到 COM 设备模式，
-            </Text>
-            <Text class="text-xs text-center" style={{ textColor: COLOR.onSurfaceVariant }}>
-              用于烧录与串口日志。
-            </Text>
-            <View class="flex-row gap-2 mt-3">
-              <View
-                focusable
-                onPress={() => (rebootAsk.value = false)}
-                class={STYLE.modalCancelBtn}
-              >
-                <Text class="text-sm" style={{ textColor: COLOR.onSurface }}>
-                  取消
-                </Text>
-              </View>
-              <View focusable onPress={confirmReboot} class={STYLE.modalDangerBtn}>
-                <Text class="text-sm font-bold" style={{ textColor: COLOR.onErrorContainer }}>
-                  重启
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
+        <ConfirmDialog
+          title="重启设备？"
+          lines={['重启后回到 COM 设备模式，', '用于烧录与串口日志。']}
+          confirmLabel="重启"
+          onCancel={() => (rebootAsk.value = false)}
+          onConfirm={confirmReboot}
+        />
       ) : null}
 
-      {hw.rebooting ? (
+      {powerOffAsk.value ? (
+        <ConfirmDialog
+          title="关机？"
+          lines={['按 PWR 键可重新开机；', 'USB 供电下不会断电。']}
+          confirmLabel="关机"
+          onCancel={() => (powerOffAsk.value = false)}
+          onConfirm={confirmPowerOff}
+        />
+      ) : null}
+
+      {hw.rebooting || hw.poweringOff ? (
         <View class={STYLE.busyOverlay}>
           <Text class="text-sm" style={{ textColor: COLOR.onSurface }}>
-            重启中
+            {hw.rebooting ? '重启中' : '关机中'}
           </Text>
         </View>
       ) : null}

@@ -51,6 +51,10 @@ export interface HardwareUiState {
   fps: number | null;
   /** 已发送重启命令。 */
   rebooting: boolean;
+  /** 已确认关机、等待断电（USB 供电时不会断，转而给出提示）。 */
+  poweringOff: boolean;
+  /** 关机被外部供电拦下时的一次性提示。 */
+  powerOffMessage: string;
 }
 
 /** 手柄配置默认值：Pro + 深灰配色（与固件出厂块占位一致）。 */
@@ -90,6 +94,8 @@ export const hw = reactive<HardwareUiState>({
   uptimeMs: 0,
   fps: null,
   rebooting: false,
+  poweringOff: false,
+  powerOffMessage: '',
 });
 
 const POLL_TICKS = 300; // 60Hz × 5s
@@ -268,6 +274,17 @@ export function rebootDevice(): void {
   });
 }
 
+/**
+ * 关机：固件把 SYS_EN 拉低释放电源锁存。电池供电时系统立刻断电，界面停在
+ * 关机中；USB 供电下锁存被旁路，固件确认自己仍存活后会回报 powerOffBlocked，
+ * 界面据此收起遮罩并给出提示。
+ */
+export function powerOffDevice(): void {
+  hw.poweringOff = true;
+  hw.powerOffMessage = '';
+  hardware.send({ t: 'powerOff' });
+}
+
 /** App 壳 setup 时调用一次；页面组件直接读 hw / 动作函数。 */
 export function useHardware(): void {
   if (started) {
@@ -308,6 +325,10 @@ export function useHardware(): void {
         break;
       case 'batteryChanged':
         hw.battery = msg.battery;
+        break;
+      case 'powerOffBlocked':
+        hw.poweringOff = false;
+        hw.powerOffMessage = 'USB 供电下无法关机，请拔线后再试';
         break;
       default:
         break;

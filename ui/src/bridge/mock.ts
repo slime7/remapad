@@ -235,6 +235,13 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       });
       break;
 
+    case 'powerOff':
+      reply({ t: 'powerOffAck', id });
+      // 浏览器里没有电源通路，按设备插着 USB 时的行为回报：锁存被旁路，
+      // 固件在确认自己还活着之后告诉 UI 关不掉。
+      pairingTimers.push(setTimeout(() => reply({ t: 'powerOffBlocked' }), 1500));
+      break;
+
     case 'reboot':
       reply({ t: 'rebooting', id });
       break;

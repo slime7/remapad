@@ -1,4 +1,4 @@
-/** 系统页：背光调节（20%–100%，防误设黑屏）、重启、设备信息与实时帧率。 */
+/** 系统页：背光调节（20%–100%，防误设黑屏）、重启与关机、设备信息与实时帧率。 */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { watchEffect } from 'vue';
 import { Icon, ICON } from '../icons';
@@ -16,6 +16,8 @@ const TRACK_W = 48;
 const BACKLIGHT_LEVELS = 5;
 /** 设备信息卡高度：py-2 上下 16 + 七行 22。 */
 const INFO_H = 16 + 22 * 7;
+/** 关机结果提示行高度（text-xs 单行）；常驻节点收起时不占高度。 */
+const MESSAGE_H = 15;
 
 /** 信息行：标签在左、值在右，用 justify-between 顶开（省掉一个占位节点）。 */
 function InfoRow(props: { label: string; value: string }) {
@@ -31,7 +33,11 @@ function InfoRow(props: { label: string; value: string }) {
   );
 }
 
-export function SystemPage(props: { active: () => boolean; onAskReboot: () => void }) {
+export function SystemPage(props: {
+  active: () => boolean;
+  onAskReboot: () => void;
+  onAskPowerOff: () => void;
+}) {
   const changeBacklight = (delta: number) => {
     // 不提供 0 档：最低保持一步，避免误触后屏幕全黑看不到画面。
     setBacklight(Math.max(BACKLIGHT_STEP, hw.backlight + delta));
@@ -47,7 +53,7 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
   const contentRef = usePageScroll(
     props.active,
     true,
-    () => 34 + 56 + 16 + 44 + 16 + INFO_H + BOTTOM_PAD_H,
+    () => 34 + 56 + 16 + 44 + 16 + 44 + 16 + MESSAGE_H + INFO_H + BOTTOM_PAD_H,
   );
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
@@ -81,6 +87,20 @@ export function SystemPage(props: { active: () => boolean; onAskReboot: () => vo
               重启设备
             </Text>
         </View>
+
+        <View focusable onPress={props.onAskPowerOff} class={STYLE.dangerRow}>
+            <Icon glyph={ICON.power} class="shrink-0 text-base" color={COLOR.onErrorContainer} />
+            <Text class="text-sm font-bold" style={{ textColor: COLOR.onErrorContainer }}>
+              关机
+            </Text>
+        </View>
+
+        <Text
+          class={hw.powerOffMessage ? 'text-xs text-center shrink-0' : 'hidden'}
+          style={{ textColor: COLOR.onSurfaceVariant }}
+        >
+          {hw.powerOffMessage}
+        </Text>
 
         <View class={STYLE.infoCard}>
           <InfoRow label="芯片" value={hw.chip || 'ESP32-S3'} />

@@ -82,6 +82,7 @@ export type DeviceCmd =
   | { t: 'triggerRumble'; id: number; frequencyHz: number; amplitude: number; durationMs: number }
   | { t: 'debugKey'; id: number; key: DebugKey }
   | { t: 'calibrateSensors'; id: number }
+  | { t: 'powerOff'; id: number }
   | { t: 'reboot'; id: number };
 
 /** 产品控制面返回的应答或主动事件。 */
@@ -123,10 +124,13 @@ export type DeviceMsg =
   | { t: 'pressLrAck'; id: number; success: boolean }
   | { t: 'rumbleAck'; id: number; success: boolean }
   | { t: 'debugKeySet'; id: number; key: DebugKey }
+  | { t: 'powerOffAck'; id: number }
   | { t: 'rebooting'; id: number }
   | { t: 'error'; id: number; code: string; message: string }
   | { t: 'batteryChanged'; battery: BatteryInfo }
   | { t: 'usbRoleChanged'; role: UsbRole; active: boolean }
   | { t: 'pairingStateChanged'; state: PairingState }
   | { t: 'buttonEvent'; buttons: ControllerButtons }
+  /** 关机被外部供电拦下（USB 供电时电源锁存被旁路，系统仍在运行）。 */
+  | { t: 'powerOffBlocked' }
   | { t: 'lowBatteryAlert'; percentage: number };
