@@ -13,8 +13,10 @@
 #include "buzzer.h"
 
 /* PWR 键经电源功能电路接 SYS_OUT（GPIO40）；板上应有外部上拉，内部上拉
- * 仅作悬空兜底。SYS_EN（GPIO41）为电源保持脚，此处刻意不驱动。 */
+ * 仅作悬空兜底。SYS_EN（GPIO41）是电源保持脚：电池供电时按键松开后系统
+ * 靠它维持，锁存见 pwr_key_power_hold；拉低即软件关机，当前没有入口。 */
 #define PWR_KEY_GPIO GPIO_NUM_40
+#define PWR_KEY_HOLD_GPIO GPIO_NUM_41
 #define PWR_KEY_POLL_MS 10
 #define PWR_KEY_SHORT_MAX_US (600 * 1000LL)
 #define PWR_KEY_LONG_MIN_US (3 * 1000000LL)
@@ -85,6 +87,32 @@ static void pwr_key_task(void *param)
         }
         vTaskDelay(pdMS_TO_TICKS(PWR_KEY_POLL_MS));
     }
+}
+
+/** 拉高 SYS_EN 锁存系统供电。电池供电时按键松开后系统是否继续工作只取决于
+ *  这一脚：不锁存（悬空或为低）时松手即断电，复位后没及时拉高同样如此，
+ *  因此调用点必须是 app_main 的第一件事。USB 供电下锁存被旁路，拉高无副作用。 */
+esp_err_t pwr_key_power_hold(void)
+{
+    const gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << PWR_KEY_HOLD_GPIO,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    esp_err_t err = gpio_config(&io_conf);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "power latch config failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    err = gpio_set_level(PWR_KEY_HOLD_GPIO, 1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "power latch hold failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "power latch held (SYS_EN GPIO%d high)", PWR_KEY_HOLD_GPIO);
+    return ESP_OK;
 }
 
 esp_err_t pwr_key_start(pwr_key_fn callback, void *user)

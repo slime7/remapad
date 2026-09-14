@@ -46,6 +46,13 @@ static void pwr_key_handler(pwr_key_event_t event, void *user)
 
 void app_main(void)
 {
+    /* 电源保持必须在最前面：电池供电时松开 PWR 键就靠这一脚维持供电，
+     * 放到外设初始化之后会让上电窗口白白拉长。失败不阻断启动：USB 供电
+     * 下锁存被旁路，屏与 UI 仍能起来，只有电池供电会掉电。 */
+    if (pwr_key_power_hold() != ESP_OK) {
+        ESP_LOGE("remapad_app", "power latch not held, battery power will drop");
+    }
+
     /* 广播地址伪装必须在蓝牙控制器初始化前完成：public 广播的空中地址
      * 由 controller 的 BD_ADDR 决定，host 侧改不动。实测主机不校验地址
      * OUI（配对与回连均成功），但为与已验证实现保持一致，沿用任天堂

@@ -228,7 +228,7 @@ python scripts/uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完
 
 不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。`log` 子命令只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：打开 USB-Serial/JTAG 口通常会把设备复位一次（USJ 特性），所以每次 `uartctl.py` 调用后 `uptime` 会归零属正常现象，连续操作建议用交互模式；抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
 
-PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚暂不驱动：USB 供电下锁存被旁路，电池供电场景待电源 BSP 阶段接入。
+PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。拉低即软件关机，当前没有入口（关机手势待定）。
 
 用户设置（背光亮度、手柄类型与配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。USB 输入与桥接模式的推进方案（当前仅架构预留）见 [usb-input-plan.md](usb-input-plan.md)。
 
