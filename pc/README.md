@@ -92,7 +92,8 @@ uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
 
 ## 已知限制
 
-- Xbox 有线、Xbox 蓝牙、PS 蓝牙与 Steam 原生布局的偏移初值取自公开资料，尚未逐条
-  实机核对；核对前以 `--dump` 的结果为准，不符处回填 `pad/pad_device.c` 的家族表。
+- Xbox 有线、Xbox 蓝牙、DS4 与 Steam 原生布局的偏移初值取自公开资料，尚未逐条
+  实机核对；核对前以 `--dump` 的结果为准，不符处回填 `pad/pad_device.c` 的家族表
+  （DualSense 蓝牙的 0x31 行已按 DualSense Edge 实测核对）。
 - 转发的是原始报告，不做任何按键重排：重排规则（用户自定义映射）在固件侧，本轮未做。
 - 拔线或退出程序时发送 `DETACH` 帧，设备侧状态回到静置，不会留下卡住的按键。

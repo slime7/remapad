@@ -57,14 +57,17 @@ static const uint32_t s_xbox_btn_map[16] = {
 /** PS：字节 0 低四位是方向键帽子开关（下方单独展开），
  *  面键就是私有格式的四个键位（Square 左、Cross 下、Circle 右、Triangle 上）；
  *  Create 与 Options 填分享与选项位，PS 键填主页位，触摸板按下填触摸板位，
- *  DualSense 的静音键填静音位。 */
+ *  DualSense 的静音键填静音位；第三字节的高两位是 DualSense Edge 的两颗背键
+ *  （实测抓包：bit6 左、bit7 右），填进 L4 / R4，目标侧按侧折进 GL / GR。
+ *  Edge 的左右 Fn 键（同一字节 bit4 / bit5）本轮不映射——它们兼作配置档
+ *  切换的组合修饰键。DS4 没有这些按键，对应位按公开资料恒为 0。 */
 static const uint32_t s_ps_btn_map[24] = {
     0, 0, 0, 0,
     PAD_BTN_SQUARE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_TRIANGLE,
     PAD_BTN_LB, PAD_BTN_RB, 0, 0,
     PAD_BTN_SHARE, PAD_BTN_OPT, PAD_BTN_LSTICK, PAD_BTN_RSTICK,
     PAD_BTN_HOME, PAD_BTN_TOUCHPAD, PAD_BTN_MUTE, 0,
-    0, 0, 0, 0,
+    0, 0, PAD_BTN_L4, PAD_BTN_R4,
 };
 
 /**
@@ -110,10 +113,10 @@ static const pad_layout_t s_layouts[] = {
         .btn_map = s_xbox_btn_map,
     },
     {
-        /* DualShock 4 / DualSense 有线（Report ID 0x01）：面键、摇杆、扳机、
-         * 触摸板按下与静音键（DualSense 才有）的位置两者一致；电量、运动与
-         * 触摸板坐标的偏移按 DualShock 4 的资料填，DualSense 这几处不同，
-         * 待抓包后按 PID 分行（见 ROADMAP 的家族表回填）。 */
+        /* DualShock 4 有线（Report ID 0x01）：面键、摇杆、扳机、触摸板按下与
+         * 静音键的位置按公开资料填。DualSense 有线同样报 0x01，但字段偏移与
+         * DS4 不同（DualSense 在扳机之后多了序号字节），要先给家族表加上 PID
+         * 维度、再按实测抓包登记，本行目前只保证 DS4（见 ROADMAP 的家族表回填）。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_USB,
         .report_id = 0x01,
@@ -135,7 +138,7 @@ static const pad_layout_t s_layouts[] = {
     },
     {
         /* DualShock 4 蓝牙（Report ID 0x11）：比有线多两个前导字节。
-         * DualSense 蓝牙的 Report ID 与 DS4 不同（公开资料为 0x31），本轮未登记。 */
+         * DualSense 蓝牙另报 0x31，布局见本表下一行。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_BT,
         .report_id = 0x11,
@@ -152,6 +155,32 @@ static const pad_layout_t s_layouts[] = {
         .stick_style = PAD_STICK_U8,
         .caps = PAD_CAP_MOTION | PAD_CAP_TOUCHPAD | PAD_CAP_TRIGGER_ANALOG |
                 PAD_CAP_RUMBLE | PAD_CAP_BATTERY | PAD_CAP_MIC,
+        .invert_y = true,
+        .btn_map = s_ps_btn_map,
+    },
+    {
+        /* DualSense 与 DualSense Edge 蓝牙（Report ID 0x31）：比 DS4 蓝牙的
+         * 0x11 布局整体后移一位，位序与 DS4 相同——第 9 字节低四位是方向键
+         * 帽子开关、高四位是面键；第 10 字节是肩键、Create/Options 与摇杆按下；
+         * 第 11 字节是 PS、触摸板按下与静音键。
+         *
+         * 偏移为 DualSense Edge（054C:0DF2）实测抓包：静止帧第 9 字节读作
+         * 0x08（帽子开关松开）、四轴落在死区内、第 17-22 字节的角速度接近 0
+         * 而加速度有一轴约 1 g。触摸板每点 4 字节、电量字节与 DS4 不同，两处
+         * 都还没核对，本轮不登记（见 ROADMAP 的家族表回填）。 */
+        .family = PAD_FAMILY_PS,
+        .conn = PAD_CONN_BT,
+        .report_id = 0x31,
+        .buttons_off = 9,
+        .buttons_bytes = 3,
+        .hat_off = 9,
+        .trigger_off = {6, 7},
+        .stick_off = {2, 3, 4, 5},
+        .touch_off = PAD_OFF_NONE,
+        .motion_off = 17,
+        .battery_off = PAD_OFF_NONE,
+        .stick_style = PAD_STICK_U8,
+        .caps = PAD_CAP_MOTION | PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = s_ps_btn_map,
     },

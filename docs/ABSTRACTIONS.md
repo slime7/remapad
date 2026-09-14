@@ -248,11 +248,11 @@ sequenceDiagram
 | `PAD_BTN_SHARE`（分享） | 分享键（Series 手柄） | Create / 分享 | 未登记，走兜底 | `NS2_BTN_CAPTURE`（截图） |
 | `PAD_BTN_MUTE`（静音） | 无 | DualSense 静音键 | 未登记，走兜底 | `NS2_BTN_C`（C 键） |
 | `PAD_BTN_DPAD_*` | 十字键 | 十字键（帽子开关展开） | 未登记，走兜底 | `NS2_BTN_DPAD_*` |
-| `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键 / 背键 | 无 | 未登记，走兜底 | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
+| `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键 / 背键 | DualSense Edge 背键（L4 / R4） | 未登记，走兜底 | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
 | 扳机模拟量 ≥ 2048（50%） | LT / RT | L2 / R2 | 未登记，走兜底 | `NS2_BTN_ZL` / `NS2_BTN_ZR` |
 | `PAD_AXIS_LX` / `LY` / `RX` / `RY`（0-4095，中位 2048） | 左右摇杆（有符号 16 位） | 左右摇杆（单字节） | 未登记，走兜底 | 12 位打包的摇杆字段 |
 
-家族表的偏移初值取自公开资料，落地时用 `pc/bridge.py --dump` 抓原始报告核对后再固化；Steam 原生布局未抓包，暂时走兜底并在能力位里如实标记。
+家族表的偏移初值取自公开资料，落地时用 `pc/bridge.py --dump` 抓原始报告核对后再固化（DualSense 蓝牙的 0x31 行已按 DualSense Edge 实测核对并单独登记）；Steam 原生布局未抓包，暂时走兜底并在能力位里如实标记。
 
 ## UI 图元与资源
 

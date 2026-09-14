@@ -211,6 +211,149 @@ static void family_detection_and_steam_gap(void)
     CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, PAD_CAP_FALLBACK_LAYOUT);
 }
 
+/**
+ * DualSense 蓝牙（Report ID 0x31）空闲帧：字节取自 pc/bridge.py --dump 的实测
+ * 报告，第 9 字节读作 0x08，正是方向键帽子开关的松开值、面键位全为 0，
+ * 因此按键位图从第 9 字节起、四轴从第 2 字节起。
+ */
+static const uint8_t kDualSenseBtIdle[64] = {
+    0x31, 0xA1, 0x7F, 0x7A, 0x7F, 0x7D, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00, 0xAA, 0x5D,
+    0xDB, 0xD2, 0xFD, 0xFF, 0xFE, 0xFF, 0x01, 0x00, 0x75, 0xFF, 0x99, 0x1F, 0xA7, 0x04, 0xE0,
+    0x53, 0x1D, 0x19, 0x0E, 0x88, 0x3E, 0x90, 0x2F, 0x80, 0x00, 0x00, 0x00, 0x52, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x1C, 0xA0, 0x08, 0x00, 0x09, 0x00, 0x00, 0xDE, 0x41, 0x87,
+    0xBE, 0x41, 0xCA, 0xF4,
+};
+
+static pad_report_t dualsense_bt_report(void)
+{
+    pad_report_t report;
+    memset(&report, 0, sizeof(report));
+    report.family = PAD_FAMILY_PS;
+    report.conn = PAD_CONN_BT;
+    report.vid = 0x054C;
+    report.pid = 0x0DF2; /* DualSense Edge */
+    report.report_id = 0x31;
+    report.len = (uint8_t)sizeof(kDualSenseBtIdle);
+    memcpy(report.data, kDualSenseBtIdle, sizeof(kDualSenseBtIdle));
+    return report;
+}
+
+static void dualsense_bt_buttons_map_by_position(void)
+{
+    pad_report_t report = dualsense_bt_report();
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    /* 空闲帧：没有按键、四轴都在死区内回到中位、扳机松开，且不走兜底布局。 */
+    CHECK_EQ(state.family, PAD_FAMILY_PS);
+    CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
+    CHECK_EQ(state.buttons, 0);
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
+    CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_CENTER);
+    CHECK_EQ(state.axis[PAD_AXIS_RX], PAD_AXIS_CENTER);
+    CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_CENTER);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MIN);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_R], PAD_AXIS_MIN);
+
+    /* 面键按位置：物理 ✕ 下、○ 右、□ 左、△ 上（第 9 字节的高四位）。 */
+    report.data[9] = 0x28;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CROSS);
+    report.data[9] = 0x48;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CIRCLE);
+    report.data[9] = 0x18;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_SQUARE);
+    report.data[9] = 0x88;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_TRIANGLE);
+
+    /* 肩键、Create、Options 与摇杆按下在第 10 字节。 */
+    report.data[9] = 0x08;
+    report.data[10] = 0x73;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_LB | PAD_BTN_RB | PAD_BTN_SHARE | PAD_BTN_OPT | PAD_BTN_LSTICK));
+    report.data[10] = 0x80;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_RSTICK);
+
+    /* PS、触摸板按下与 DualSense 的静音键在第 11 字节。 */
+    report.data[10] = 0x00;
+    report.data[11] = 0x07;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_HOME | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
+
+    /* 帽子开关：向上只出方向键上，右上同时置两位。 */
+    report.data[11] = 0x00;
+    report.data[9] = 0x00;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons & (PAD_BTN_DPAD_UP | PAD_BTN_DPAD_DOWN | PAD_BTN_DPAD_LEFT |
+                              PAD_BTN_DPAD_RIGHT),
+             (uint32_t)PAD_BTN_DPAD_UP);
+    report.data[9] = 0x01;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons & (PAD_BTN_DPAD_UP | PAD_BTN_DPAD_RIGHT),
+             (uint32_t)(PAD_BTN_DPAD_UP | PAD_BTN_DPAD_RIGHT));
+}
+
+static void dualsense_bt_sticks_triggers_and_motion(void)
+{
+    pad_report_t report = dualsense_bt_report();
+    report.data[2] = 0x00; /* LX 全左 */
+    report.data[3] = 0xFF; /* LY 全下：报告里 0 在上、255 在下，解析侧翻正 */
+    report.data[4] = 0x7F; /* RX 落在死区内 */
+    report.data[5] = 0x00; /* RY 全上 */
+    report.data[6] = 0xFF; /* L2 全按 */
+    report.data[7] = 0x80; /* R2 半按 */
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_MIN);
+    CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_MIN);
+    CHECK_EQ(state.axis[PAD_AXIS_RX], PAD_AXIS_CENTER);
+    CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_MAX);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MAX);
+    CHECK(state.trigger[PAD_TRIGGER_R] > 2000);
+    CHECK(state.trigger[PAD_TRIGGER_R] < 2100);
+
+    /* 运动字段：静止帧里三轴角速度接近 0、加速度有一轴约 1 g，偏移对不上不会成立。 */
+    CHECK_EQ(state.caps & PAD_CAP_MOTION, PAD_CAP_MOTION);
+    CHECK(state.motion.present);
+    for (size_t i = 0; i < 3; i++) {
+        CHECK(state.motion.gyro[i] > -200);
+        CHECK(state.motion.gyro[i] < 200);
+    }
+    CHECK(state.motion.accel[1] > 7000);
+    CHECK(state.motion.accel[1] < 9000);
+}
+
+static void dualsense_edge_back_buttons_map_to_gl_gr(void)
+{
+    pad_report_t report = dualsense_bt_report();
+    pad_state_t state;
+
+    /* 第 11 字节高两位是 DualSense Edge 的两颗背键（实测抓包：左 0x40、右 0x80）。 */
+    report.data[11] = 0x40;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_L4);
+
+    report.data[11] = 0x80;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_R4);
+
+    /* 背键可与 PS / 触摸板 / 静音键同时按下；目标侧把 L4 / R4 折进 GL / GR。 */
+    report.data[11] = 0xC7;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_L4 | PAD_BTN_R4 | PAD_BTN_HOME | PAD_BTN_TOUCHPAD |
+                        PAD_BTN_MUTE));
+
+    /* Fn 键（bit4 / bit5）本轮不映射：按住不出任何按键位。 */
+    report.data[11] = 0x30;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, 0);
+}
+
 HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"Xbox 面键按位置映射（物理 A 下 → ✕、物理 B 右 → ○）",
                  xbox_face_buttons_map_by_position},
@@ -219,4 +362,10 @@ HOST_TEST_SUITE(suite_pad_device, "pad_device",
                  ps_report_parses_hat_face_buttons_and_battery},
                 {"摇杆死区与 Y 轴方向", stick_deadzone_and_y_direction},
                 {"未识别型号回落 Xbox 布局并标记兜底", unknown_model_falls_back_to_xbox_layout},
-                {"VID 判定家族（Steam 布局未定，走兜底）", family_detection_and_steam_gap});
+                {"VID 判定家族（Steam 布局未定，走兜底）", family_detection_and_steam_gap},
+                {"DualSense 蓝牙按键不再乱配（面键、方向键、肩键、静音键）",
+                 dualsense_bt_buttons_map_by_position},
+                {"DualSense 蓝牙摇杆、扳机与运动字段量程",
+                 dualsense_bt_sticks_triggers_and_motion},
+                {"DualSense Edge 背键能当 GL / GR 用",
+                 dualsense_edge_back_buttons_map_to_gl_gr});
