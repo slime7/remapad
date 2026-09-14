@@ -52,9 +52,14 @@ enum {
     PAD_BTN_RB = 1u << 5,
     PAD_BTN_LSTICK = 1u << 6,
     PAD_BTN_RSTICK = 1u << 7,
-    PAD_BTN_BACK = 1u << 8,
-    PAD_BTN_START = 1u << 9,
-    PAD_BTN_GUIDE = 1u << 10,
+    /** 触摸板按下：Xbox 的 View（select）与 PS 的触摸板按下都落在这里，
+     *  目标侧作减号。 */
+    PAD_BTN_TOUCHPAD = 1u << 8,
+    /** 选项键：Xbox 的 Menu 与 PS 的 Options 都落在这里，目标侧作加号。 */
+    PAD_BTN_OPT = 1u << 9,
+    /** 主页键：Xbox 的西瓜键与 PS 的 PS 键都落在这里。 */
+    PAD_BTN_HOME = 1u << 10,
+    /** 分享键：Xbox 的分享键与 PS 的 Create 都落在这里，目标侧作截图。 */
     PAD_BTN_SHARE = 1u << 11,
     PAD_BTN_DPAD_UP = 1u << 12,
     PAD_BTN_DPAD_DOWN = 1u << 13,
@@ -64,11 +69,8 @@ enum {
     PAD_BTN_L5 = 1u << 17,
     PAD_BTN_R4 = 1u << 18,
     PAD_BTN_R5 = 1u << 19,
-    PAD_BTN_TOUCHPAD = 1u << 20,
-    PAD_BTN_MUTE = 1u << 21,
-    /** 目标专属键：NS2 的 C 键在通用手柄上没有对应键，单独留一位，
-     *  由映射表或目标侧填。 */
-    PAD_BTN_C = 1u << 22,
+    /** 静音键：只有 PS 的 DualSense 有，目标侧作 C 键。 */
+    PAD_BTN_MUTE = 1u << 20,
 };
 
 /** 轴索引（pad_state_t.axis，顺序固定）。 */

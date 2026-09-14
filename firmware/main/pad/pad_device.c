@@ -44,23 +44,26 @@ typedef struct {
     const uint32_t *btn_map;
 } pad_layout_t;
 
-/** Xbox：bit0-3 方向键、bit4 Start、bit5 Back、bit6/7 按下摇杆、
- *  bit8/9 肩键、bit10 Guide、bit12-15 面键（物理 A 在下、B 在右）。 */
+/** Xbox：bit0-3 方向键、bit4 Menu、bit5 View（select）、bit6/7 按下摇杆、
+ *  bit8/9 肩键、bit10 西瓜键、bit11 分享键（Series 手柄才有，位置按公开
+ *  资料填，待抓包核对）、bit12-15 面键（物理 A 在下、B 在右）。 */
 static const uint32_t s_xbox_btn_map[16] = {
     PAD_BTN_DPAD_UP, PAD_BTN_DPAD_DOWN, PAD_BTN_DPAD_LEFT, PAD_BTN_DPAD_RIGHT,
-    PAD_BTN_START, PAD_BTN_BACK, PAD_BTN_LSTICK, PAD_BTN_RSTICK,
-    PAD_BTN_LB, PAD_BTN_RB, PAD_BTN_GUIDE, 0,
+    PAD_BTN_OPT, PAD_BTN_TOUCHPAD, PAD_BTN_LSTICK, PAD_BTN_RSTICK,
+    PAD_BTN_LB, PAD_BTN_RB, PAD_BTN_HOME, PAD_BTN_SHARE,
     PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_SQUARE, PAD_BTN_TRIANGLE,
 };
 
 /** PS：字节 0 低四位是方向键帽子开关（下方单独展开），
- *  面键就是私有格式的四个键位（Square 左、Cross 下、Circle 右、Triangle 上）。 */
+ *  面键就是私有格式的四个键位（Square 左、Cross 下、Circle 右、Triangle 上）；
+ *  Create 与 Options 填分享与选项位，PS 键填主页位，触摸板按下填触摸板位，
+ *  DualSense 的静音键填静音位。 */
 static const uint32_t s_ps_btn_map[24] = {
     0, 0, 0, 0,
     PAD_BTN_SQUARE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_TRIANGLE,
     PAD_BTN_LB, PAD_BTN_RB, 0, 0,
-    PAD_BTN_SHARE, PAD_BTN_START, PAD_BTN_LSTICK, PAD_BTN_RSTICK,
-    PAD_BTN_GUIDE, PAD_BTN_TOUCHPAD, PAD_BTN_MUTE, 0,
+    PAD_BTN_SHARE, PAD_BTN_OPT, PAD_BTN_LSTICK, PAD_BTN_RSTICK,
+    PAD_BTN_HOME, PAD_BTN_TOUCHPAD, PAD_BTN_MUTE, 0,
     0, 0, 0, 0,
 };
 

@@ -35,17 +35,18 @@ typedef struct {
 } debug_key_t;
 
 static const debug_key_t s_debug_keys[] = {
-    /* 键名沿用 Nintendo 侧叫法（目标主机是 NS2），掩码写私有格式的 PS 键名：
-       a 在右、b 在下、x 在上、y 在左。 */
+    /* 键名沿用 Nintendo 侧叫法（目标主机是 NS2），掩码写私有格式的键名：
+       面键按 PS 的位置（a 在右、b 在下、x 在上、y 在左），plus 与 minus 走
+       选项与触摸板位，home 与 capture 走主页与分享位，c 走静音位。 */
     {"a", PAD_BTN_CIRCLE, 250},
     {"b", PAD_BTN_CROSS, 250},
     {"x", PAD_BTN_TRIANGLE, 250},
     {"y", PAD_BTN_SQUARE, 250},
-    {"plus", PAD_BTN_START, 250},
-    {"minus", PAD_BTN_BACK, 250},
-    {"home", PAD_BTN_GUIDE, 250},
+    {"plus", PAD_BTN_OPT, 250},
+    {"minus", PAD_BTN_TOUCHPAD, 250},
+    {"home", PAD_BTN_HOME, 250},
     {"capture", PAD_BTN_SHARE, 250},
-    {"c", PAD_BTN_C, 250},
+    {"c", PAD_BTN_MUTE, 250},
     {"l", PAD_BTN_LB, 250},
     {"r", PAD_BTN_RB, 250},
     {"zl", PAD_BTN_L4, 250},

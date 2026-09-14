@@ -110,14 +110,14 @@ static void shoulders_dpad_and_system_keys(void)
     expect_buttons(PAD_BTN_DPAD_DOWN, 0x03, 0);
     expect_buttons(PAD_BTN_DPAD_LEFT, 0x03, 2);
     expect_buttons(PAD_BTN_DPAD_RIGHT, 0x03, 1);
-    expect_buttons(PAD_BTN_START, 0x02, 6);
-    expect_buttons(PAD_BTN_BACK, 0x03, 6);
-    expect_buttons(PAD_BTN_GUIDE, 0x04, 0);
+    expect_buttons(PAD_BTN_OPT, 0x02, 6);
+    expect_buttons(PAD_BTN_TOUCHPAD, 0x03, 6);
+    expect_buttons(PAD_BTN_HOME, 0x04, 0);
     expect_buttons(PAD_BTN_SHARE, 0x04, 1);
     expect_buttons(PAD_BTN_LSTICK, 0x03, 7);
     expect_buttons(PAD_BTN_RSTICK, 0x02, 7);
-    /* 目标专属键：主机上没有对应键，只有目标侧会填。 */
-    expect_buttons(PAD_BTN_C, 0x04, 4);
+    /* 静音键只有 PS 的 DualSense 有，目标侧作 C 键。 */
+    expect_buttons(PAD_BTN_MUTE, 0x04, 4);
 }
 
 static void back_buttons_fold_into_gl_and_gr(void)
@@ -240,7 +240,7 @@ static void unknown_model_still_reports_keys(void)
 HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"面键按位置映射到 NS2 的 A/B/X/Y（私有用 PS 键名）",
                  face_buttons_keep_position_semantics},
-                {"肩键、方向键、系统键与 C 键", shoulders_dpad_and_system_keys},
+                {"肩键、方向键、选择类与系统键", shoulders_dpad_and_system_keys},
                 {"四颗背键按侧折进 GL / GR", back_buttons_fold_into_gl_and_gr},
                 {"扳机按 50% 阈值数字化成 ZL / ZR", analog_triggers_digitize_at_half},
                 {"摇杆原样进报文且中位正确", sticks_keep_values_and_center},

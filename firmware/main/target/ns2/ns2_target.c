@@ -29,10 +29,10 @@ static const struct {
     {PAD_BTN_RB, NS2_BTN_R},
     {PAD_BTN_LSTICK, NS2_BTN_LSTICK},
     {PAD_BTN_RSTICK, NS2_BTN_RSTICK},
-    {PAD_BTN_BACK, NS2_BTN_MINUS},
-    {PAD_BTN_START, NS2_BTN_PLUS},
-    {PAD_BTN_GUIDE, NS2_BTN_HOME},
-    {PAD_BTN_SHARE, NS2_BTN_CAPTURE},
+    {PAD_BTN_TOUCHPAD, NS2_BTN_MINUS}, /* 触摸板按下 / View → 减号 */
+    {PAD_BTN_OPT, NS2_BTN_PLUS},       /* Options / Menu → 加号 */
+    {PAD_BTN_HOME, NS2_BTN_HOME},      /* PS 键 / 西瓜键 → Home */
+    {PAD_BTN_SHARE, NS2_BTN_CAPTURE},  /* 分享 / Create → 截图 */
     {PAD_BTN_DPAD_UP, NS2_BTN_DPAD_UP},
     {PAD_BTN_DPAD_DOWN, NS2_BTN_DPAD_DOWN},
     {PAD_BTN_DPAD_LEFT, NS2_BTN_DPAD_LEFT},
@@ -42,7 +42,7 @@ static const struct {
     {PAD_BTN_L5, NS2_BTN_GL},
     {PAD_BTN_R4, NS2_BTN_GR},
     {PAD_BTN_R5, NS2_BTN_GR},
-    {PAD_BTN_C, NS2_BTN_C},
+    {PAD_BTN_MUTE, NS2_BTN_C},         /* 静音 → C 键 */
 };
 
 static pad_target_facts_t s_facts;

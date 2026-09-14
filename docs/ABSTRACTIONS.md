@@ -178,7 +178,7 @@ classDiagram
     pad_feedback_t ..> pad_state_t : 反向链路（目标 → 输入设备）
 ```
 
-- 按键位按位置固定、键名沿用 PS（`PAD_BTN_TRIANGLE` 上、`PAD_BTN_CIRCLE` 右、`PAD_BTN_CROSS` 下、`PAD_BTN_SQUARE` 左）：Xbox 与 Nintendo 的 A/B/X/Y 标签位置不同，用 PS 名可以避免「A 到底指哪个键」的混淆，家族表把各家的物理键填进对应位置；背键与目标专属键（NS2 的 C 键）用扩展位占位。
+- 按键位按位置固定、键名沿用 PS（`PAD_BTN_TRIANGLE` 上、`PAD_BTN_CIRCLE` 右、`PAD_BTN_CROSS` 下、`PAD_BTN_SQUARE` 左）：Xbox 与 Nintendo 的 A/B/X/Y 标签位置不同，用 PS 名可以避免「A 到底指哪个键」的混淆，家族表把各家的物理键填进对应位置；背键与静音键（目标侧作 C 键）用扩展位占位。
 - 四轴与双扳机统一为 0-4095 整数、摇杆中位 2048，Y 轴统一成「上为正」，8% 死区在解析段套用并把剩余行程重新铺满；扳机保持模拟量，是否数字化由目标决定。
 - `caps` 标注这一帧里哪些字段真的来自设备（运动、触摸板、模拟扳机、背键、麦克风、电池、震动）；型号未识别时回落 Xbox 布局并置 `PAD_CAP_FALLBACK_LAYOUT`，结果仍可用但字段可能错位。
 - 目标只消费自己 `caps` 范围内的字段：不在集合里的部分（IMU、触摸板、麦克风）不映射，能力集合变化时提示一次，不逐帧刷日志。
@@ -224,14 +224,14 @@ sequenceDiagram
 | `PAD_BTN_SQUARE`（□ 左） | X | Square | 未登记，走兜底 | `NS2_BTN_Y` |
 | `PAD_BTN_LB` / `PAD_BTN_RB` | LB / RB | L1 / R1 | 未登记，走兜底 | `NS2_BTN_L` / `NS2_BTN_R` |
 | `PAD_BTN_LSTICK` / `PAD_BTN_RSTICK` | 左/右摇杆按下 | L3 / R3 | 未登记，走兜底 | `NS2_BTN_LSTICK` / `NS2_BTN_RSTICK` |
-| `PAD_BTN_START` / `PAD_BTN_BACK` | Menu / View | Options / Share | 未登记，走兜底 | `NS2_BTN_PLUS` / `NS2_BTN_MINUS` |
-| `PAD_BTN_GUIDE` / `PAD_BTN_SHARE` | Guide / Share | PS 键 / 无 | 未登记，走兜底 | `NS2_BTN_HOME` / `NS2_BTN_CAPTURE` |
-| `PAD_BTN_TOUCHPAD`（触摸板按下） | 无 | 触摸板按下 | 未登记，走兜底 | 无对应键，不进报文 |
-| `PAD_BTN_MUTE`（静音） | 无 | DualSense 静音键 | 未登记，走兜底 | 无对应键，不进报文 |
+| `PAD_BTN_TOUCHPAD`（触摸板按下） | View（select） | 触摸板按下 | 未登记，走兜底 | `NS2_BTN_MINUS`（减号） |
+| `PAD_BTN_OPT`（选项） | Menu | Options | 未登记，走兜底 | `NS2_BTN_PLUS`（加号） |
+| `PAD_BTN_HOME`（主页） | 西瓜键 | PS 键 | 未登记，走兜底 | `NS2_BTN_HOME` |
+| `PAD_BTN_SHARE`（分享） | 分享键（Series 手柄） | Create / 分享 | 未登记，走兜底 | `NS2_BTN_CAPTURE`（截图） |
+| `PAD_BTN_MUTE`（静音） | 无 | DualSense 静音键 | 未登记，走兜底 | `NS2_BTN_C`（C 键） |
 | `PAD_BTN_DPAD_*` | 十字键 | 十字键（帽子开关展开） | 未登记，走兜底 | `NS2_BTN_DPAD_*` |
 | `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键 / 背键 | 无 | 未登记，走兜底 | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
 | 扳机模拟量 ≥ 2048（50%） | LT / RT | L2 / R2 | 未登记，走兜底 | `NS2_BTN_ZL` / `NS2_BTN_ZR` |
-| `PAD_BTN_C` | 无 | 无 | 无 | `NS2_BTN_C`（目标专属键） |
 | `PAD_AXIS_LX` / `LY` / `RX` / `RY`（0-4095，中位 2048） | 左右摇杆（有符号 16 位） | 左右摇杆（单字节） | 未登记，走兜底 | 12 位打包的摇杆字段 |
 
 家族表的偏移初值取自公开资料，落地时用 `pc/bridge.py --dump` 抓原始报告核对后再固化；Steam 原生布局未抓包，暂时走兜底并在能力位里如实标记。

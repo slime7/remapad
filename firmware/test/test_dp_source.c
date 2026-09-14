@@ -109,37 +109,37 @@ static void registration_limit(void)
     /* 第四个源生效，第五个没有。 */
     CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS | PAD_BTN_DPAD_UP));
 
-    dp_source_inject(PAD_BTN_GUIDE, 100);
+    dp_source_inject(PAD_BTN_HOME, 100);
     dp_source_sample(&state);
     /* 注入叠加在合成结果之上。 */
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS | PAD_BTN_DPAD_UP | PAD_BTN_GUIDE));
+             (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS | PAD_BTN_DPAD_UP | PAD_BTN_HOME));
 }
 
 static void debug_injection_holds_then_releases(void)
 {
     /* dp_task 周期 5ms：hold 10ms ⇒ 保持 2 次采样。 */
-    dp_source_inject(PAD_BTN_GUIDE, 10);
+    dp_source_inject(PAD_BTN_HOME, 10);
     CHECK(dp_source_inject_active());
 
     pad_state_t state;
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_GUIDE, PAD_BTN_GUIDE);
+    CHECK_EQ(state.buttons & PAD_BTN_HOME, PAD_BTN_HOME);
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_GUIDE, PAD_BTN_GUIDE);
+    CHECK_EQ(state.buttons & PAD_BTN_HOME, PAD_BTN_HOME);
 
     /* 保持期结束：按键不再出现，注入标记也清空。 */
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_GUIDE, 0);
+    CHECK_EQ(state.buttons & PAD_BTN_HOME, 0);
     CHECK(!dp_source_inject_active());
 
     /* 过短的 hold 会被抬到至少一个任务周期，避免点不动。
-     * 这里挑一个没有输入源产出的键（C），否则断言分不清是注入还是源给的。 */
-    dp_source_inject(PAD_BTN_C, 0);
+     * 这里挑一个没有输入源产出的键（静音位），否则断言分不清是注入还是源给的。 */
+    dp_source_inject(PAD_BTN_MUTE, 0);
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_C, PAD_BTN_C);
+    CHECK_EQ(state.buttons & PAD_BTN_MUTE, PAD_BTN_MUTE);
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_C, 0);
+    CHECK_EQ(state.buttons & PAD_BTN_MUTE, 0);
 
     /* 上限为 60000ms（12000 次采样）：超过旧的 5s 上限仍按住，便于长按
      * 验证与主机 Grip 界面的组合确认。 */
@@ -156,17 +156,17 @@ static void debug_injection_holds_then_releases(void)
 
 static void debug_release_clears_injection(void)
 {
-    dp_source_inject(PAD_BTN_GUIDE, 60000);
+    dp_source_inject(PAD_BTN_HOME, 60000);
 
     pad_state_t state;
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_GUIDE, PAD_BTN_GUIDE);
+    CHECK_EQ(state.buttons & PAD_BTN_HOME, PAD_BTN_HOME);
 
     /* 提前释放：注入标记与按键同时清空。 */
     dp_source_inject_release();
     CHECK(!dp_source_inject_active());
     dp_source_sample(&state);
-    CHECK_EQ(state.buttons & PAD_BTN_GUIDE, 0);
+    CHECK_EQ(state.buttons & PAD_BTN_HOME, 0);
 }
 
 static void debug_stick_injection(void)
@@ -232,13 +232,14 @@ static void debug_key_lookup(void)
 
     CHECK(dp_source_key_lookup("ls", 2, &mask, &hold_ms));
     CHECK_EQ(mask, PAD_BTN_LSTICK);
+    /* 键名 c 是 NS2 的 C 键，掩码落到私有格式的静音位（PS 的静音键）。 */
     CHECK(dp_source_key_lookup("c", 1, &mask, &hold_ms));
-    CHECK_EQ(mask, PAD_BTN_C);
+    CHECK_EQ(mask, PAD_BTN_MUTE);
     /* Nintendo 叫法落到私有格式的位置语义键上。 */
     CHECK(dp_source_key_lookup("gl", 2, &mask, &hold_ms));
     CHECK_EQ(mask, PAD_BTN_L4);
     CHECK(dp_source_key_lookup("home", 4, &mask, &hold_ms));
-    CHECK_EQ(mask, PAD_BTN_GUIDE);
+    CHECK_EQ(mask, PAD_BTN_HOME);
 
     /* 未命中：未知名字、空名字、前缀都不能改写输出。 */
     mask = 0;

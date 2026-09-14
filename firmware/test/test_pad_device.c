@@ -114,7 +114,7 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.family, PAD_FAMILY_PS);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_LB | PAD_BTN_RB | PAD_BTN_START | PAD_BTN_GUIDE |
+             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_LB | PAD_BTN_RB | PAD_BTN_OPT | PAD_BTN_HOME |
                         PAD_BTN_TOUCHPAD));
     CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
     CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MAX);
@@ -129,8 +129,8 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     /* DualSense 在 PS 键与触摸板按下之外还多一个静音位（byte7 bit2）。 */
     report.data[7] = 0x07;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.buttons & (PAD_BTN_GUIDE | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE),
-             (uint32_t)(PAD_BTN_GUIDE | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
+    CHECK_EQ(state.buttons & (PAD_BTN_HOME | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE),
+             (uint32_t)(PAD_BTN_HOME | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
     report.data[7] = 0x03;
 
     /* 帽子开关：向上时只出方向键上。 */
