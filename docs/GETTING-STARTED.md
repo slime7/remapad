@@ -12,10 +12,11 @@
 | PocketJS compiler | 仓库内的 `ui/vendor/pocketjs` 快照 | 提供 `tools/pocket.ts` 与 ESP-IDF host profile 支持；npm 上发布的 0.11.0 尚不含该支持 |
 | Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 仅在升级组件、重新生成 ESP32-S3 原生归档时需要 |
 | Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
+| uv | 当前稳定版 | 运行 `pc/` 下的桥接程序（`cd pc ; uv run python bridge.py -p COMx`）；第三方依赖只有 `hidapi`，由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`，解释器要 3.10 或更高，uv 找不到会自己下载 |
 | ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
-USB 输入设备、目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 Web 预览可以交互就认为真实 USB 或 BLE 链路已经可用。
+目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围。PC 手柄经桥接程序进入设备这条路径已经可用（见 [pc/README.md](../pc/README.md)），USB host 直插（手柄插在板卡上）尚未实现。不要因为 Web 预览可以交互就认为真实 BLE 链路已经可用。
 
 板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)、[ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，进度见 [ROADMAP.md](ROADMAP.md)）但主机互操作待实机验证；USB 输入与 IMU/RTC 等其余外设仍待实现（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
 
@@ -231,7 +232,7 @@ python scripts/uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完
 
 PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。软件关机走系统页「关机」按钮（bridge 的 `powerOff` 命令，串口对应 `poweroff`）：电池供电下释放锁存即断电，USB 供电下锁存被旁路、关不掉，固件重新锁存后界面提示「USB 供电下无法关机，请拔线后再试」。
 
-用户设置（背光亮度、手柄类型与配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。USB 输入与桥接模式的推进方案（当前仅架构预留）见 [usb-input-plan.md](usb-input-plan.md)。
+用户设置（背光亮度、手柄类型与配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmware/main/input/`，PC 侧见 [pc/README.md](../pc/README.md)；USB host 直插仍是架构预留，推进方案见 [usb-input-plan.md](usb-input-plan.md)。
 
 ## 关键文件
 
@@ -245,8 +246,11 @@ PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**�
 - [firmware/main/config/app_config.c](../firmware/main/config/app_config.c)：用户设置 NVS 持久化（亮度 / 连接模式 / 手柄身份）。
 - [firmware/main/console/cli.c](../firmware/main/console/cli.c)：串口行命令 CLI（USB-Serial/JTAG）。
 - [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按切模式）。
-- [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制，USB 源预留）。
-- [firmware/main/ns2/ns2_output.c](../firmware/main/ns2/ns2_output.c)：NS2 输出封装（按键构建报告、结构化反馈、电池、amiibo 预置）。
+- [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制；桥接源在 `input/`，USB host 源预留）。
+- [firmware/main/input/input_link.c](../firmware/main/input/input_link.c)：桥接链路的设备侧（USB-Serial/JTAG 唯一读取者、桥接帧与 CLI 文本分流）。
+- [firmware/main/pad/pad_device.c](../firmware/main/pad/pad_device.c)：私有手柄格式与家族布局表（各家报告的字段偏移、按键位置映射与轴归一）。
+- [firmware/main/target/target.c](../firmware/main/target/target.c) 与 [firmware/main/target/ns2/](../firmware/main/target/ns2)：目标编码接口与 NS2 输出封装（按键构建报告、结构化反馈、电池、amiibo 预置）。
+- [pc/bridge.py](../pc/bridge.py) 与 [pc/link.py](../pc/link.py)：PC 侧桥接程序（hidapi 读手柄 → 桥接帧，`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。
 - [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
@@ -256,14 +260,15 @@ PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**�
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 - [docs/hardware.md](hardware.md)：目标板卡的 SoC/存储、屏幕、触摸、外设、GPIO 分配和板级注意事项。
-- [docs/usb-input-plan.md](usb-input-plan.md)：USB 输入接收与桥接模式方案预案（仅架构）。
+- [docs/usb-input-plan.md](usb-input-plan.md)：USB host 直插的方案预案（桥接路径已落地，见 [pc/README.md](../pc/README.md)）。
 
 ## 最终产品数据面（当前规划）
 
 后续固件工作按以下顺序拆分（进度跟踪见 [ROADMAP.md](ROADMAP.md)，BLE 链路先行、USB 输入殿后）：
 
 1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（未开始，需先确认 VBUS 供电与 USB mux 切换）
-2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。（已完成，`firmware/main/ns2/`）
+2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。（已完成，按 `firmware/main/input/` → `pad/` → `target/` 三段划分，见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）
+3. PC 手柄经桥接程序与串口帧进入设备，映射与编码走同一套 `pad/` + `target/`。（设备侧与 PC 侧代码已完成，实机验收与家族表抓包核对待做）
 3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。（代码完成，`firmware/main/ble/` + `firmware/main/dp/`，合成源静置、按键由调试页注入，实机互操作待验证）
 4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。（配对/回连/NVS 凭证代码完成，唤醒广播顺延；震动解析记录，M5 转发 USB）
 5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。（配对/连接与电池电量已真实化；充电状态为电压趋势推断值）

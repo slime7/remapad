@@ -63,11 +63,11 @@ flowchart LR
     Renderer --> Strip[RGB565 damage strip]
     Strip --> DisplayBSP[panel_transfer：esp_lcd SPI EDMA]
 
-    USB[USB 接收] --> DataPlane[产品控制器数据面]
-    DataPlane --> Normalize[输入规范化]
-    Normalize --> Encoder[NS2 报告编码]
-    Encoder --> BLE[BLE 广播 / GATT / 配对]
-    DataPlane --> State[连接与配对状态]
+    Input["PC 桥接 / USB host 输入"] --> Recv["input/ 接收段"]
+    Recv --> Pad["pad/ 处理段：家族表 + 私有格式"]
+    Pad --> Encoder["target/ 转换段：NS2 报告编码"]
+    Encoder --> BLE["BLE 广播 / GATT / 配对"]
+    Recv --> State["连接与配对状态"]
     State -.低频状态.-> UI
 ```
 
@@ -88,62 +88,38 @@ flowchart LR
 
 ## 双工作区结构
 
-```text
-remapad/
-├── AGENTS.md
-├── package.json
-├── pnpm-workspace.yaml
-├── scripts/
-│   ├── create_adr.py
-│   ├── pocketjs.mjs         # 官方工具链与触摸预览入口
-│   └── preview-server.mjs   # 触摸预览的静态服务器
-├── patches/                 # 上游 PocketJS 对账记录与发布说明
-├── docs/
-│   ├── VISION.md
-│   ├── ARCHITECTURE.md
-│   ├── ABSTRACTIONS.md
-│   ├── GETTING-STARTED.md
-│   ├── controller.md
-│   └── adr/
-├── ui/
-│   ├── package.json
-│   ├── pocket.json
-│   ├── jsconfig.json
-│   ├── vendor/pocketjs/     # 固定的官方编译器与框架快照
-│   └── src/
-│       ├── index.tsx
-│       ├── App.tsx
-│       ├── logo.png 与 spinner-*.svg   # 入口同级的图片资源
-│       └── bridge/           # 产品控制面协议预留
-│   └── preview/              # 触摸屏预览页
-└── firmware/
-    ├── CMakeLists.txt        # ESP-IDF 工程入口
-    ├── pocket.host.json      # ESP32-S3 host profile
-    ├── partitions.csv
-    ├── sdkconfig.defaults
-    ├── components/           # 固定在本仓库的官方 PocketJS ESP-IDF 组件与 S3 原生归档
-    │   ├── pocketjs_package/
-    │   ├── pocketjs_guest/
-    │   ├── pocketjs_ui_core/
-    │   ├── pocketjs_ui_qjs/
-    │   ├── pocketjs_render_rgb565/
-    │   └── pocketjs_runner/   # 官方可选调度组件，当前未接入
-    └── main/
-        ├── CMakeLists.txt
-        ├── idf_component.yml
-        ├── main.c
-        ├── pocketjs_host.c
-        ├── pocketjs_host.h
-        ├── bridge/            # 产品控制面（UI 命令/事件 + 外部队列入口）
-        ├── config/            # 用户设置持久化（NVS：亮度/角色/手柄身份）
-        ├── console/           # 串口 CLI（USB-Serial/JTAG 行命令）
-        ├── drivers/           # panel/backlight/touch BSP 与 battery/pwr_key
-        ├── ns2/               # NS2 报告编码、帧构造与输出封装
-        ├── ble/               # NimBLE 手柄外设、会话与凭证
-        └── dp/                # 数据面任务与输入源抽象
+```mermaid
+flowchart TB
+    Root["remapad/"]
+    Root --> RootFiles["AGENTS.md / package.json / pnpm-workspace.yaml"]
+    Root --> Scripts["scripts/：create_adr.py / pocketjs.mjs（官方工具链与触摸预览入口）/ preview-server.mjs"]
+    Root --> Patches["patches/：上游 PocketJS 对账记录与发布说明"]
+    Root --> PC["pc/：PC 侧桥接程序（hidapi 读手柄 → 桥接帧）"]
+    Root --> Docs["docs/：VISION / ARCHITECTURE / ABSTRACTIONS / GETTING-STARTED / controller / hardware / adr/"]
+    Root --> UI["ui/：PocketJS 前端工作区"]
+    Root --> Firmware["firmware/：ESP-IDF 固件工作区"]
+
+    UI --> UiFiles["package.json / pocket.json / jsconfig.json"]
+    UI --> UiVendor["vendor/pocketjs/：固定的官方编译器与框架快照"]
+    UI --> UiSrc["src/：index.tsx / App.tsx / 入口同级图片资源 / bridge/（控制面协议）"]
+    UI --> UiPreview["preview/：触摸屏预览页"]
+
+    Firmware --> FwRoot["CMakeLists.txt / pocket.host.json / partitions.csv / sdkconfig.defaults"]
+    Firmware --> FwComponents["components/：固定在本仓库的官方 PocketJS ESP-IDF 组件与 S3 原生归档"]
+    Firmware --> FwMain["main/"]
+    FwMain --> MainEntry["main.c / pocketjs_host.c / boot_splash.c / render_accel.c"]
+    FwMain --> MainBridge["bridge/：控制面命令与事件"]
+    FwMain --> MainConfig["config/：NVS 用户设置持久化"]
+    FwMain --> MainConsole["console/：串口 CLI"]
+    FwMain --> MainDrivers["drivers/：panel / touch / backlight / pwr_key / buzzer / battery"]
+    FwMain --> MainInput["input/：接收段（桥接帧与串口接收）"]
+    FwMain --> MainPad["pad/：处理段（私有格式与家族表）"]
+    FwMain --> MainTarget["target/：转换段（目标编码，含 target/ns2/）"]
+    FwMain --> MainBle["ble/：NimBLE 手柄外设、会话与凭证"]
+    FwMain --> MainDp["dp/：数据面任务与输入源抽象"]
 ```
 
-仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/`、`firmware/main/bridge/` 和 `drivers/` 是最终 USB→NS2→BLE 产品控制面的预留接口，当前不在 PocketJS UI runtime 或 ESP-IDF target 的编译源中，不能视为已完成的硬件实现。
+仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；数据面按 `input/`、`pad/`、`target/` 三段划分（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)），其中 USB host 直插仍是架构预留（方案见 [usb-input-plan.md](usb-input-plan.md)）。
 
 UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 50 ms（240×280，成本在 Vue Vapor 的逐节点挂载，不在宿主 op 或样式解析）。`ui/src/App.tsx` 因此在首次渲染里一次挂完七个页面，首屏只在全部建树完成后提交，等待期由固件启动画面覆盖；把建树摊到首帧之后会让首帧后仍有数秒的阻塞帧（切页与滚动都在这段时间里卡住）。切页只翻转各页根节点的 `hidden`，App 没有页面容器层也没有待挂队列，新增页面直接写在 JSX 里（见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
 
@@ -151,13 +127,18 @@ UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 5
 
 ### UI 包
 
-```text
-ui/src + ui/pocket.json + firmware/pocket.host.json
-    │
-    └── 官方 pocket build --host-profile
-            ├── remapad-ui.js
-            ├── remapad-ui.pak
-            └── remapad-ui.pocket
+```mermaid
+flowchart LR
+    Source["ui/src + ui/pocket.json + firmware/pocket.host.json"]
+    Build["官方 pocket build --host-profile"]
+    JS["remapad-ui.js"]
+    Pak["remapad-ui.pak"]
+    Pocket["remapad-ui.pocket"]
+
+    Source --> Build
+    Build --> JS
+    Build --> Pak
+    Build --> Pocket
 ```
 
 应用清单声明应用自身需要的 capability 和视口；host profile 声明设备真实提供的能力。官方 resolver 会检查二者是否兼容，并将 profile hash、host ABI、tick、视口、density 和 presentation 写入构建计划及包 variant。
@@ -201,24 +182,36 @@ QuickJS 的栈守卫判据是 `rt->stack_limit = rt->stack_top - rt->stack_size`
 
 最终功能链路独立于 PocketJS UI runtime：
 
-```text
-USB host 接收
-    │
-    ▼
-输入报告解析与规范化
-    │  统一按键、摇杆、扳机、IMU 和连接状态
-    ▼
-NS2 手柄报告编码
-    │
-    ▼
-BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应
-    │
-    └─ 配对、回连、唤醒和凭证持久化
+```mermaid
+flowchart LR
+    Bridge["PC 桥接（pc/ 桥接程序）"]
+    Host["USB host 手柄（待接入）"]
+
+    subgraph Plane[产品控制器数据面]
+        Recv["input/ 接收段<br/>帧解码 / 串口分帧 / dp_source_t 输入源"]
+        Pad["pad/ 处理段<br/>家族布局表解析与归一，统一按键（位置语义）/ 摇杆 / 扳机 / IMU / 设备标识"]
+        Encode["target/ 转换段<br/>NS2 报告编码（target/ns2/，0x05 / 0x09）"]
+        Recv -->|pad_report_t| Pad
+        Pad -->|pad_state_t| Encode
+    end
+
+    BLE["BLE 外设广播 → GATT 服务 → 输入通知 / 震动与命令响应"]
+    Cred["配对、回连、唤醒与凭证持久化"]
+    Feedback["pad_feedback_t（主机反馈：震动 / 玩家 LED / 触觉采样）"]
+
+    Bridge -->|桥接帧，USB-Serial/JTAG| Recv
+    Host -->|原始报告| Recv
+    Encode --> BLE
+    BLE --> Cred
+    BLE -.-> Feedback
+    Feedback -.-> Bridge
 ```
 
-该数据面应由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，不能让高频 USB 报告经过 UI bridge 或每帧 `pocketjs_ui_turn`。PocketJS UI 只需要读取低频连接/电量/配对状态，并发出开始配对、停止配对、背光等控制命令。
+该数据面由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，高频报告不经过 UI bridge，也不经过每帧 `pocketjs_ui_turn`。PocketJS UI 只读取低频连接/电量/配对状态，并发出开始配对、停止配对、背光等控制命令。
 
-现有 `ui/src/bridge/` 和 `firmware/main/bridge/` 保留为这一控制面的接口预留；它们目前没有加入 PocketJS host 的 `REQUIRES` 或 `SRCS`，也没有连接实际 USB/BLE 传输。NS2 的广播字段、GATT、HID 报告、配对和震动命令见 [controller.md](controller.md)，实现前必须用真实设备抓包和互操作测试确认。
+三段之间只有两种数据：`pad_report_t`（原始报告 + 设备标识）与 `pad_state_t`（私有格式）。新增一种手柄在 `pad/pad_device.c` 的家族表里加一行，新增一个目标（例如 NS1）在 `target/` 下加一个 `pad_target_t` 实现；桥接 PC 与将来的 USB host 直插共用 `pad/` 与 `target/` 两段，按键位置映射与轴归一只有一份，展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
+
+现有 `ui/src/bridge/` 和 `firmware/main/bridge/` 是这一控制面已接入的实现（UI 命令/事件 + 供 PWR 按键与串口 CLI 使用的外部队列入口）。NS2 的广播字段、GATT、HID 报告、配对和震动命令见 [controller.md](controller.md)，实现前必须用真实设备抓包和互操作测试确认。
 
 ## 内存与显示策略
 

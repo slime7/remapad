@@ -24,13 +24,22 @@
 - **震动输出**：Output Report 0x02 解析正确（板卡无马达，最终转发给 USB 源手柄，属 M5）。
 - **UI 观感**：启动画面时序、切页与滚动观感在实机确认。
 
-### M5 — USB host 输入接入（阶段末尾）　状态：未开始
+### M5 — 输入接入：桥接（PC）已落地，USB host 待接入　状态：进行中
+
+**桥接（PC 输入 → NS2）　状态：代码完成，实机验收待做**
+
+设备侧按 `input/` → `pad/` → `target/` 三段改造并打通到 BLE 输出，PC 侧新增 `pc/` 桥接程序（hidapi 读手柄 → 串口桥接帧，免复位、与串口 CLI 共用一根 Type-C）。数据流、私有格式与家族映射见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」，模块边界见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)。剩余：
+
+- [ ] 实机验收：PC 侧插 Xbox / PS / Steam 任一手柄 → NS2 主机的按键与摇杆正确；扳机按 50% 阈值触发 ZL/ZR；背键进 GL/GR；PC 侧拔线后状态回中不卡键；串口日志显示识别到的家族与型号。
+- [ ] 家族表按实测抓包回填：用 `cd pc ; uv run python bridge.py --dump` 抓 Xbox 有线 / Xbox 蓝牙 / PS 蓝牙 / Steam 原生布局的原始报告，核对并修正 `firmware/main/pad/pad_device.c` 家族表里的字段偏移（Steam 原生布局尚未登记，当前走 Xbox 兜底并置能力位标记）。
+
+**USB host 直插（手柄插在板卡上）　状态：未开始**
 
 新建 `firmware/main/usb/`：
 
 - [ ] USB mux 切换实验定案：`usb_new_phy()`（OTG + HOST）+ USB-Serial-JTAG 让出、日志切 UART0（GPIO43/44）；结论回填 [hardware.md](hardware.md) 并出 ADR。
 - [ ] VBUS 5V 供电路径确认（hardware.md 挂起项，决定 host 模式能否给手柄供电，必要时调整方案）。
-- [ ] `usb_host_hid.c`：host lib 安装、复合设备枚举（跳过 Vendor Bulk / 音频接口）、claim HID 接口、IN 64B 接收 + OUT 发送队列；解析带 Report ID 的 0x05/0x09 输入 → 规范化状态 → 接入 dp_task 输入源；BLE 下发的震动/LED 经 OUT 反向转发。
+- [ ] `usb_host_hid.c`：host lib 安装、复合设备枚举（跳过 Vendor Bulk / 音频接口）、claim HID 接口、IN 64B 接收 + OUT 发送队列；原始报告按 `pad_report_t` 交给 `pad/` 的家族表（与桥接路径共用同一份解析与映射），再接 dp_task 输入源；BLE 下发的震动/LED 经 OUT 反向转发。
 - [ ] `usbRole` 命令真实化（切换策略预计"确认后重启进入 host 模式"，实验后定）。
 
 **验收**：NS2 手柄插板 → Switch 2 收到真实手柄输入；主机震动可传到手柄；模式页 host 角色真实生效。
@@ -61,4 +70,4 @@ UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重�
 
 ## 本阶段明确不做
 
-桥接角色（电脑输入 → NS2）、OTA、amiibo/storage 分区、IMU/RTC/蜂鸣器外设、输入映射 UI、UI 基础组件库（Phase 2 另一支线，另行安排）。
+OTA、amiibo/storage 分区（amiibo 镜像暂存 PSRAM）、IMU/RTC 外设、用户自定义映射与 NVS 持久化（本轮只留家族表与映射结构上的覆盖点）、UI 基础组件库（Phase 2 另一支线，另行安排）。

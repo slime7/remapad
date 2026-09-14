@@ -16,7 +16,11 @@
 | **Damage region** | 一帧中需要重新光栅化的逻辑矩形；renderer 将其输出为 full-width RGB565 strip。 |
 | **Host BSP** | 项目自己的 ESP-IDF 硬件层，负责面板、DMA、触控、按键、电源和其他外设。 |
 | **USB input** | 由 ESP32 USB host 接收的外部输入报告，先进入产品数据面，不直接进入 PocketJS。 |
-| **NS2 report encoder** | 将规范化控制器状态编码为目标 NS2 手柄的 USB/BLE 报告。 |
+| **接收段（input/）** | 输入通路的第一段：桥接帧的编解码与串口分帧、USB-Serial/JTAG 的唯一读取者、实现 `dp_source_t` 的输入源。 |
+| **处理段（pad/）** | 输入通路的第二段：家族布局表把各家手柄报告解析成私有格式 `pad_state_t`（按键按位置语义、摇杆归一、能力位）。 |
+| **转换段（target/）** | 输入通路的第三段：目标编码器 `pad_target_t` 把私有格式编码成具体目标家族的报文，现役实现为 `target/ns2/`。 |
+| **桥接帧** | PC → 设备的高频载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG。 |
+| **NS2 report encoder** | 将私有手柄状态（`pad_state_t`）编码为目标 NS2 手柄的 USB/BLE 报告，位于 `firmware/main/target/ns2/`。 |
 | **BLE controller peripheral** | 对 NS2 主机执行广播、GATT 服务、输入通知、输出命令和配对状态管理的 ESP32 外设角色。 |
 | **Product control plane** | UI bridge 与固件控制面，用于低频状态、配置、配对操作和诊断；不承载高频输入报告。 |
 
@@ -24,13 +28,18 @@
 
 应用和设备各自声明事实，官方 resolver 在构建时验证兼容性：
 
-```text
-ui/pocket.json                 firmware/pocket.host.json
-  ├─ entry/framework             ├─ platform = esp-idf
-  ├─ logical viewport            ├─ host ABI / tickHz
-  ├─ requires                    ├─ physical/logical viewport
-  └─ enhances                    ├─ presentation / density
-                                 └─ capabilities
+```mermaid
+flowchart LR
+    App["ui/pocket.json<br/>应用声明"] --> AppEntry["entry / framework"]
+    App --> AppView["logical viewport"]
+    App --> AppReq["requires"]
+    App --> AppEnh["enhances"]
+
+    Host["firmware/pocket.host.json<br/>设备声明"] --> HostPlatform["platform = esp-idf"]
+    Host --> HostAbi["host ABI / tickHz"]
+    Host --> HostView["physical / logical viewport"]
+    Host --> HostPres["presentation / density"]
+    Host --> HostCap["capabilities"]
 ```
 
 - `requires` 是应用运行所必需的能力，host 不提供时构建应失败。
@@ -45,21 +54,31 @@ ui/pocket.json                 firmware/pocket.host.json
 
 USB 到 NS2 BLE 的目标链路如下：
 
-```text
-USB HID / vendor report
-          │
-          ▼
-USB 接收任务 → 报告解析 → 规范化 controller state
-                                      │
-                                      ▼
-                              NS2 report encoder
-                                      │
-                                      ▼
-              BLE 广播 / GATT / 输入通知 / 输出命令
-                                      │
-                                      ▼
-                         NS2 主机的连接与配对
+```mermaid
+flowchart TB
+    Bridge["PC 手柄（已实现）<br/>pc/ 桥接程序读原始报告并转发"]
+    Host["USB host 手柄（未实现，M5）<br/>手柄插在板卡上：USB mux 切换 + HID 接收"]
+    Recv["input/ 接收段<br/>帧解码 / 串口分帧 / dp_source_t 输入源"]
+    Parse["pad/ 处理段<br/>家族布局表解析 + 归一 → pad_state_t"]
+    Encode["target/ 转换段<br/>pad_target_t → NS2 报告编码（target/ns2/）"]
+    Ble["BLE 广播 / GATT / 输入通知 / 输出命令"]
+    Session["NS2 主机的连接与配对"]
+    Feedback["pad_feedback_t：主机反馈（震动 / 玩家 LED / 触觉采样）"]
+
+    Bridge -->|"桥接帧，USB-Serial/JTAG"| Recv
+    Host -. "IN 64B 中断传输（HID 报告 + Report ID）" .-> Recv
+    Recv -->|pad_report_t| Parse
+    Parse --> Encode
+    Encode --> Ble
+    Ble --> Session
+    Ble -.-> Feedback
+    Feedback -. 输入侧投递 .-> Recv
+
+    classDef planned stroke-dasharray: 5 5
+    class Host planned
 ```
+
+实线是已经落地的路径（PC 侧插手柄，经桥接帧进来），虚线是尚未实现的部分：USB host 直插（手柄插在板卡上）需要先做 USB mux 实验与 VBUS 供电确认，方案见 [usb-input-plan.md](usb-input-plan.md)，待办见 [ROADMAP.md](ROADMAP.md) M5。两条路径在这里汇合，之后共用 `pad/` 与 `target/` 两段，解析与映射只有一份。
 
 这条链路需要保持低延迟和确定性：
 
@@ -74,8 +93,146 @@ USB 接收任务 → 报告解析 → 规范化 controller state
 - 配对对外的心智模型是「开机即配对、无需界面」：有凭证发回连广播、无凭证发发现广播（见上一条），主机侧配对记录在首次连接握手时完成，用户不需要在屏幕上做任何确认动作；屏幕上的配对页只用于观察会话状态、手动进出配对模式或解除配对，主机 Grip / 手柄顺序界面只用于调整手柄顺序与确认 JoyCon 已配对。JoyCon 组合保持左右两条独立连接与两条独立凭证（各占一个广播实例），屏幕 UI 不做合并成单个设备的展示。
 - 主机推送的手柄固件更新按「接受并假装升级」处理：0x0018 升级数据块写入被计数接收，静默 10 秒视为完成，上报版本（app_config 持久化，0x10 查询与两个出厂块共用）递增落盘；真实升级协议无公开文档，需抓包后再对齐（见 controller.md §12）。
 - 调试注入是控制面进入数据面的唯一低频通道，采样与编码仍由数据面任务独立完成，不引入高频路径（`firmware/main/dp/dp_source.c`）：按键注入经 `dp_source_inject()` 叠加一次按下并按时长自动释放（默认 250ms，配对 L+R 约 1s，对应主机 Grip/顺序界面的配对确认动作，上限 60s，`dp_source_inject_release()` 可提前释放），摇杆注入经 `dp_source_inject_stick()` 给出持续电平（0-4095，两侧独立，未设定的一侧沿用输入源的值，`dp_source_inject_stick_reset()` 回中并解除注入）。注入是合成的最后一步：按键叠加在合成按键上，设定过的摇杆覆盖合成摇杆。按键名表由 `dp_source_key_lookup()` 提供，串口 CLI 与主机端用例共用；UI 调试页「按键指令」区走 bridge 的 `debugKey`（仍是 a / home / lr 三个键）。串口 `link` 命令按身份打印链路快照（`ns2_session_status()`）：对外广播地址、连接句柄、会话状态、报告格式、已开启的通知通道、已发送报告数（主机订阅后才计数）与凭证条数，配对、组合与分侧上报都能在串口上对账。
-- 输入获取与 NS2 输出已解耦为两个稳定接口（`firmware/main/dp/dp_source.h` 与 `firmware/main/ns2/ns2_output.h`，ADR 0011 边界内）：新增输入设备（USB 手柄、桥接 PC、UART 注入）只需实现 `dp_source_t` 并注册，首个注册源拥有摇杆/电池字段，后续源叠加按键，调试注入最后叠加；输出侧 `ns2_output_send()` 接收规范化状态（可只填需要输出的按键），内部按会话格式编码并经注册的输出通道（现役 BLE 通知，USB 预留）发送。主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等）经反馈监听者分发，M5 起转发给插入的手柄或桥接 PC。电池经 `battery.c` 唯一入口 + `ns2_output_set_battery` 随报告上发；amiibo 镜像经 `ns2_output_amiibo_stage` 预置（传输方式待定），Report 0x09 的 NFC 状态字节随预置汇报。USB 输入/桥接的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
+- 输入与输出已解耦成三段稳定接口（`firmware/main/dp/dp_source.h`、`firmware/main/pad/pad_state.h`、`firmware/main/target/target.h`，边界见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）：新增输入设备（桥接 PC、将来的 USB 手柄、调试注入）只需实现 `dp_source_t` 并注册，首个注册源拥有摇杆/扳机/触摸/运动与设备标识字段，后续源叠加按键，调试注入最后叠加；私有格式 `pad_state_t` 是上下段之间的唯一接缝，目标侧 `target_send_pad()` 按注册的 `pad_target_t` 编码（现役 `target/ns2/`，内部仍调 `ns2_output_send()`，可只填需要输出的按键）。主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等），在反馈监听者里归一到 `pad_feedback_t` 并回发桥接帧；投递到插入手柄的动作在后续里程碑实现。电池经 `battery.c` 唯一入口 + `ns2_output_set_battery` 随报告上发；amiibo 镜像经 `ns2_output_amiibo_stage` 预置（传输方式待定），Report 0x09 的 NFC 状态字节随预置汇报。USB host 直插的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
 - USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
+
+## 输入通路：接收 / 处理 / 转换
+
+输入通路按三段划分（取舍见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）：`input/` 只把字节变成「原始报告 + 设备标识」，`pad/` 只把原始报告变成私有格式并收敛家族差异，`target/` 只把私有格式编码成目标报文。三段之间是单向数据流：新增一种手柄只加家族表一行，新增一个目标（例如将来的 NS1）只加一个 `pad_target_t` 实现。
+
+```mermaid
+flowchart LR
+    subgraph PC["PC（pc/ 桥接程序）"]
+        HID["手柄 HID 报告"] --> BR["bridge.py：原始报告 + 设备标识"]
+    end
+
+    BR -- "桥接帧（USB-Serial/JTAG）" --> LINK
+
+    subgraph FW["ESP32-S3 固件 firmware/main/"]
+        LINK["input/ 接收段<br/>input_link 唯一读取者 + input_frame 解帧"]
+        SRC["input/ 输入源<br/>dp_source_t 实现"]
+        CLI["console/ CLI 行解析"]
+
+        LINK -- "非帧字节" --> CLI
+        LINK -- "桥接帧" --> SRC
+        SRC -- "pad_report_t" --> DEV["pad/ 处理段<br/>家族表 + pad_state_from_report"]
+        DEV -- "pad_state_t" --> TGT["target/ 转换段<br/>pad_target_t"]
+        TGT --> NS2["target/ns2/<br/>0x05 / 0x09 报告编码"]
+        NS2 --> BLE["ble/ NimBLE 输入通知"]
+        BLE -. "主机反馈 → pad_feedback_t" .-> LINK
+    end
+
+    BLE --> HOST["NS2 主机"]
+```
+
+私有格式是这条通路的接缝：上游只要能填出 `pad_state_t`（桥接 PC、将来的 USB host 直插、调试注入都一样），下游目标就不需要知道手柄从哪来。
+
+```mermaid
+classDiagram
+    class pad_report_t {
+        pad_family_t family
+        pad_conn_t conn
+        uint16 vid
+        uint16 pid
+        uint8 report_id
+        uint8 len
+        uint8 data 64 字节
+    }
+
+    class pad_state_t {
+        uint32 buttons
+        uint16 axis 四轴
+        uint16 trigger 双扳机
+        pad_touch_t touch 两处
+        pad_motion_t motion
+        uint16 mic_level
+        bool mic_muted
+        uint8 battery_percent
+        bool charging
+        uint32 caps
+        pad_family_t family
+        pad_conn_t conn
+        uint16 vid
+        uint16 pid
+        uint8 report_id
+        uint32 seq
+    }
+
+    class pad_target_t {
+        const char * name
+        uint32 caps
+        set_facts()
+        send_pad()
+    }
+
+    class pad_feedback_t {
+        bool rumble_on 双马达
+        uint8 rumble_strength 双马达
+        uint8 rumble_raw 目标原始参数
+        uint8 player_led
+        uint8 haptic_sample
+    }
+
+    pad_report_t --> pad_state_t : pad_state_from_report
+    pad_state_t --> pad_target_t : target_send_pad
+    pad_feedback_t ..> pad_state_t : 反向链路（目标 → 输入设备）
+```
+
+- 按键位按位置语义命名（`PAD_BTN_A` 右、`PAD_BTN_B` 下、`PAD_BTN_X` 上、`PAD_BTN_Y` 左），家族表把各家的物理键填进对应位置；背键与目标专属键（NS2 的 C 键）用扩展位占位。
+- 四轴与双扳机统一为 0-4095 整数、摇杆中位 2048，Y 轴统一成「上为正」，8% 死区在解析段套用并把剩余行程重新铺满；扳机保持模拟量，是否数字化由目标决定。
+- `caps` 标注这一帧里哪些字段真的来自设备（运动、触摸板、模拟扳机、背键、麦克风、电池、震动）；型号未识别时回落 Xbox 布局并置 `PAD_CAP_FALLBACK_LAYOUT`，结果仍可用但字段可能错位。
+- 目标只消费自己 `caps` 范围内的字段：不在集合里的部分（IMU、触摸板、麦克风）不映射，能力集合变化时提示一次，不逐帧刷日志。
+- 桥接帧与 CLI 文本共用一根 USB-Serial/JTAG：接收侧校验 CRC、失步时只丢一个字节继续扫描，非帧字节原样交回命令行解析，因此桥接跑着的时候串口 CLI 照常可用。
+
+PC 手柄到 NS2 主机的完整时序（映射表把家族差异收敛在 `pad/`，所以桥接路径与将来的 USB host 直插路径共用后面两段）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant PC as pc/bridge.py
+    participant RECV as input/input_link
+    participant SRC as input/input_source
+    participant DP as dp/dp_task
+    participant DEV as pad/pad_device
+    participant TGT as target/ns2
+    participant HOST as NS2 主机
+
+    PC->>RECV: ATTACH 帧（家族 / 连接方式 / VID:PID）
+    RECV->>SRC: input_source_handle_frame
+    PC->>RECV: REPORT 帧（设备标识 + 原始报告）
+    RECV->>SRC: 存入最近一帧报告
+    loop 每 5 ms
+        DP->>SRC: dp_source_sample()
+        SRC->>DEV: pad_state_from_report()
+        DEV-->>SRC: pad_state_t
+        DP->>TGT: target_send_pad()
+        TGT->>HOST: ns2_output_send() → BLE 输入通知
+    end
+    HOST->>DP: 主机反馈（震动 / 玩家 LED / 触觉采样）
+    DP->>PC: FEEDBACK 桥接帧（本轮只打印）
+    PC->>RECV: DETACH 帧（拔线或退出）
+    RECV->>SRC: 状态回静置，按键不卡住
+```
+
+家族与目标的按键对应关系（按位置对齐，因此 Xbox 的物理 A 与 PS 的 Cross 都落在 `PAD_BTN_B`、再到 `NS2_BTN_B`）：
+
+| 私有格式（位置语义） | Xbox 物理键 | PS 物理键 | Steam（原生布局） | NS2 目标 |
+| :--- | :--- | :--- | :--- | :--- |
+| `PAD_BTN_A`（右） | B | Circle | 未登记，走兜底 | `NS2_BTN_A` |
+| `PAD_BTN_B`（下） | A | Cross | 未登记，走兜底 | `NS2_BTN_B` |
+| `PAD_BTN_X`（上） | Y | Triangle | 未登记，走兜底 | `NS2_BTN_X` |
+| `PAD_BTN_Y`（左） | X | Square | 未登记，走兜底 | `NS2_BTN_Y` |
+| `PAD_BTN_LB` / `PAD_BTN_RB` | LB / RB | L1 / R1 | 未登记，走兜底 | `NS2_BTN_L` / `NS2_BTN_R` |
+| `PAD_BTN_LSTICK` / `PAD_BTN_RSTICK` | 左/右摇杆按下 | L3 / R3 | 未登记，走兜底 | `NS2_BTN_LSTICK` / `NS2_BTN_RSTICK` |
+| `PAD_BTN_START` / `PAD_BTN_BACK` | Menu / View | Options / Share | 未登记，走兜底 | `NS2_BTN_PLUS` / `NS2_BTN_MINUS` |
+| `PAD_BTN_GUIDE` / `PAD_BTN_SHARE` | Guide / Share | PS 键 / 无 | 未登记，走兜底 | `NS2_BTN_HOME` / `NS2_BTN_CAPTURE` |
+| `PAD_BTN_DPAD_*` | 十字键 | 十字键（帽子开关展开） | 未登记，走兜底 | `NS2_BTN_DPAD_*` |
+| `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键 / 背键 | 无 | 未登记，走兜底 | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
+| 扳机模拟量 ≥ 2048（50%） | LT / RT | L2 / R2 | 未登记，走兜底 | `NS2_BTN_ZL` / `NS2_BTN_ZR` |
+| `PAD_BTN_C` | 无 | 无 | 无 | `NS2_BTN_C`（目标专属键） |
+| `PAD_AXIS_LX` / `LY` / `RX` / `RY`（0-4095，中位 2048） | 左右摇杆（有符号 16 位） | 左右摇杆（单字节） | 未登记，走兜底 | 12 位打包的摇杆字段 |
+
+家族表的偏移初值取自公开资料，落地时用 `pc/bridge.py --dump` 抓原始报告核对后再固化；Steam 原生布局未抓包，暂时走兜底并在能力位里如实标记。
 
 ## UI 图元与资源
 
@@ -102,21 +259,22 @@ mount(() => <Hero />);
 
 ## 构建产物映射
 
-```text
-Vue Vapor JSX + pocket.json + host profile
-                    │
-                    ▼
-          PocketJS 官方 compiler
-                    │
-       ┌────────────┼────────────┐
-       ▼            ▼            ▼
-remapad-ui.js  remapad-ui.pak  remapad-ui.pocket
-                                   │
-                                   ▼
-                 pocketjs_embed_package / compile_app
-                                   │
-                                   ▼
-                    firmware/build/pocketjs/remapad/
+```mermaid
+flowchart TB
+    Source["Vue Vapor JSX + pocket.json + host profile"]
+    Compiler["PocketJS 官方 compiler"]
+    JS["remapad-ui.js"]
+    Pak["remapad-ui.pak"]
+    Pocket["remapad-ui.pocket"]
+    Embed["pocketjs_embed_package / compile_app"]
+    Output["firmware/build/pocketjs/remapad/<br/>C 与汇编嵌入文件、生成头文件（均为 CMake 产物）"]
+
+    Source --> Compiler
+    Compiler --> JS
+    Compiler --> Pak
+    Compiler --> Pocket
+    Pocket --> Embed
+    Embed --> Output
 ```
 
 `firmware/build/pocketjs/remapad/` 中的 C/汇编嵌入文件和生成头文件都是 CMake 产物。项目不应再出现手写的 PCKT 解析、字节数组或 `app_pocket.h` 同步脚本。
@@ -125,29 +283,30 @@ remapad-ui.js  remapad-ui.pak  remapad-ui.pocket
 
 `firmware/main/pocketjs_host.c` 使用官方 C API，顺序与官方 ESP-IDF smoke 示例保持一致，但创建、mount、eval 和逐帧 turn 都在同一个产品 task 上完成：
 
-```text
-embedded .pocket bytes
-        │
-        ├─ pocketjs_package_open
-        └─ pocketjs_package_select(host contract)
-                │ borrowed JS + PAK views
-                ▼
-        guest_create(QuickJS)
-                │
-        ui_core_create(contract viewport)
-                │
-        ui_qjs_create → feed_pak → mount → guest_eval
-                │
-        remapad-pjs owner task:
-          sample_input → pocketjs_ui_turn → after_turn
-                                             │
-                                  prepare damage plan
-                                             │
-                                  render_strip (RGB565)
-                                             │
-                                  panel transfer by BSP
-                                             │
-                                  commit / abort
+```mermaid
+flowchart TB
+    Package["embedded .pocket bytes"]
+    Open["pocketjs_package_open"]
+    Select["pocketjs_package_select（host contract）"]
+    Guest["guest_create（QuickJS）"]
+    Core["ui_core_create（contract viewport）"]
+    Mount["ui_qjs_create → feed_pak → mount → guest_eval"]
+    Turn["remapad-pjs owner task<br/>sample_input → pocketjs_ui_turn → after_turn"]
+    Plan["prepare damage plan"]
+    Strip["render_strip（RGB565）"]
+    Transfer["panel transfer by BSP"]
+    Commit["commit / abort"]
+
+    Package --> Open
+    Open --> Select
+    Select -->|"borrowed JS + PAK views"| Guest
+    Guest --> Core
+    Core --> Mount
+    Mount --> Turn
+    Turn --> Plan
+    Plan --> Strip
+    Strip --> Transfer
+    Transfer --> Commit
 ```
 
 包中的 JavaScript 和 PAK 都是借用视图，必须在 guest、binding 和 package 销毁前保持可读。生成的 package header/assembly 由 CMake 管理，因此不会发生 UI 与固件手动复制不一致的问题。

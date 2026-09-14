@@ -36,7 +36,7 @@
 | [0008](0008-panel-transfer-completion-gate.md) | active | 面板提交增加传输完成门控，部分取代 0007 的颜色缓冲复用语义 |
 | [0009](0009-ota-storage-flash-layout.md) | active | 固化 16MB Flash 分区终局布局：OTA 双分区与通用存储区 |
 | [0010](0010-nimble-ble-controller-stack.md) | active | BLE 手柄外设采用 ESP-IDF 内置 NimBLE 栈，SMP 关闭、配对由应用层 Command 0x15 承担 |
-| [0011](0011-controller-dataplane-module-boundary.md) | active | 控制器数据面按 ns2/ble/dp/usb 四模块分层，数据流单点汇合于 dp_task |
+| [0011](0011-controller-dataplane-module-boundary.md) | active | 控制器数据面按 ns2/ble/dp/usb 四模块分层，数据流单点汇合于 dp_task；目录划分由 0021 部分取代，数据面汇合约定仍生效 |
 | [0012](0012-firmware-boot-splash-before-ui.md) | active | 固件在 PocketJS UI 就绪前自绘启动画面并提前点亮背光 |
 | [0013](0013-defer-page-mount-after-first-frame.md) | superseded | 首帧只挂载首页，其余页面按帧补挂并在首页显示加载提示；由 0014 取代 |
 | [0014](0014-page-mount-on-demand-progressive-fill.md) | superseded | 页面改为按需挂载并逐帧自顶向下填充，外层容器先出现；由 0015 取代 |
@@ -46,6 +46,7 @@
 | [0018](0018-panel-spi2-clock-80mhz.md) | active | 面板 SPI2 时钟取上限 80 MHz，部分取代 0017 决策 1 的时钟取值 |
 | [0019](0019-playwright-e2e-and-host-unit-tests.md) | active | 以 Playwright 端到端测试与固件主机端单元测试作为回归基线 |
 | [0020](0020-battery-adc-sampling-and-charge-inference.md) | active | 电池电量走 BAT_ADC 采样（过采样平均 + 曲线拟合校准 + 静置电压—容量表），充电状态按电压趋势推断 |
+| [0021](0021-input-path-three-stage-layering.md) | active | 输入通路按 input/pad/target 三段分层（接收 / 处理 / 转换），部分取代 0011 的目录划分 |
 
 ## 创建 ADR 脚本用法
 
