@@ -2,6 +2,23 @@
 
 #include <string.h>
 
+/** 真机抓包（ndeadly/switch2_controller_research 的 btle_procon2_motion_0x000E）
+ *  里的一块运动数据：40 字节运动块 + 紧随其后的 8 字节尾段。板卡没有 IMU，
+ *  用抓包原值占位比全零更接近真机；块内两处 3 字节小端微秒时间戳（运动块
+ *  偏移 0x05 与 0x23）在发送时按上报节奏推进，其余字节保持原值。 */
+static const uint8_t s_motion_capture[40 + 8] = {
+    0x06, 0x70, 0x95, 0x5B, 0x34, 0xB6, 0x94, 0x78, 0x00, 0x0D,
+    0x43, 0xB7, 0xFB, 0x37, 0x42, 0x01, 0x2C, 0x83, 0xFF, 0x41,
+    0x34, 0x04, 0x9E, 0x15, 0x0E, 0x88, 0x35, 0x92, 0xCB, 0xCD,
+    0x53, 0xC3, 0xA2, 0xBA, 0x49, 0xC3, 0x9F, 0x78, 0x07, 0x51,
+    0x6C, 0xBE, 0x81, 0x4B, 0x20, 0x54, 0xDF, 0x58,
+};
+
+/** 抓包块内两个时间戳字段的偏移（相对运动块起点）：第二个比第一个晚 2.5ms。 */
+#define NS2_MOTION_STAMP_OFFS_A 0x05
+#define NS2_MOTION_STAMP_OFFS_B 0x23
+#define NS2_REPORT_INTERVAL_US 5000u
+
 /** 把规范化按键位图中的一个键摆到目标字节的指定位上。 */
 static uint8_t btn_bit(uint32_t buttons, uint32_t mask, uint8_t shift)
 {
@@ -132,11 +149,31 @@ void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],
     buttons_09(state, &out[0x02]);
     ns2_pack_stick(state->stick_lx, state->stick_ly, &out[0x05]);
     ns2_pack_stick(state->stick_rx, state->stick_ry, &out[0x08]);
-    /* 状态标志：特性位 5（触觉）开启时 0x38，否则 0x30。
-     * 0x0C NFC 状态由 amiibo 预置数据驱动（空闲 0x00）；0x0D 耳机状态、
-     * 0x0E 运动数据长度本阶段均为 0。 */
+    /* 状态标志：特性位 5（触觉）开启时 0x38，否则 0x30（真机抓包：开启触觉
+     * 的 0x09 报文该字节恒为 0x38）。0x0C NFC 状态由 amiibo 预置数据驱动
+     * （空闲 0x00）；0x0D 耳机状态为 0。 */
     out[0x0B] = state->rumble_enabled ? 0x38 : 0x30;
     out[0x0C] = state->nfc_state;
+    /* 运动块（0x0E 长度 + 0x0F 起 40 字节）：主机开启 IMU 特性位（掩码
+     * bit2）后，长度 0 的报文会被当作不完整输入。板卡没有 IMU，按 mode 填
+     * 占位；NS2_MOTION_NONE 用于实机确认主机是否真的要求运动数据。 */
+    if (state->motion_mode == NS2_MOTION_NONE) {
+        out[0x0E] = 0x00;
+        return;
+    }
+    out[0x0E] = NS2_INPUT_09_MOTION_LEN;
+    if (state->motion_mode == NS2_MOTION_CAPTURE) {
+        memcpy(&out[0x0F], s_motion_capture, sizeof(s_motion_capture));
+        const uint32_t base = (uint32_t)counter * NS2_REPORT_INTERVAL_US;
+        const uint16_t offs[2] = {NS2_MOTION_STAMP_OFFS_A, NS2_MOTION_STAMP_OFFS_B};
+        for (uint8_t i = 0; i < 2; i++) {
+            const uint32_t stamp = base + (uint32_t)i * (NS2_REPORT_INTERVAL_US / 2);
+            uint8_t *field = &out[0x0F + offs[i]];
+            field[0] = (uint8_t)(stamp & 0xFF);
+            field[1] = (uint8_t)((stamp >> 8) & 0xFF);
+            field[2] = (uint8_t)((stamp >> 16) & 0xFF);
+        }
+    }
 }
 
 void ns2_encode_input_09_usb(uint8_t out[NS2_INPUT_09_LEN + 1],

@@ -491,6 +491,9 @@ static void handle_debug_key(int id, const char *cmd)
         mask = PAD_BTN_CIRCLE;
     } else if (key != NULL && key_len == 4 && strncmp(key, "home", 4) == 0) {
         mask = PAD_BTN_HOME;
+        /* 「唤醒 HOME」不只注入按键：主机休眠时按键进不去，只有 0x81 状态位
+         * 的唤醒广播能把它叫醒（约 10 秒突发）。 */
+        ns2_session_wake_request();
     } else if (key != NULL && key_len == 2 && strncmp(key, "lr", 2) == 0) {
         mask = PAD_BTN_LB | PAD_BTN_RB;
         hold_ms = 1000;

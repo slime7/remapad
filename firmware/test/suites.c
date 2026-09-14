@@ -5,6 +5,7 @@
 #include "host_test.h"
 
 extern const host_test_suite_t suite_ns2_report;
+extern const host_test_suite_t suite_ns2_adv;
 extern const host_test_suite_t suite_ns2_serial;
 extern const host_test_suite_t suite_ns2_frames;
 extern const host_test_suite_t suite_ns2_identity;
@@ -18,6 +19,7 @@ extern const host_test_suite_t suite_battery;
 
 static const host_test_suite_t *const s_suites[] = {
     &suite_ns2_report,
+    &suite_ns2_adv,
     &suite_ns2_serial,
     &suite_ns2_frames,
     &suite_ns2_identity,

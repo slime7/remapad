@@ -40,6 +40,15 @@ enum {
 #define NS2_STICK_CENTER 2048
 #define NS2_STICK_MAX 4095
 
+/** 0x09 运动块填充方式。真机在特性位 bit2（IMU）开启后发 40 字节传感器
+ *  数据；板卡没有 IMU，只能用占位。实机排查「连上但主机不采用输入」时用
+ *  CLI `motion` 在几种占位间切换，确认主机是否校验运动块内容。 */
+typedef enum {
+    NS2_MOTION_ZERO = 0,  /**< 长度 0x28 + 全零块（默认） */
+    NS2_MOTION_CAPTURE = 1, /**< 长度 0x28 + 真机抓包块（时间戳按节奏推进） */
+    NS2_MOTION_NONE = 2,  /**< 长度 0x00，不带运动数据 */
+} ns2_motion_mode_t;
+
 /**
  * 手柄身份：单连接 Pro（NS2_ID_PRO）或 JoyCon 组合的左右两只（L/R 双连接，
  * 各自独立的序列号、PID、广播地址与配对凭证）。凭证存储与广播/会话层都
@@ -70,6 +79,8 @@ typedef struct {
     /** NFC 状态字节（Report 0x09 偏移 0x0C）：0x00 空闲，0x01-0x07 感应中。
      *  由 amiibo 预置数据驱动（ns2_output），无预置时保持 0x00。 */
     uint8_t nfc_state;
+    /** 运动块填充方式（ns2_motion_mode_t）。 */
+    uint8_t motion_mode;
 } ns2_controller_state_t;
 
 /** 复位为静置默认：摇杆居中、无按键、无外设数据。 */
@@ -87,6 +98,7 @@ static inline void ns2_state_defaults(ns2_controller_state_t *state)
     state->battery_mv = 0;
     state->rumble_enabled = false;
     state->nfc_state = 0;
+    state->motion_mode = NS2_MOTION_ZERO;
 }
 
 #ifdef __cplusplus

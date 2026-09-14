@@ -13,10 +13,12 @@
 #include "backlight.h"
 #include "battery.h"
 #include "bridge/js_bridge.h"
+#include "ble_controller.h"
 #include "ble_session.h"
 #include "buzzer.h"
 #include "dp_source.h"
 #include "ns2_identity.h"
+#include "ns2_output.h"
 #include "ota_session.h"
 #include "pad_state.h"
 
@@ -46,6 +48,11 @@ static void cli_help(void)
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  pairing start|stop  pairing advertising");
+    cli_print("  wake                wake the paired console (0x81 burst, ~10s)");
+    cli_print("  report              dump the last input report actually sent");
+    cli_print("  motion 0|1|2        0x09 motion block: zeros / stamp / none");
+    cli_print("  ltk 0|1             LTK store form (0 reversed, 1 as-is)");
+    cli_print("  drop                disconnect the current host");
     cli_print("  version             running image version, partition and ota state");
     cli_print("  rollback            roll back to the previous image (pending verify only)");
     cli_print("  poweroff            release power latch (battery only)");
@@ -180,7 +187,7 @@ static void cli_link(void)
 {
     uint8_t ids[2] = {0};
     const size_t count = ns2_session_mode_identities(ids);
-    char line[128];
+    char line[176];
     snprintf(line, sizeof(line), "mode=%s identities=%u",
              count == 1 ? "pro" : "joycon", (unsigned)count);
     cli_print(line);
@@ -194,14 +201,23 @@ static void cli_link(void)
             ns2_mac_to_string(status.mac, addr);
         }
         if (status.connected) {
+            uint16_t mtu = 0;
+            uint32_t tx_fail = 0;
+            int tx_rc = 0;
+            bool enc = false;
+            ble_controller_conn_stats(status.conn_handle, NULL, &mtu, &tx_fail, &tx_rc, &enc);
             snprintf(line, sizeof(line),
-                     "  %-4s %s conn=%u fmt=0x%02x notify=%s%s reports=%lu creds=%u "
-                     "adv=%s addr=%s",
+                     "  %-4s %s conn=%u itvl=%u mtu=%u enc=%u fmt=0x%02x notify=%s%s "
+                     "feat=%u reports=%lu txf=%lu/rc%d creds=%u adv=%s addr=%s motion=%u ltk=%u",
                      ns2_identity_name(status.identity), link_state_name(status.state),
-                     status.conn_handle, status.report_format,
+                     status.conn_handle, status.conn_itvl, (unsigned)mtu, enc ? 1u : 0u,
+                     status.report_format,
                      status.notify_05 ? "05" : "-", status.notify_09 ? "09" : "-",
-                     (unsigned long)status.reports, (unsigned)status.creds,
-                     status.advertising ? "on" : "off", addr);
+                     status.features_enabled ? 1u : 0u,
+                     (unsigned long)status.reports, (unsigned long)tx_fail, tx_rc,
+                     (unsigned)status.creds,
+                     status.advertising ? "on" : "off", addr, ns2_output_motion_mode(),
+                     ns2_session_ltk_form());
         } else {
             snprintf(line, sizeof(line), "  %-4s %s creds=%u adv=%s addr=%s",
                      ns2_identity_name(status.identity), link_state_name(status.state),
@@ -275,6 +291,79 @@ static void cli_pairing(const char *arg)
     }
 }
 
+/** 唤醒突发：主机休眠时只有 0x81 状态的广播能把它叫醒；未连接且已配对时
+ *  以唤醒形态广播约 10 秒（主机扫描窗口远长于真机的 2 秒突发），之后自动
+ *  回到回连形态。 */
+static void cli_wake(void)
+{
+    ns2_session_wake_request();
+    cli_print("ok wake burst requested");
+}
+
+/** 抓线上输入报文：主机「已连接、已订阅但没有输入」时，用它确认设备真正
+ *  发出去的字节（计数器是否递增、0x0E 运动长度、按键位、状态字节）。 */
+static void cli_report(void)
+{
+    uint8_t ids[2] = {0};
+    const size_t count = ns2_session_mode_identities(ids);
+    for (size_t i = 0; i < count; i++) {
+        ns2_session_status_t status;
+        if (!ns2_session_status(ids[i], &status) || !status.connected) {
+            continue;
+        }
+        uint8_t body[63];
+        const uint8_t fmt = status.report_format == 5 ? 5 : 9;
+        if (!ble_controller_last_input(status.conn_handle, fmt, body)) {
+            cli_print("err no report sent yet");
+            continue;
+        }
+        char line[176];
+        snprintf(line, sizeof(line),
+                 "  %-4s fmt=0x%02x cnt=%u pow=0x%02x btn=%02x%02x%02x L=%02x%02x%02x "
+                 "R=%02x%02x%02x st=0x%02x nfc=0x%02x motion=0x%02x",
+                 ns2_identity_name(status.identity), fmt, body[0], body[1], body[2], body[3],
+                 body[4], body[5], body[6], body[7], body[8], body[9], body[10], body[0x0B],
+                 body[0x0C], body[0x0E]);
+        cli_print(line);
+    }
+}
+
+/** 0x09 运动块占位切换：实机确认主机是否校验运动数据，无需重新烧录。 */
+static void cli_motion(const char *arg)
+{
+    const int mode = atoi(arg);
+    if (mode < NS2_MOTION_ZERO || mode > NS2_MOTION_NONE) {
+        cli_print("err motion 0|1|2");
+        return;
+    }
+    ns2_output_set_motion_mode((uint8_t)mode);
+    char line[48];
+    snprintf(line, sizeof(line), "ok motion=%d", mode);
+    cli_print(line);
+}
+
+/** LTK 注入形态切换：主机连上但 link 显示 enc=0（未加密）时现场对比两种
+ *  形态，判断是不是密钥字节序导致主机不认这台手柄。 */
+static void cli_ltk(const char *arg)
+{
+    const int form = atoi(arg);
+    if (form != 0 && form != 1) {
+        cli_print("err ltk 0|1");
+        return;
+    }
+    ns2_session_set_ltk_form((uint8_t)form);
+    char line[48];
+    snprintf(line, sizeof(line), "ok ltk_form=%d (next connect)", form);
+    cli_print(line);
+}
+
+/** 断开当前主机：改完开关后用它让主机重新连接（重新走一遍注入）。 */
+static void cli_drop(void)
+{
+    ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
+    cli_print("ok disconnect requested");
+}
+
 static void cli_dispatch(char *line)
 {
     char *space = strchr(line, ' ');
@@ -306,6 +395,16 @@ static void cli_dispatch(char *line)
         cli_mode(arg);
     } else if (strcmp(line, "pairing") == 0) {
         cli_pairing(arg);
+    } else if (strcmp(line, "wake") == 0) {
+        cli_wake();
+    } else if (strcmp(line, "report") == 0) {
+        cli_report();
+    } else if (strcmp(line, "motion") == 0) {
+        cli_motion(arg);
+    } else if (strcmp(line, "ltk") == 0) {
+        cli_ltk(arg);
+    } else if (strcmp(line, "drop") == 0) {
+        cli_drop();
     } else if (strcmp(line, "version") == 0) {
         cli_version();
     } else if (strcmp(line, "rollback") == 0) {

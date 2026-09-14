@@ -131,6 +131,10 @@ typedef struct {
     bool input09_notify;
     bool answer_notify;
     bool answer2_notify;
+    uint16_t conn_itvl; /* 1.25ms 单位 */
+    uint16_t mtu;       /* 协商后的 ATT MTU（63B 通知需要 >= 66） */
+    uint32_t tx_fail;   /* 通知投递失败计数（订阅成功但主机收不到输入的判据） */
+    int tx_rc;          /* 最近一次失败的返回码 */
     uint8_t last_input05[63];
     uint8_t last_input09[63];
 } conn_slot_t;
@@ -294,7 +298,14 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
         return read_flat(ctxt, rate_zero, sizeof(rate_zero));
     }
     if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_DSC) {
-        /* 主机初始化时向 0x0010 等报告率描述符写入配置；接受即认可。 */
+        /* 主机初始化末尾会向 0x000C/0x0010 写报告率描述符（实测 `85 00`）。
+         * 写到这里说明主机的初始化序列已走到订阅输入前一步，日志留痕便于
+         * 判断握手停在哪一步。 */
+        uint8_t data[8] = {0};
+        uint16_t len = 0;
+        ble_hs_mbuf_to_flat(ctxt->om, data, sizeof(data), &len);
+        ESP_LOGI(TAG, "report rate dsc write (handle=0x%04x, %uB: %02x %02x)",
+                 attr_handle, (unsigned)len, data[0], len > 1 ? data[1] : 0);
         return 0;
     }
     if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) {
@@ -355,28 +366,6 @@ static void gatt_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
     }
 }
 
-static void request_conn_params(uint16_t conn_handle)
-{
-    /* 对齐已验证实现：最小间隔请求 7.5ms（6 单位），上限与超时取主机当前
-     * 值（不干扰主机自己的时序），延迟 0。 */
-    struct ble_gap_conn_desc desc;
-    if (ble_gap_conn_find(conn_handle, &desc) != 0) {
-        return;
-    }
-    const struct ble_gap_upd_params upd = {
-        .itvl_min = 6, /* 7.5ms */
-        .itvl_max = desc.conn_itvl,
-        .latency = 0,
-        .supervision_timeout = desc.supervision_timeout,
-        .min_ce_len = 0,
-        .max_ce_len = 0,
-    };
-    const int rc = ble_gap_update_params(conn_handle, &upd);
-    if (rc != 0) {
-        ESP_LOGD(TAG, "conn param update rc=%d", rc);
-    }
-}
-
 /** 按本机地址反查广播实例（连接落在哪个广播上）；Pro 模式两实例同址，
  * 返回首个命中。未命中返回 -1。 */
 static int adv_instance_by_addr(const uint8_t addr[6])
@@ -421,7 +410,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             ble_gap_terminate(event->connect.conn_handle, BLE_CTL_DISCONNECT_CONN_FAIL);
             break;
         }
-        struct ble_gap_conn_desc desc;
+        struct ble_gap_conn_desc desc = {0};
         uint8_t identity = NS2_ID_PRO;
         if (ble_gap_conn_find(event->connect.conn_handle, &desc) == 0) {
             const int inst = adv_instance_by_addr(desc.our_ota_addr.val);
@@ -437,10 +426,35 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         slot->used = true;
         slot->conn_handle = event->connect.conn_handle;
         slot->identity = identity;
-        ESP_LOGI(TAG, "ACL connected (conn=%u, identity=%s)",
-                 event->connect.conn_handle, ns2_identity_name(identity));
+        slot->conn_itvl = desc.conn_itvl;
+        slot->mtu = ble_att_mtu(event->connect.conn_handle);
+        ESP_LOGI(TAG, "ACL connected (conn=%u, identity=%s, itvl=%u units / %u us, mtu=%u, "
+                 "peer id/ota type %u/%u)",
+                 event->connect.conn_handle, ns2_identity_name(identity),
+                 desc.conn_itvl, (unsigned)desc.conn_itvl * 1250u, (unsigned)slot->mtu,
+                 desc.peer_id_addr.type, desc.peer_ota_addr.type);
         ns2_session_on_connect(event->connect.conn_handle, identity);
-        request_conn_params(event->connect.conn_handle);
+        break;
+    }
+    case BLE_GAP_EVENT_CONN_UPDATE: {
+        /* 连接参数由主机发起：主机常把连接压到 4 单位（5ms，亚规范间隔），
+         * 控制器侧需放行（CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE）；
+         * 这里只观测，不反向请求（NimBLE 主机侧拒绝 itvl < 6 的请求）。
+         * 输入被主机采用的门槛是 0x0C/0x04 特性启用，不是间隔（ADR 0023）。 */
+        conn_slot_t *slot = conn_slot(event->conn_update.conn_handle);
+        struct ble_gap_conn_desc desc = {0};
+        uint16_t itvl = 0;
+        if (ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
+            itvl = desc.conn_itvl;
+        }
+        if (slot != NULL) {
+            slot->conn_itvl = itvl;
+            slot->mtu = ble_att_mtu(event->conn_update.conn_handle);
+        }
+        ESP_LOGI(TAG, "conn update (conn=%u, itvl=%u units / %u us, mtu=%u, status=%d)",
+                 event->conn_update.conn_handle, itvl, (unsigned)itvl * 1250u,
+                 (unsigned)ble_att_mtu(event->conn_update.conn_handle),
+                 event->conn_update.status);
         break;
     }
     case BLE_GAP_EVENT_ENC_CHANGE: {
@@ -614,9 +628,28 @@ static void notify(uint16_t conn_handle, uint16_t attr_handle, bool enabled,
     }
     struct os_mbuf *om = ble_hs_mbuf_from_flat(data, (uint16_t)len);
     if (om == NULL) {
+        conn_slot_t *slot = conn_slot(conn_handle);
+        if (slot != NULL) {
+            slot->tx_fail++;
+            slot->tx_rc = -1;
+        }
         return;
     }
-    ble_gatts_notify_custom(conn_handle, attr_handle, om);
+    /* 返回码必须记录：MTU 不足时 ble_gatts_notify_custom 直接失败，静默吞掉
+     * 会让「主机已订阅但收不到输入」无法定位。 */
+    const int rc = ble_gatts_notify_custom(conn_handle, attr_handle, om);
+    if (rc != 0) {
+        conn_slot_t *slot = conn_slot(conn_handle);
+        if (slot != NULL) {
+            if (slot->tx_fail == 0) {
+                ESP_LOGW(TAG, "notify failed rc=%d (conn=%u, handle=0x%04x, len=%u, mtu=%u)",
+                         rc, conn_handle, attr_handle, (unsigned)len,
+                         (unsigned)ble_att_mtu(conn_handle));
+            }
+            slot->tx_fail++;
+            slot->tx_rc = rc;
+        }
+    }
 }
 
 bool ble_controller_connected(void)
@@ -718,6 +751,52 @@ bool ble_controller_input_notify_ready(uint16_t conn_handle, uint8_t report_form
     return report_format == 5 ? slot->input05_notify : slot->input09_notify;
 }
 
+bool ble_controller_conn_itvl(uint16_t conn_handle, uint16_t *out_itvl)
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL || out_itvl == NULL) {
+        return false;
+    }
+    *out_itvl = slot->conn_itvl;
+    return true;
+}
+
+bool ble_controller_conn_stats(uint16_t conn_handle, uint16_t *out_itvl, uint16_t *out_mtu,
+                               uint32_t *out_tx_fail, int *out_tx_rc, bool *out_encrypted)
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL) {
+        return false;
+    }
+    if (out_itvl != NULL) {
+        *out_itvl = slot->conn_itvl;
+    }
+    if (out_mtu != NULL) {
+        *out_mtu = slot->mtu;
+    }
+    if (out_tx_fail != NULL) {
+        *out_tx_fail = slot->tx_fail;
+    }
+    if (out_tx_rc != NULL) {
+        *out_tx_rc = slot->tx_rc;
+    }
+    if (out_encrypted != NULL) {
+        struct ble_gap_conn_desc desc = {0};
+        *out_encrypted = ble_gap_conn_find(conn_handle, &desc) == 0 && desc.sec_state.encrypted;
+    }
+    return true;
+}
+
+bool ble_controller_last_input(uint16_t conn_handle, uint8_t report_format, uint8_t *out)
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL || out == NULL) {
+        return false;
+    }
+    memcpy(out, report_format == 5 ? slot->last_input05 : slot->last_input09, 63);
+    return true;
+}
+
 bool ble_controller_conn_identity(uint16_t conn_handle, uint8_t *identity)
 {
     conn_slot_t *slot = conn_slot(conn_handle);
@@ -764,6 +843,11 @@ esp_err_t ble_controller_start(void)
     memset(s_adv_identity, 0, sizeof(s_adv_identity));
     memset(s_adv_addr, 0, sizeof(s_adv_addr));
     memset(s_adv_addr_valid, 0, sizeof(s_adv_addr_valid));
+
+    /* NimBLE 对每条 ATT 通知都打一行 INFO（连接期间约 200 行/秒）：会把串口
+     * 日志淹掉、真机排查时看不到自己的事件，也会给上报循环增加格式化开销。
+     * 只留 WARN 及以上。 */
+    esp_log_level_set("NimBLE", ESP_LOG_WARN);
 
     const esp_err_t err = nimble_port_init();
     if (err != ESP_OK) {

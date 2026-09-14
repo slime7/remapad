@@ -6,6 +6,7 @@
 
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -24,6 +25,16 @@
 static const char *TAG = "remapad_dp";
 
 #define DP_TICK_MS 5
+
+/** 目标上报分频：dp 每 5ms 采样，NS2 目标每 15ms 发一份报告（对齐已验证
+ *  实现的 HID_REPORT_INTERVAL=15ms）。5ms 一发会超出链路吞吐：订阅后
+ *  200Hz 的 63B 通知近半数因发送队列拥塞被丢，报文计数器跳号，主机拿到
+ *  残缺流后不采用输入（实测「全要素正常但按键无反应」）。 */
+#define DP_SEND_DIV 3
+
+/** 按键变化日志的最小间隔：调试注入与桥接输入都在这一条里可见，
+ *  限频后连点也不会刷屏（真机排查时按时间对得上串口日志）。 */
+#define DP_BUTTON_LOG_MIN_INTERVAL_US (200 * 1000LL)
 
 /** 合成输入源：只提供静置状态（摇杆居中、无按键）。板卡与主机会话侧的事实
  *  （电池、触觉特性、amiibo 状态）经目标侧刷新，按键输入来自调试注入与
@@ -123,13 +134,28 @@ static void dp_task(void *param)
     (void)param;
     pad_state_t pad;
     TickType_t wake = xTaskGetTickCount();
+    uint32_t last_buttons = 0;
+    int64_t last_button_log_us = 0;
+    uint32_t send_div = 0;
 
     ESP_LOGI(TAG, "data plane task running, tick=%dms, target=%s", DP_TICK_MS,
              target_name());
     for (;;) {
         dp_source_sample(&pad);
+        if (pad.buttons != last_buttons) {
+            const int64_t now_us = esp_timer_get_time();
+            if (now_us - last_button_log_us >= DP_BUTTON_LOG_MIN_INTERVAL_US) {
+                ESP_LOGI(TAG, "buttons 0x%08lx -> 0x%08lx", (unsigned long)last_buttons,
+                         (unsigned long)pad.buttons);
+                last_button_log_us = now_us;
+            }
+            last_buttons = pad.buttons;
+        }
         refresh_target_facts();
-        target_send_pad(&pad);
+        if (++send_div >= DP_SEND_DIV) {
+            send_div = 0;
+            target_send_pad(&pad);
+        }
         /* vTaskDelayUntil 内部自行推进 wake；再手动累加会把实际周期翻倍。 */
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(DP_TICK_MS));
     }

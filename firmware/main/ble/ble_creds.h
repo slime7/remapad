@@ -20,9 +20,22 @@ extern "C" {
  * 态），回连广播直接使用存储值。
  */
 
+/** NVS 布局里每个身份的槽位数（序列化按此固定长度，不随保留策略变化）。 */
 #define NS2_CREDS_MAX 4
+/** 内存里每个身份保留的凭证条数：对齐 controller.md §7.4 的两条存储模型
+ *  （主机公网地址 + 私有第二接口地址）。超出后丢弃最旧一条，回连广播始终
+ *  用最近一条，主机换过地址后不会再发旧地址。 */
+#define NS2_CREDS_KEEP 2
 #define NS2_CREDS_MAC_LEN 6
 #define NS2_CREDS_LTK_LEN 16
+
+/** 最近一次成功连接的主机地址（按身份保存，独立于配对凭证）。回连与唤醒
+ *  广播必须携带主机自己的地址，主机才会认；配对凭证里的地址可能为空或
+ *  过期，连接时记录到的对端地址则一定是主机当前在用的那个。 */
+void ble_creds_note_host_mac(ns2_identity_t identity, const uint8_t mac[NS2_CREDS_MAC_LEN]);
+
+/** 读取该身份最近一次连接的主机地址；未记录过返回 false。 */
+bool ble_creds_host_mac(ns2_identity_t identity, uint8_t out[NS2_CREDS_MAC_LEN]);
 
 typedef struct {
     uint8_t mac[NS2_CREDS_MAC_LEN];

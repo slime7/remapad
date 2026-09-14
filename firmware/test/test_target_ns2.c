@@ -237,6 +237,45 @@ static void unknown_model_still_reports_keys(void)
     CHECK_EQ(s_capture.body[0x02], 0x01);
 }
 
+/** 主机在 0x0012 上按 BLE 形态下发 Output Report 0x02：实机写入的载荷是
+ *  32 字节（左右各 16 字节 LRA 参数包，不带 Report ID）。把长度判成
+ *  33 字节会把每一包震动都丢掉，表现为「主机下发震动，设备毫无反应」，
+ *  同时每 20-30 ms 刷一条告警把串口日志淹掉。 */
+static void rumble_payload_accepts_ble_form(void)
+{
+    uint8_t ble[32];
+    memset(ble, 0, sizeof(ble));
+    ble[0] = 0x40;  /* 左 LRA 状态字 bit6：启用 */
+    ble[16] = 0x00; /* 右 LRA 状态字：未启用 */
+
+    ns2_rumble_event_t event;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(event.left_on);
+    CHECK(!event.right_on);
+    CHECK_EQ(event.raw[0], 0x40);
+    CHECK_EQ(event.raw[16], 0x00);
+
+    /* 带 Report ID/占位前缀的 33 字节形态：参数包整体后移一字节。 */
+    uint8_t with_id[33];
+    with_id[0] = 0x00;
+    memcpy(&with_id[1], ble, sizeof(ble));
+    REQUIRE(ns2_rumble_parse(with_id, sizeof(with_id), &event));
+    CHECK(event.left_on);
+    CHECK_EQ(event.raw[16], 0x00);
+
+    /* 右路启用、左路关闭：两路状态字分别判定。 */
+    ble[0] = 0x00;
+    ble[16] = 0x40;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(!event.left_on);
+    CHECK(event.right_on);
+
+    /* 过短或空载荷按失败返回，不产生事件。 */
+    CHECK(!ns2_rumble_parse(ble, 31, &event));
+    CHECK(!ns2_rumble_parse(NULL, sizeof(ble), &event));
+    CHECK(!ns2_rumble_parse(ble, sizeof(ble), NULL));
+}
+
 HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"面键按位置映射到 NS2 的 A/B/X/Y（私有用 PS 键名）",
                  face_buttons_keep_position_semantics},
@@ -246,4 +285,5 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"摇杆原样进报文且中位正确", sticks_keep_values_and_center},
                 {"目标事实折进电量字节", target_facts_fold_into_power_byte},
                 {"NS2 吃不下能力位也不改报文", unconsumed_caps_do_not_change_the_report},
-                {"未识别型号兜底后仍照常上报", unknown_model_still_reports_keys});
+                {"未识别型号兜底后仍照常上报", unknown_model_still_reports_keys},
+                {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form});

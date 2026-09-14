@@ -50,6 +50,15 @@ CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
 CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
 CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2
 
+# NS2 主机把连接压到 5ms（4 单位，低于 BLE 规范的 7.5ms 下限），控制器必须
+# 放行亚规范间隔主机下发的更新才能落地。ESP32-C3/S3 控制器允许亚规范间隔由
+# 这个开关控制（bt.c 据此调用 ble_min_conn_interval_enable(3)，最低 3.75ms），
+# IDF 6.1 默认开启，这里显式写出以免后续版本默认值变化悄悄带偏。NimBLE 主机
+# 侧仍按规范拒绝 itvl < 6 的主动请求，因此本工程不主动请求连接参数，只接受
+# 主机下发的值（输入被采用的门槛是 0x0C/0x04 特性启用与稳定上报流，见
+# ADR 0023）。
+CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE=y
+
 # NS2 主机只认经扩展广播 HCI 路径（LE Set Extended Advertising Parameters，
 # legacy_pdu=1）下发的 legacy PDU；缓冲参数对齐已验证可被 NS2 发现的
 # ESP32 实现（zhantss/ESP32-BLE5-NSController-Emulator）。

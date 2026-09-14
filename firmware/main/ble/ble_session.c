@@ -13,6 +13,7 @@
 #include "ble_controller.h"
 #include "ble_creds.h"
 #include "dp_plane.h"
+#include "ns2_adv.h"
 #include "ns2_identity.h"
 #include "ns2_frames.h"
 #include "ns2_output.h"
@@ -52,6 +53,10 @@ typedef struct {
     bool pair_ltk_ready;
     /** 已投递的输入报告数（主机订阅后计数），供控制面诊断。 */
     uint32_t reports;
+    /** 主机已发 0x0c/0x04 启用特性：输入报文被采用的门槛，未启用不发。 */
+    bool features_enabled;
+    /** 休眠看门狗计数：每秒 +1，主机启用特性即清零。 */
+    uint8_t dormant_ticks;
 } session_slot_t;
 
 static struct {
@@ -262,32 +267,98 @@ static void factory_init(void)
     }
 }
 
-/** 31 字节手柄广播载荷（controller.md §2.1）：Flags 3B + 厂商数据 28B。
- * 偏移：5-6 Company ID、7-9 协议头、10-11 VID、12-13 PID、16 状态位、
- * 17-22 目标主机 MAC 反序、23 尾部标志。有凭证时构造回连广播。 */
-static void build_adv_payload(uint8_t out[31], ns2_identity_t identity, bool reconnect)
+/** 唤醒窗口时长：真机按键唤醒只发约 2 秒的 0x81 广播，这里取 10 秒——主机
+ *  的唤醒扫描窗口远长于 2 秒，窗口太短会错过；连接建立即提前结束窗口，
+ *  所以主机在线时不会多打扰它。 */
+#define NS2_WAKE_BURST_US (10 * 1000000LL)
+
+/** 休眠看门狗：已订阅输入但主机始终没发 0x0c/0x04（启用特性）持续这么多
+ *  秒（tick 每 1 秒一次），判定为主机不采用输入的休眠连接——握把页的快捷
+ *  回连正是这个形态（实测 itvl=4 但未启用的链路按键同样无效）。正常握手
+ *  在订阅前后一两秒内就会启用特性，15 秒足够宽。 */
+#define NS2_DORMANT_TICKS 15
+
+/** 每次上电允许的休眠断开次数上限：超过即放弃（避免与主机反复互相拉扯）。 */
+#define NS2_DORMANT_MAX_DROPS 3
+
+/** 唤醒窗口（0 = 未开）：窗口内广播形态为 0x81 的唤醒广播。 */
+static ns2_adv_wake_window_t s_wake_win;
+
+/** 本次上电已执行的休眠断开次数（上限 NS2_DORMANT_MAX_DROPS）。 */
+static uint8_t s_dormant_drops;
+
+static bool wake_burst_active(void)
 {
-    const uint16_t pid = identity_pid(identity);
-    static const uint8_t tpl[31] = {
-        0x02, 0x01, 0x06,
-        0x1B, 0xFF,
-        0x53, 0x05, 0x01, 0x00, 0x03,
-        0x7E, 0x05,
-        0x00, 0x00,
-        0x00, 0x01, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    };
-    memcpy(out, tpl, 31);
-    out[12] = (uint8_t)(pid & 0xFF);
-    out[13] = (uint8_t)(pid >> 8);
-    if (reconnect && ble_creds_count(identity) > 0) {
-        const ns2_cred_record_t *rec = ble_creds_get(identity, 0);
-        memcpy(&out[17], rec->mac, 6);
-        /* 已配对回连/唤醒形态：状态字节 0x81（对齐已验证实现，
-         * 主机据此按回连流程初始化）。 */
-        out[16] = 0x81;
+    return ns2_adv_wake_window_active(&s_wake_win, esp_timer_get_time());
+}
+
+static bool mac_all_zero(const uint8_t mac[6])
+{
+    for (size_t i = 0; i < 6; i++) {
+        if (mac[i] != 0) {
+            return false;
+        }
     }
+    return true;
+}
+
+/** 身份的广播形态：手动配对模式与未配对身份发发现广播；已配对身份平时发
+ * 回连广播（状态位 0x00），只有显式唤醒突发期间才发 0x81 的唤醒广播。
+ * 地址优先取最近一次连接记录到的主机地址，其次取最近一条「非全零」凭证：
+ * NVS 里存在计数虚高、尾部记录全零的历史表，直接取最近一条会写出全零地址
+ * 的广播——主机既不会回连也不会被唤醒。 */
+static ns2_adv_mode_t adv_mode_for(ns2_identity_t identity, const uint8_t **out_mac)
+{
+    static uint8_t s_adv_host_mac[6];
+    if (s_ses.pairing_mode) {
+        *out_mac = NULL;
+        return NS2_ADV_DISCOVERY;
+    }
+    /* 凭证优先：记录值可能被普通 BLE 主机（PC/手机）污染，凭证只会在 NS2
+     * 配对交换里写入。 */
+    const size_t count = ble_creds_count(identity);
+    for (size_t i = count; i > 0; i--) {
+        const ns2_cred_record_t *rec = ble_creds_get(identity, i - 1);
+        if (rec != NULL && !mac_all_zero(rec->mac)) {
+            memcpy(s_adv_host_mac, rec->mac, sizeof(s_adv_host_mac));
+            *out_mac = s_adv_host_mac;
+            return ns2_adv_choose_mode(true, wake_burst_active());
+        }
+    }
+    if (ble_creds_host_mac(identity, s_adv_host_mac)) {
+        *out_mac = s_adv_host_mac;
+        return ns2_adv_choose_mode(true, wake_burst_active());
+    }
+    *out_mac = NULL;
+    return ns2_adv_choose_mode(false, wake_burst_active());
+}
+
+static const char *adv_mode_name(ns2_adv_mode_t mode)
+{
+    switch (mode) {
+    case NS2_ADV_WAKE:
+        return "wake";
+    case NS2_ADV_RECONNECT:
+        return "reconnect";
+    default:
+        return "discovery";
+    }
+}
+
+/** 启动一个身份的广播：Pro 单身份占两个实例（扩展 + legacy PDU）共用公共
+ * 伪装地址，JoyCon 组合左右各占一个实例（静态随机地址）。 */
+static void adv_start_identity(size_t index, ns2_identity_t identity,
+                               const uint8_t payload[NS2_ADV_PAYLOAD_LEN])
+{
+    ns2_identity_t ids[2];
+    if (mode_identities(ids) == 1) {
+        ble_controller_adv_start(0, (uint8_t)NS2_ID_PRO, payload, NULL);
+        ble_controller_adv_start(1, (uint8_t)NS2_ID_PRO, payload, NULL);
+        return;
+    }
+    uint8_t addr[6];
+    ns2_identity_adv_addr(s_ses.own_mac, identity, addr);
+    ble_controller_adv_start((uint8_t)index, identity, payload, addr);
 }
 
 /** 按凭证状态恢复广播：Pro 双实例（扩展 + legacy PDU）共用公共伪装地址；
@@ -298,21 +369,33 @@ static void resume_advertising(void)
     ns2_identity_t ids[2];
     const size_t n = mode_identities(ids);
     for (size_t i = 0; i < n; i++) {
-        const bool reconnect = ble_creds_count(ids[i]) > 0;
-        uint8_t adv[31];
-        build_adv_payload(adv, ids[i], reconnect);
-        if (n == 1) {
-            ble_controller_adv_start(0, (uint8_t)NS2_ID_PRO, adv, NULL);
-            ble_controller_adv_start(1, (uint8_t)NS2_ID_PRO, adv, NULL);
-        } else {
-            uint8_t addr[6];
-            ns2_identity_adv_addr(s_ses.own_mac, ids[i], addr);
-            ble_controller_adv_start((uint8_t)i, ids[i], adv, addr);
-        }
+        uint8_t adv[NS2_ADV_PAYLOAD_LEN];
+        const uint8_t *mac = NULL;
+        const ns2_adv_mode_t mode = adv_mode_for(ids[i], &mac);
+        ns2_adv_payload(adv, identity_pid(ids[i]), mode, mac);
+        adv_start_identity(i, ids[i], adv);
         ESP_LOGI(TAG, "resume: identity %u %s advertising (%u creds)",
-                 (unsigned)ids[i], reconnect ? "reconnect" : "discovery",
-                 (unsigned)ble_creds_count(ids[i]));
+                 (unsigned)ids[i], adv_mode_name(mode), (unsigned)ble_creds_count(ids[i]));
     }
+}
+
+void ns2_session_wake_request(void)
+{
+    if (s_ses.pairing_mode) {
+        ESP_LOGI(TAG, "wake burst ignored (pairing mode)");
+        return;
+    }
+    ns2_adv_wake_window_open(&s_wake_win, esp_timer_get_time(), NS2_WAKE_BURST_US);
+    ESP_LOGI(TAG, "wake burst started (%u ms)", (unsigned)(NS2_WAKE_BURST_US / 1000));
+    if (ble_controller_connected()) {
+        /* 已连接时唤醒请求按「重新连接」处理：主机从「更改握法/顺序」页面
+         * 连上来的会话不会采用输入报文（controller.md §12），断一次让主机
+         * 按回连路径重新连上来；断开事件随即重启广播，此时窗口内发 0x81。 */
+        ESP_LOGI(TAG, "wake: dropping current link to force a reconnect");
+        ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
+        return;
+    }
+    resume_advertising();
 }
 
 void ns2_session_on_sync(const uint8_t own_mac[6])
@@ -322,6 +405,14 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     memcpy(s_ses.own_mac, own_mac, 6);
     ESP_LOGI(TAG, "host synced, own MAC %02x:%02x:%02x:%02x:%02x:%02x",
              own_mac[0], own_mac[1], own_mac[2], own_mac[3], own_mac[4], own_mac[5]);
+    /* 已配对的上电：先开一段唤醒窗口，让休眠中的主机被叫醒并按回连路径
+     * 连上来（从配对页面连上来的会话输入会被主机侧阻塞，见 controller.md
+     * §12）；窗口内连上即结束窗口，超时后退回 0x00 的回连形态等主机回连。 */
+    if (ns2_session_paired()) {
+        ns2_adv_wake_window_open(&s_wake_win, esp_timer_get_time(), NS2_WAKE_BURST_US);
+        ESP_LOGI(TAG, "boot wake window opened (%u ms)",
+                 (unsigned)(NS2_WAKE_BURST_US / 1000));
+    }
     resume_advertising();
 }
 
@@ -414,6 +505,10 @@ bool ns2_session_conn_idle_expired(uint16_t conn_handle)
 
 /** 将派生 LTK 注入 NimBLE bonding store（随机数与 EDIV 全 0，BLE 链路
  * 加密用的 LTK 为线序 A1 XOR B1）；主机配对完成或回连后调用。 */
+/** LTK 注入形态：0 = 反转后写入（默认，与参考实现一致），1 = 原样写入。
+ *  主机连上但 `link` 显示 enc=0 时用它做现场 A/B。 */
+static uint8_t s_ltk_form;
+
 static void inject_ltk_to_ble_store(const uint8_t host_mac[6], const uint8_t ltk[16])
 {
     struct ble_store_value_sec sec;
@@ -421,15 +516,38 @@ static void inject_ltk_to_ble_store(const uint8_t host_mac[6], const uint8_t ltk
     sec.bond_count = 1;
     sec.key_size = 16;
     sec.ltk_present = 1;
-    reverse_bytes(ltk, sec.ltk, 16);
-    sec.peer_addr.type = BLE_ADDR_PUBLIC;
+    if (s_ltk_form == 0) {
+        /* 参考实现形态：会话里存的是 AES 密钥形态（A1^B1 反序），写栈前再反
+         * 转回主机存储形态（zhantss/ESP32-BLE5-NSController-Emulator）。 */
+        reverse_bytes(ltk, sec.ltk, 16);
+    } else {
+        /* 研究仓库的 .ltk（用于解密真机链路）恰是反序形态：按原样写入。 */
+        memcpy(sec.ltk, ltk, 16);
+    }
     memcpy(sec.peer_addr.val, host_mac, 6);
     sec.rand_num = 0;
     sec.ediv = 0;
     sec.authenticated = 1;
     sec.sc = 1;
-    ble_store_write_our_sec(&sec);
-    ble_store_write_peer_sec(&sec);
+    /* 主机的地址类型（公有/随机）也要对上：栈按「地址 + 类型」查 LTK，类型
+     * 不一致会查不到密钥、加密请求被否掉（表现为主机连上但不认这台手柄）。
+     * 主机可能用两个地址中的任意一个，两种类型都登记一份。 */
+    static const uint8_t types[2] = {BLE_ADDR_PUBLIC, BLE_ADDR_RANDOM};
+    for (size_t i = 0; i < 2; i++) {
+        sec.peer_addr.type = types[i];
+        ble_store_write_our_sec(&sec);
+        ble_store_write_peer_sec(&sec);
+    }
+}
+
+void ns2_session_set_ltk_form(uint8_t form)
+{
+    s_ltk_form = form == 0 ? 0 : 1;
+}
+
+uint8_t ns2_session_ltk_form(void)
+{
+    return s_ltk_form;
 }
 
 void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
@@ -451,6 +569,11 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
     slot->conn_handle = conn_handle;
     slot->identity = identity;
     slot->report_format = NS2_REPORT_ID_09;
+    /* 主机已回连：唤醒窗口立即结束，后继广播回到 0x00 的回连形态。 */
+    if (wake_burst_active()) {
+        ns2_adv_wake_window_close(&s_wake_win);
+        ESP_LOGI(TAG, "wake burst finished (host connected)");
+    }
 
     uint8_t peer[6] = {0};
     const bool have_peer = ble_controller_peer_mac(conn_handle, peer);
@@ -462,6 +585,12 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
                 break;
             }
         }
+    }
+    if (matched != NULL) {
+        /* 命中配对凭证：确认是 NS2 主机，记下它当前使用的地址（回连/唤醒
+         * 广播必须带主机自己的地址）。普通 BLE 主机（PC/手机）不写这条，
+         * 否则它们会把回连目标改成自己。 */
+        ble_creds_note_host_mac(identity, peer);
     }
     ESP_LOGI(TAG, "connected (conn=%u, identity=%s, peer %02x:%02x:%02x:%02x:%02x:%02x, %s)",
              conn_handle, ns2_identity_name(identity),
@@ -497,12 +626,11 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
         resume_advertising();
     } else if (identity != NS2_ID_PRO && identity_in_mode(identity)) {
         /* JoyCon 组合：另一只仍在线，只恢复断开身份的广播等它回连。 */
-        const bool reconnect = ble_creds_count(identity) > 0;
-        uint8_t adv[31];
-        build_adv_payload(adv, identity, reconnect);
-        uint8_t addr[6];
-        ns2_identity_adv_addr(s_ses.own_mac, identity, addr);
-        ble_controller_adv_start(identity == NS2_ID_JOYCON_L ? 0 : 1, identity, adv, addr);
+        uint8_t adv[NS2_ADV_PAYLOAD_LEN];
+        const uint8_t *mac = NULL;
+        const ns2_adv_mode_t mode = adv_mode_for(identity, &mac);
+        ns2_adv_payload(adv, identity_pid(identity), mode, mac);
+        adv_start_identity(identity == NS2_ID_JOYCON_L ? 0 : 1, identity, adv);
     }
 }
 
@@ -620,6 +748,8 @@ static size_t handle_init_cmd(session_slot_t *ses, const uint8_t *req, size_t le
             uint8_t ltk[16];
             reverse_bytes(&req[14], ltk, 16);
             ble_creds_save(ses->identity, &req[8], ltk);
+            /* 配对交换走完才算确认是 NS2 主机：此时才记回连广播要用的地址。 */
+            ble_creds_note_host_mac(ses->identity, &req[8]);
             ses->state = SESSION_NORMAL;
             log_session_normal(ses);
         }
@@ -694,10 +824,15 @@ static size_t handle_feature_cmd(session_slot_t *ses, const uint8_t *req, size_t
         ses->feature_mask = mask;
         break;
     case 0x04:
+        /* 启用特性：主机采用输入报文的门槛（参考实现据此进入 DEV_READY 并
+         *  开始上报）。 */
         ses->feature_mask |= mask;
+        ses->features_enabled = true;
+        ESP_LOGI(TAG, "features enabled (mask 0x%02x) -> input reports on", mask);
         break;
     case 0x05:
         ses->feature_mask = (uint8_t)(ses->feature_mask & ~mask);
+        ses->features_enabled = false;
         break;
     case 0x06:
         ESP_LOGI(TAG, "feature sampling config 0x%02x (ignored)", mask);
@@ -772,6 +907,7 @@ static size_t handle_pairing_cmd(session_slot_t *ses, const uint8_t *req, size_t
          * store（rand/ediv 全 0），主机后续的标准加密请求即可用该 LTK。 */
         if (ses->pair_mac_ready && ses->pair_ltk_ready) {
             ble_creds_save(ses->identity, ses->pair_host_mac, ses->pair_ltk);
+            ble_creds_note_host_mac(ses->identity, ses->pair_host_mac);
             inject_ltk_to_ble_store(ses->pair_host_mac, ses->pair_ltk);
             ses->pair_mac_ready = false;
             ses->pair_ltk_ready = false;
@@ -786,6 +922,25 @@ static size_t handle_pairing_cmd(session_slot_t *ses, const uint8_t *req, size_t
     }
 }
 
+/** 前 n（最多 16）字节的十六进制串，写入调用方缓冲（长度 >= 3*16+4）。 */
+static const char *hex_prefix(const uint8_t *data, size_t len, char *out, size_t cap)
+{
+    const size_t n = len < 16 ? len : 16;
+    size_t used = 0;
+    for (size_t i = 0; i < n && used + 4 <= cap; i++) {
+        const int written = snprintf(&out[used], cap - used, i == 0 ? "%02x" : " %02x", data[i]);
+        if (written <= 0 || (size_t)written >= cap - used) {
+            break;
+        }
+        used += (size_t)written;
+    }
+    if (len > n && used + 4 <= cap) {
+        snprintf(&out[used], cap - used, " ..");
+    }
+    out[cap - 1] = 0;
+    return out;
+}
+
 void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
                             uint16_t conn_handle)
 {
@@ -798,6 +953,13 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         ESP_LOGW(TAG, "command too short (%u)", (unsigned)len);
         return;
     }
+    char resp_hex[3 * 16 + 4];
+    char rsp_hex[3 * 16 + 4];
+    /* 主机初始化与运行期的每一步命令都留痕：真机排查「连上但没输入」时，
+     * 对不上抓包的握手步骤一眼可见。应答体同样留前 16 字节，用于对照
+     * 主机重复轮询某条命令（重复轮询说明该应答没被主机接受）。 */
+    ESP_LOGI(TAG, "cmd 0x%02x/0x%02x (%uB) %s", data[0], data[3], (unsigned)len,
+             hex_prefix(data, len, resp_hex, sizeof(resp_hex)));
     const uint8_t cmd = data[0];
     const uint8_t subcmd = data[3];
 
@@ -853,6 +1015,24 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         memset(&frame[8], 0, 24);
         resp_len = NS2_FRAME_HEADER_LEN + 24;
         break;
+    case 0x18:
+        /* 主机在会话中每约 10 秒轮询一次 0x18/0x01，期望 8 字节应答体
+         * （controller.md §6 与已验证实现一致）。不回这个体，主机不会把
+         * 这台手柄当成可用输入源——「连上、订阅了、上报也在发，但按键没
+         * 反应」正是这个现象。0x18/0x03 只回显请求里的那一字节。 */
+        if (subcmd == 0x01) {
+            static const uint8_t body[8] = {
+                0x00, 0x00, 0x40, 0xF0, 0x00, 0x00, 0x60, 0x00,
+            };
+            memcpy(&frame[8], body, sizeof(body));
+            resp_len = NS2_FRAME_HEADER_LEN + sizeof(body);
+        } else if (subcmd == 0x03) {
+            frame[8] = len >= 9 ? data[8] : 0x07;
+            resp_len = NS2_FRAME_HEADER_LEN + 1;
+        } else {
+            resp_len = NS2_FRAME_HEADER_LEN;
+        }
+        break;
     case NS2_CMD_VERSION:
         if (subcmd == 0x01) {
             ns2_body_version(&frame[8], ses->identity);
@@ -877,23 +1057,22 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     }
     ns2_frame_response_header(frame, cmd, transport, subcmd);
     ble_controller_notify_answer(conn_handle, resp, ANSWER_PREFIX_LEN + resp_len);
+    ESP_LOGI(TAG, "rsp 0x%02x/0x%02x (%uB) %s", cmd, subcmd,
+             (unsigned)(ANSWER_PREFIX_LEN + resp_len),
+             hex_prefix(resp, ANSWER_PREFIX_LEN + resp_len, rsp_hex, sizeof(rsp_hex)));
 }
 
 void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle)
 {
-    /* Output Report 0x02：BLE 形态首字节 0x00，随后 2x16B LRA 参数包（§5.4）。
-     * 板卡无震动马达：解析为结构化震动事件经 ns2_output 分发给监听者
-     * （当前记录日志，M5 起转发给 USB 源手柄 / 桥接 PC）。 */
+    /* Output Report 0x02：2x16B LRA 参数包（§5.4）。板卡无震动马达：
+     * 解析为结构化震动事件经 ns2_output 分发给监听者（当前记录日志，
+     * M5 起转发给 USB 源手柄 / 桥接 PC）。 */
     (void)conn_handle;
-    if (len < 1 + 32) {
+    ns2_rumble_event_t event;
+    if (!ns2_rumble_parse(data, len, &event)) {
         ESP_LOGW(TAG, "output report too short (%u)", (unsigned)len);
         return;
     }
-    ns2_rumble_event_t event;
-    memcpy(event.raw, &data[1], sizeof(event.raw));
-    /* LRA 状态字 bit6 = 启用标志（controller.md §5.4）。 */
-    event.left_on = (event.raw[0] & 0x40) != 0;
-    event.right_on = (event.raw[16] & 0x40) != 0;
     ESP_LOGI(TAG, "rumble: L=%u R=%u (0x%02x/0x%02x)",
              (unsigned)event.left_on, (unsigned)event.right_on,
              event.raw[0], event.raw[16]);
@@ -908,7 +1087,9 @@ void ns2_session_on_composite(const uint8_t *data, size_t len, uint16_t conn_han
         ESP_LOGW(TAG, "composite too short (%u)", (unsigned)len);
         return;
     }
-    ns2_session_on_output(data, 32, conn_handle);
+    /* 复合写入的震动段只有一条 16 字节 LRA 参数包（与 0x0012 的左右两条
+     * 不同），本工程不模拟马达，遂不解析；震动反馈走 0x0012 通路的
+     * ns2_session_on_output。 */
     ns2_session_on_command(&data[33], len - 33, NS2_FRAME_TRANSPORT_BLE, conn_handle);
 }
 
@@ -928,20 +1109,7 @@ void ns2_session_start_pairing_mode(void)
     /* 手动配对恒发标准发现广播（目标 MAC 全零，对齐 §12 配对时机语义）：
      * 已配对的主机会把它当作重新配对，未配对的主机可直接首次配对。
      * JoyCon 组合左右两只同时进入发现广播（按下 LR 的组合确认流程）。 */
-    ns2_identity_t ids[2];
-    const size_t n = mode_identities(ids);
-    for (size_t i = 0; i < n; i++) {
-        uint8_t adv[31];
-        build_adv_payload(adv, ids[i], false);
-        if (n == 1) {
-            ble_controller_adv_start(0, (uint8_t)NS2_ID_PRO, adv, NULL);
-            ble_controller_adv_start(1, (uint8_t)NS2_ID_PRO, adv, NULL);
-        } else {
-            uint8_t addr[6];
-            ns2_identity_adv_addr(s_ses.own_mac, ids[i], addr);
-            ble_controller_adv_start((uint8_t)i, ids[i], adv, addr);
-        }
-    }
+    resume_advertising();
     ESP_LOGI(TAG, "pairing mode: discovery advertising");
 }
 
@@ -1054,6 +1222,44 @@ void ns2_session_tick(void)
     if (s_fwupd.active && esp_timer_get_time() - s_fwupd.last_us > FWUPD_IDLE_TIMEOUT_US) {
         fwupd_finish();
     }
+    /* 唤醒窗口到时收尾：立刻回到 0x00 的回连广播，别让主机在休眠中反复被叫醒。 */
+    if (s_wake_win.until_us != 0 && !wake_burst_active()) {
+        ns2_adv_wake_window_close(&s_wake_win);
+        ESP_LOGI(TAG, "wake burst finished");
+        if (!ble_controller_connected() && !s_ses.pairing_mode) {
+            resume_advertising();
+        }
+    }
+
+    /* 休眠看门狗：已订阅输入但间隔停在激活门槛之上（ns2_adv_dormant_link）
+     * 持续 NS2_DORMANT_TICKS 秒的连接，主机永远不会采用它的输入——断开并
+     * 开唤醒突发，逼主机按会激活的回连路径重连。手动配对模式下不干预
+     * （此时由用户主导流程）。 */
+    if (!s_ses.pairing_mode) {
+        for (size_t i = 0; i < SESSION_MAX; i++) {
+            session_slot_t *ses = &s_ses.sess[i];
+            if (!ses->active || ses->state != SESSION_NORMAL) {
+                continue;
+            }
+            const bool subscribed = ble_controller_input_notify_ready(
+                ses->conn_handle, ses->report_format);
+            if (!subscribed || !ns2_adv_dormant_link(subscribed, ses->features_enabled)) {
+                ses->dormant_ticks = 0;
+                continue;
+            }
+            if (++ses->dormant_ticks < NS2_DORMANT_TICKS ||
+                s_dormant_drops >= NS2_DORMANT_MAX_DROPS) {
+                continue;
+            }
+            s_dormant_drops++;
+            ses->dormant_ticks = 0;
+            ESP_LOGW(TAG, "dormant link (conn=%u, features not enabled) -> drop + wake "
+                     "(attempt %u/%u)", ses->conn_handle,
+                     (unsigned)s_dormant_drops, (unsigned)NS2_DORMANT_MAX_DROPS);
+            ns2_session_wake_request();
+            break;
+        }
+    }
 }
 
 /* --- 输出会话视图（dp 的输出通道经 sink 间接调用）--- */
@@ -1096,8 +1302,12 @@ void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *
         if (n == index) {
             session_slot_t *slot = &s_ses.sess[i];
             const uint16_t conn = slot->conn_handle;
-            /* 未订阅也要投递：传输层会刷新 READ 缓存并静默丢弃通知，
-             * 只有真正上行的报告才计入计数与首帧日志。 */
+            /* 特性启用（0x0c/0x04）前不发输入通知：对齐参考实现的 DEV_READY
+             *  门槛——主机不采用未启用链路上的输入，提前灌报文只会挤占发送
+             *  队列（休眠连接上曾实测近半数通知因拥塞失败）。 */
+            if (!slot->features_enabled) {
+                return;
+            }
             if (ble_controller_input_notify_ready(conn, report_id)) {
                 slot->reports++;
                 if (slot->reports == 1) {
@@ -1184,7 +1394,9 @@ bool ns2_session_status(uint8_t identity, ns2_session_status_t *out)
     out->report_format = slot->report_format;
     out->notify_05 = ble_controller_input_notify_ready(slot->conn_handle, NS2_REPORT_ID_05);
     out->notify_09 = ble_controller_input_notify_ready(slot->conn_handle, NS2_REPORT_ID_09);
+    out->features_enabled = slot->features_enabled;
     out->reports = slot->reports;
+    ble_controller_conn_itvl(slot->conn_handle, &out->conn_itvl);
     out->state = slot->state == SESSION_NORMAL ? NS2_LINK_NORMAL : NS2_LINK_WAIT_PAIR;
     return true;
 }

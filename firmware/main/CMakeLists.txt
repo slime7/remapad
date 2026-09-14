@@ -43,6 +43,7 @@ idf_component_register(
         "ota/ota_session.c"
         "target/target.c"
         "target/ns2/ns2_report.c"
+        "target/ns2/ns2_adv.c"
         "target/ns2/ns2_frames.c"
         "target/ns2/ns2_output.c"
         "target/ns2/ns2_serial.c"

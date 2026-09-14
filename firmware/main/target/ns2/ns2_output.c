@@ -26,6 +26,8 @@ static struct {
     bool charging;
     bool external_power;
 
+    uint8_t motion_mode; /* ns2_motion_mode_t：0x09 运动块占位方式 */
+
     uint8_t *amiibo;
     size_t amiibo_len;
 } s_out;
@@ -53,6 +55,7 @@ void ns2_output_send(const ns2_controller_state_t *state)
     }
     /* 电池字段以 ns2_output_set_battery 的最新值为准（输入源可能不带电池）。 */
     ns2_controller_state_t merged = *state;
+    merged.motion_mode = s_out.motion_mode;
     if (s_out.battery_level != 0 || s_out.battery_mv != 0) {
         merged.battery_level = s_out.battery_level;
         merged.battery_mv = s_out.battery_mv;
@@ -87,6 +90,16 @@ void ns2_output_set_battery(uint8_t level, uint16_t voltage_mv, bool charging, b
     s_out.battery_mv = voltage_mv;
     s_out.charging = charging;
     s_out.external_power = external;
+}
+
+void ns2_output_set_motion_mode(uint8_t mode)
+{
+    s_out.motion_mode = mode;
+}
+
+uint8_t ns2_output_motion_mode(void)
+{
+    return s_out.motion_mode;
 }
 
 esp_err_t ns2_output_amiibo_stage(const uint8_t *data, size_t len)
@@ -145,6 +158,24 @@ void ns2_output_emit_rumble(const ns2_rumble_event_t *event)
     if (s_out.feedback_fn != NULL && event != NULL) {
         s_out.feedback_fn(NS2_FEEDBACK_RUMBLE, event, s_out.feedback_user);
     }
+}
+
+bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
+{
+    if (data == NULL || out == NULL) {
+        return false;
+    }
+    /* 32 字节 = BLE 形态（实机写入即是此长度，不带 Report ID）；
+     * 33 字节及以上 = 多带 1 字节 Report ID/占位前缀的形态。 */
+    const size_t body = len >= 1 + 32 ? 1 : 0;
+    if (len < body + 32) {
+        return false;
+    }
+    memcpy(out->raw, &data[body], sizeof(out->raw));
+    /* LRA 状态字 bit6 = 启用标志（controller.md §5.4）。 */
+    out->left_on = (out->raw[0] & 0x40) != 0;
+    out->right_on = (out->raw[16] & 0x40) != 0;
+    return true;
 }
 
 void ns2_output_emit_player_led(uint8_t led_mask)

@@ -56,6 +56,7 @@ static void idle_report_09(void)
     expected[0x09] = 0x08;
     expected[0x0A] = 0x80;
     expected[0x0B] = 0x30; /* 特性位：未开启触觉 */
+    expected[0x0E] = 0x28; /* 运动数据长度：板无 IMU，填 40 字节零值占位 */
     CHECK_BYTES(out, expected, sizeof(expected));
 }
 
@@ -236,13 +237,33 @@ static void feature_flag_and_nfc(void)
     CHECK_EQ(out[0x0B], 0x30); /* 未开启触觉 */
     CHECK_EQ(out[0x0C], 0x00);
     CHECK_EQ(out[0x0D], 0x00); /* 耳机状态 */
-    CHECK_EQ(out[0x0E], 0x00); /* 运动数据长度 */
+    CHECK_EQ(out[0x0E], 0x28); /* 运动数据长度 */
 
     state.rumble_enabled = true;
     state.nfc_state = 0x05;
     ns2_encode_input_09(out, &state, 0);
     CHECK_EQ(out[0x0B], 0x38);
     CHECK_EQ(out[0x0C], 0x05);
+}
+
+/** 主机开启 IMU 特性位（0x0C/0x04 掩码含 bit2）后，0x09 报文必须带上运动
+ *  数据块的长度；长度为 0 的报文会被主机当作不完整输入而整体丢弃（表现为
+ *  「已连接但按键无反应」）。板卡无 IMU，长度填 40、内容保持全零占位。 */
+static void motion_block_is_zero_filled_placeholder(void)
+{
+    uint8_t out[NS2_INPUT_09_LEN];
+    ns2_controller_state_t state;
+    ns2_state_defaults(&state);
+    state.buttons = NS2_BTN_A;
+    ns2_encode_input_09(out, &state, 0);
+
+    CHECK_EQ(out[0x0E], 0x28);
+    for (size_t offset = 0x0F; offset < 0x0F + 0x28; offset++) {
+        CHECK_EQ(out[offset], 0x00);
+    }
+    /* 运动块之后只剩保留字节，整包长度不变。 */
+    CHECK_EQ(out[0x37], 0x00);
+    CHECK_EQ(NS2_INPUT_09_LEN, 63u);
 }
 
 static void usb_form_prepends_report_id(void)
@@ -287,6 +308,62 @@ static void counter_widths(void)
     CHECK_EQ(out05[0x03], 0x12);
 }
 
+/** 运动块可以整体关掉：主机若本来就不要运动数据，长度 0 是合法形态。 */
+static void motion_block_can_be_disabled(void)
+{
+    ns2_controller_state_t state;
+    ns2_state_defaults(&state);
+    state.motion_mode = NS2_MOTION_NONE;
+
+    uint8_t out[NS2_INPUT_09_LEN];
+    ns2_encode_input_09(out, &state, 7);
+    CHECK_EQ(out[0x0E], 0x00);
+
+    /* 按键/摇杆字段不受运动块开关影响。 */
+    state.buttons = NS2_BTN_A;
+    ns2_encode_input_09(out, &state, 7);
+    CHECK_EQ(out[0x02], 0x02);
+    CHECK_EQ(out[0x0E], 0x00);
+}
+
+/** 抓包占位：长度 40，块内两处时间戳按 5ms 节奏推进，其余字节是抓包原值。 */
+static void motion_capture_mode_is_monotonic(void)
+{
+    ns2_controller_state_t state;
+    ns2_state_defaults(&state);
+    state.motion_mode = NS2_MOTION_CAPTURE;
+
+    uint8_t first[NS2_INPUT_09_LEN];
+    uint8_t second[NS2_INPUT_09_LEN];
+    ns2_encode_input_09(first, &state, 10);
+    ns2_encode_input_09(second, &state, 11);
+    CHECK_EQ(first[0x0E], NS2_INPUT_09_MOTION_LEN);
+    CHECK_EQ(second[0x0E], NS2_INPUT_09_MOTION_LEN);
+
+    /* 块内偏移 0x05 与 0x23 各是一个 3 字节小端微秒时间戳，间隔 2.5ms。 */
+    const uint32_t a0 = (uint32_t)first[0x14] | ((uint32_t)first[0x15] << 8) |
+                        ((uint32_t)first[0x16] << 16);
+    const uint32_t b0 = (uint32_t)first[0x32] | ((uint32_t)first[0x33] << 8) |
+                        ((uint32_t)first[0x34] << 16);
+    const uint32_t a1 = (uint32_t)second[0x14] | ((uint32_t)second[0x15] << 8) |
+                        ((uint32_t)second[0x16] << 16);
+    CHECK_EQ(a0, 50000u);
+    CHECK_EQ(b0 - a0, 2500u);
+    CHECK_EQ(a1 - a0, 5000u);
+
+    /* 时间戳之外的字节来自抓包：块首 0x06、尾段首字节 0x6C。 */
+    CHECK_EQ(first[0x0F], 0x06);
+    CHECK_EQ(first[0x13], 0x34);
+    CHECK_EQ(first[0x35], 0x07);
+    CHECK_EQ(first[0x37], 0x6C);
+    CHECK_EQ(first[0x3E], 0x58);
+
+    /* 按键与摇杆字段不受运动块影响。 */
+    CHECK_EQ(first[0x02], 0x00);
+    CHECK_EQ(first[0x05], 0x00);
+    CHECK_EQ(first[0x06], 0x08);
+}
+
 HOST_TEST_SUITE(suite_ns2_report, "ns2_report",
                 {"静置状态 0x09 整包逐字节", idle_report_09},
                 {"0x09 按键位表", button_bits_09},
@@ -295,5 +372,8 @@ HOST_TEST_SUITE(suite_ns2_report, "ns2_report",
                 {"Pro / JoyCon 左右身份切分", identity_split},
                 {"电源与充电状态字节", power_and_charge_bytes},
                 {"特性位与 NFC 字段", feature_flag_and_nfc},
+                {"运动数据长度非零且块内全零占位", motion_block_is_zero_filled_placeholder},
                 {"USB 形态只多一个 Report ID", usb_form_prepends_report_id},
-                {"计数器宽度：0x09 8 位 / 0x05 32 位小端", counter_widths});
+                {"计数器宽度：0x09 8 位 / 0x05 32 位小端", counter_widths},
+                {"运动块可整体关闭（长度 0）", motion_block_can_be_disabled},
+                {"运动块抓包占位的时间戳推进", motion_capture_mode_is_monotonic});

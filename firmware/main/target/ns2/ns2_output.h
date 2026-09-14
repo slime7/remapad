@@ -60,6 +60,12 @@ typedef struct {
 
 typedef void (*ns2_feedback_fn)(ns2_feedback_type_t type, const void *payload, void *user);
 
+/** 解析主机经 0x0012 下发的 Output Report 0x02（BLE 形态）为结构化震动事件：
+ *  左/右 LRA 各 16 字节参数包，状态字 bit6 为启用标志。实机写入的载荷是
+ *  32 字节（两个参数包，BLE 模式不带 Report ID），部分主机路径会多带 1 字节
+ *  Report ID/占位前缀（33 字节）。命中返回 true，过短返回 false。 */
+bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out);
+
 /** 注册输出通道（BLE 通知在 ble_controller 就绪后由 dp 注册）。重复注册
  *  覆盖旧通道。 */
 void ns2_output_set_sink(const ns2_output_sink_t *sink);
@@ -73,6 +79,13 @@ void ns2_output_send(const ns2_controller_state_t *state);
 
 /** 更新随报告上发的电池信息（电平 0-9、电压毫伏、充电与外部供电）。 */
 void ns2_output_set_battery(uint8_t level, uint16_t voltage_mv, bool charging, bool external);
+
+/** 0x09 运动块占位方式（ns2_motion_mode_t）：板卡无 IMU，实机排查「主机不
+ *  采用输入」时用 CLI `motion` 切换，无需重新烧录。 */
+void ns2_output_set_motion_mode(uint8_t mode);
+
+/** 当前运动块占位方式（CLI 回显用）。 */
+uint8_t ns2_output_motion_mode(void);
 
 /** 预置 amiibo / NTAG215 镜像（最长 NS2_AMIIBO_MAX 字节，拷贝进 PSRAM）。
  *  成功后 ns2_output_nfc_state() 汇报 0x01（已就绪待感应），供输入报告

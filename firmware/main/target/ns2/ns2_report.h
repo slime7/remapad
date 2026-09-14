@@ -12,6 +12,10 @@ extern "C" {
 #define NS2_INPUT_05_LEN 63
 #define NS2_INPUT_09_LEN 63
 
+/** Report 0x09 运动数据块：长度字节固定 40（主机开启 IMU 特性位后不认
+ *  长度为 0 的报文），块内字节恒为 0——板卡没有 IMU，按已验证实现填占位。 */
+#define NS2_INPUT_09_MOTION_LEN 0x28
+
 #define NS2_REPORT_ID_05 0x05
 #define NS2_REPORT_ID_09 0x09
 

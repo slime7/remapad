@@ -44,6 +44,21 @@ bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6]);
 /** 指定连接上输入报告格式（0x05 / 0x09）的 CCCD 是否已由主机开启。 */
 bool ble_controller_input_notify_ready(uint16_t conn_handle, uint8_t report_format);
 
+/** 指定连接的当前连接间隔（1.25ms 单位，4 = 5ms）。NS2 主机要求约 5ms
+ * （约 200Hz 上报），间隔偏大时主机会连接、订阅但忽略输入报文；该值由
+ * 主机下发的连接更新决定，控制器需允许亚规范间隔（sdkconfig 的
+ * CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE，默认开启）。 */
+bool ble_controller_conn_itvl(uint16_t conn_handle, uint16_t *out_itvl);
+
+/** 连接观测：当前间隔（1.25ms 单位）、协商后的 ATT MTU、通知投递失败计数
+ *  与最近一次失败的返回码（0 = 未失败）。MTU < 66 时 63 字节输入通知发不
+ *  出去，主机会表现为「已订阅但无输入」。任一指针可传 NULL。 */
+bool ble_controller_conn_stats(uint16_t conn_handle, uint16_t *out_itvl, uint16_t *out_mtu,
+                               uint32_t *out_tx_fail, int *out_tx_rc, bool *out_encrypted);
+
+/** 最近一次真正投递的输入报文（63B，不含 Report ID），供 CLI 抓取线上内容。 */
+bool ble_controller_last_input(uint16_t conn_handle, uint8_t report_format, uint8_t *out);
+
 /** 发送 Input Report 0x05 / 0x09 通知到指定连接（未订阅时静默丢弃，同时刷新 READ 缓存）。 */
 void ble_controller_notify_input_05(uint16_t conn_handle, const uint8_t report[63]);
 void ble_controller_notify_input_09(uint16_t conn_handle, const uint8_t report[63]);
