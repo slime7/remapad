@@ -47,6 +47,7 @@
 | [0019](0019-playwright-e2e-and-host-unit-tests.md) | active | 以 Playwright 端到端测试与固件主机端单元测试作为回归基线 |
 | [0020](0020-battery-adc-sampling-and-charge-inference.md) | active | 电池电量走 BAT_ADC 采样（过采样平均 + 曲线拟合校准 + 静置电压—容量表），充电状态按电压趋势推断 |
 | [0021](0021-input-path-three-stage-layering.md) | active | 输入通路按 input/pad/target 三段分层（接收 / 处理 / 转换），部分取代 0011 的目录划分 |
+| [0022](0022-ota-over-bridge-frames-with-rollback.md) | active | OTA 升级复用桥接帧（USB-Serial/JTAG 双分区回写）与回滚健康门槛 |
 
 ## 创建 ADR 脚本用法
 

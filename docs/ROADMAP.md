@@ -45,6 +45,15 @@
 
 **验收**：NS2 手柄插板 → Switch 2 收到真实手柄输入；主机震动可传到手柄；模式页 host 角色真实生效。
 
+### M6 — 固件 OTA 升级（整包应用镜像）　状态：代码完成，实机验收待做
+
+升级走 USB-Serial/JTAG 上的桥接帧：PC 端 `pc/ota.py` 按窗口推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`），设备侧 `firmware/main/ota/` 写进非运行应用分区，`esp_ota_end` 校验通过后切启动分区并重启；回滚保护下新镜像以「待验证」启动，UI 首帧成功且开机满 30 秒才确认有效。选型见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)，协议见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」，操作见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「固件 OTA 升级」。剩余：
+
+- [ ] 实机验收：正常升级（记录用时）→ 自动重启 → `uartctl.py version` 与系统页显示新版本；升级期间 NS2 主机连接的表现与重启后免配对回连。
+- [ ] 异常路径：中途杀掉 PC 端进程 → 设备回 TIMEOUT 且仍从旧镜像启动；发送被截断的镜像 → 在首帧写入或 `esp_ota_end` 处被拒；人为丢帧 → 从 ACK 的期望序号续传成功。
+- [ ] 回滚演练：把 `ota_session.c` 的健康门槛临时改成 300 秒，升级后立刻断电/重启 → 设备自动回到旧镜像；确认 `rollback` 命令在待验证状态下可用。
+- [ ] 开发流程对账：跑到 `ota_1` 后验证 `idf.py app-flash` 的错位现象与 `idf.py erase-otadata` 的恢复路径，结论回填 [GETTING-STARTED.md](GETTING-STARTED.md)。
+
 ## Phase 3 — UI 性能与启动时间　状态：未开始
 
 UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重建上（见 [adr/0017](adr/0017-display-path-and-scroll-frame-budget.md)），启动成本集中在 guest 侧 bundle 的解析与执行（`guest_eval` 约占 16 秒）。两个里程碑分别针对这两处瓶颈；应用侧能动的只有「每帧画多少像素」和「包怎么加载」，因此都先与官方 PocketJS 上游确认可行边界。
@@ -71,4 +80,4 @@ UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重�
 
 ## 本阶段明确不做
 
-OTA、amiibo/storage 分区（amiibo 镜像暂存 PSRAM）、IMU/RTC 外设、用户自定义映射与 NVS 持久化（本轮只留家族表与映射结构上的覆盖点）、UI 基础组件库（Phase 2 另一支线，另行安排）。
+amiibo/storage 分区（amiibo 镜像暂存 PSRAM）、IMU/RTC 外设、用户自定义映射与 NVS 持久化（本轮只留家族表与映射结构上的覆盖点）、UI 基础组件库（Phase 2 另一支线，另行安排）。OTA 由 M6 落地，不再是排除项。

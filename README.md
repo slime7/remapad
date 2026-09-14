@@ -150,6 +150,8 @@ idf.py -p COM3 flash monitor
 
 当前 `firmware/partitions.csv` 采用官方示例同类的内置包方案，并为 OTA 与用户数据预留了终局布局（见 [ADR 0009](docs/adr/0009-ota-storage-flash-layout.md)）：NVS、PHY 初始化、4 MB `ota_0`/`ota_1` 双应用分区、`otadata` 和约 7.9 MB `storage` 通用存储区。`.pocket` 会嵌入应用镜像，不再需要独立的 SPIFFS 资源分区；`ota_0` 继承原 `factory` 的 `0x10000` 偏移，`storage` 将来挂 littlefs，首个用途是用户上传的 amiibo（NTAG215）。
 
+两个应用分区已用于 OTA 升级：`cd pc ; uv run python ota.py -p COM3` 把 `firmware/build/remapad_firmware.bin` 经 USB-Serial/JTAG 写进非运行分区，校验通过后切启动分区并重启；回滚保护下新镜像要过「UI 首帧成功 + 开机 30 秒」的健康门槛才被确认，否则下次重启回退旧镜像（见 [ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md) 与 [GETTING-STARTED.md](docs/GETTING-STARTED.md)）。
+
 8 MB Octal PSRAM 用于 PocketJS guest 和渲染暂存区；真正的面板 DMA 缓冲区应由后续 BSP 按显示控制器和 ESP-IDF DMA 约束分配。
 
 未来 BLE 配对凭证、主机绑定信息和控制器状态应使用 ESP-IDF NVS 等明确的持久化层管理，不能写入 PocketJS 包或依赖渲染任务的生命周期。协议字段和配对流程以 [controller.md](docs/controller.md) 为实现参考，并需通过真实设备抓包验证。

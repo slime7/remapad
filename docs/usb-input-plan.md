@@ -9,7 +9,7 @@
 - 切到 OTG 后 PC 上的 COM 口消失：无人值守时无法烧录。**桥接（otg）模式因此双端禁切**（UI 与 PWR 长按路径均被 bridge 拒绝），只有数据面接入、且能给出安全的恢复路径后才解锁。
 - VBUS 5V 供电路径未确认（host 模式要给插入的手柄供电），是 M5 的门禁项。
 - 桥接模式需要 PC 侧配套程序（目前没有）；用板卡给 NS2 手柄转发输入的 host 模式则要求手柄自带电池——当前 ESP32 侧也没有锂电池，两块硬件都不具备，因此本文只做架构预留。
-- USB-Serial/JTAG 的 DTR/RTS 由片内状态机解释成复位控制线：RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态（需复位脉冲恢复）。PC 侧工具打开这个口时必须把两条线固定为低电平，[scripts/uartctl.py](../scripts/uartctl.py) 的 `SerialPort` 是已验证的实现。
+- USB-Serial/JTAG 的 DTR/RTS 由片内状态机解释成复位控制线：RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态（需复位脉冲恢复）。PC 侧工具打开这个口时必须把两条线固定为低电平，[pc/link.py](../pc/link.py) 的 `SerialLink` 是已验证的实现（`bridge.py`、`uartctl.py`、`ota.py` 共用）。
 
 ## 目标数据流（M5：USB host 手柄 → NS2）
 
@@ -54,7 +54,7 @@ flowchart LR
     Tgt --> BLE
 ```
 
-PC 程序职责：枚举本机手柄、采样原始报告、按约定格式打包（原始报告 + 设备标识，解析与映射只在固件做一份）、维持连接；设备侧只做接收、解析与转发。串口打开沿用 [scripts/uartctl.py](../scripts/uartctl.py) 的免复位做法（DTR/RTS 全程低电平）。低频控制（配对、亮度、模式）继续走现有 bridge 命令与串口 CLI，屏幕 UI 无感。
+PC 程序职责：枚举本机手柄、采样原始报告、按约定格式打包（原始报告 + 设备标识，解析与映射只在固件做一份）、维持连接；设备侧只做接收、解析与转发。串口打开沿用 [pc/link.py](../pc/link.py) 的免复位做法（DTR/RTS 全程低电平）。低频控制（配对、亮度、模式）继续走现有 bridge 命令与串口 CLI，屏幕 UI 无感。
 
 这条路径已落地（设备侧三段改造 + `pc/` 桥接程序，实机验收与家族表抓包核对见 [ROADMAP.md](ROADMAP.md) M5）；下面两节是 USB host 直插仍未实施的部分。
 

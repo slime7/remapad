@@ -84,6 +84,7 @@ flowchart LR
 | 调度 | 产品 owner task | `remapad-pjs` 固定 tick 任务，承载 guest 生命周期与每帧 UI turn；官方 `pocketjs_runner` 保留在 `firmware/components/` 但当前未接入 |
 | 渲染 | `pocketjs_render_rgb565` | 软件 RGB565 renderer、damage plan 和事务提交 |
 | 控制器数据面 | ESP-IDF USB/BLE/GATT/FreeRTOS（规划） | USB 输入接收、输入规范化、NS2 报告编码、BLE 广播/GATT/配对和状态持久化；协议见 [controller.md](controller.md) |
+| 升级 | `pc/ota.py` + `main/ota/` | 经桥接帧推送整包应用镜像，写非运行分区、`esp_ota_end` 校验后切启动分区并重启；回滚健康门槛见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md) |
 | 硬件 | 产品 BSP + ESP-IDF | 输入采样、面板初始化、DMA 传输、电源和其他外设 |
 
 ## 双工作区结构
@@ -117,6 +118,7 @@ flowchart TB
     FwMain --> MainTarget["target/：转换段（目标编码，含 target/ns2/）"]
     FwMain --> MainBle["ble/：NimBLE 手柄外设、会话与凭证"]
     FwMain --> MainDp["dp/：数据面任务与输入源抽象"]
+    FwMain --> MainOta["ota/：升级会话（分区回写与回滚门槛）"]
 ```
 
 仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；数据面按 `input/`、`pad/`、`target/` 三段划分（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)），其中 USB host 直插仍是架构预留（方案见 [usb-input-plan.md](usb-input-plan.md)）。
@@ -213,6 +215,34 @@ flowchart LR
 
 现有 `ui/src/bridge/` 和 `firmware/main/bridge/` 是这一控制面已接入的实现（UI 命令/事件 + 供 PWR 按键与串口 CLI 使用的外部队列入口）。NS2 的广播字段、GATT、HID 报告、配对和震动命令见 [controller.md](controller.md)，实现前必须用真实设备抓包和互操作测试确认。
 
+## OTA 升级通路
+
+现场升级整包应用镜像（固件 + 内嵌 `.pocket`）走唯一 Type-C 的 USB-Serial/JTAG，通道与固件日志、串口 CLI、桥接输入帧同一条字节流，**不切 USB mux**，因此升级期间设备照常作为手柄工作，NVS 设置与 BLE 配对凭证不受影响（选型与取舍见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)）。
+
+```mermaid
+flowchart LR
+    Tool["pc/ota.py<br/>校验镜像头与应用描述符"]
+    Link["input/input_link.c<br/>USJ 唯一读取者"]
+    Session["ota/ota_session.c<br/>队列 + 内部 RAM 栈任务"]
+    Proto["ota/ota_proto.c<br/>序号 / 窗口 / 4 KB 聚合 / 超时"]
+    Flash["esp_ota API<br/>非运行分区 → otadata"]
+    Health["回滚健康门槛<br/>UI 首帧 + 开机 30 秒"]
+
+    Tool -->|"OTA 帧 0x30-0x33（桥接帧格式）"| Link
+    Link -->|OTA 帧| Session
+    Session --> Proto
+    Proto -->|"4 KB 块"| Flash
+    Session -->|ACK 帧| Tool
+    Health -->|esp_ota_mark_app_valid_cancel_rollback| Flash
+```
+
+- **协议**：沿用桥接帧（`A5 5A` + ver/type/slot/seq/len + 载荷 + CRC16），新增 `0x30` BEGIN（`ROM1` + 镜像字节数）、`0x31` DATA（块序号 + 最多 200 字节）、`0x32` END 与设备回发的 `0x33` ACK（状态 + 错误码 + 期望序号 + 已收字节；BEGIN 的应答在末尾附 16 字节运行版本）。解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验。
+- **流控**：PC 每 16 帧（约 3.2 KB）为一个窗口，收到 ACK 才发下一窗。窗口末帧在帧头 `slot` 字段带上标记（末尾不足一窗同样标记），设备收到即应答，不必等固定帧数或超时。ACK 的「期望序号」就是重发起点：设备丢弃重复序号、不重复写 flash，整窗重发时只回一次序号错误应答，避免一串应答淹掉后续。失败一律整包重发，不做断点续传。
+- **写入**：`esp_ota_get_next_update_partition()` 选非运行分区 → `esp_ota_begin(镜像大小)` 预擦 → 4 KB 对齐的 `esp_ota_write` → `esp_ota_end()` 整体校验（应用描述符、芯片标识与尾部 SHA-256）→ `esp_ota_set_boot_partition()` → 回 ACK 后延时 500 ms 重启。任一步失败即 `esp_ota_abort()`，`otadata` 在成功前不动，所以断电与拔线只会让设备继续从旧镜像启动。
+- **内存约束**：升级任务由 `xTaskCreate` 创建（栈在内部 RAM），帧队列与 4 KB 聚合缓冲同样固定在内部 RAM——flash 写入的禁缓存窗口内不能访问 PSRAM，且非 DRAM 缓冲会让 IDF 退化成 32 字节一次的栈拷贝。
+- **回滚保护**：开启 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` 后新镜像以「待验证」启动，UI 首帧提交成功且开机满 30 秒才调用 `esp_ota_mark_app_valid_cancel_rollback()`；未过门槛就重启会回退到升级前的镜像。待验证窗口内 `esp_ota_begin` 返回 `ESP_ERR_OTA_ROLLBACK_INVALID_STATE`，设备据此回 BUSY。
+- **观测**：串口 CLI 的 `version`（版本 / 分区 / 待验证状态）与 `status`（`fw=` 与 `ota=` 字段）、UI 系统页的固件信息行共用同一个版本字符串——它来自构建时的 `git describe`，写进镜像应用描述符的 `PROJECT_VER`。
+
 ## 内存与显示策略
 
 - JavaScript guest 和资源优先使用 8 MB Octal PSRAM。
@@ -232,17 +262,20 @@ flowchart LR
 | `nvs` | data/nvs | `0x9000` | 24 KB | 设置项（亮度、连发/改建、手柄颜色）、BLE 配对密钥 |
 | `phy_init` | data/phy | `0xf000` | 4 KB | 射频校准 |
 | `ota_0` | app/ota_0 | `0x10000` | 4 MB | 主应用分区，固件及内置 `.pocket`（继承原 factory 偏移） |
-| `ota_1` | app/ota_1 | `0x410000` | 4 MB | OTA 备份分区，供将来 `esp_ota` 升级回写 |
+| `ota_1` | app/ota_1 | `0x410000` | 4 MB | OTA 目标分区：`pc/ota.py` 推送的镜像先写这里，校验通过后切为启动分区 |
 | `otadata` | data/ota | `0x810000` | 8 KB | OTA 启动选择数据 |
 | `storage` | data/spiffs | `0x812000` | 约 7.9 MB | 通用数据存储区（首个用途：用户上传的 amiibo/NTAG215），将来挂 littlefs |
 
 包是固件的一部分，不再通过 SPIFFS 运行时加载。若后续包或固件超过 4 MB，应先重新评估分区布局，再修改 `partitions.csv`。布局受 ADR 0009 约束：新增分区只允许在尾部追加，禁止移动 `nvs`/`phy_init` 偏移，以免升级固件时擦除用户 NVS 数据与配对凭证。
+
+两个应用分区在 OTA 升级里互为备份：升级写的是当前未运行的那个，校验通过才写 `otadata` 切过去（见上文「OTA 升级通路」）。升级命令、PC 端工具与恢复路径见 [GETTING-STARTED.md](GETTING-STARTED.md) 与 [pc/README.md](../pc/README.md)；从 `ota_1` 启动之后，开发期固定写 `0x10000` 的 `app-flash` 会写错分区，继续开发前先执行 `idf.py erase-otadata`。
 
 ## 相关决策与官方资料
 
 - [ADR 0001：采用 PocketJS 与 Vue Vapor 驱动 ESP32-S3 屏幕 UI](adr/0001-use-pocketjs-vue-vapor-for-esp32s3-ui.md)
 - [ADR 0002：旧 bridge/自定义打包方案（已被取代）](adr/0002-adopt-hardware-bridge-and-packaging-architecture.md)
 - [ADR 0003：采用官方 PocketJS ESP-IDF host 构建链路](adr/0003-use-official-esp-idf-host.md)
+- [ADR 0022：OTA 升级复用桥接帧（USB-Serial/JTAG 双分区回写）与回滚健康门槛](adr/0022-ota-over-bridge-frames-with-rollback.md)
 - [Switch 2 / NS2 手柄通信协议与数据交互技术规范](controller.md)
 - [PocketJS ESP-IDF 官方指南](https://pocketjs.dev/docs/esp-idf/)
 - [PocketJS ESP-IDF 官方 README](https://github.com/pocket-stack/pocketjs/blob/main/hosts/esp-idf/README.md)
