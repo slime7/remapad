@@ -205,7 +205,7 @@ pnpm run test:firmware    # 固件主机端：把纯逻辑模块编译成本机�
 ## 串口 CLI 与 PWR 按键
 
 
-固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。项目自带 [scripts/uartctl.py](../scripts/uartctl.py)（依赖 pyserial）：
+固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。项目自带 [scripts/uartctl.py](../scripts/uartctl.py)（只用 Python 标准库，不需要安装第三方包）：
 
 ```powershell
 python scripts/uartctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长/电池电压与电量
@@ -227,7 +227,7 @@ python scripts/uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完
 
 `key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr lr`，默认保持 250 ms（`lr` 为 1000 ms，对应主机 Grip 界面的组合确认），最长 60000 ms；注入叠加在输入源之上。`stick` 设定的一侧摇杆持续生效、未设定的一侧沿用输入源，因此 JoyCon 组合下可以分别推左摇杆与右摇杆，验证左右两只各自上报。`link` 打印当前形态与每个身份一行：对外广播地址、连接句柄、会话状态（idle / advertising / wait-pair / normal）、报告格式、已开启的通知通道、已发送报告数与凭证条数，配对与回连过程可以直接在串口上对账。
 
-不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。`log` 子命令只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：打开 USB-Serial/JTAG 口通常会把设备复位一次（USJ 特性），所以每次 `uartctl.py` 调用后 `uptime` 会归零属正常现象，连续操作建议用交互模式；抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
+不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。`log` 子命令只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：USB-Serial/JTAG 的片内状态机把 CDC 的 DTR/RTS 当复位控制线解释——RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态；`uartctl.py` 用 Win32 API 打开端口并把两条线固定为低电平，因此打开、读取、关闭都不会复位设备（连续调用 `uptime` 会持续增长），需要复位时用 `log --reset`（只脉冲 RTS），自己写 PC 端工具时按同样规则处理这两条线。抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
 
 PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。软件关机走系统页「关机」按钮（bridge 的 `powerOff` 命令，串口对应 `poweroff`）：电池供电下释放锁存即断电，USB 供电下锁存被旁路、关不掉，固件重新锁存后界面提示「USB 供电下无法关机，请拔线后再试」。
 
