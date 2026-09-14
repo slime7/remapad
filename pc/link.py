@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import time
 from ctypes import wintypes
 
 # 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码（各 PC 端工具同一做法）。
