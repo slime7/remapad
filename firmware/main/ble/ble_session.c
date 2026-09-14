@@ -18,6 +18,7 @@
 #include "ns2_output.h"
 #include "ns2_report.h"
 #include "ns2_serial.h"
+#include "pad_state.h"
 
 static const char *TAG = "remapad_blses";
 
@@ -963,7 +964,7 @@ void ns2_session_press_lr(void)
     /* 配对模式期间双身份发现广播已在发（start_pairing_mode 保证），这里只
      * 补 L+R 按键注入：主机 Grip 界面的组合确认动作，双连接时左右两只都
      * 会上报。 */
-    dp_plane_debug_key(NS2_BTN_L | NS2_BTN_R, 1000);
+    dp_plane_debug_key(PAD_BTN_LB | PAD_BTN_RB, 1000);
     ESP_LOGI(TAG, "press LR (mode=%u, pairing=%u)", (unsigned)s_ses.device_mode,
              (unsigned)s_ses.pairing_mode);
 }

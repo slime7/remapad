@@ -27,9 +27,14 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
+# Python 脚本（scripts/ 与 pc/）运行后产生的字节码缓存
+__pycache__/
+*.pyc
 
 # Rust 编译临时产物 (若本地引入 Rust 渲染核心)
 target/
+# 固件目标编码目录与 Rust 产物同名，这里显式取消忽略
+!firmware/main/target/
 
 # 编辑器与 IDE 配置
 .vscode/

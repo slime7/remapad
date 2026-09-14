@@ -4,34 +4,34 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "ns2_state.h"
+#include "pad_state.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * 数据面输入源抽象（ADR 0011 的 dp 模块内）：把「输入从哪来」与「NS2 编码
- * 输出」解耦。dp_task 每个周期调用 dp_source_sample 得到合成后的规范化状态，
- * 再交给 ns2_output_send；新增输入设备（USB host 手柄、UART 注入、桥接 PC
- * 报告等）只需实现一个 dp_source_t 并注册，不改编码与发送路径。
+ * 数据面输入源抽象（ADR 0011 的 dp 模块内）：把「输入从哪来」与「编码成什么
+ * 目标报文」解耦。dp_task 每个周期调用 dp_source_sample 得到合成后的私有手柄
+ * 状态（pad_state_t），再交给 target/ 的目标编码器；新增输入设备（USB host
+ * 手柄、桥接 PC 报告、调试注入）只需实现一个 dp_source_t 并注册。
  *
- * 合成规则：第一个已注册源拥有摇杆与电源字段（通常即主输入设备），后续源
- * 只叠加按键；最后叠加调试注入（overlay）。
+ * 合成规则：第一个已注册源拥有摇杆、扳机、触摸、运动与设备标识字段（通常
+ * 即主输入设备），后续源只叠加按键；最后叠加调试注入（overlay）。
  */
 
 typedef struct {
     /** 源名称（日志用）。 */
     const char *name;
-    /** 采样：在 ns2_state_defaults 之后的规范化状态上填入本源数据。 */
-    void (*sample)(ns2_controller_state_t *state);
+    /** 采样：在 pad_state_defaults 之后的私有状态上填入本源数据。 */
+    void (*sample)(pad_state_t *state);
 } dp_source_t;
 
 /** 注册输入源（静态生命周期，注册后不可注销）。先注册者优先拥有摇杆。 */
 void dp_source_register(const dp_source_t *source);
 
-/** 合成所有已注册源 + 调试注入，输出当前周期的规范化状态。 */
-void dp_source_sample(ns2_controller_state_t *state);
+/** 合成所有已注册源 + 调试注入，输出当前周期的私有手柄状态。 */
+void dp_source_sample(pad_state_t *state);
 
 /** 调试注入：叠加一次按键按下，保持 hold_ms 后自动释放。 */
 void dp_source_inject(uint32_t buttons_mask, uint32_t hold_ms);
@@ -47,7 +47,7 @@ void dp_source_inject_stick(char side, uint16_t x, uint16_t y);
 /** 调试注入：两侧摇杆回中并解除摇杆注入（之后输入源的摇杆值恢复生效）。 */
 void dp_source_inject_stick_reset(void);
 
-/** 调试按键名（a / home / lr / up / ls / …）→ 位掩码与默认保持时长：
+/** 调试按键名（a / home / lr / up / ls / …）→ 私有按键位与默认保持时长：
  *  命中返回 true，未命中返回 false。名字表在 dp_source.c，CLI 与用例共用。 */
 bool dp_source_key_lookup(const char *name, size_t len, uint32_t *mask, uint32_t *hold_ms);
 

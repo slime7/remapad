@@ -1,18 +1,13 @@
 #include "cli.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "driver/usb_serial_jtag_vfs.h"
 
 #include "app_config.h"
 #include "backlight.h"
@@ -22,7 +17,7 @@
 #include "buzzer.h"
 #include "dp_source.h"
 #include "ns2_identity.h"
-#include "ns2_state.h"
+#include "pad_state.h"
 
 static const char *TAG = "remapad_cli";
 
@@ -97,12 +92,12 @@ static void cli_key(const char *arg)
 static bool parse_stick_axis(const char *text, int *value)
 {
     if (strcmp(text, "center") == 0 || strcmp(text, "c") == 0) {
-        *value = NS2_STICK_CENTER;
+        *value = PAD_AXIS_CENTER;
         return true;
     }
     char *end = NULL;
     const long parsed = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || parsed < 0 || parsed > NS2_STICK_MAX) {
+    if (end == text || *end != '\0' || parsed < 0 || parsed > PAD_AXIS_MAX) {
         return false;
     }
     *value = (int)parsed;
@@ -288,41 +283,37 @@ static void cli_dispatch(char *line)
     }
 }
 
-static void cli_task(void *param)
+void cli_feed_bytes(const uint8_t *data, size_t len)
 {
-    (void)param;
-    /* USJ 为初级控制台时启动代码已注册 vfs；显式切到非阻塞模式：日志在
-     * 未连接时丢弃（不会卡住任务），输入由本任务轮询读取。 */
-    usb_serial_jtag_vfs_use_nonblocking();
-    usb_serial_jtag_vfs_set_rx_line_endings(ESP_LINE_ENDINGS_CR);
-
-    char line[CLI_LINE_MAX];
-    size_t len = 0;
-    ESP_LOGI(TAG, "cli ready (type help)");
-    for (;;) {
-        char ch;
-        const ssize_t n = read(0, &ch, 1);
-        if (n == 1) {
-            if (ch == '\r' || ch == '\n') {
-                line[len] = '\0';
-                cli_dispatch(line);
-                len = 0;
-            } else if (len + 1 < sizeof(line)) {
-                line[len++] = ch;
-            } else {
-                cli_print("err line too long");
-                len = 0;
-            }
+    static char line[CLI_LINE_MAX];
+    static size_t used;
+    if (data == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < len; i++) {
+        const char ch = (char)data[i];
+        if (ch == '\r' || ch == '\n') {
+            line[used] = '\0';
+            cli_dispatch(line);
+            used = 0;
             continue;
         }
-        vTaskDelay(pdMS_TO_TICKS(20));
+        if (ch == '\0') {
+            continue; /* 帧噪声或空字节：不进入命令行缓冲。 */
+        }
+        if (used + 1 < sizeof(line)) {
+            line[used++] = ch;
+        } else {
+            cli_print("err line too long");
+            used = 0;
+        }
     }
 }
 
 esp_err_t remapad_cli_start(void)
 {
-    if (xTaskCreate(cli_task, "remapad-cli", 4096, NULL, 2, NULL) != pdPASS) {
-        return ESP_ERR_NO_MEM;
-    }
+    /* 接收与分帧由 input_link 的接收任务承担（USJ 驱动 + 环形缓冲），这里
+     * 只报告命令行就绪；命令分发在 cli_feed_bytes 里同步进行。 */
+    ESP_LOGI(TAG, "cli ready (type help)");
     return ESP_OK;
 }

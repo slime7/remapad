@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -24,6 +27,13 @@ extern "C" {
  */
 
 esp_err_t remapad_cli_start(void);
+
+/**
+ * 把串口上的一串字节喂给行解析：input_link 从同一根 USJ 上读到的非帧字节
+ * 由这里接住，因此桥接数据与命令行共用一条链路。在接收任务上下文里同步
+ * 分发命令，命令本身不做阻塞等待。
+ */
+void cli_feed_bytes(const uint8_t *data, size_t len);
 
 #ifdef __cplusplus
 }

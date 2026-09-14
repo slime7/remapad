@@ -19,7 +19,7 @@
 #include "ble_session.h"
 #include "dp_plane.h"
 #include "ns2_identity.h"
-#include "ns2_state.h"
+#include "pad_state.h"
 #include "pwr_key.h"
 
 #include "pocketjs/guest.h"
@@ -484,11 +484,11 @@ static void handle_debug_key(int id, const char *cmd)
     uint32_t mask = 0;
     uint32_t hold_ms = 250;
     if (key != NULL && key_len == 1 && key[0] == 'a') {
-        mask = NS2_BTN_A;
+        mask = PAD_BTN_A;
     } else if (key != NULL && key_len == 4 && strncmp(key, "home", 4) == 0) {
-        mask = NS2_BTN_HOME;
+        mask = PAD_BTN_GUIDE;
     } else if (key != NULL && key_len == 2 && strncmp(key, "lr", 2) == 0) {
-        mask = NS2_BTN_L | NS2_BTN_R;
+        mask = PAD_BTN_LB | PAD_BTN_RB;
         hold_ms = 1000;
     }
     if (mask == 0) {

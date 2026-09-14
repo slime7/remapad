@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -14,27 +15,22 @@
 #include "ble_creds.h"
 #include "ble_session.h"
 #include "dp_source.h"
+#include "input_link.h"
+#include "input_source.h"
 #include "ns2_output.h"
-#include "ns2_report.h"
-#include "ns2_state.h"
+#include "ns2_target.h"
+#include "target.h"
 
 static const char *TAG = "remapad_dp";
 
 #define DP_TICK_MS 5
 
-/** 合成输入源：仅提供静置状态（摇杆居中、无按键），电源/特性字段取自
- *  会话与电池驱动；按键输入全部来自调试注入，主机侧不应出现任何自动
- *  变化。M5 的 USB host 手柄源按 dp_source_t 再注册一路。 */
-static void synthetic_sample(ns2_controller_state_t *state)
+/** 合成输入源：只提供静置状态（摇杆居中、无按键）。板卡与主机会话侧的事实
+ *  （电池、触觉特性、amiibo 状态）经目标侧刷新，按键输入来自调试注入与
+ *  桥接 PC（input/ 注册的源）。 */
+static void synthetic_sample(pad_state_t *state)
 {
-    /* 电量与端电压取自电池驱动；充电状态是趋势推断值（板上没有充电状态
-     * 引脚），推断到充电即认为接了外部供电。 */
-    const bool charging = battery_is_charging();
-    state->battery_level = battery_ns2_level_from_percent(battery_get_percentage());
-    state->battery_mv = (uint16_t)battery_get_voltage_mv();
-    state->charging = charging;
-    state->external_power = charging;
-    state->rumble_enabled = ns2_session_rumble_enabled();
+    (void)state;
 }
 
 static const dp_source_t s_synthetic_source = {
@@ -71,38 +67,69 @@ static const ns2_output_sink_t s_ble_sink = {
     .user = NULL,
 };
 
-/** 主机反馈监听：结构化事件当前记录日志；M5 的 USB OUT / 桥接转发在此
- *  按目标设备编码后下发。 */
+/** 目标侧事实：电量与端电压取自电池驱动（充电状态是趋势推断值，板上没有
+ *  充电状态引脚，推断到充电即认为接了外部供电）；触觉特性与 NFC 状态来自
+ *  主机会话与 amiibo 预置。 */
+static void refresh_target_facts(void)
+{
+    const bool charging = battery_is_charging();
+    const pad_target_facts_t facts = {
+        .battery_level = battery_ns2_level_from_percent(battery_get_percentage()),
+        .battery_mv = (uint16_t)battery_get_voltage_mv(),
+        .charging = charging,
+        .external_power = charging,
+        .rumble_enabled = ns2_session_rumble_enabled(),
+        .nfc_state = ns2_output_nfc_state(),
+    };
+    target_set_facts(&facts);
+}
+
+/** 主机反馈监听：先归一到私有反馈格式（pad_feedback_t），投递路径（USB OUT /
+ *  桥接回发）在后续里程碑实现，本轮只记录日志。 */
 static void feedback_listener(ns2_feedback_type_t type, const void *payload, void *user)
 {
     (void)user;
+    pad_feedback_t feedback;
+    pad_feedback_defaults(&feedback);
     switch (type) {
     case NS2_FEEDBACK_RUMBLE: {
         const ns2_rumble_event_t *rumble = payload;
-        ESP_LOGI(TAG, "feedback rumble: L=%u R=%u (forward target pending M5)",
+        feedback.rumble_on[PAD_TRIGGER_L] = rumble->left_on;
+        feedback.rumble_on[PAD_TRIGGER_R] = rumble->right_on;
+        memcpy(feedback.rumble_raw[PAD_TRIGGER_L], rumble->raw, 16);
+        memcpy(feedback.rumble_raw[PAD_TRIGGER_R], &rumble->raw[16], 16);
+        ESP_LOGI(TAG, "feedback rumble: L=%u R=%u (delivery pending)",
                  (unsigned)rumble->left_on, (unsigned)rumble->right_on);
         break;
     }
     case NS2_FEEDBACK_PLAYER_LED:
-        ESP_LOGI(TAG, "feedback player LED 0x%x", *(const uint8_t *)payload);
+        feedback.player_led = *(const uint8_t *)payload;
+        ESP_LOGI(TAG, "feedback player LED 0x%x", feedback.player_led);
         break;
     case NS2_FEEDBACK_HAPTIC_SAMPLE:
-        ESP_LOGI(TAG, "feedback haptic sample 0x%02x", *(const uint8_t *)payload);
+        feedback.haptic_sample_valid = true;
+        feedback.haptic_sample = *(const uint8_t *)payload;
+        ESP_LOGI(TAG, "feedback haptic sample 0x%02x", feedback.haptic_sample);
         break;
     default:
         break;
     }
+    /* 反向链路：主机反馈经桥接帧回发给 PC（投递到手柄在后续里程碑实现）。 */
+    input_link_send_feedback(&feedback);
 }
 
 static void dp_task(void *param)
 {
-    ns2_controller_state_t state;
+    (void)param;
+    pad_state_t pad;
     TickType_t wake = xTaskGetTickCount();
 
-    ESP_LOGI(TAG, "data plane task running, tick=%dms, source=synthetic+inject", DP_TICK_MS);
+    ESP_LOGI(TAG, "data plane task running, tick=%dms, target=%s", DP_TICK_MS,
+             target_name());
     for (;;) {
-        dp_source_sample(&state);
-        ns2_output_send(&state);
+        dp_source_sample(&pad);
+        refresh_target_facts();
+        target_send_pad(&pad);
         /* vTaskDelayUntil 内部自行推进 wake；再手动累加会把实际周期翻倍。 */
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(DP_TICK_MS));
     }
@@ -122,6 +149,12 @@ esp_err_t dp_plane_start(void)
         return err;
     }
     battery_init();
+    /* 目标：NS2（Pro Controller 2 与 JoyCon 2 共用一份编码实现）。将来支持
+     * NS1 时在 target/ns1/ 新增实现并在这里切换。 */
+    target_set(ns2_target_get());
+    /* 输入源注册顺序即优先级：桥接 PC 先注册（拥有摇杆与设备字段），合成源
+     * 只补静置状态，调试注入最后叠加。 */
+    input_source_register();
     dp_source_register(&s_synthetic_source);
     ns2_output_set_sink(&s_ble_sink);
     ns2_output_set_feedback_listener(feedback_listener, NULL);

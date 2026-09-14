@@ -14,6 +14,7 @@
 #include "dp_plane.h"
 #include "drivers/buzzer.h"
 #include "drivers/pwr_key.h"
+#include "input_link.h"
 #include "pocketjs_host.h"
 
 /** NVS 存放 PHY 校准、BLE 配对凭证与用户设置；擦除恢复仅发生在介质损坏场景。 */
@@ -91,6 +92,12 @@ void app_main(void)
     const esp_err_t cli_err = remapad_cli_start();
     if (cli_err != ESP_OK) {
         ESP_LOGE("remapad_app", "cli start failed: %s", esp_err_to_name(cli_err));
+    }
+    /* 桥接链路接管 USJ 读取：安装驱动、把非帧字节转给 CLI。失败不阻断启动，
+     * 屏幕 UI 与 BLE 链路照常工作。 */
+    const esp_err_t link_err = input_link_start();
+    if (link_err != ESP_OK) {
+        ESP_LOGE("remapad_app", "bridge link start failed: %s", esp_err_to_name(link_err));
     }
     const esp_err_t pwr_err = pwr_key_start(pwr_key_handler, NULL);
     if (pwr_err != ESP_OK) {
