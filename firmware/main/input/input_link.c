@@ -6,6 +6,7 @@
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -21,6 +22,10 @@ static const char *TAG = "remapad_input";
 #define INPUT_LINK_TX_BUF 1024
 #define INPUT_LINK_TASK_STACK 4096
 #define INPUT_LINK_TASK_PRIO 6
+/** 控制帧（PING/OTA 应答）等着写进发送环的上限：日志刷屏时环会满，但绝不无限等。 */
+#define INPUT_LINK_REPLY_TIMEOUT_MS 200u
+/** 单次尝试的等待粒度：够让驱动冲掉一批日志字节，又不至于卡住调用任务。 */
+#define INPUT_LINK_TX_SLICE_MS 20u
 
 static input_frame_rx_t s_rx;
 static uint32_t s_frames;
@@ -42,7 +47,8 @@ static void on_frame(const input_frame_view_t *frame, void *user)
     }
     if (frame->type == INPUT_FRAME_TYPE_PING) {
         const uint8_t version = INPUT_FRAME_VERSION;
-        input_link_send_frame(INPUT_FRAME_TYPE_PING, 0, &version, sizeof(version));
+        input_link_send_frame_wait(INPUT_FRAME_TYPE_PING, 0, &version, sizeof(version),
+                                   INPUT_LINK_REPLY_TIMEOUT_MS);
         ESP_LOGI(TAG, "bridge ping from PC (protocol v%u)",
                  frame->payload_len > 0 ? frame->payload[0] : 0u);
         return;
@@ -95,17 +101,51 @@ uint32_t input_link_frame_count(void)
     return s_frames;
 }
 
+/** 组一帧到调用者的缓冲：载荷超限时返回 0，调用者据此丢弃。 */
+static size_t encode_frame(uint8_t *frame, uint8_t type, uint8_t slot, const uint8_t *payload,
+                           size_t payload_len)
+{
+    return input_frame_encode(frame, INPUT_FRAME_MAX_LEN, type, slot, 0, payload, payload_len);
+}
+
 void input_link_send_frame(uint8_t type, uint8_t slot, const uint8_t *payload,
                            size_t payload_len)
 {
     uint8_t frame[INPUT_FRAME_MAX_LEN];
-    const size_t len =
-        input_frame_encode(frame, sizeof(frame), type, slot, 0, payload, payload_len);
+    const size_t len = encode_frame(frame, type, slot, payload, payload_len);
     if (len == 0) {
         return;
     }
     /* 主机没在读时直接丢弃，绝不在数据面任务里阻塞。 */
     usb_serial_jtag_write_bytes(frame, len, 0);
+}
+
+esp_err_t input_link_send_frame_wait(uint8_t type, uint8_t slot, const uint8_t *payload,
+                                    size_t payload_len, uint32_t timeout_ms)
+{
+    uint8_t frame[INPUT_FRAME_MAX_LEN];
+    const size_t len = encode_frame(frame, type, slot, payload, payload_len);
+    if (len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    /* 发送环会被日志填满：分片重试到写完全帧，超时即放弃，不无限阻塞调用任务。 */
+    const int64_t deadline_us = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
+    size_t sent = 0;
+    while (sent < len) {
+        const int n = usb_serial_jtag_write_bytes(&frame[sent], len - sent,
+                                                  pdMS_TO_TICKS(INPUT_LINK_TX_SLICE_MS));
+        if (n > 0) {
+            sent += (size_t)n;
+        }
+        if (sent < len && esp_timer_get_time() >= deadline_us) {
+            ESP_LOGW(TAG, "frame 0x%02x blocked (%u/%u bytes in %u ms)", type, (unsigned)sent,
+                     (unsigned)len, (unsigned)timeout_ms);
+            return ESP_ERR_TIMEOUT;
+        }
+    }
+    /* 环里还排着日志字节：等驱动推完再返回，调用方紧接着重启也不会截断应答。 */
+    usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(INPUT_LINK_TX_SLICE_MS));
+    return ESP_OK;
 }
 
 void input_link_send_feedback(const pad_feedback_t *feedback)

@@ -69,6 +69,7 @@ ota_proto_result_t ota_proto_begin(ota_proto_t *proto, uint32_t image_size,
     proto->chunk_len = 0;
     proto->accepted_since_ack = 0;
     proto->seq_error_reported = false;
+    proto->seq_error_reply_us = 0;
     proto->finished = false;
     proto->last_rx_us = now_us;
     return result_from(proto, true);
@@ -90,10 +91,16 @@ ota_proto_result_t ota_proto_data(ota_proto_t *proto, const uint8_t *payload, si
     const uint16_t seq = (uint16_t)(payload[0] | ((uint16_t)payload[1] << 8));
     if (seq != proto->next_seq) {
         /* 重发或丢帧：回当前期望序号，PC 从这里续传、不重复写 flash。整窗重发时
-         * 所有重发帧都落在同一个期望序号上，只答一次，否则一串 ACK 会淹掉后续应答。 */
+         * 所有重发帧都落在同一个期望序号上，按最小间隔限流，避免一串应答淹掉后续；
+         * 限流不撤销已经发过的那次，PC 隔一会儿重问仍然拿得到应答。 */
         proto->code = OTA_CODE_SEQ_ERROR;
-        const bool report = !proto->seq_error_reported;
-        proto->seq_error_reported = true;
+        const bool report =
+            !proto->seq_error_reported ||
+            now_us - proto->seq_error_reply_us >= OTA_DUPLICATE_REPLY_MIN_INTERVAL_US;
+        if (report) {
+            proto->seq_error_reported = true;
+            proto->seq_error_reply_us = now_us;
+        }
         return result_from(proto, report);
     }
     const size_t data_len = len - OTA_DATA_SEQ_LEN;
@@ -120,6 +127,7 @@ ota_proto_result_t ota_proto_data(ota_proto_t *proto, const uint8_t *payload, si
     proto->next_seq = (uint16_t)(proto->next_seq + 1u);
     proto->code = OTA_CODE_OK;
     proto->seq_error_reported = false;
+    proto->seq_error_reply_us = 0;
     proto->accepted_since_ack++;
     if (window_end || proto->accepted_since_ack >= OTA_ACK_WINDOW) {
         proto->accepted_since_ack = 0;

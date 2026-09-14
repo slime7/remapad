@@ -202,16 +202,17 @@ static void window_end_marker_acks_at_once(void)
     CHECK_EQ(result.next_seq, 2);
 }
 
-static void repeated_duplicates_answer_once(void)
+static void repeated_duplicates_answer_rate_limited(void)
 {
     ota_proto_t proto;
     sink_t sink;
+    uint8_t payload[OTA_DATA_PAYLOAD_MAX];
     memset(&sink, 0, sizeof(sink));
     ota_proto_init(&proto);
     REQUIRE(ota_proto_begin(&proto, 600, 1048576, 0).state == OTA_STATE_RECEIVING);
     feed_image(&proto, 600, 0, 200, &sink);
 
-    /* 整窗重发的第一帧回 SEQ_ERROR 给出续传起点，其余重发帧不再刷应答。 */
+    /* 整窗重发的第一帧回 SEQ_ERROR 给出续传起点，紧随其后的重发帧不再刷应答。 */
     ota_proto_result_t result = feed_image(&proto, 600, 0, 200, &sink);
     CHECK(result.reply);
     CHECK_EQ(result.code, OTA_CODE_SEQ_ERROR);
@@ -220,7 +221,16 @@ static void repeated_duplicates_answer_once(void)
     CHECK(!result.reply);
     CHECK_EQ(result.code, OTA_CODE_SEQ_ERROR);
 
-    /* 收下新帧后重置标记，下一次重发仍会得到应答。 */
+    /* 应答可能在共享串口上被日志挤掉：过了最小间隔重问，仍然拿得到应答。 */
+    const size_t later_len = build_data(payload, 0, 200, 0x00);
+    result = ota_proto_data(&proto, payload, later_len, false,
+                            OTA_DUPLICATE_REPLY_MIN_INTERVAL_US, sink_flush, &sink);
+    CHECK(result.reply);
+    CHECK_EQ(result.code, OTA_CODE_SEQ_ERROR);
+    CHECK_EQ(result.next_seq, 1);
+    CHECK_EQ(result.received, 200);
+
+    /* 收下新帧后重置限流，下一轮重发立刻得到应答。 */
     result = feed_image(&proto, 600, 1, 200, &sink);
     CHECK(!result.reply);
     result = feed_image(&proto, 600, 1, 200, &sink);
@@ -400,7 +410,8 @@ HOST_TEST_SUITE(suite_ota_proto, "ota_proto",
                  data_tracks_sequence_and_resend},
                 {"每收满一个窗口回一次 ACK", data_acks_every_window},
                 {"窗口末帧标记立刻应答（末尾不足一窗）", window_end_marker_acks_at_once},
-                {"整窗重发只回一次序号错误应答", repeated_duplicates_answer_once},
+                {"整窗重发的序号错误应答按最小间隔限流",
+                 repeated_duplicates_answer_rate_limited},
                 {"没有 BEGIN 的数据帧与结束帧被拒绝", data_needs_an_open_session},
                 {"4 KB 聚合边界与尾块交付", chunks_flush_on_4k_boundary_and_at_end},
                 {"结束帧字节数与声明不符即失败", end_rejects_size_mismatch},

@@ -40,6 +40,10 @@ extern "C" {
 /** 每收满这么多数据帧回一次 ACK：PC 收到才发下一窗，构成收发流控。 */
 #define OTA_ACK_WINDOW 16u
 
+/** 同一期望序号的重复应答最小间隔：压掉整窗重发时的连串应答，又不至于把丢掉的
+ *  那一次永久压制（应答在共享串口上可能被日志挤掉，PC 会按超时重问）。 */
+#define OTA_DUPLICATE_REPLY_MIN_INTERVAL_US (50 * 1000LL)
+
 /** 聚合缓冲：攒满一块写一次 flash，避免每个数据帧都开关一次 cache。 */
 #define OTA_CHUNK_LEN 4096u
 
@@ -88,8 +92,10 @@ typedef struct {
     uint32_t image_size;
     size_t chunk_len;
     uint16_t accepted_since_ack;
-    /** 已经为当前期望序号回过一次 SEQ_ERROR；重发整窗时不再逐帧回。 */
+    /** 已经为当前期望序号回过一次序号错误应答。 */
     bool seq_error_reported;
+    /** 上次为重复序号回应答的时刻（微秒），用来给重发应答限流。 */
+    int64_t seq_error_reply_us;
     bool finished;
     int64_t last_rx_us;
     uint8_t chunk[OTA_CHUNK_LEN];

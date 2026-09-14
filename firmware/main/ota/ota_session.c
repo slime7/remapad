@@ -28,6 +28,8 @@ static const char *TAG = "remapad_ota";
 #define OTA_POLL_MS 200u
 /** 完成后先让 USJ 把应答帧送出去，再重启。 */
 #define OTA_REBOOT_DELAY_MS 500u
+/** 应答等发送环的上限：串口日志会挤占发送环，升级应答不能像数据面那样随手丢。 */
+#define OTA_ACK_TX_TIMEOUT_MS 200u
 /** 健康门槛：UI 首帧成功且开机满这么久，才确认新镜像有效。 */
 #define OTA_HEALTH_MIN_UPTIME_US (30 * 1000 * 1000LL)
 
@@ -126,7 +128,7 @@ static void reply(const ota_proto_result_t *result, bool with_version)
     if (len == 0) {
         return;
     }
-    input_link_send_frame(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len);
+    input_link_send_frame_wait(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len, OTA_ACK_TX_TIMEOUT_MS);
 }
 
 /** 交一块聚合好的镜像数据给 flash：缓冲与栈都在内部 RAM，可在禁缓存窗口内读。 */

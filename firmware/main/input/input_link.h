@@ -27,6 +27,13 @@ uint32_t input_link_frame_count(void);
 void input_link_send_frame(uint8_t type, uint8_t slot, const uint8_t *payload,
                            size_t payload_len);
 
+/**
+ * 同上，但在 timeout_ms 内重试把整帧推进发送环：串口上的日志流量会占满缓冲，
+ * 升级应答这类控制帧不能像数据面那样随手丢。仍可能在超时后放弃，不无限阻塞。
+ */
+esp_err_t input_link_send_frame_wait(uint8_t type, uint8_t slot, const uint8_t *payload,
+                                    size_t payload_len, uint32_t timeout_ms);
+
 /** 回发一帧反馈给 PC（主机 → 手柄方向）：本轮 PC 端只打印，投递到手柄
  *  在后续里程碑实现。 */
 void input_link_send_feedback(const pad_feedback_t *feedback);
