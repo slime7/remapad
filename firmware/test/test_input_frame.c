@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "input_frame.h"
+#include "ota_proto.h"
 
 typedef struct {
     size_t frames;
@@ -15,7 +16,7 @@ typedef struct {
     uint8_t seqs[4];
     uint8_t slots[4];
     size_t lens[4];
-    uint8_t payload[4][INPUT_FRAME_MAX_PAYLOAD];
+    uint8_t payload[4][INPUT_FRAME_WIRE_MAX_PAYLOAD];
     uint8_t text[128];
     size_t text_len;
 } capture_t;
@@ -53,6 +54,31 @@ static size_t build_report_frame(uint8_t *out, size_t out_len, uint8_t seq, uint
     const uint8_t payload[4] = {first, 0x02, 0x03, 0x04};
     return input_frame_encode(out, out_len, INPUT_FRAME_TYPE_REPORT, 0, seq, payload,
                               sizeof(payload));
+}
+
+/**
+ * 手工拼一帧：报文帧的编码入口把载荷卡在 72 字节，OTA 数据帧要到 202 字节，
+ * 因此这里按线格式直接构造，用来钉住解码器的线格式上限。
+ */
+static size_t build_wire_frame(uint8_t *out, size_t out_len, uint8_t type, uint8_t seq,
+                               const uint8_t *payload, size_t payload_len)
+{
+    const size_t total = INPUT_FRAME_HEADER_LEN + payload_len + INPUT_FRAME_CRC_LEN;
+    if (out_len < total || payload_len > INPUT_FRAME_WIRE_MAX_PAYLOAD) {
+        return 0;
+    }
+    out[0] = INPUT_FRAME_SYNC0;
+    out[1] = INPUT_FRAME_SYNC1;
+    out[2] = INPUT_FRAME_VERSION;
+    out[3] = type;
+    out[4] = 0;
+    out[5] = seq;
+    out[6] = (uint8_t)payload_len;
+    memcpy(&out[INPUT_FRAME_HEADER_LEN], payload, payload_len);
+    const uint16_t crc = input_frame_crc16(out, total - INPUT_FRAME_CRC_LEN);
+    out[total - 2] = (uint8_t)(crc & 0xFFu);
+    out[total - 1] = (uint8_t)(crc >> 8);
+    return total;
 }
 
 static void crc_known_vector_and_golden_frame(void)
@@ -153,13 +179,83 @@ static void resync_after_garbage_and_false_sync(void)
     const uint8_t noise[2] = {0x41, 0x42};
     feed(&cap, &rx, noise, sizeof(noise));
 
-    /* 假同步字 + 越界长度：必须重新对齐，不能读越界。 */
-    const uint8_t fake[7] = {0xA5, 0x5A, 0x01, 0x10, 0x00, 0x02, 0xFF};
+    /* 假同步字 + 长度凑得上的伪帧：CRC 校验失败后必须重新对齐，不能读越界。 */
+    const uint8_t fake[13] = {0xA5, 0x5A, 0x01, 0x10, 0x00, 0x02, 0x04,
+                              0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00};
     feed(&cap, &rx, fake, sizeof(fake));
     feed(&cap, &rx, frame, len);
     CHECK_EQ(cap.frames, 1);
     CHECK_EQ(cap.seqs[0], 1);
     CHECK_EQ(cap.payload[0][0], 0x55);
+}
+
+static void wire_frame_accepts_ota_sized_payload(void)
+{
+    capture_t cap;
+    input_frame_rx_t rx;
+    memset(&cap, 0, sizeof(cap));
+    input_frame_rx_reset(&rx);
+
+    /* OTA 数据帧：序号 2 字节 + 200 字节数据，超出报文帧的 72 字节上限。 */
+    uint8_t payload[OTA_DATA_PAYLOAD_MAX];
+    for (size_t i = 0; i < sizeof(payload); i++) {
+        payload[i] = (uint8_t)i;
+    }
+    uint8_t frame[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t len = build_wire_frame(frame, sizeof(frame), INPUT_FRAME_TYPE_OTA_DATA, 0x3C,
+                                        payload, sizeof(payload));
+    REQUIRE(len == INPUT_FRAME_HEADER_LEN + sizeof(payload) + INPUT_FRAME_CRC_LEN);
+    feed(&cap, &rx, frame, len);
+    CHECK_EQ(cap.frames, 1);
+    CHECK_EQ(cap.types[0], INPUT_FRAME_TYPE_OTA_DATA);
+    CHECK_EQ(cap.seqs[0], 0x3C);
+    CHECK_EQ(cap.lens[0], sizeof(payload));
+    CHECK_BYTES(cap.payload[0], payload, sizeof(payload));
+
+    /* 分两批喂入同一帧，跨批次仍然收得回来。 */
+    memset(&cap, 0, sizeof(cap));
+    input_frame_rx_reset(&rx);
+    feed(&cap, &rx, frame, 100);
+    CHECK_EQ(cap.frames, 0);
+    feed(&cap, &rx, &frame[100], len - 100);
+    CHECK_EQ(cap.frames, 1);
+    CHECK_EQ(cap.lens[0], sizeof(payload));
+    CHECK_BYTES(cap.payload[0], payload, sizeof(payload));
+}
+
+static void ota_and_report_frames_share_one_stream(void)
+{
+    capture_t cap;
+    input_frame_rx_t rx;
+    memset(&cap, 0, sizeof(cap));
+    input_frame_rx_reset(&rx);
+
+    uint8_t ota_payload[OTA_DATA_PAYLOAD_MAX];
+    for (size_t i = 0; i < sizeof(ota_payload); i++) {
+        ota_payload[i] = (uint8_t)(0x80u + (i & 0x1Fu));
+    }
+    uint8_t ota_frame[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t ota_len = build_wire_frame(ota_frame, sizeof(ota_frame),
+                                            INPUT_FRAME_TYPE_OTA_DATA, 1, ota_payload,
+                                            sizeof(ota_payload));
+    uint8_t report[INPUT_FRAME_MAX_LEN];
+    const size_t report_len = build_report_frame(report, sizeof(report), 2, 0x9A);
+    uint8_t ping[INPUT_FRAME_MAX_LEN];
+    const uint8_t version = INPUT_FRAME_VERSION;
+    const size_t ping_len = input_frame_encode(ping, sizeof(ping), INPUT_FRAME_TYPE_PING, 0, 0,
+                                               &version, 1);
+
+    feed(&cap, &rx, ota_frame, ota_len);
+    feed(&cap, &rx, report, report_len);
+    feed(&cap, &rx, ping, ping_len);
+    CHECK_EQ(cap.frames, 3);
+    CHECK_EQ(cap.types[0], INPUT_FRAME_TYPE_OTA_DATA);
+    CHECK_EQ(cap.types[1], INPUT_FRAME_TYPE_REPORT);
+    CHECK_EQ(cap.types[2], INPUT_FRAME_TYPE_PING);
+    CHECK_EQ(cap.lens[0], sizeof(ota_payload));
+    CHECK_EQ(cap.lens[1], 4);
+    CHECK_EQ(cap.lens[2], 1);
+    CHECK_BYTES(cap.payload[0], ota_payload, sizeof(ota_payload));
 }
 
 static void bad_crc_is_dropped_and_stream_recovers(void)
@@ -206,6 +302,10 @@ HOST_TEST_SUITE(suite_input_frame, "input_frame",
                 {"文本与帧混流按顺序分流", demux_text_and_frames},
                 {"跨批次分帧与补全末字节", frame_split_across_feeds},
                 {"噪声与假同步字之后仍能恢复", resync_after_garbage_and_false_sync},
+                {"OTA 数据帧的长载荷按线格式上限收全",
+                 wire_frame_accepts_ota_sized_payload},
+                {"OTA 数据帧与报文帧、探测帧混流按顺序分流",
+                 ota_and_report_frames_share_one_stream},
                 {"CRC 不符的帧被丢弃且后续帧照常",
                  bad_crc_is_dropped_and_stream_recovers},
                 {"零载荷断开帧往返", empty_detach_frame_round_trip});

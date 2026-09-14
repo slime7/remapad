@@ -15,7 +15,9 @@ extern "C" {
  * 帧布局（长度不含自身）：
  *   A5 5A | ver | type | slot | seq | len | payload[len] | crc16(LE)
  * CRC-16/CCITT-FALSE 覆盖整帧除末尾两字节外的全部字节（含同步字）。
- * 载荷上限 72 字节：8 字节设备标识 + 单帧最多 64 字节原始报告。
+ * 载荷上限按用途分两档：报文帧 72 字节（8 字节设备标识 + 单帧最多 64 字节
+ * 原始报告），OTA 数据帧最多 202 字节；线格式的 len 是单字节，因此解码器
+ * 按 INPUT_FRAME_WIRE_MAX_PAYLOAD 收帧，各类型再按自己的上限校验。
  */
 #define INPUT_FRAME_SYNC0 0xA5u
 #define INPUT_FRAME_SYNC1 0x5Au
@@ -25,13 +27,21 @@ extern "C" {
 #define INPUT_FRAME_MAX_PAYLOAD 72u
 #define INPUT_FRAME_MAX_LEN \
     (INPUT_FRAME_HEADER_LEN + INPUT_FRAME_MAX_PAYLOAD + INPUT_FRAME_CRC_LEN)
+/** 线格式上限：len 字段是单字节，解码器最多收这么多字节的载荷。 */
+#define INPUT_FRAME_WIRE_MAX_PAYLOAD 255u
+#define INPUT_FRAME_WIRE_MAX_LEN \
+    (INPUT_FRAME_HEADER_LEN + INPUT_FRAME_WIRE_MAX_PAYLOAD + INPUT_FRAME_CRC_LEN)
 
-/** 帧类型。 */
+/** 帧类型：输入通路 0x01-0x20，OTA 升级 0x30-0x33，探测 0x7F。 */
 typedef enum {
     INPUT_FRAME_TYPE_ATTACH = 0x01,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_DETACH = 0x02,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_REPORT = 0x10,   /**< 载荷 = 设备标识 + 原始报告。 */
     INPUT_FRAME_TYPE_FEEDBACK = 0x20, /**< 载荷 = 反馈（设备 → PC）。 */
+    INPUT_FRAME_TYPE_OTA_BEGIN = 0x30, /**< 载荷 = 镜像大小声明（设备 ← PC）。 */
+    INPUT_FRAME_TYPE_OTA_DATA = 0x31,  /**< 载荷 = 块序号 + 镜像数据（设备 ← PC）。 */
+    INPUT_FRAME_TYPE_OTA_END = 0x32,   /**< 无载荷，声明数据发完（设备 ← PC）。 */
+    INPUT_FRAME_TYPE_OTA_ACK = 0x33,   /**< 载荷 = 升级状态应答（设备 → PC）。 */
     INPUT_FRAME_TYPE_PING = 0x7F,     /**< 载荷 = 版本号（1 字节）。 */
 } input_frame_type_t;
 
@@ -60,7 +70,7 @@ size_t input_frame_encode(uint8_t *out, size_t out_len, uint8_t type, uint8_t sl
 
 /** 解帧状态机：把字节流切成桥接帧与其余文本（CLI 行命令）。 */
 typedef struct {
-    uint8_t buf[INPUT_FRAME_MAX_LEN + 16u];
+    uint8_t buf[INPUT_FRAME_WIRE_MAX_LEN + 16u];
     size_t len;
 } input_frame_rx_t;
 

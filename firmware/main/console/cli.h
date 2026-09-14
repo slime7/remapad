@@ -21,6 +21,8 @@ extern "C" {
  *   screen on|off        息屏 / 亮屏
  *   mode device|host     连接模式（桥接 otg 由 bridge 拒绝）
  *   pairing start|stop   配对模式开关
+ *   version              运行镜像版本 / 分区 / OTA 会话状态
+ *   rollback             回滚到上一个可用镜像（仅待验证状态有效）
  *   reboot               软重启（回 COM 模式）
  *
  * 注意：与 idf.py monitor 共用端口时，监视器会抢读输入，二者勿同时使用。

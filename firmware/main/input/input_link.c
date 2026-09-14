@@ -12,6 +12,7 @@
 #include "cli.h"
 #include "input_frame.h"
 #include "input_source.h"
+#include "ota_session.h"
 
 static const char *TAG = "remapad_input";
 
@@ -33,6 +34,19 @@ static void on_frame(const input_frame_view_t *frame, void *user)
         return;
     }
     s_frames++;
+    /* 升级帧由 OTA 会话接走（要写 flash，不能落在输入通路里）；探测帧在这里
+     * 直接应答，其余交给输入源。 */
+    if (ota_session_is_frame_type(frame->type)) {
+        ota_session_handle_frame(frame);
+        return;
+    }
+    if (frame->type == INPUT_FRAME_TYPE_PING) {
+        const uint8_t version = INPUT_FRAME_VERSION;
+        input_link_send_frame(INPUT_FRAME_TYPE_PING, 0, &version, sizeof(version));
+        ESP_LOGI(TAG, "bridge ping from PC (protocol v%u)",
+                 frame->payload_len > 0 ? frame->payload[0] : 0u);
+        return;
+    }
     input_source_handle_frame(frame);
 }
 
@@ -81,6 +95,19 @@ uint32_t input_link_frame_count(void)
     return s_frames;
 }
 
+void input_link_send_frame(uint8_t type, uint8_t slot, const uint8_t *payload,
+                           size_t payload_len)
+{
+    uint8_t frame[INPUT_FRAME_MAX_LEN];
+    const size_t len =
+        input_frame_encode(frame, sizeof(frame), type, slot, 0, payload, payload_len);
+    if (len == 0) {
+        return;
+    }
+    /* 主机没在读时直接丢弃，绝不在数据面任务里阻塞。 */
+    usb_serial_jtag_write_bytes(frame, len, 0);
+}
+
 void input_link_send_feedback(const pad_feedback_t *feedback)
 {
     if (feedback == NULL) {
@@ -94,12 +121,5 @@ void input_link_send_feedback(const pad_feedback_t *feedback)
     payload[3] = feedback->rumble_strength[PAD_TRIGGER_R];
     payload[4] = feedback->player_led;
     payload[5] = feedback->haptic_sample_valid ? feedback->haptic_sample : 0u;
-    uint8_t frame[INPUT_FRAME_MAX_LEN];
-    const size_t len = input_frame_encode(frame, sizeof(frame), INPUT_FRAME_TYPE_FEEDBACK, 0, 0,
-                                          payload, sizeof(payload));
-    if (len == 0) {
-        return;
-    }
-    /* 主机没在读时直接丢弃，绝不在数据面任务里阻塞。 */
-    usb_serial_jtag_write_bytes(frame, len, 0);
+    input_link_send_frame(INPUT_FRAME_TYPE_FEEDBACK, 0, payload, sizeof(payload));
 }

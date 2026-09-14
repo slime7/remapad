@@ -112,8 +112,9 @@ static void process(input_frame_rx_t *rx, input_frame_cb_t on_frame, input_text_
             return; /* 帧头未收齐 */
         }
         const size_t payload_len = rx->buf[6];
-        if (payload_len > INPUT_FRAME_MAX_PAYLOAD) {
-            /* 长度越界：这里的同步字是误命中，丢一个字节继续扫描。 */
+        if (payload_len > INPUT_FRAME_WIRE_MAX_PAYLOAD) {
+            /* 线格式上限与接收缓冲是同一常量，这里只在常量被调小时兜底：
+             * 丢一个字节继续扫描，绝不按超长长度去读缓冲之外。 */
             drop_first_byte(rx);
             continue;
         }

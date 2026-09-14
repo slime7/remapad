@@ -23,6 +23,7 @@ const FIRMWARE_SOURCES = [
   'firmware/main/pad/pad_state.c',
   'firmware/main/pad/pad_device.c',
   'firmware/main/input/input_frame.c',
+  'firmware/main/ota/ota_proto.c',
   'firmware/main/target/ns2/ns2_report.c',
   'firmware/main/target/ns2/ns2_serial.c',
   'firmware/main/target/ns2/ns2_frames.c',
@@ -49,6 +50,7 @@ const TEST_SOURCES = [
   'firmware/test/test_dp_source.c',
   'firmware/test/test_pad_device.c',
   'firmware/test/test_input_frame.c',
+  'firmware/test/test_ota_proto.c',
   'firmware/test/test_target_ns2.c',
   'firmware/test/test_battery.c',
 ];
@@ -57,6 +59,7 @@ const INCLUDE_DIRS = [
   'firmware/main',
   'firmware/main/pad',
   'firmware/main/input',
+  'firmware/main/ota',
   'firmware/main/target',
   'firmware/main/target/ns2',
   'firmware/main/config',

@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "esp_heap_caps.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -26,7 +27,6 @@
 
 static const char *TAG = "remapad_bridge";
 
-#define REMAPAD_FW_VERSION "v0.4.0"
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
@@ -185,10 +185,13 @@ static void handle_hello(int id)
 {
     char event[REMAPAD_EVENT_MAX];
     const size_t psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    /* 版本号单一来源：构建时写进镜像应用描述符的 PROJECT_VER（git describe），
+     * 与串口 CLI version、OTA 应答、系统页信息行完全一致。 */
+    const esp_app_desc_t *desc = esp_app_get_description();
     snprintf(event, sizeof(event),
              "{\"t\":\"ready\",\"id\":%d,\"chip\":\"%s\",\"firmwareVersion\":\"%s\","
              "\"psramSize\":%u}",
-             id, REMAPAD_CHIP_NAME, REMAPAD_FW_VERSION, (unsigned)psram);
+             id, REMAPAD_CHIP_NAME, desc != NULL ? desc->version : "unknown", (unsigned)psram);
     reply_raw(event);
     ESP_LOGI(TAG, "hello -> ready (psram=%u)", (unsigned)psram);
 }

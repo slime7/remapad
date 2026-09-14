@@ -10,6 +10,11 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
 
+# OTA 回滚保护：新镜像先以「待验证」状态启动，等 UI 首帧成功且稳定运行满
+# OTA_HEALTH_MIN_UPTIME_US（ota_session.c）才标记有效；在此之前重启，引导器
+# 回退到升级前的镜像。串口 CLI 的 rollback 命令也依赖这个状态。
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
 # 8MB Octal PSRAM is used by the PocketJS guest and UI framebuffer.
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y

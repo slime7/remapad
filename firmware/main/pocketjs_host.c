@@ -19,6 +19,7 @@
 #include "backlight.h"
 #include "boot_splash.h"
 #include "bridge/js_bridge.h"
+#include "ota_session.h"
 #include "panel.h"
 #include "render_accel.h"
 #include "touch.h"
@@ -467,6 +468,9 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
                  frame->raster_density,
                  plan.region_count);
         runtime->first_frame_logged = true;
+        /* 首帧落屏说明 guest 起得来、渲染通路通：交给 OTA 会话作为回滚健康
+         * 门槛的一半条件（另一半是稳定运行时长）。 */
+        ota_session_notify_ui_ready();
         /* 背光通常已由启动画面点亮（持久化亮度，开机恒为亮屏态）；这里再设
          * 一次是面板可用但启动画面不可用时的兜底。 */
         esp_err_t backlight_result = backlight_set(effective_brightness());

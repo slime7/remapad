@@ -7,6 +7,8 @@ set(remapad_pocketjs_requires
     esp_driver_usb_serial_jtag
     esp_lcd_touch
     esp_lcd_touch_cst816s
+    app_update
+    esp_app_format
     bt
     nvs_flash
     mbedtls
@@ -37,6 +39,8 @@ idf_component_register(
         "input/input_frame.c"
         "input/input_source.c"
         "input/input_link.c"
+        "ota/ota_proto.c"
+        "ota/ota_session.c"
         "target/target.c"
         "target/ns2/ns2_report.c"
         "target/ns2/ns2_frames.c"
@@ -57,6 +61,7 @@ idf_component_register(
         "drivers"
         "pad"
         "input"
+        "ota"
         "target"
         "target/ns2"
         "ble"

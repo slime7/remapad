@@ -17,6 +17,7 @@
 #include "buzzer.h"
 #include "dp_source.h"
 #include "ns2_identity.h"
+#include "ota_session.h"
 #include "pad_state.h"
 
 static const char *TAG = "remapad_cli";
@@ -45,25 +46,58 @@ static void cli_help(void)
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  pairing start|stop  pairing advertising");
+    cli_print("  version             running image version, partition and ota state");
+    cli_print("  rollback            roll back to the previous image (pending verify only)");
     cli_print("  poweroff            release power latch (battery only)");
     cli_print("  reboot              restart into COM mode");
 }
 
 static void cli_status(void)
 {
-    char line[128];
+    char line[224];
     const app_config_t *cfg = app_config_get();
     snprintf(line, sizeof(line),
              "state pairing=%s role=%s backlight=%u screen=%u uptime=%llds heap=%u "
-             "batt=%umV/%u%% chg=%u",
+             "batt=%umV/%u%% chg=%u fw=%s part=%s ota=%s",
              js_bridge_pairing_state(),
              cfg->usb_role == APP_CONFIG_USB_HOST ? "host" : "device",
              (unsigned)backlight_get(), (unsigned)cfg->screen_on,
              (long long)(esp_timer_get_time() / 1000000LL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
-             battery_is_charging() ? 1u : 0u);
+             battery_is_charging() ? 1u : 0u,
+             ota_session_running_version(), ota_session_running_partition(),
+             ota_session_state_name());
     cli_print(line);
+}
+
+/** 运行镜像信息：版本与分区来自 OTA 会话（与 UI 系统页同一来源）。 */
+static void cli_version(void)
+{
+    char line[128];
+    snprintf(line, sizeof(line), "fw=%s part=%s image=%s ota=%s",
+             ota_session_running_version(), ota_session_running_partition(),
+             ota_session_pending_verify() ? "pending-verify" : "confirmed",
+             ota_session_state_name());
+    cli_print(line);
+}
+
+/** 回滚演练：只有待验证镜像（OTA 后首次启动、尚未过健康门槛）能回滚。 */
+static void cli_rollback(void)
+{
+    const esp_err_t err = ota_session_rollback_and_reboot();
+    if (err == ESP_ERR_INVALID_STATE) {
+        cli_print("err running image is not pending verification");
+        return;
+    }
+    if (err != ESP_OK) {
+        char line[64];
+        snprintf(line, sizeof(line), "err rollback failed: %s", esp_err_to_name(err));
+        cli_print(line);
+        return;
+    }
+    /* 成功路径会直接重启，这行只在中断前送得出去的情况下可见。 */
+    cli_print("ok rolling back to the previous image");
 }
 
 /** 调试注入：按键名 + 可选保持时长；release 立即释放当前注入。 */
@@ -272,6 +306,10 @@ static void cli_dispatch(char *line)
         cli_mode(arg);
     } else if (strcmp(line, "pairing") == 0) {
         cli_pairing(arg);
+    } else if (strcmp(line, "version") == 0) {
+        cli_version();
+    } else if (strcmp(line, "rollback") == 0) {
+        cli_rollback();
     } else if (strcmp(line, "poweroff") == 0) {
         js_bridge_submit_command("{\"t\":\"powerOff\",\"id\":0}");
         cli_print("ok poweroff queued");

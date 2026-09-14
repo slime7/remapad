@@ -128,10 +128,6 @@ void input_source_handle_frame(const input_frame_view_t *frame)
     case INPUT_FRAME_TYPE_REPORT:
         handle_report(frame);
         break;
-    case INPUT_FRAME_TYPE_PING:
-        ESP_LOGI(TAG, "bridge ping (protocol v%u)",
-                 frame->payload_len > 0 ? frame->payload[0] : 0u);
-        break;
     default:
         ESP_LOGW(TAG, "unsupported frame type 0x%02x", frame->type);
         break;

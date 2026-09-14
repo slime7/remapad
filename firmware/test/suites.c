@@ -12,6 +12,7 @@ extern const host_test_suite_t suite_render_accel;
 extern const host_test_suite_t suite_dp_source;
 extern const host_test_suite_t suite_pad_device;
 extern const host_test_suite_t suite_input_frame;
+extern const host_test_suite_t suite_ota_proto;
 extern const host_test_suite_t suite_target_ns2;
 extern const host_test_suite_t suite_battery;
 
@@ -24,6 +25,7 @@ static const host_test_suite_t *const s_suites[] = {
     &suite_dp_source,
     &suite_pad_device,
     &suite_input_frame,
+    &suite_ota_proto,
     &suite_target_ns2,
     &suite_battery,
     NULL,
