@@ -22,7 +22,7 @@
 
 ## 当前决策
 
-下表是本目录的完整 ADR 索引，也是当前决策状态的唯一导航入口。新增 ADR 后必须追加对应行，并继续保持编号升序；状态变更时只修改状态列和必要的取代说明。
+下表是本目录的完整 ADR 索引，也是当前决策状态的唯一导航入口。
 
 | ADR | 状态 | 主题 |
 | --- | --- | --- |
@@ -38,27 +38,13 @@
 | [0010](0010-nimble-ble-controller-stack.md) | active | BLE 手柄外设采用 ESP-IDF 内置 NimBLE 栈，SMP 关闭、配对由应用层 Command 0x15 承担 |
 | [0011](0011-controller-dataplane-module-boundary.md) | active | 控制器数据面按 ns2/ble/dp/usb 四模块分层，数据流单点汇合于 dp_task |
 | [0012](0012-firmware-boot-splash-before-ui.md) | active | 固件在 PocketJS UI 就绪前自绘启动画面并提前点亮背光 |
-| [0013](0013-defer-page-mount-after-first-frame.md) | active | 首帧只挂载首页，其余页面按帧补挂并在首页显示加载提示；补挂时机由 0014 取代 |
-| [0014](0014-page-mount-on-demand-progressive-fill.md) | active | 页面改为按需挂载并逐帧自顶向下填充，外层容器先出现；补挂时机由 0015 取代 |
-| [0015](0015-restore-deferred-page-mount-after-first-frame.md) | active | 恢复首帧后逐帧补挂页面，放弃按需挂载与分帧填充；挂载时机由 0016 取代 |
+| [0013](0013-defer-page-mount-after-first-frame.md) | superseded | 首帧只挂载首页，其余页面按帧补挂并在首页显示加载提示；由 0014 取代 |
+| [0014](0014-page-mount-on-demand-progressive-fill.md) | superseded | 页面改为按需挂载并逐帧自顶向下填充，外层容器先出现；由 0015 取代 |
+| [0015](0015-restore-deferred-page-mount-after-first-frame.md) | superseded | 恢复首帧后逐帧补挂页面，放弃按需挂载与分帧填充；由 0016 取代 |
 | [0016](0016-mount-all-pages-before-first-frame.md) | active | 首屏前一次性挂载全部页面，放弃首帧后逐帧补挂 |
 | [0017](0017-display-path-and-scroll-frame-budget.md) | active | 面板 SPI2 取 40 MHz、strip 改 32 行条带优先内部 RAM、本机加速回调接管填充与掩码混合；整幅内容按行带顺序在一帧内刷完（隔行因实机纵向错位被否决）；面板时钟取值由 0018 部分取代 |
 | [0018](0018-panel-spi2-clock-80mhz.md) | active | 面板 SPI2 时钟取上限 80 MHz，部分取代 0017 决策 1 的时钟取值 |
 | [0019](0019-playwright-e2e-and-host-unit-tests.md) | active | 以 Playwright 端到端测试与固件主机端单元测试作为回归基线 |
-
-`0002` 仍作为硬件 bridge 与控制面分层的决策依据；其自定义打包和 host 接入范围由 `0003` 取代。旧 ADR 文件正文保持不变。
-
-`0004` 仍作为 Web 预览采用官方 `hosts/web` 开发主机的决策依据；其固件组件与原生归档取自 PocketJS checkout 的范围由 `0005` 取代。旧 ADR 文件正文保持不变。
-
-`0007` 仍作为显示与触摸 BSP 选型（esp_lcd 内置 ST7789、Registry CST816S、LEDC 背光）的决策依据；其 strip 提交中颜色缓冲必须待 `trans_done` 门控后才可复用的语义由 `0008` 部分取代。旧 ADR 文件正文保持不变。
-
-`0013` 仍作为「首帧不全量挂载页面」这一取舍的依据；其首帧后每帧补挂一页的时机与页面填充方式由 `0014` 取代，**页面根节点自行翻转 hidden、按需挂载分块填充的约定以 0014 为准**。旧 ADR 文件正文保持不变。
-
-`0014` 的按需挂载与分帧填充实测让每次首次进入页面都停留在半成品状态，观感不如启动阶段一次挂完；其补挂时机与页面填充方式由 `0015` 取代，**页面在首帧后逐帧补挂、切页只翻 hidden、页面根节点自行翻转 hidden 的约定以 0015 为准**。旧 ADR 文件正文保持不变。
-
-`0015` 的逐帧补挂把建树推到首帧之后，实测首帧之后 8-9 秒内每帧被阻塞 0.6-2.4 秒，切页与滚动都在这段时间里卡顿；其挂载时机由 `0016` 取代，**七页在首屏前一次挂完、App 不再有待挂队列、切页只翻 hidden、页面根节点自行翻转 hidden 的约定以 0016 为准**。旧 ADR 文件正文保持不变。
-
-`0017` 仍作为显示通路取值（32 行条带、优先内部 RAM）、整幅行带刷新、本机加速回调与滚动位移路径的决策依据；其决策 1 中面板 SPI2 取 40 MHz 的时钟取值由 `0018` 部分取代，**面板像素时钟以 `0018` 为准**。旧 ADR 文件正文保持不变。
 
 ## 创建 ADR 脚本用法
 
