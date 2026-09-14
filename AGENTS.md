@@ -50,6 +50,8 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器；禁止对已写入用户数据的设备执行 `erase-flash`（会清空 NVS 设置/配对与 `storage` 分区，布局约束见 [ADR 0009](docs/adr/0009-ota-storage-flash-layout.md)） |
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
 
+固件命令要在**配置本工程时用的那套 Python 环境**（IDF checkout 自带的 `export.ps1`，即 `%USERPROFILE%\.espressif` 那套）里执行。EIM 的 `Microsoft.*.PowerShell_profile.ps1` 激活的是另一套解释器，`idf.py` 在那里只打印一行环境提示就返回、不编译（详见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)）。
+
 ## 产物与生成文件约定
 
 - **禁止手动修改构建产物**：
