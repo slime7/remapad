@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const SELF_PATH = fileURLToPath(import.meta.url);
 const PROJECT_ROOT = resolve(SCRIPT_DIR, '..');
 const UI_ROOT = resolve(PROJECT_ROOT, 'ui');
 const MANIFEST = resolve(UI_ROOT, 'pocket.json');
@@ -20,6 +21,60 @@ const SIBLING_CHECKOUT = resolve(PROJECT_ROOT, '../pocketjs');
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? '';
 const backendArgs = argv.filter((value) => value !== '--');
+
+// 隐藏子命令 __devtools-watchdog：DevTools（bun serve.ts）经它拉起。它只盯主
+// 进程的 PID——主进程被强杀时收不到任何退出事件，由这个还活着的中间层负责
+// 把 DevTools 进程树收掉，8131 不会留给孤儿进程。必须放在 usage 校验之前，
+// 否则未知命令会先被拦下。
+if (command === '__devtools-watchdog') {
+  const [serveScript, parentPid] = backendArgs;
+  let devtools = null;
+  const killDevtools = () => {
+    if (devtools === null || devtools.pid === undefined || devtools.exitCode !== null) {
+      return;
+    }
+    try {
+      if (process.platform === 'win32') {
+        // kill() 在 Windows 上只打得到直接子进程，用 taskkill 连树收。
+        spawn('taskkill', ['/pid', String(devtools.pid), '/T', '/F'], { stdio: 'ignore' });
+      } else {
+        devtools.kill('SIGTERM');
+      }
+    } catch {
+      // 进程已不在，无需清理。
+    }
+  };
+  const die = (code) => {
+    killDevtools();
+    process.exit(code);
+  };
+  for (const signal of process.platform === 'win32'
+    ? ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']
+    : ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => die(0));
+  }
+  process.on('exit', killDevtools);
+  devtools = spawn('bun', [serveScript], {
+    cwd: dirname(serveScript),
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+  devtools.on('error', () => die(1));
+  devtools.on('close', (code) => process.exit(code ?? 0));
+  setInterval(() => {
+    try {
+      process.kill(Number(parentPid), 0);
+    } catch (error) {
+      // EPERM 说明进程还在（属主不同），只有 ESRCH 才是真没了。
+      if (error.code !== 'EPERM') {
+        console.log('[Remapad] 主进程已退出，关闭 DevTools 服务器');
+        die(0);
+      }
+    }
+  }, 1500);
+  // 顶层 await 把执行流停在这里（ESM 不允许顶层 return）；事件循环由上面的
+  // setInterval 与 bun 子进程维持，进程不会落入下方其余命令的分支。
+  await new Promise(() => {});
+}
 
 if (!['check', 'compile', 'build', 'web', 'native'].includes(command)) {
   console.error('usage: node scripts/pocketjs.mjs <check|compile|build|web|native>');
@@ -167,10 +222,10 @@ async function watchUiSources(compilerRoot, server) {
       return;
     }
     compiling = true;
-    const child = spawn('bun', cliArgs(compilerRoot, 'compile', UI_OUTDIR), {
+    const child = trackChild(spawn('bun', cliArgs(compilerRoot, 'compile', UI_OUTDIR), {
       cwd: compilerRoot,
       stdio: ['ignore', 'ignore', 'inherit'],
-    });
+    }));
     // spawn 失败（bun 丢失/被占用等）只触发 error 不触发 close；挂上处理器避免
     // 未捕获的 error 事件带崩整个 dev 进程。
     child.on('error', (error) => {
@@ -215,6 +270,82 @@ async function watchUiSources(compilerRoot, server) {
       console.error('[Remapad] 无法监听 ' + target + '：' + error.message);
     }
   }
+}
+
+// ---- 生命周期：web 命令拉起的所有子进程必须随主进程一起退出 ----
+// 背景：e2e 的 webServer / 交互式 pnpm dev 一旦被取消或强杀，bun DevTools
+// 子进程会变成孤儿占住 8131。这里的收尾分三层：exit/信号处理器（正常路径）、
+// 父进程看门狗（playwright 或终端整个消失）、DevTools 看门狗中间层（主进程
+// 被强杀时唯一还活着的清理者，见文件头部的 __devtools-watchdog 分支）。
+
+/** 在跑的子进程（DevTools 看门狗、watch 增量编译）。 */
+const liveChildren = new Set();
+
+function trackChild(child) {
+  liveChildren.add(child);
+  child.on('close', () => liveChildren.delete(child));
+  return child;
+}
+
+function killChildTree(child) {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+  try {
+    if (process.platform === 'win32') {
+      // Windows 上 kill() 只打得到直接子进程，用 taskkill 连树收。
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      child.kill('SIGTERM');
+    }
+  } catch {
+    // 进程已不在，无需清理。
+  }
+}
+
+function killAllChildren() {
+  for (const child of [...liveChildren]) {
+    killChildTree(child);
+  }
+  liveChildren.clear();
+}
+
+process.on('exit', killAllChildren);
+for (const signal of process.platform === 'win32'
+  ? ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']
+  : ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    killAllChildren();
+    process.exit(0);
+  });
+}
+
+/**
+ * 父进程（playwright webServer / 交互终端）消失后自动退出：playwright 自己被
+ * 强杀时没人来杀 webServer，端口 8130 会留给孤儿进程。POSIX 下父进程死后本
+ * 进程被过继、ppid 改变；Windows 下 ppid 不变，改用 kill(pid, 0) 探测。
+ */
+function watchParent() {
+  const initialPpid = process.ppid;
+  const parentGone = () => {
+    if (process.ppid !== initialPpid) {
+      return true;
+    }
+    try {
+      process.kill(initialPpid, 0);
+      return false;
+    } catch (error) {
+      // EPERM 说明进程还在（属主不同），只有 ESRCH 才是真没了。
+      return error.code !== 'EPERM';
+    }
+  };
+  setInterval(() => {
+    if (parentGone()) {
+      console.log('[Remapad] 父进程已退出，自动关闭预览与 DevTools 服务器');
+      killAllChildren();
+      process.exit(0);
+    }
+  }, 1500);
 }
 
 if (command === 'native') {
@@ -271,19 +402,23 @@ if (command === 'web') {
   // 预览页以 device 角色接入它的 /ws，面板在 http://127.0.0.1:8131/devtools。
   const serveScript = resolve(runtimeDir, 'serve.ts');
   if (existsSync(serveScript)) {
-    const devtools = spawn('bun', [serveScript], {
-      cwd: runtimeDir,
+    // DevTools 经看门狗中间层拉起：即便本进程被强杀（收不到任何事件），中间层
+    // 也会在 1.5 秒内发现 PID 失效并收掉 DevTools 进程树，8131 不留给孤儿。
+    trackChild(spawn(process.execPath, [
+      SELF_PATH,
+      '__devtools-watchdog',
+      serveScript,
+      String(process.pid),
+    ], {
       env: { ...process.env, PORT: '8131' },
-      stdio: ['ignore', 'inherit', 'inherit'],
-    });
-    process.on('exit', () => {
-      devtools.kill();
-    });
+      stdio: 'inherit',
+    }));
     console.log('[Remapad] 官方 DevTools: http://127.0.0.1:8131/devtools');
   } else {
     console.log('[Remapad] 快照缺少 hosts/web/serve.ts，未启动官方 DevTools 服务器（重新执行 scripts/vendor-pocketjs.mjs 同步）');
   }
   watchUiSources(compilerRoot, server);
+  watchParent();
 }
 
 // check / compile / build 直接转发官方 CLI，产物写入本仓库的 ui/dist。
