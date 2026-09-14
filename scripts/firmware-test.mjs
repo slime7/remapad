@@ -23,6 +23,7 @@ const FIRMWARE_SOURCES = [
   'firmware/main/ns2/ns2_report.c',
   'firmware/main/ns2/ns2_serial.c',
   'firmware/main/ns2/ns2_frames.c',
+  'firmware/main/ns2/ns2_identity.c',
   'firmware/main/render_accel.c',
   'firmware/main/dp/dp_source.c',
 ];
@@ -36,6 +37,7 @@ const TEST_SOURCES = [
   'firmware/test/test_ns2_report.c',
   'firmware/test/test_ns2_serial.c',
   'firmware/test/test_ns2_frames.c',
+  'firmware/test/test_ns2_identity.c',
   'firmware/test/test_render_accel.c',
   'firmware/test/test_dp_source.c',
 ];

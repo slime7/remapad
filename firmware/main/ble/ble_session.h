@@ -98,6 +98,42 @@ bool ns2_session_output_info(size_t index, uint8_t *identity, uint8_t *report_fo
 /** 向第 index 个活跃会话发送编码好的报告体（内部按其连接与订阅状态投递）。 */
 void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *body);
 
+/* --- 链路状态视图（串口诊断与控制面经这些接口取数）--- */
+
+/** 单个身份的链路状态（控制面诊断取值）。 */
+typedef enum {
+    NS2_LINK_IDLE = 0,    /* 无会话、也不在广播 */
+    NS2_LINK_ADVERTISING, /* 无会话，广播实例在发（发现或回连） */
+    NS2_LINK_WAIT_PAIR,   /* 已连接，主机握手未完成 */
+    NS2_LINK_NORMAL,      /* 已连接，凭证匹配（或本会话完成握手） */
+} ns2_link_state_t;
+
+/** 单个身份的链路快照。地址为 NimBLE 存储序（显示序反转）。 */
+typedef struct {
+    uint8_t identity;      /* ns2_identity_t */
+    uint8_t state;         /* ns2_link_state_t */
+    bool connected;
+    uint16_t conn_handle;
+    uint8_t report_format; /* 0x05 / 0x09；未连接为 0 */
+    bool notify_05;        /* 主机已订阅 0x05 输入报告通道 */
+    bool notify_09;
+    uint32_t reports;      /* 已投递的输入报告数（订阅后计数） */
+    uint8_t creds;         /* 该身份的配对凭证条数 */
+    bool advertising;      /* 该身份的广播实例在发 */
+    bool mac_valid;
+    uint8_t mac[6];
+} ns2_session_status_t;
+
+/** 当前形态的身份列表（Pro 1 个；JoyCon 组合 2 个），返回写入个数。 */
+size_t ns2_session_mode_identities(uint8_t out[2]);
+
+/** 指定身份的链路快照；身份不属于当前形态时返回 false。 */
+bool ns2_session_status(uint8_t identity, ns2_session_status_t *out);
+
+/** 指定身份对外广播地址（Pro 为公共伪装地址，JoyCon 为派生静态随机地址）；
+ * host 尚未同步时地址未确定，返回 false。 */
+bool ns2_session_identity_mac(uint8_t identity, uint8_t out[6]);
+
 #ifdef __cplusplus
 }
 #endif

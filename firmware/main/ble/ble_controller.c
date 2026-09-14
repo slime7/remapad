@@ -15,6 +15,7 @@
 #include "os/os_mbuf.h"
 
 #include "ble_session.h"
+#include "ns2_identity.h"
 #include "ns2_frames.h"
 
 static const char *TAG = "remapad_blctl";
@@ -436,10 +437,18 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         slot->used = true;
         slot->conn_handle = event->connect.conn_handle;
         slot->identity = identity;
-        ESP_LOGI(TAG, "ACL connected (conn=%u, identity=%u)",
-                 event->connect.conn_handle, (unsigned)identity);
+        ESP_LOGI(TAG, "ACL connected (conn=%u, identity=%s)",
+                 event->connect.conn_handle, ns2_identity_name(identity));
         ns2_session_on_connect(event->connect.conn_handle, identity);
         request_conn_params(event->connect.conn_handle);
+        break;
+    }
+    case BLE_GAP_EVENT_ENC_CHANGE: {
+        const conn_slot_t *slot = conn_slot(event->enc_change.conn_handle);
+        ESP_LOGI(TAG, "encryption change (conn=%u, identity=%s, status=%d)",
+                 event->enc_change.conn_handle,
+                 ns2_identity_name(slot ? slot->identity : NS2_ID_PRO),
+                 event->enc_change.status);
         break;
     }
     case BLE_GAP_EVENT_DISCONNECT: {
@@ -448,8 +457,8 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         if (slot != NULL) {
             memset(slot, 0, sizeof(*slot));
         }
-        ESP_LOGI(TAG, "disconnected reason=0x%02x (identity=%u)",
-                 event->disconnect.reason, (unsigned)identity);
+        ESP_LOGI(TAG, "disconnected reason=0x%02x (identity=%s)",
+                 event->disconnect.reason, ns2_identity_name(identity));
         ns2_session_on_disconnect(event->disconnect.conn.conn_handle, identity);
         break;
     }
@@ -566,24 +575,28 @@ static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t p
              legacy_pdu ? "legacy" : "extended", (unsigned)s_adv_identity[instance]);
 }
 
-void ble_controller_adv_start(uint8_t instance, const uint8_t payload[31],
-                              const uint8_t addr[6])
+void ble_controller_adv_start(uint8_t instance, uint8_t identity,
+                              const uint8_t payload[31], const uint8_t addr[6])
 {
     if (instance >= ADV_INSTANCE_MAX) {
         return;
     }
-    /* 实例身份由会话层随载荷一并告知：Pro 单身份（双实例同址），JoyCon
-     * 双身份各占一实例。addr 为 NULL 时沿用公共伪装地址。 */
-    if (addr != NULL) {
-        s_adv_identity[instance] =
-            (addr[5] & 0xC0) == 0xC0 && (addr[0] & 0x01) != 0 ? NS2_ID_JOYCON_R
-                                                              : NS2_ID_JOYCON_L;
-    } else {
-        s_adv_identity[instance] = NS2_ID_PRO;
-    }
+    /* 实例身份由会话层显式给出：Pro 单身份（双实例同址），JoyCon 双身份
+     * 各占一实例。addr 为 NULL 时沿用公共伪装地址。 */
+    s_adv_identity[instance] = identity;
     ESP_LOG_BUFFER_HEX(TAG, payload, 31);
     adv_start_instance(instance, addr != NULL ? 1 : (instance == ADV_INSTANCE_LEGACY),
                        payload, addr);
+}
+
+bool ble_controller_adv_running(uint8_t identity)
+{
+    for (size_t i = 0; i < ADV_INSTANCE_MAX; i++) {
+        if (s_adv_identity[i] == identity && ble_gap_ext_adv_active((uint8_t)i)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void ble_controller_adv_stop(void)

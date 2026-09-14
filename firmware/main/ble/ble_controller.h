@@ -58,10 +58,14 @@ void ble_controller_adv_stop(void);
  * 以 31 字节原始载荷启动一个广播实例。addr 为 NULL 时用公共伪装地址
  * （Pro 单身份，实例 0 走扩展 PDU、实例 1 走 legacy PDU 的既有形态）；
  * 非 NULL 时以该静态随机地址广播（JoyCon 双身份各占一个实例，legacy PDU）。
- * instance 取 0/1。
+ * instance 取 0/1；identity 由会话层显式给出（ns2_identity_t），传输层不再
+ * 从地址反推——左右两只的地址最低位来自芯片，反推会认错身份。
  */
-void ble_controller_adv_start(uint8_t instance, const uint8_t payload[31],
-                              const uint8_t addr[6]);
+void ble_controller_adv_start(uint8_t instance, uint8_t identity,
+                              const uint8_t payload[31], const uint8_t addr[6]);
+
+/** 指定身份的广播实例是否在发（诊断用；Pro 两个实例任一在发即为真）。 */
+bool ble_controller_adv_running(uint8_t identity);
 
 /** 解析连接的本机地址（广播身份来源）：命中返回 true 并按 identity 输出。 */
 bool ble_controller_conn_identity(uint16_t conn_handle, uint8_t *identity);

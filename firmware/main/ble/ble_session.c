@@ -1,6 +1,7 @@
 #include "ble_session.h"
 
 #include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -12,6 +13,7 @@
 #include "ble_controller.h"
 #include "ble_creds.h"
 #include "dp_plane.h"
+#include "ns2_identity.h"
 #include "ns2_frames.h"
 #include "ns2_output.h"
 #include "ns2_report.h"
@@ -47,6 +49,8 @@ typedef struct {
     bool pair_mac_ready;
     uint8_t pair_ltk[16];
     bool pair_ltk_ready;
+    /** 已投递的输入报告数（主机订阅后计数），供控制面诊断。 */
+    uint32_t reports;
 } session_slot_t;
 
 static struct {
@@ -60,6 +64,8 @@ static struct {
     uint32_t button_color;
     uint32_t grip_color;
     bool pairing_mode;
+    /** 当前形态的身份是否都已连上（成对在线行只打印一次）。 */
+    bool pair_online_logged;
 } s_ses;
 
 /** 当前手柄身份集合：Pro = {PRO}；JoyCon 组合 = {JOYCON_L, JOYCON_R}。 */
@@ -84,18 +90,6 @@ static bool identity_in_mode(ns2_identity_t identity)
         }
     }
     return false;
-}
-
-/** JoyCon 组合的双身份 AdvA：静态随机地址（NimBLE 每实例地址仅支持
- * RANDOM），高两位置 11、其余取公共伪装地址派生，L/R 以最低位区分。
- * 与真机的 public 地址形态不同，主机侧能否接受需实机验证（记录项）。 */
-static void identity_adv_addr(ns2_identity_t identity, uint8_t out[6])
-{
-    memcpy(out, s_ses.own_mac, 6);
-    out[5] = (uint8_t)(out[5] | 0xC0);
-    if (identity == NS2_ID_JOYCON_R) {
-        out[0] = (uint8_t)(out[0] | 0x01);
-    }
 }
 
 /** 身份的 PID（controller.md 手柄型号表）：Pro 0x2069；Joy-Con 2 (L) 0x2067、
@@ -307,12 +301,12 @@ static void resume_advertising(void)
         uint8_t adv[31];
         build_adv_payload(adv, ids[i], reconnect);
         if (n == 1) {
-            ble_controller_adv_start(0, adv, NULL);
-            ble_controller_adv_start(1, adv, NULL);
+            ble_controller_adv_start(0, (uint8_t)NS2_ID_PRO, adv, NULL);
+            ble_controller_adv_start(1, (uint8_t)NS2_ID_PRO, adv, NULL);
         } else {
             uint8_t addr[6];
-            identity_adv_addr(ids[i], addr);
-            ble_controller_adv_start((uint8_t)i, adv, addr);
+            ns2_identity_adv_addr(s_ses.own_mac, ids[i], addr);
+            ble_controller_adv_start((uint8_t)i, ids[i], adv, addr);
         }
         ESP_LOGI(TAG, "resume: identity %u %s advertising (%u creds)",
                  (unsigned)ids[i], reconnect ? "reconnect" : "discovery",
@@ -344,6 +338,62 @@ static session_slot_t *session_by_conn(uint16_t conn_handle)
         }
     }
     return NULL;
+}
+
+static session_slot_t *session_by_identity(uint8_t identity)
+{
+    for (size_t i = 0; i < SESSION_MAX; i++) {
+        if (s_ses.sess[i].active && s_ses.sess[i].identity == identity) {
+            return &s_ses.sess[i];
+        }
+    }
+    return NULL;
+}
+
+/** 会话进入 normal（凭证匹配回连或本会话完成握手）：打印可观测的状态行。 */
+static void log_session_normal(const session_slot_t *ses)
+{
+    ESP_LOGI(TAG, "%s session normal (conn=%u, fmt=0x%02x)",
+             ns2_identity_name(ses->identity), ses->conn_handle, ses->report_format);
+}
+
+/** 当前形态的所有身份都已连上时打印一次成对在线行：主机 Grip 页组合前
+ *  的证据；任一身份断开后重新武装。 */
+static void log_pair_online(void)
+{
+    ns2_identity_t ids[2];
+    const size_t n = mode_identities(ids);
+    for (size_t i = 0; i < n; i++) {
+        if (session_by_identity(ids[i]) == NULL) {
+            return;
+        }
+    }
+    if (s_ses.pair_online_logged) {
+        return;
+    }
+    s_ses.pair_online_logged = true;
+    char list[24];
+    size_t used = 0;
+    for (size_t i = 0; i < n; i++) {
+        const int written = snprintf(&list[used], sizeof(list) - used,
+                                     i == 0 ? "%s" : " + %s",
+                                     ns2_identity_name(ids[i]));
+        if (written <= 0 || (size_t)written >= sizeof(list) - used) {
+            break;
+        }
+        used += (size_t)written;
+    }
+    ESP_LOGI(TAG, "all identities online: %s", list);
+}
+
+/** 身份对外广播地址（NimBLE 存储序）；host 未同步时地址尚未确定。 */
+static bool identity_mac(uint8_t identity, uint8_t out[6])
+{
+    if (!s_ses.synced) {
+        return false;
+    }
+    ns2_identity_adv_addr(s_ses.own_mac, identity, out);
+    return true;
 }
 
 void ns2_session_touch(uint16_t conn_handle)
@@ -412,8 +462,8 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
             }
         }
     }
-    ESP_LOGI(TAG, "connected (conn=%u, identity=%u, peer %02x:%02x:%02x:%02x:%02x:%02x, %s)",
-             conn_handle, (unsigned)identity,
+    ESP_LOGI(TAG, "connected (conn=%u, identity=%s, peer %02x:%02x:%02x:%02x:%02x:%02x, %s)",
+             conn_handle, ns2_identity_name(identity),
              peer[0], peer[1], peer[2], peer[3], peer[4], peer[5],
              matched ? "paired host" : "unpaired host");
     slot->state = matched ? SESSION_NORMAL : SESSION_CONNECTED_WAIT_PAIR;
@@ -421,8 +471,10 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
     if (matched) {
         /* 回连：把 NVS 里的 LTK 重新注入本周期 NimBLE RAM store。 */
         inject_ltk_to_ble_store(matched->mac, matched->ltk);
+        log_session_normal(slot);
     }
     ESP_LOGI(TAG, "waiting host init sequence");
+    log_pair_online();
 }
 
 void ns2_session_on_connect_fail(void)
@@ -438,6 +490,8 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
     if (slot != NULL) {
         memset(slot, 0, sizeof(*slot));
     }
+    /* 成对在线状态被打破，下一次全部在线时再打印一次。 */
+    s_ses.pair_online_logged = false;
     if (!ble_controller_connected()) {
         resume_advertising();
     } else if (identity != NS2_ID_PRO && identity_in_mode(identity)) {
@@ -446,8 +500,8 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
         uint8_t adv[31];
         build_adv_payload(adv, identity, reconnect);
         uint8_t addr[6];
-        identity_adv_addr(identity, addr);
-        ble_controller_adv_start(identity == NS2_ID_JOYCON_L ? 0 : 1, adv, addr);
+        ns2_identity_adv_addr(s_ses.own_mac, identity, addr);
+        ble_controller_adv_start(identity == NS2_ID_JOYCON_L ? 0 : 1, identity, adv, addr);
     }
 }
 
@@ -566,6 +620,7 @@ static size_t handle_init_cmd(session_slot_t *ses, const uint8_t *req, size_t le
             reverse_bytes(&req[14], ltk, 16);
             ble_creds_save(ses->identity, &req[8], ltk);
             ses->state = SESSION_NORMAL;
+            log_session_normal(ses);
         }
         return NS2_FRAME_HEADER_LEN;
     case 0x08:
@@ -720,6 +775,7 @@ static size_t handle_pairing_cmd(session_slot_t *ses, const uint8_t *req, size_t
             ses->pair_mac_ready = false;
             ses->pair_ltk_ready = false;
             ses->state = SESSION_NORMAL;
+            log_session_normal(ses);
         }
         resp[8] = 0x01;
         return NS2_FRAME_HEADER_LEN + 1;
@@ -877,12 +933,12 @@ void ns2_session_start_pairing_mode(void)
         uint8_t adv[31];
         build_adv_payload(adv, ids[i], false);
         if (n == 1) {
-            ble_controller_adv_start(0, adv, NULL);
-            ble_controller_adv_start(1, adv, NULL);
+            ble_controller_adv_start(0, (uint8_t)NS2_ID_PRO, adv, NULL);
+            ble_controller_adv_start(1, (uint8_t)NS2_ID_PRO, adv, NULL);
         } else {
             uint8_t addr[6];
-            identity_adv_addr(ids[i], addr);
-            ble_controller_adv_start((uint8_t)i, adv, addr);
+            ns2_identity_adv_addr(s_ses.own_mac, ids[i], addr);
+            ble_controller_adv_start((uint8_t)i, ids[i], adv, addr);
         }
     }
     ESP_LOGI(TAG, "pairing mode: discovery advertising");
@@ -1037,7 +1093,17 @@ void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *
             continue;
         }
         if (n == index) {
-            const uint16_t conn = s_ses.sess[i].conn_handle;
+            session_slot_t *slot = &s_ses.sess[i];
+            const uint16_t conn = slot->conn_handle;
+            /* 未订阅也要投递：传输层会刷新 READ 缓存并静默丢弃通知，
+             * 只有真正上行的报告才计入计数与首帧日志。 */
+            if (ble_controller_input_notify_ready(conn, report_id)) {
+                slot->reports++;
+                if (slot->reports == 1) {
+                    ESP_LOGI(TAG, "first input report -> %s (conn=%u, fmt=0x%02x)",
+                             ns2_identity_name(slot->identity), conn, report_id);
+                }
+            }
             if (report_id == NS2_REPORT_ID_05) {
                 ble_controller_notify_input_05(conn, body);
             } else {
@@ -1066,6 +1132,8 @@ void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
     s_ses.body_color = body_rgb;
     s_ses.button_color = button_rgb;
     s_ses.grip_color = grip_rgb;
+    /* 形态切换会改变「所有身份在线」的含义，重新武装成对在线行。 */
+    s_ses.pair_online_logged = false;
     if (s_ses.synced) {
         factory_init();
         if (!ble_controller_connected()) {
@@ -1075,4 +1143,47 @@ void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
     ESP_LOGI(TAG, "controller identity -> %s (body=%06lx btn=%06lx grip=%06lx)",
              joycon ? "joycon-lr" : "pro", (unsigned long)body_rgb,
              (unsigned long)button_rgb, (unsigned long)grip_rgb);
+}
+
+/* --- 链路状态视图（串口诊断与控制面经这些接口取数）--- */
+
+size_t ns2_session_mode_identities(uint8_t out[2])
+{
+    ns2_identity_t ids[2];
+    const size_t n = mode_identities(ids);
+    for (size_t i = 0; i < n; i++) {
+        out[i] = (uint8_t)ids[i];
+    }
+    return n;
+}
+
+bool ns2_session_identity_mac(uint8_t identity, uint8_t out[6])
+{
+    return identity_mac(identity, out);
+}
+
+bool ns2_session_status(uint8_t identity, ns2_session_status_t *out)
+{
+    if (out == NULL || !identity_in_mode((ns2_identity_t)identity)) {
+        return false;
+    }
+    memset(out, 0, sizeof(*out));
+    out->identity = identity;
+    out->creds = (uint8_t)ble_creds_count((ns2_identity_t)identity);
+    out->advertising = ble_controller_adv_running(identity);
+    out->mac_valid = identity_mac(identity, out->mac);
+
+    const session_slot_t *slot = session_by_identity(identity);
+    if (slot == NULL) {
+        out->state = out->advertising ? NS2_LINK_ADVERTISING : NS2_LINK_IDLE;
+        return true;
+    }
+    out->connected = true;
+    out->conn_handle = slot->conn_handle;
+    out->report_format = slot->report_format;
+    out->notify_05 = ble_controller_input_notify_ready(slot->conn_handle, NS2_REPORT_ID_05);
+    out->notify_09 = ble_controller_input_notify_ready(slot->conn_handle, NS2_REPORT_ID_09);
+    out->reports = slot->reports;
+    out->state = slot->state == SESSION_NORMAL ? NS2_LINK_NORMAL : NS2_LINK_WAIT_PAIR;
+    return true;
 }

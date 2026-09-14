@@ -34,6 +34,7 @@ idf_component_register(
         "ns2/ns2_frames.c"
         "ns2/ns2_output.c"
         "ns2/ns2_serial.c"
+        "ns2/ns2_identity.c"
         "ble/ble_controller.c"
         "ble/ble_session.c"
         "ble/ble_creds.c"

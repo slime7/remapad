@@ -145,13 +145,111 @@ static void debug_injection_holds_then_releases(void)
     dp_source_sample(&state);
     CHECK_EQ(state.buttons & NS2_BTN_C, 0);
 
-    /* 超过上限的 hold 被夹到 5000ms（1000 次采样），不会永久按住。 */
+    /* 上限为 60000ms（12000 次采样）：超过旧的 5s 上限仍按住，便于长按
+     * 验证与主机 Grip 界面的组合确认。 */
     dp_source_inject(NS2_BTN_B, 60000);
     dp_source_sample(&state);
     CHECK_EQ(state.buttons & NS2_BTN_B, NS2_BTN_B);
+    for (int i = 0; i < 1100; i++) {
+        dp_source_sample(&state);
+    }
+    CHECK_EQ(state.buttons & NS2_BTN_B, NS2_BTN_B);
+    CHECK(dp_source_inject_active());
+    dp_source_inject_release();
+}
+
+static void debug_release_clears_injection(void)
+{
+    dp_source_inject(NS2_BTN_HOME, 60000);
+
+    ns2_controller_state_t state;
+    dp_source_sample(&state);
+    CHECK_EQ(state.buttons & NS2_BTN_HOME, NS2_BTN_HOME);
+
+    /* 提前释放：注入标记与按键同时清空。 */
+    dp_source_inject_release();
+    CHECK(!dp_source_inject_active());
+    dp_source_sample(&state);
+    CHECK_EQ(state.buttons & NS2_BTN_HOME, 0);
+}
+
+static void debug_stick_injection(void)
+{
+    ns2_controller_state_t state;
+
+    /* 未设定时沿用输入源：主源给的四轴原样透传。 */
+    dp_source_inject_stick_reset();
+    dp_source_sample(&state);
+    CHECK_EQ(state.stick_lx, 0x111);
+    CHECK_EQ(state.stick_ly, 0x222);
+    CHECK_EQ(state.stick_rx, 0x333);
+    CHECK_EQ(state.stick_ry, 0x444);
+
+    /* 只推左摇杆：左轴被覆盖，右轴仍是输入源的值。 */
+    dp_source_inject_stick('l', NS2_STICK_MAX, NS2_STICK_CENTER);
+    dp_source_sample(&state);
+    CHECK_EQ(state.stick_lx, NS2_STICK_MAX);
+    CHECK_EQ(state.stick_ly, NS2_STICK_CENTER);
+    CHECK_EQ(state.stick_rx, 0x333);
+    CHECK_EQ(state.stick_ry, 0x444);
+
+    /* 再给右摇杆另一个值：两侧各自保持。 */
+    dp_source_inject_stick('r', 0, 0x800);
+    dp_source_sample(&state);
+    CHECK_EQ(state.stick_lx, NS2_STICK_MAX);
+    CHECK_EQ(state.stick_ly, NS2_STICK_CENTER);
+    CHECK_EQ(state.stick_rx, 0);
+    CHECK_EQ(state.stick_ry, 0x800);
+
+    /* 超界钳制到 12 位上限。 */
+    dp_source_inject_stick('l', 0xFFFF, 0xFFFF);
+    dp_source_sample(&state);
+    CHECK_EQ(state.stick_lx, NS2_STICK_MAX);
+    CHECK_EQ(state.stick_ly, NS2_STICK_MAX);
+
+    /* 回中：解除注入，四轴回到输入源的值。 */
+    dp_source_inject_stick_reset();
+    dp_source_sample(&state);
+    CHECK_EQ(state.stick_lx, 0x111);
+    CHECK_EQ(state.stick_ly, 0x222);
+    CHECK_EQ(state.stick_rx, 0x333);
+    CHECK_EQ(state.stick_ry, 0x444);
+}
+
+static void debug_key_lookup(void)
+{
+    uint32_t mask = 0;
+    uint32_t hold_ms = 0;
+
+    CHECK(dp_source_key_lookup("a", 1, &mask, &hold_ms));
+    CHECK_EQ(mask, NS2_BTN_A);
+    CHECK_EQ(hold_ms, 250);
+
+    CHECK(dp_source_key_lookup("up", 2, &mask, &hold_ms));
+    CHECK_EQ(mask, NS2_BTN_DPAD_UP);
+
+    /* 组合键默认按更长时间保持，对应主机 Grip 界面的确认动作。 */
+    CHECK(dp_source_key_lookup("lr", 2, &mask, &hold_ms));
+    CHECK_EQ(mask, (uint32_t)(NS2_BTN_L | NS2_BTN_R));
+    CHECK_EQ(hold_ms, 1000);
+
+    CHECK(dp_source_key_lookup("ls", 2, &mask, &hold_ms));
+    CHECK_EQ(mask, NS2_BTN_LSTICK);
+    CHECK(dp_source_key_lookup("c", 1, &mask, &hold_ms));
+    CHECK_EQ(mask, NS2_BTN_C);
+
+    /* 未命中：未知名字、空名字、前缀都不能改写输出。 */
+    mask = 0;
+    CHECK(!dp_source_key_lookup("nope", 4, &mask, &hold_ms));
+    CHECK_EQ(mask, 0);
+    CHECK(!dp_source_key_lookup("", 0, &mask, &hold_ms));
+    CHECK(!dp_source_key_lookup("aa", 2, &mask, &hold_ms));
 }
 
 HOST_TEST_SUITE(suite_dp_source, "dp_source",
                 {"合成规则：主源拥有摇杆与电源，其余只叠按键", composition_rules},
                 {"注册上限与调试注入叠加", registration_limit},
-                {"调试注入按时长保持后自动释放", debug_injection_holds_then_releases});
+                {"调试注入按时长保持后自动释放", debug_injection_holds_then_releases},
+                {"调试释放立即清空注入按键", debug_release_clears_injection},
+                {"摇杆注入：左右独立设定、钳制与回中", debug_stick_injection},
+                {"按键名表：命中、默认保持时长与未命中", debug_key_lookup});

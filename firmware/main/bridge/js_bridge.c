@@ -18,6 +18,7 @@
 #include "ble_controller.h"
 #include "ble_session.h"
 #include "dp_plane.h"
+#include "ns2_identity.h"
 #include "ns2_state.h"
 
 #include "pocketjs/guest.h"
@@ -489,13 +490,29 @@ static void handle_debug_key(int id, const char *cmd)
 static void handle_get_controller_config(int id)
 {
     const app_config_t *cfg = app_config_get();
+    /* 手柄设置页展示的对外地址：Pro 公共伪装地址，JoyCon 各自派生地址。
+     * host 尚未同步时留空，UI 显示占位符。 */
+    uint8_t mac[6];
+    char pro_mac[18] = "";
+    char left_mac[18] = "";
+    char right_mac[18] = "";
+    if (ns2_session_identity_mac(NS2_ID_PRO, mac)) {
+        ns2_mac_to_string(mac, pro_mac);
+    }
+    if (ns2_session_identity_mac(NS2_ID_JOYCON_L, mac)) {
+        ns2_mac_to_string(mac, left_mac);
+    }
+    if (ns2_session_identity_mac(NS2_ID_JOYCON_R, mac)) {
+        ns2_mac_to_string(mac, right_mac);
+    }
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"controllerConfig\",\"id\":%d,\"config\":{\"type\":\"%s\","
-             "\"bodyColor\":%lu,\"buttonColor\":%lu,\"gripColor\":%lu}}",
+             "\"bodyColor\":%lu,\"buttonColor\":%lu,\"gripColor\":%lu},"
+             "\"addresses\":{\"pro\":\"%s\",\"left\":\"%s\",\"right\":\"%s\"}}",
              id, cfg->ctrl_type == APP_CONFIG_CTRL_JOYCON ? "joycon" : "pro",
              (unsigned long)cfg->body_color, (unsigned long)cfg->button_color,
-             (unsigned long)cfg->grip_color);
+             (unsigned long)cfg->grip_color, pro_mac, left_mac, right_mac);
     reply_raw(event);
 }
 
