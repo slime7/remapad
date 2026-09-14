@@ -213,13 +213,14 @@ uv run python uartctl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
 uv run python uartctl.py -p COM3 key release     # 立即释放注入的按键
 uv run python uartctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
 uv run python uartctl.py -p COM3 stick reset     # 两侧摇杆回中
-uv run python uartctl.py -p COM3 link            # 两只手柄的地址、连接与上报计数
+uv run python uartctl.py -p COM3 link            # 两只手柄的地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
 uv run python uartctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
 uv run python uartctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
 uv run python uartctl.py -p COM3 backlight 60    # 背光并持久化
 uv run python uartctl.py -p COM3 screen off      # 息屏（on 恢复）
 uv run python uartctl.py -p COM3 mode host       # 连接模式（otg 被固件拒绝）
 uv run python uartctl.py -p COM3 pairing start   # 配对广播开关
+uv run python uartctl.py -p COM3 wake            # 唤醒突发：把休眠中的 NS2 主机叫醒（0x81 广播约 10 秒）
 uv run python uartctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
 uv run python uartctl.py -p COM3 reboot          # 软重启回 COM 模式
 uv run python uartctl.py -p COM3 log --seconds 20        # 只读设备日志 20 秒

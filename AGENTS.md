@@ -51,7 +51,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
 | **固件 OTA 升级** | `cd pc ; uv run python ota.py -p COMx` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata`（见 [ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)） |
 | **PC 手柄桥接** | `cd pc ; uv run python bridge.py -p COMx` | 读 PC 端手柄的原始报告并按桥接帧转发给设备（依赖由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移） |
-| **串口 CLI** | `cd pc ; uv run python uartctl.py -p COMx status` | 行命令控制台（免复位打开、`log` 只读日志、`version` 看镜像版本与升级状态、`rollback` 回滚待验证镜像） |
+| **串口 CLI** | `cd pc ; uv run python uartctl.py -p COMx status` | 行命令控制台（免复位打开、`log` 只读日志、`link` 看连接间隔与上报计数、`wake` 唤醒休眠中的主机、`version` 看镜像版本与升级状态、`rollback` 回滚待验证镜像） |
 
 固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行（`firmware/build/CMakeCache.txt` 记录了解释器路径，`rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可查）。同一台机器上并存多套 IDF 环境时，切到不是配置工程的那套，`idf.py` 只打印几行环境提示就返回、不编译（退出码 0、产物时间戳不变），判据与排错见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) 的「6. 编译 ESP-IDF 固件」。
 
