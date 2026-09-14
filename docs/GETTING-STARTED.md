@@ -109,23 +109,20 @@ pnpm run dev
 
 ### 6. 编译 ESP-IDF 固件
 
-固件命令要在**配置本工程时用的那套 Python 环境**里执行：`firmware/build/CMakeCache.txt` 记录了解释器路径，本机对应 IDF checkout 自带的 `export.ps1`（即 `.espressif` 那套）：
+固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行：`firmware/build/CMakeCache.txt` 记录了解释器路径（`rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可以查到），换一套环境后 `idf.py` 会空转、不编译（见「常见问题」）。
 
 ```powershell
-. C:\esp\v6.1\esp-idf\export.ps1
+. <IDF_DIR>\export.ps1
 cd firmware
 idf.py set-target esp32s3
 idf.py build
 ```
 
-同一台机器上可能并存两套 IDF 工具环境，激活脚本不同、Python 解释器也不同，只有配置工程时用的那套能直接构建：
+`<IDF_DIR>` 换成自己的 ESP-IDF 安装目录：PowerShell 用该目录下的 `export.ps1`，bash 用 `export.sh`；用官方安装管理器装的 IDF，就用它生成的 profile 脚本或 IDE 终端。同一台机器上可能并存多套 IDF 工具环境，激活脚本与 Python 解释器都不同，只有配置工程时用的那套能直接构建。判断标准与机器无关：
 
-| 环境 | 激活方式 | Python 解释器 | 本工程 |
-| :--- | :--- | :--- | :--- |
-| IDF checkout 自带 | `. <IDF>\export.ps1`（本机 `C:\esp\v6.1\esp-idf\export.ps1`） | `%USERPROFILE%\.espressif\python_env\idf6.1_py3.11_env` | 可用，工程按它配置 |
-| EIM 安装管理器 | `. C:\Espressif\tools\Microsoft.<版本>.PowerShell_profile.ps1` | `C:\Espressif\tools\python\<版本>\venv` | 不可用：`idf.py` 只校验并返回，不编译 |
-
-环境不符时的表现是 `idf.py` 打印 `'<venv>\python.exe' is currently active in the environment while the project was configured with '<venv>\python.exe'`，紧接着结束、退出码 0，`firmware/build/` 里的产物时间戳不变。这是空转，不是构建成功（详见「常见问题」）。要么切回工程配置时的那套环境，要么在另一套环境里 `idf.py fullclean` 后重新配置。
+- 真的开始编译（出现 `[1/N] Building ...`）才算成功；
+- 只打印几行环境提示、随后一行 `Executing action: all (aliases: build)` 就结束（退出码 0、`firmware/build/` 里的产物时间戳不变）是空转：输出里会同时给出「当前环境用的解释器」与「配置工程时用的解释器」两条路径，照着切回去即可；
+- 想换到另一套环境长期使用，就在那套环境里 `idf.py fullclean` 后重新配置（代价是完整重编一次）。
 
 `firmware/components/` 中的官方组件由 ESP-IDF 自动发现，`firmware/main/CMakeLists.txt` 按顺序接入包：
 
@@ -142,13 +139,13 @@ idf.py build
 idf.py -p COM3 flash monitor
 ```
 
-没有 ESP-IDF 终端时（例如从 Git Bash 直接发起），可以用一条 PowerShell 命令激活环境后执行。环境同样用 IDF checkout 自带的 `export.ps1`（见上一节的两套环境对照）。关键是先清掉 `MSYSTEM`——Git Bash 会把它带给子进程，`idf.py` 检测到后只打印警告并静默拒绝执行：
+没有 ESP-IDF 终端时（例如从 Git Bash 直接发起），可以用一条 PowerShell 命令激活环境后执行：用配置工程时那套 IDF 的 `export.ps1`（见上一节），先把 `MSYSTEM` 清掉——Git Bash 会把它带给子进程，`idf.py` 检测到后只打印警告并静默拒绝执行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item Env:MSYSTEM -ErrorAction SilentlyContinue; . 'C:\esp\v6.1\esp-idf\export.ps1'; Set-Location firmware; idf.py -p COM3 flash"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item Env:MSYSTEM -ErrorAction SilentlyContinue; . '<IDF_DIR>\export.ps1'; Set-Location firmware; idf.py -p COM3 flash"
 ```
 
-IDF checkout 位置不同时改成实际的 `export.ps1` 路径即可。
+`<IDF_DIR>` 与 `COM3` 按实际填写。
 
 把 `COM3` 替换为实际端口。若开发板没有自动进入下载模式，按板卡说明操作 BOOT/EN。串口监视器使用 `Ctrl + ]` 退出。
 
@@ -320,7 +317,7 @@ USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge �
 
 ### `idf.py build` 秒退且没有编译输出
 
-现象是打印几行环境提示后出现 `'<venv>\python.exe' is currently active in the environment while the project was configured with '<venv>\python.exe'`，紧接一行 `Executing action: all (aliases: build)` 就结束，退出码 0、`firmware/build/` 里的产物时间戳不变。这不是构建成功：`firmware/build/CMakeCache.txt` 记录了配置工程时用的 Python 解释器，换到另一套环境后 `idf.py` 只做校验就返回，一步都不编译。本机踩坑的典型来源是 EIM 的 `Microsoft.*.PowerShell_profile.ps1`，它激活的是 `C:\Espressif\tools\python\<版本>\venv`；切回 IDF checkout 自带的 `. C:\esp\v6.1\esp-idf\export.ps1` 再执行即可（两套环境的对照见「6. 编译 ESP-IDF 固件」）。想确认工程到底有没有活干，可以先试运行一次 ninja，它只列步骤、不改文件：
+现象是打印几行环境提示后出现 `'<venv>\python.exe' is currently active in the environment while the project was configured with '<venv>\python.exe'`，紧接一行 `Executing action: all (aliases: build)` 就结束，退出码 0、`firmware/build/` 里的产物时间戳不变。这不是构建成功：`firmware/build/CMakeCache.txt` 记录了配置工程时用的 Python 解释器（`rg -n '^PYTHON' firmware/build/CMakeCache.txt`），换到另一套 IDF 环境后 `idf.py` 只做校验就返回，一步都不编译。按提示里的两条路径切回配置工程时用的那套环境即可；要换环境长期使用则在当前环境里 `idf.py fullclean` 后重新配置（见「6. 编译 ESP-IDF 固件」）。想确认工程到底有没有活干，可以先试运行一次 ninja，它只列步骤、不改文件：
 
 ```powershell
 ninja -C firmware\build -n

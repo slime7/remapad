@@ -53,7 +53,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | **PC 手柄桥接** | `cd pc ; uv run python bridge.py -p COMx` | 读 PC 端手柄的原始报告并按桥接帧转发给设备（依赖由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移） |
 | **串口 CLI** | `cd pc ; uv run python uartctl.py -p COMx status` | 行命令控制台（免复位打开、`log` 只读日志、`version` 看镜像版本与升级状态、`rollback` 回滚待验证镜像） |
 
-固件命令要在**配置本工程时用的那套 Python 环境**（IDF checkout 自带的 `export.ps1`，即 `%USERPROFILE%\.espressif` 那套）里执行。EIM 的 `Microsoft.*.PowerShell_profile.ps1` 激活的是另一套解释器，`idf.py` 在那里只打印一行环境提示就返回、不编译（详见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)）。
+固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行（`firmware/build/CMakeCache.txt` 记录了解释器路径，`rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可查）。同一台机器上并存多套 IDF 环境时，切到不是配置工程的那套，`idf.py` 只打印几行环境提示就返回、不编译（退出码 0、产物时间戳不变），判据与排错见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) 的「6. 编译 ESP-IDF 固件」。
 
 ## 产物与生成文件约定
 
