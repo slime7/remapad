@@ -55,6 +55,13 @@ export async function openControllerSettings(app: RemapadApp): Promise<void> {
   await app.refreshTree();
 }
 
+/** 打开模式页（设置列表第三行）。 */
+export async function openMode(app: RemapadApp): Promise<void> {
+  await openSettingsItem(app, '模式切换');
+  await expect.poll(() => app.hasVisibleText('串口')).toBe(true);
+  await app.refreshTree();
+}
+
 /** 打开配对页（设置列表第二行）。 */
 export async function openPairing(app: RemapadApp): Promise<void> {
   await openSettingsItem(app, '手柄配对');

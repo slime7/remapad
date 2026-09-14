@@ -29,30 +29,33 @@ function batteryAppearance(percentage: number, charging: boolean): { glyph: stri
 }
 
 export function AppStatusBar() {
-  const usbOn = usbLinkState(hw.usbRole, hw.usbRoleActive) !== 'off';
-  const btConnected = hw.pairing === 'connected';
-  const battery = batteryAppearance(hw.battery.percentage, hw.battery.charging);
+  /* Vue Vapor：派生值包成函数、在 JSX 内调用才会被渲染作用跟踪。在组件体里
+   * 算成常量会被冻在首帧——设备上首帧早于固件应答，电量图标曾因此停在 0%
+   * 的告警色，数字却已经是真实电量（见 tests/e2e/status-bar.spec.ts）。 */
+  const usbOn = () => usbLinkState(hw.usbRole, hw.usbRoleActive) !== 'off';
+  const btConnected = () => hw.pairing === 'connected';
+  const battery = () => batteryAppearance(hw.battery.percentage, hw.battery.charging);
   return (
     <View class={STYLE.statusBar}>
       <Icon
-        glyph={usbOn ? ICON.usb : ICON.usbOff}
+        glyph={usbOn() ? ICON.usb : ICON.usbOff}
         class="shrink-0 text-sm"
-        color={usbOn ? COLOR.primary : COLOR.onSurfaceVariant}
+        color={usbOn() ? COLOR.primary : COLOR.onSurfaceVariant}
       />
       <Text class="text-xs grow" style={{ textColor: COLOR.onSurfaceVariant }}>
         {usbRoleLabel(hw.usbRole)}
       </Text>
       <Icon
-        glyph={btConnected ? ICON.bluetoothConnected : ICON.bluetoothDisabled}
+        glyph={btConnected() ? ICON.bluetoothConnected : ICON.bluetoothDisabled}
         class="shrink-0 text-sm"
-        color={btConnected ? COLOR.primary : COLOR.onSurfaceVariant}
+        color={btConnected() ? COLOR.primary : COLOR.onSurfaceVariant}
       />
       <Icon
-        glyph={battery.glyph}
+        glyph={battery().glyph}
         class="shrink-0 text-sm"
-        color={battery.color}
+        color={battery().color}
       />
-      <Text class="text-xs shrink-0" style={{ textColor: battery.color }}>
+      <Text class="text-xs shrink-0" style={{ textColor: battery().color }}>
         {`${hw.battery.percentage}%`}
       </Text>
     </View>
