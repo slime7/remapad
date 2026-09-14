@@ -30,6 +30,8 @@ pnpm-debug.log*
 # Python 脚本（scripts/ 与 pc/）运行后产生的字节码缓存
 __pycache__/
 *.pyc
+# uv 为 pc/ 桥接程序建的虚拟环境（uv.lock 需要提交）
+.venv/
 
 # Rust 编译临时产物 (若本地引入 Rust 渲染核心)
 target/
