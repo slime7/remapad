@@ -25,7 +25,11 @@ export const ICON = {
   swapHoriz: '\ue8d4',
   bug: '\ue868',
   brightnessHigh: '\ue1ac',
+  /** 电池分档只有经典四个字形（实心满电 / 通用 / 告警 / 充电），
+   *  图集里没有按百分比分格的电量条，档位差由颜色区分（见 AppStatusBar）。 */
+  batteryFull: '\ue1a4',
   batteryStd: '\ue1a5',
+  batteryAlert: '\ue19c',
   batteryChargingFull: '\ue1a3',
 } as const;
 

@@ -31,7 +31,7 @@ static const char *TAG = "remapad_bridge";
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
 #define REMAPAD_EVENT_MAX 320
 
-/** battery.c 是电池数据获取的唯一入口；真实 ADC 接入前上报占位值。 */
+/** 重启前留出的应答时间：先让 UI 收到 rebooting 再重启。 */
 #define REMAPAD_REBOOT_DELAY_US (150 * 1000LL)
 
 /** 外部命令/事件槽：PWR 按键与串口 CLI 等非 owner task 上下文的入口。

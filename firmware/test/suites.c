@@ -10,6 +10,7 @@ extern const host_test_suite_t suite_ns2_frames;
 extern const host_test_suite_t suite_ns2_identity;
 extern const host_test_suite_t suite_render_accel;
 extern const host_test_suite_t suite_dp_source;
+extern const host_test_suite_t suite_battery;
 
 static const host_test_suite_t *const s_suites[] = {
     &suite_ns2_report,
@@ -18,6 +19,7 @@ static const host_test_suite_t *const s_suites[] = {
     &suite_ns2_identity,
     &suite_render_accel,
     &suite_dp_source,
+    &suite_battery,
     NULL,
 };
 

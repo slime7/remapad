@@ -26,6 +26,7 @@ const FIRMWARE_SOURCES = [
   'firmware/main/ns2/ns2_identity.c',
   'firmware/main/render_accel.c',
   'firmware/main/dp/dp_source.c',
+  'firmware/main/drivers/battery_curve.c',
 ];
 
 /** 测试自身的源码与替身。 */
@@ -40,6 +41,7 @@ const TEST_SOURCES = [
   'firmware/test/test_ns2_identity.c',
   'firmware/test/test_render_accel.c',
   'firmware/test/test_dp_source.c',
+  'firmware/test/test_battery.c',
 ];
 
 const INCLUDE_DIRS = [
@@ -47,6 +49,7 @@ const INCLUDE_DIRS = [
   'firmware/main/ns2',
   'firmware/main/config',
   'firmware/main/dp',
+  'firmware/main/drivers',
   'firmware/components/pocketjs_render_rgb565/include',
   'firmware/test/support',
   'firmware/test/support/stubs',

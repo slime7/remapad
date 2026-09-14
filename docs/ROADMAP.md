@@ -31,7 +31,7 @@
 - [ ] USB mux 切换实验定案：`usb_new_phy()`（OTG + HOST）+ USB-Serial-JTAG 让出、日志切 UART0（GPIO43/44）；结论回填 [hardware.md](hardware.md) 并出 ADR。
 - [ ] VBUS 5V 供电路径确认（hardware.md 挂起项，决定 host 模式能否给手柄供电，必要时调整方案）。
 - [ ] `usb_host_hid.c`：host lib 安装、复合设备枚举（跳过 Vendor Bulk / 音频接口）、claim HID 接口、IN 64B 接收 + OUT 发送队列；解析带 Report ID 的 0x05/0x09 输入 → 规范化状态 → 接入 dp_task 输入源；BLE 下发的震动/LED 经 OUT 反向转发。
-- [ ] `usbRole` 命令真实化（切换策略预计"确认后重启进入 host 模式"，实验后定）；`battery.c` 真实 ADC（GPIO1）顺带接入。
+- [ ] `usbRole` 命令真实化（切换策略预计"确认后重启进入 host 模式"，实验后定）。
 
 **验收**：NS2 手柄插板 → Switch 2 收到真实手柄输入；主机震动可传到手柄；模式页 host 角色真实生效。
 

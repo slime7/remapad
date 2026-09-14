@@ -9,6 +9,7 @@
 #include "freertos/task.h"
 
 #include "battery.h"
+#include "battery_curve.h"
 #include "ble_controller.h"
 #include "ble_creds.h"
 #include "ble_session.h"
@@ -26,9 +27,13 @@ static const char *TAG = "remapad_dp";
  *  变化。M5 的 USB host 手柄源按 dp_source_t 再注册一路。 */
 static void synthetic_sample(ns2_controller_state_t *state)
 {
-    state->battery_level = 8;
+    /* 电量与端电压取自电池驱动；充电状态是趋势推断值（板上没有充电状态
+     * 引脚），推断到充电即认为接了外部供电。 */
+    const bool charging = battery_is_charging();
+    state->battery_level = battery_ns2_level_from_percent(battery_get_percentage());
     state->battery_mv = (uint16_t)battery_get_voltage_mv();
-    state->external_power = battery_is_charging();
+    state->charging = charging;
+    state->external_power = charging;
     state->rumble_enabled = ns2_session_rumble_enabled();
 }
 

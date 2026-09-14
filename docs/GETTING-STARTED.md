@@ -17,7 +17,7 @@
 
 USB 输入设备、目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围，但当前仓库尚未完成这些产品 BSP。不要因为 Web 预览可以交互就认为真实 USB 或 BLE 链路已经可用。
 
-板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)、[ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，进度见 [ROADMAP.md](ROADMAP.md)）但主机互操作待实机验证；USB 输入与电池等其余外设仍待实现。
+板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)、[ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，进度见 [ROADMAP.md](ROADMAP.md)）但主机互操作待实机验证；USB 输入与 IMU/RTC 等其余外设仍待实现（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
 
 ## 最短步骤
 
@@ -208,7 +208,7 @@ pnpm run test:firmware    # 固件主机端：把纯逻辑模块编译成本机�
 固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。项目自带 [scripts/uartctl.py](../scripts/uartctl.py)（依赖 pyserial）：
 
 ```powershell
-python scripts/uartctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长
+python scripts/uartctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长/电池电压与电量
 python scripts/uartctl.py -p COM3 key a           # 注入 A 键（键名见下方说明）
 python scripts/uartctl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
 python scripts/uartctl.py -p COM3 key release     # 立即释放注入的按键
@@ -265,7 +265,7 @@ PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**�
 2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。（已完成，`firmware/main/ns2/`）
 3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。（代码完成，`firmware/main/ble/` + `firmware/main/dp/`，合成源静置、按键由调试页注入，实机互操作待验证）
 4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。（配对/回连/NVS 凭证代码完成，唤醒广播顺延；震动解析记录，M5 转发 USB）
-5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。（配对/连接已真实化，电池仍为占位）
+5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。（配对/连接与电池电量已真实化；充电状态为电压趋势推断值）
 
 USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge 只作为控制面，数据面应使用 ESP-IDF 原生任务和队列。
 

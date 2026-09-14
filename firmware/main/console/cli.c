@@ -16,6 +16,7 @@
 
 #include "app_config.h"
 #include "backlight.h"
+#include "battery.h"
 #include "bridge/js_bridge.h"
 #include "ble_session.h"
 #include "buzzer.h"
@@ -57,12 +58,15 @@ static void cli_status(void)
     char line[128];
     const app_config_t *cfg = app_config_get();
     snprintf(line, sizeof(line),
-             "state pairing=%s role=%s backlight=%u screen=%u uptime=%llds heap=%u",
+             "state pairing=%s role=%s backlight=%u screen=%u uptime=%llds heap=%u "
+             "batt=%umV/%u%% chg=%u",
              js_bridge_pairing_state(),
              cfg->usb_role == APP_CONFIG_USB_HOST ? "host" : "device",
              (unsigned)backlight_get(), (unsigned)cfg->screen_on,
              (long long)(esp_timer_get_time() / 1000000LL),
-             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
+             battery_is_charging() ? 1u : 0u);
     cli_print(line);
 }
 

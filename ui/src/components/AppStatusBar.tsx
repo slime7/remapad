@@ -9,9 +9,29 @@ import { COLOR, STYLE } from '../theme';
 import { hw } from '../hooks/useHardware';
 import { usbLinkState, usbRoleLabel } from '../utils';
 
+/** 状态栏电量分档阈值：低于 15% 转告警色，90% 以上用实心电池。 */
+const BATTERY_LOW_PCT = 15;
+const BATTERY_FULL_PCT = 90;
+
+/** 电量图标与颜色：充电优先（板载无充电状态引脚，该标志由固件按电压趋势推断），
+ *  其余按电量分档，低电量转告警色。 */
+function batteryAppearance(percentage: number, charging: boolean): { glyph: string; color: string } {
+  if (charging) {
+    return { glyph: ICON.batteryChargingFull, color: COLOR.primary };
+  }
+  if (percentage <= BATTERY_LOW_PCT) {
+    return { glyph: ICON.batteryAlert, color: COLOR.error };
+  }
+  if (percentage >= BATTERY_FULL_PCT) {
+    return { glyph: ICON.batteryFull, color: COLOR.onSurfaceVariant };
+  }
+  return { glyph: ICON.batteryStd, color: COLOR.onSurfaceVariant };
+}
+
 export function AppStatusBar() {
   const usbOn = usbLinkState(hw.usbRole, hw.usbRoleActive) !== 'off';
   const btConnected = hw.pairing === 'connected';
+  const battery = batteryAppearance(hw.battery.percentage, hw.battery.charging);
   return (
     <View class={STYLE.statusBar}>
       <Icon
@@ -28,11 +48,11 @@ export function AppStatusBar() {
         color={btConnected ? COLOR.primary : COLOR.onSurfaceVariant}
       />
       <Icon
-        glyph={hw.battery.charging ? ICON.batteryChargingFull : ICON.batteryStd}
+        glyph={battery.glyph}
         class="shrink-0 text-sm"
-        color={COLOR.onSurfaceVariant}
+        color={battery.color}
       />
-      <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+      <Text class="text-xs shrink-0" style={{ textColor: battery.color }}>
         {`${hw.battery.percentage}%`}
       </Text>
     </View>

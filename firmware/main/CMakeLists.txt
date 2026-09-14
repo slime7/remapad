@@ -1,5 +1,6 @@
 set(remapad_pocketjs_requires
     esp_timer
+    esp_adc
     esp_lcd
     esp_driver_ledc
     esp_driver_gpio
@@ -28,6 +29,7 @@ idf_component_register(
         "drivers/backlight.c"
         "drivers/touch.c"
         "drivers/battery.c"
+        "drivers/battery_curve.c"
         "drivers/buzzer.c"
         "drivers/pwr_key.c"
         "ns2/ns2_report.c"

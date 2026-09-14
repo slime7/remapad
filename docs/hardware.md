@@ -1,6 +1,6 @@
 # Remapad 目标硬件参考
 
-本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。面板、触摸与背光 BSP 已接入固件（见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄链路、蜂鸣器（GPIO42 LEDC tone）、电池占位采样与 PWR 按键已接入；USB 输入、IMU 与 RTC 仍只有硬件事实。
+本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。面板、触摸与背光 BSP 已接入固件（见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄链路、蜂鸣器（GPIO42 LEDC tone）、电池电压采样与 PWR 按键已接入；USB 输入、IMU 与 RTC 仍只有硬件事实。
 
 板卡为微雪 (Waveshare) **ESP32-S3-Touch-LCD-1.69**，SKU 27350；本文档的规格、引脚与地址来自微雪官方文档 <https://docs.waveshare.net/ESP32-S3-Touch-LCD-1.69>。
 
@@ -56,7 +56,7 @@ CPU 频率默认值是 160 MHz，SoC 支持 240 MHz。当前固件显式配置�
 | IMU | QMI8658C 六轴（3 轴陀螺仪 + 3 轴加速度计） | I2C | 7-bit 地址 `0x6B` | SCL=GPIO10, SDA=GPIO11, INT=GPIO38 |
 | RTC | PCF85063ATL | I2C | 7-bit 地址 `0x51`，32.768 kHz 晶振 | SCL=GPIO10, SDA=GPIO11, INT=GPIO39 |
 | 蜂鸣器 | 板载蜂鸣器 | GPIO / PWM | tone / PWM 输出 | GPIO42 |
-| 电池采样 | B+ 分压到 ADC | ADC | R3 上拉 200K、R7 下拉 100K；`VBAT = VADC × 3` | GPIO1 / BAT_ADC |
+| 电池采样 | B+ 分压到 ADC | ADC | R3 上拉 200K、R7 下拉 100K；`VBAT = VADC × 3`，引脚即 ADC1_CH0 | GPIO1 / BAT_ADC |
 | 电源控制 | SYS_OUT / SYS_EN | GPIO | PWR / Key2 电源功能电路 | SYS_OUT=GPIO40, SYS_EN=GPIO41 |
 | 充电管理 | ETA6098 | 电源 | 单节锂电池充放电 | 电池接口 MX1.25 2P |
 | 3.3 V LDO | ME6217C33M5G | 电源 | 系统 3.3 V | VCC3V3 |
@@ -138,13 +138,13 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 
 ## 产品 BSP 接入状态
 
-面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 取上限 80 MHz，理由见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。此外 `pwr_key.c`（GPIO40 采样，短按息屏 / 长按切连接模式）、`buzzer.c`（GPIO42 LEDC tone，长按 3 秒提示音）与 BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）已接入；`battery.c` 已编译但仍是占位采样（真实 ADC 与充电状态待电源 BSP）。
+面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 取上限 80 MHz，理由见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。此外 `pwr_key.c`（GPIO40 采样，短按息屏 / 长按切连接模式）、`buzzer.c`（GPIO42 LEDC tone，长按 3 秒提示音）与 BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）已接入；`battery.c` 走 BAT_ADC（GPIO1 / ADC1_CH0），按「12 dB 衰减 + 曲线拟合校准 + 过采样平均 + 分压还原」采样出 VBAT，再由 `battery_curve.c` 的静置电压—容量表折算百分比，选型与限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。
 
 尚未接入的硬件：
 
 - IMU（QMI8658C）与 RTC（PCF85063ATL）的驱动与状态上报；
 - USB host 输入接收与 NS2 报告编码（方案见 [usb-input-plan.md](usb-input-plan.md)）；
-- 电池真实 ADC 采样与充电状态（当前上报占位值）；
-- SYS_EN（GPIO41）电源保持驱动（USB 供电下锁存被旁路，待电池接入）。
+- 充电状态与外部供电的测量：ETA6098 的充电状态输出只驱动板上指示灯，没有引到 GPIO，板上也没有 VBUS 检测脚；固件的充电标志是按采样电压趋势推断的，不是实测值（见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)）；
+- SYS_EN（GPIO41）电源保持驱动（USB 供电下锁存被旁路，待电池供电场景接入）。
 
 屏幕事实已写入 `firmware/pocket.host.json`：`input.touch` 随触摸采样接入一并声明。
