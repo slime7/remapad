@@ -38,7 +38,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | **依赖安装** | `pnpm install` | 安装前端工作区依赖 |
 | **代码检查** | `pnpm run lint` | 执行前端 ESLint 静态代码检查 |
 | **UI 端到端测试** | `pnpm run test:e2e` | 用 Playwright 驱动触摸预览页里的真实产物，断言页面行为与屏幕像素；`pnpm run test:e2e:headed` 可看过程，规则见 [docs/TESTING.md](docs/TESTING.md) |
-| **固件主机端测试** | `pnpm run test:firmware` | 把与硬件无关的固件逻辑模块编译成开发机可执行文件并运行，秒级出结果（NS2 编码、序列号、命令帧、像素回调、输入源合成） |
+| **固件主机端测试** | `pnpm run test:firmware` | 把与硬件无关的固件逻辑模块编译成开发机可执行文件并运行，秒级出结果（NS2 编码、序列号、命令帧、身份与地址派生、像素回调、输入源合成） |
 | **PocketJS 契约检查** | `pnpm run check` | 使用官方 CLI 和 `firmware/pocket.host.json` 校验清单、能力与视口 |
 | **前端资源编译** | `pnpm run compile` | 调用官方 PocketJS 编译器，输出 `.js` 与 `.pak` |
 | **前端应用打包** | `pnpm run build` | 调用官方 `pocket build --host-profile` 输出 `.pocket` |

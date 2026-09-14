@@ -209,7 +209,12 @@ pnpm run test:firmware    # 固件主机端：把纯逻辑模块编译成本机�
 
 ```powershell
 python scripts/uartctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长
-python scripts/uartctl.py -p COM3 key a           # 注入 A 键（home / lr 同理）
+python scripts/uartctl.py -p COM3 key a           # 注入 A 键（键名见下方说明）
+python scripts/uartctl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
+python scripts/uartctl.py -p COM3 key release     # 立即释放注入的按键
+python scripts/uartctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
+python scripts/uartctl.py -p COM3 stick reset     # 两侧摇杆回中
+python scripts/uartctl.py -p COM3 link            # 两只手柄的地址、连接与上报计数
 python scripts/uartctl.py -p COM3 backlight 60    # 背光并持久化
 python scripts/uartctl.py -p COM3 screen off      # 息屏（on 恢复）
 python scripts/uartctl.py -p COM3 mode host       # 连接模式（otg 被固件拒绝）
@@ -218,6 +223,8 @@ python scripts/uartctl.py -p COM3 reboot          # 软重启回 COM 模式
 python scripts/uartctl.py -p COM3 log --seconds 20   # 只读设备日志 20 秒
 python scripts/uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完整启动日志
 ```
+
+`key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr lr`，默认保持 250 ms（`lr` 为 1000 ms，对应主机 Grip 界面的组合确认），最长 60000 ms；注入叠加在输入源之上。`stick` 设定的一侧摇杆持续生效、未设定的一侧沿用输入源，因此 JoyCon 组合下可以分别推左摇杆与右摇杆，验证左右两只各自上报。`link` 打印当前形态与每个身份一行：对外广播地址、连接句柄、会话状态（idle / advertising / wait-pair / normal）、报告格式、已开启的通知通道、已发送报告数与凭证条数，配对与回连过程可以直接在串口上对账。
 
 不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。`log` 子命令只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：打开 USB-Serial/JTAG 口通常会把设备复位一次（USJ 特性），所以每次 `uartctl.py` 调用后 `uptime` 会归零属正常现象，连续操作建议用交互模式；抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
 
