@@ -1,5 +1,6 @@
 import type {
   BatteryInfo,
+  ControllerAddresses,
   ControllerConfig,
   ControllerMode,
   DeviceCmd,
@@ -31,6 +32,13 @@ const DEFAULT_CONTROLLER_CONFIG: ControllerConfig = {
   bodyColor: 0x232323,
   buttonColor: 0x3c3c3c,
   gripColor: 0x2e2e2e,
+};
+
+/** 浏览器 mock 的对外地址：与固件的派生规则同形（公共伪装地址 + 左右扩散派生）。 */
+const MOCK_CONTROLLER_ADDRESSES: ControllerAddresses = {
+  pro: '78:81:8C:1A:2B:3C',
+  left: 'E9:D4:62:0F:14:48',
+  right: 'CA:8A:D9:29:23:6F',
 };
 
 const state: MockHardwareState = {
@@ -158,7 +166,12 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
     }
 
     case 'getControllerConfig':
-      reply({ t: 'controllerConfig', id, config: { ...state.controllerConfig } });
+      reply({
+        t: 'controllerConfig',
+        id,
+        config: { ...state.controllerConfig },
+        addresses: { ...MOCK_CONTROLLER_ADDRESSES },
+      });
       break;
 
     case 'setControllerConfig':

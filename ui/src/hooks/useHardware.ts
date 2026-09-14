@@ -10,6 +10,7 @@ import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { hardware } from '../bridge/driver';
 import type {
   BatteryInfo,
+  ControllerAddresses,
   ControllerConfig,
   DebugKey,
   DeviceMsg,
@@ -36,6 +37,8 @@ export interface HardwareUiState {
   pairingMessage: string;
   /** 手柄身份配置（类型 + 配色），持久化在固件 NVS。 */
   controllerConfig: ControllerConfig;
+  /** 各身份对外的蓝牙地址（显示序；host 未同步时为空串）。 */
+  controllerAddresses: ControllerAddresses;
   controller: string | null;
   usbRole: UsbRole;
   /** USB host 数据面未接入，host 角色仅记录请求。 */
@@ -58,6 +61,13 @@ const DEFAULT_CONTROLLER_CONFIG: ControllerConfig = {
   gripColor: 0x2e2e2e,
 };
 
+/** 地址就绪前的占位值（固件在 host 同步前给空串）。 */
+const DEFAULT_CONTROLLER_ADDRESSES: ControllerAddresses = {
+  pro: '',
+  left: '',
+  right: '',
+};
+
 export const hw = reactive<HardwareUiState>({
   linkReady: false,
   chip: '',
@@ -72,6 +82,7 @@ export const hw = reactive<HardwareUiState>({
   pairing: 'idle',
   pairingMessage: '',
   controllerConfig: { ...DEFAULT_CONTROLLER_CONFIG },
+  controllerAddresses: { ...DEFAULT_CONTROLLER_ADDRESSES },
   controller: null,
   usbRole: 'device',
   usbRoleActive: true,
@@ -277,6 +288,7 @@ export function useHardware(): void {
   hardware.send({ t: 'getControllerConfig' }, (msg) => {
     if (msg.t === 'controllerConfig') {
       hw.controllerConfig = msg.config;
+      hw.controllerAddresses = msg.addresses;
     }
   });
 

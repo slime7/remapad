@@ -69,6 +69,8 @@ export const STYLE = {
   /** 列表行与信息卡。 */
   rowCard: 'w-full h-[44] shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 active:bg-[#14263e] transition-colors duration-150',
   infoCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2',
+  /** 信息行卡：每行一个文本节点，行距由 gap 给出。 */
+  infoCardRows: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2 gap-2',
   actionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-3',
 
   /** 小型表面按钮：背光步进、调试按键（含触发高亮的选中形态）。 */
@@ -104,6 +106,7 @@ export const STYLE = {
 
 /**
  * 构建期字符集锚点：uptime、百分比等文本在运行时由数字动态拼出，数字与
- * 符号必须出现在某个字面量里才会被烘焙进字体图集。
+ * 符号必须出现在某个字面量里才会被烘焙进字体图集；设备地址是运行时
+ * 拼出的大写十六进制，字母表同样在这里锚定。
  */
-export const CHARSET_ANCHOR = '0123456789:.%-';
+export const CHARSET_ANCHOR = '0123456789:.%-ABCDEF';

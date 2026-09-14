@@ -28,6 +28,13 @@ export interface ControllerConfig {
   gripColor: number;
 }
 
+/** 各手柄身份对外的蓝牙地址（显示序大写十六进制；host 未同步时为空串）。 */
+export interface ControllerAddresses {
+  pro: string;
+  left: string;
+  right: string;
+}
+
 /** 调试注入的按键（调试页按键指令区）；lr 表示同时按下 L 和 R。 */
 export type DebugKey = 'a' | 'home' | 'lr';
 
@@ -102,7 +109,13 @@ export type DeviceMsg =
   | { t: 'backlightSet'; id: number; brightness: number; success: boolean }
   | { t: 'screenPowerSet'; id: number; on: boolean }
   | { t: 'screenPowerChanged'; on: boolean }
-  | { t: 'controllerConfig'; id: number; config: ControllerConfig }
+  | {
+      t: 'controllerConfig';
+      id: number;
+      config: ControllerConfig;
+      /** 身份信息卡展示的对外地址：Pro 公共伪装地址，JoyCon 左右各自派生。 */
+      addresses: ControllerAddresses;
+    }
   | { t: 'controllerConfigSet'; id: number; config: ControllerConfig; success: boolean }
   | { t: 'usbRoleSet'; id: number; role: UsbRole; active: boolean; message?: string }
   | { t: 'pairingResult'; id: number; state: PairingState; message?: string }

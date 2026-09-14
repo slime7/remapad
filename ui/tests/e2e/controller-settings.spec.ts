@@ -1,11 +1,13 @@
 /**
- * 手柄设置页：手柄类型切换。
+ * 手柄设置页：手柄类型切换与身份信息行。
  *
- * 两条历史回归点：
- *   1. 切换只改文本与 hidden，序列号行是常驻节点——重建节点会让整页卡顿
+ * 三条历史回归点：
+ *   1. 切换只改文本与 hidden，四条信息行是常驻节点——重建节点会让整页卡顿
  *      （每节点实机约 50 ms），节点总数必须不变；
  *   2. 选项卡没有颜色过渡，选中色一步到位——加了 transition 之后点下去要连画
- *      150 ms 才到位，像慢半拍，所以 3 帧内就必须是终色。
+ *      150 ms 才到位，像慢半拍，所以 3 帧内就必须是终色；
+ *   3. 信息行是「标签 值」单节点：Pro 两行（序列号、MAC），JoyCon 四行
+ *      （左序列号、左 MAC、右序列号、右 MAC），地址取固件应答。
  */
 import { test, expect } from './fixtures';
 import { openControllerSettings } from './pages';
@@ -16,21 +18,27 @@ const CARD_JOYCON = { x: 200, y: 144 };
 const SELECTED = '#9ecefe';
 const UNSELECTED = '#0c1a2c';
 
-test('默认 Pro：只显示一条序列号', async ({ app }) => {
+/** 浏览器 mock 的对外地址，与固件派生规则同形（见 ui/src/bridge/mock.ts）。 */
+const PRO_MAC = '78:81:8C:1A:2B:3C';
+const LEFT_MAC = 'E9:D4:62:0F:14:48';
+const RIGHT_MAC = 'CA:8A:D9:29:23:6F';
+
+test('默认 Pro：序列号与 MAC 两行，右只两行收起', async ({ app }) => {
   await app.goto();
   await openControllerSettings(app);
   const texts = await app.visibleTexts();
   expect(texts).toContain('Pro 手柄');
   expect(texts).toContain('JoyCon 组合');
-  expect(texts).toContain('序列号');
-  expect(texts).toContain('HEJ71001123456');
-  expect(texts).not.toContain('左序列号');
-  expect(texts).not.toContain('右序列号');
+  expect(texts).toContain('序列号 HEJ71001123456');
+  expect(texts).toContain(`MAC ${PRO_MAC}`);
+  expect(texts).not.toContain('左序列号 HBW10067012342');
+  expect(texts).not.toContain('右序列号 HCW10068012341');
+  expect(texts).not.toContain(`右 MAC ${RIGHT_MAC}`);
   expect(await app.colorAt(CARD_PRO.x, CARD_PRO.y)).toBe(SELECTED);
   expect(await app.colorAt(CARD_JOYCON.x, CARD_JOYCON.y)).toBe(UNSELECTED);
 });
 
-test('切到 JoyCon 组合：多出左右两条序列号，节点不重建，选中色一步到位', async ({ app }) => {
+test('切到 JoyCon 组合：左右各两条信息行，节点不重建，选中色一步到位', async ({ app }) => {
   await app.goto();
   await openControllerSettings(app);
   const nodeCount = (await app.nodes()).length;
@@ -48,11 +56,12 @@ test('切到 JoyCon 组合：多出左右两条序列号，节点不重建，选
 
   await app.refreshTree();
   const texts = await app.visibleTexts();
-  expect(texts).toContain('左序列号');
-  expect(texts).toContain('右序列号');
-  expect(texts).toContain('HBW10067012342');
-  expect(texts).toContain('HCW10068012341');
-  expect(texts).not.toContain('序列号');
+  expect(texts).toContain('左序列号 HBW10067012342');
+  expect(texts).toContain(`左 MAC ${LEFT_MAC}`);
+  expect(texts).toContain('右序列号 HCW10068012341');
+  expect(texts).toContain(`右 MAC ${RIGHT_MAC}`);
+  expect(texts).not.toContain('序列号 HEJ71001123456');
+  expect(texts).not.toContain(`MAC ${PRO_MAC}`);
   // 常驻节点：一次切换不该重建任何节点。
   expect((await app.nodes()).length).toBe(nodeCount);
 });
