@@ -115,6 +115,19 @@ esp_err_t pwr_key_power_hold(void)
     return ESP_OK;
 }
 
+/** 拉低 SYS_EN 释放锁存：电池供电下系统就此断电，函数之后的代码不会执行；
+ *  USB 供电下锁存被旁路，调用方（bridge）会重新锁存并如实回报，不会假关机。 */
+esp_err_t pwr_key_power_release(void)
+{
+    const esp_err_t err = gpio_set_level(PWR_KEY_HOLD_GPIO, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "power latch release failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "power latch released (SYS_EN GPIO%d low)", PWR_KEY_HOLD_GPIO);
+    return ESP_OK;
+}
+
 esp_err_t pwr_key_start(pwr_key_fn callback, void *user)
 {
     if (callback == NULL) {

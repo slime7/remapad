@@ -50,6 +50,7 @@ static void cli_help(void)
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  pairing start|stop  pairing advertising");
+    cli_print("  poweroff            release power latch (battery only)");
     cli_print("  reboot              restart into COM mode");
 }
 
@@ -276,6 +277,9 @@ static void cli_dispatch(char *line)
         cli_mode(arg);
     } else if (strcmp(line, "pairing") == 0) {
         cli_pairing(arg);
+    } else if (strcmp(line, "poweroff") == 0) {
+        js_bridge_submit_command("{\"t\":\"powerOff\",\"id\":0}");
+        cli_print("ok poweroff queued");
     } else if (strcmp(line, "reboot") == 0) {
         js_bridge_submit_command("{\"t\":\"reboot\",\"id\":0}");
         cli_print("ok reboot queued");

@@ -20,6 +20,7 @@
 #include "dp_plane.h"
 #include "ns2_identity.h"
 #include "ns2_state.h"
+#include "pwr_key.h"
 
 #include "pocketjs/guest.h"
 
@@ -33,6 +34,11 @@ static const char *TAG = "remapad_bridge";
 
 /** 重启前留出的应答时间：先让 UI 收到 rebooting 再重启。 */
 #define REMAPAD_REBOOT_DELAY_US (150 * 1000LL)
+
+/** 关机时序：先让 UI 收到应答，再释放电源锁存；释放后仍存活说明锁存被
+ *  外部供电旁路（USB 供电），此时恢复锁存并如实回报 UI。 */
+#define REMAPAD_POWER_OFF_DELAY_US (200 * 1000LL)
+#define REMAPAD_POWER_OFF_VERIFY_US (1500 * 1000LL)
 
 /** 外部命令/事件槽：PWR 按键与串口 CLI 等非 owner task 上下文的入口。
  * guest eval 只允许在 owner task 上执行（QuickJS 栈守卫约束），外部任务
@@ -59,6 +65,9 @@ static struct {
     bool usb_role_host; /* UI 请求的角色；host 数据面未接入，仅记录。 */
     int64_t reboot_at_us;
     bool reboot_pending;
+    /** 关机阶段：0 空闲，1 待释放锁存，2 待确认是否已断电。 */
+    int64_t power_off_at_us;
+    uint8_t power_off_stage;
 } s_bridge;
 
 esp_err_t js_bridge_init(void)
@@ -443,6 +452,18 @@ static void handle_press_lr(int id)
     reply_raw(event);
 }
 
+/** 关机：电池供电下释放锁存即断电（之后的代码不会执行）；USB 供电下身
+ *  下继续运行，由 js_bridge_service 的下一阶段确认并回报。 */
+static void handle_power_off(int id)
+{
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event), "{\"t\":\"powerOffAck\",\"id\":%d}", id);
+    reply_raw(event);
+    s_bridge.power_off_stage = 1;
+    s_bridge.power_off_at_us = esp_timer_get_time() + REMAPAD_POWER_OFF_DELAY_US;
+    ESP_LOGI(TAG, "power off requested; releasing power latch");
+}
+
 static void handle_reboot(int id)
 {
     char event[REMAPAD_EVENT_MAX];
@@ -577,6 +598,8 @@ static void handle_cmd(const char *cmd)
         handle_press_lr(id);
     } else if (cmd_has(cmd, "\"t\":\"debugKey\"")) {
         handle_debug_key(id, cmd);
+    } else if (cmd_has(cmd, "\"t\":\"powerOff\"")) {
+        handle_power_off(id);
     } else if (cmd_has(cmd, "\"t\":\"reboot\"")) {
         handle_reboot(id);
     } else {
@@ -613,6 +636,20 @@ const char *js_bridge_pairing_state(void)
 void js_bridge_service(void)
 {
     pairing_state_poll();
+
+    /* 关机两阶段：先释放电源锁存，再确认是否真的断电。电池供电时第一步
+     * 之后系统已经断电、不回到这里；能走到第二步说明外部供电旁路了锁存。 */
+    if (s_bridge.power_off_stage == 1 && esp_timer_get_time() >= s_bridge.power_off_at_us) {
+        pwr_key_power_release();
+        s_bridge.power_off_stage = 2;
+        s_bridge.power_off_at_us = esp_timer_get_time() + REMAPAD_POWER_OFF_VERIFY_US;
+    } else if (s_bridge.power_off_stage == 2 &&
+               esp_timer_get_time() >= s_bridge.power_off_at_us) {
+        s_bridge.power_off_stage = 0;
+        pwr_key_power_hold();
+        reply_raw("{\"t\":\"powerOffBlocked\"}");
+        ESP_LOGI(TAG, "power off blocked: still powered, latch restored (USB supply?)");
+    }
 
     if (s_bridge.reboot_pending && esp_timer_get_time() >= s_bridge.reboot_at_us) {
         ESP_LOGI(TAG, "rebooting now (USB returns to Serial/JTAG COM mode)");

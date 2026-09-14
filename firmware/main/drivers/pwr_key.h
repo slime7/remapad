@@ -29,8 +29,12 @@ typedef void (*pwr_key_fn)(pwr_key_event_t event, void *user);
 
 /** 拉高 SYS_EN 锁存系统供电：电池供电时 PWR 键松开后靠它维持供电。
  *  属于上电时序，必须在 app_main 入口调用（早于外设与 UI 初始化）；
- *  拉低即软件关机，当前没有入口。 */
+ *  软件关机走 pwr_key_power_release。 */
 esp_err_t pwr_key_power_hold(void);
+
+/** 拉低 SYS_EN 释放电源锁存：电池供电时系统随即断电；USB 供电下锁存被
+ *  旁路、系统仍在运行，调用方需要重新锁存（见 pwr_key_power_hold）。 */
+esp_err_t pwr_key_power_release(void);
 
 /** 启动按键采样任务（GPIO40 输入上拉，10ms 轮询去抖）。 */
 esp_err_t pwr_key_start(pwr_key_fn callback, void *user);

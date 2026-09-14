@@ -138,7 +138,7 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 
 ## 产品 BSP 接入状态
 
-面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 取上限 80 MHz，理由见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。此外 `pwr_key.c`（GPIO40 采样，短按息屏 / 长按切连接模式；并在 `app_main` 入口把 SYS_EN（GPIO41）拉高锁存电池供电，USB 供电下锁存被旁路，拉低即软件关机、当前没有入口）、`buzzer.c`（GPIO42 LEDC tone，长按 3 秒提示音）与 BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）已接入；`battery.c` 走 BAT_ADC（GPIO1 / ADC1_CH0），按「12 dB 衰减 + 曲线拟合校准 + 过采样平均 + 分压还原」采样出 VBAT，再由 `battery_curve.c` 的静置电压—容量表折算百分比，选型与限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。
+面板、触摸与背光已接入固件：`firmware/main/drivers/` 中的 `panel.c`（esp_lcd 内置 ST7789 驱动，SPI2 取上限 80 MHz，理由见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）、`touch.c`（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`）与 `backlight.c`（GPIO15 LEDC PWM）承担面板初始化、strip 提交、触点采样和背光驱动；选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。此外 `pwr_key.c`（GPIO40 采样，短按息屏 / 长按切连接模式；并在 `app_main` 入口把 SYS_EN（GPIO41）拉高锁存电池供电，USB 供电下锁存被旁路；软件关机走系统页「关机」按钮，电池供电下释放锁存即断电，USB 供电下锁存被旁路、系统仍在运行，固件会重新锁存并回报，界面提示关不掉）、`buzzer.c`（GPIO42 LEDC tone，长按 3 秒提示音）与 BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）已接入；`battery.c` 走 BAT_ADC（GPIO1 / ADC1_CH0），按「12 dB 衰减 + 曲线拟合校准 + 过采样平均 + 分压还原」采样出 VBAT，再由 `battery_curve.c` 的静置电压—容量表折算百分比，选型与限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。
 
 尚未接入的硬件：
 
