@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Remapad 桥接链路的 PC 侧：免复位串口打开 + 桥接帧编解码。
 
-串口打开沿用 scripts/uartctl.py 的做法：直接用 Win32 API，并在打开前后把
-DTR/RTS 固定为低电平——USB-Serial/JTAG 的片内状态机把这两条线当复位控制线
-解释（RTS 拉高即复位），普通串口库默认会在打开端口时拉起它们。
+串口打开是全仓库 PC 侧工具的唯一实现（bridge.py / uartctl.py / ota.py 共用）：
+直接用 Win32 API，并在打开前后把 DTR/RTS 固定为低电平——USB-Serial/JTAG 的
+片内状态机把这两条线当复位控制线解释（RTS 拉高即复位），普通串口库默认会在
+打开端口时拉起它们。
 
 帧格式与固件侧 input_frame.c 一致：
     A5 5A | ver | type | slot | seq | len | payload[len] | crc16(LE)
 CRC-16/CCITT-FALSE 覆盖除末尾两字节外的整帧（含同步字）。
+
+同一套帧格式还承载 OTA 升级（固件侧 ota_proto.c）：类型 0x30-0x33，数据帧
+载荷到 202 字节，因此编码入口允许显式放宽载荷上限（OTA_MAX_PAYLOAD）。
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ import ctypes
 import sys
 from ctypes import wintypes
 
-# 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码（与 scripts/uartctl.py 同一做法）。
+# 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码（各 PC 端工具同一做法）。
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8")
@@ -32,12 +36,44 @@ HEADER_LEN = 7
 CRC_LEN = 2
 MAX_PAYLOAD = 72
 MAX_FRAME = HEADER_LEN + MAX_PAYLOAD + CRC_LEN
+#: 线格式上限：帧头里的长度字段是单字节，OTA 数据帧用到 202 字节。
+WIRE_MAX_PAYLOAD = 255
 
 TYPE_ATTACH = 0x01
 TYPE_DETACH = 0x02
 TYPE_REPORT = 0x10
 TYPE_FEEDBACK = 0x20
+TYPE_OTA_BEGIN = 0x30
+TYPE_OTA_DATA = 0x31
+TYPE_OTA_END = 0x32
+TYPE_OTA_ACK = 0x33
 TYPE_PING = 0x7F
+
+#: BEGIN 载荷：magic + image_size(u32 LE)。
+OTA_BEGIN_MAGIC = b"ROM1"
+#: DATA 载荷：seq(u16 LE) + 数据，单帧数据上限 200 字节。
+OTA_DATA_MAX = 200
+#: ACK 载荷：state + code + next_seq(u16 LE) + received(u32 LE)。
+OTA_ACK_LEN = 8
+#: BEGIN 的 ACK 在末尾追加的运行版本字段长度（ASCII，NUL 填充）。
+OTA_ACK_VERSION_LEN = 16
+#: 一个窗口的帧数：设备每收满这么多帧回一次 ACK，PC 收到才发下一窗。
+OTA_WINDOW_FRAMES = 16
+#: 数据帧的 slot 字段取这个值表示「这一帧是窗口的最后一帧」（含末尾不足一窗），
+#: 设备收到即回应答，否则末尾那批帧要等固定帧数或超时。
+OTA_SLOT_WINDOW_END = 1
+
+OTA_STATE_NAMES = {0: "idle", 1: "receiving", 2: "done", 3: "failed"}
+OTA_CODE_NAMES = {
+    0: "ok",
+    1: "设备忙（已有升级在进行或镜像待验证）",
+    2: "镜像头无效",
+    3: "序号不连续",
+    4: "写 flash 失败",
+    5: "字节数与声明不符",
+    6: "镜像校验失败",
+    7: "设备侧超时",
+}
 
 FAMILY_UNKNOWN = 0
 FAMILY_XBOX = 1
@@ -76,12 +112,43 @@ def crc16(data: bytes) -> int:
     return crc
 
 
-def encode(frame_type: int, slot: int, seq: int, payload: bytes = b"") -> bytes:
-    if len(payload) > MAX_PAYLOAD:
-        raise ValueError("载荷超过桥接帧上限")
+def encode(frame_type: int, slot: int, seq: int, payload: bytes = b"",
+           max_payload: int = MAX_PAYLOAD) -> bytes:
+    if len(payload) > max_payload:
+        raise ValueError("载荷超过该帧类型允许的上限")
     frame = bytes([SYNC0, SYNC1, VERSION, frame_type, slot, seq, len(payload)]) + payload
     crc = crc16(frame)
     return frame + bytes([crc & 0xFF, crc >> 8])
+
+
+def ota_begin_payload(image_size: int) -> bytes:
+    """BEGIN 载荷：magic + 镜像字节数（小端）。"""
+    return OTA_BEGIN_MAGIC + image_size.to_bytes(4, "little")
+
+
+def ota_data_payload(seq: int, chunk: bytes) -> bytes:
+    """DATA 载荷：块序号（小端）+ 镜像数据。"""
+    if len(chunk) > OTA_DATA_MAX:
+        raise ValueError("OTA 数据块超过单帧上限")
+    return seq.to_bytes(2, "little") + chunk
+
+
+def parse_ota_ack(payload: bytes) -> dict:
+    """解析设备回发的 ACK；BEGIN 的应答末尾带 16 字节运行版本。"""
+    if len(payload) < OTA_ACK_LEN:
+        raise ValueError(f"ACK 载荷过短：{len(payload)} 字节")
+    version = b""
+    if len(payload) >= OTA_ACK_LEN + OTA_ACK_VERSION_LEN:
+        version = payload[OTA_ACK_LEN : OTA_ACK_LEN + OTA_ACK_VERSION_LEN].split(b"\0")[0]
+    return {
+        "state": OTA_STATE_NAMES.get(payload[0], str(payload[0])),
+        "state_id": payload[0],
+        "code": OTA_CODE_NAMES.get(payload[1], str(payload[1])),
+        "code_id": payload[1],
+        "next_seq": int.from_bytes(payload[2:4], "little"),
+        "received": int.from_bytes(payload[4:8], "little"),
+        "version": version.decode("utf-8", errors="replace"),
+    }
 
 
 def device_id(family: int, conn: int, vid: int, pid: int, report_id: int, report_len: int) -> bytes:
@@ -155,6 +222,7 @@ _INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 _PURGE_RXCLEAR = 0x0008
 _DTR_CONTROL_DISABLE = 0x00
 _RTS_CONTROL_DISABLE = 0x00
+_RTS_CONTROL_ENABLE = 0x01
 _MAXDWORD = 0xFFFFFFFF
 
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -241,6 +309,7 @@ class SerialLink:
     """USB-Serial/JTAG 串口：打开与运行期间 DTR、RTS 始终为低。"""
 
     def __init__(self, port: str, baud: int = 115200, read_timeout_ms: int = 0) -> None:
+        self._rx = b""
         self._handle = _kernel32.CreateFileW(
             "\\\\.\\" + port, _GENERIC_READ | _GENERIC_WRITE, 0, None, _OPEN_EXISTING, 0, None
         )
@@ -297,6 +366,44 @@ class SerialLink:
                 raise OSError("写入串口失败：未接受任何字节")
             sent += written.value
 
+    def readline(self) -> bytes:
+        """返回一行（含换行）；没有完整行时返回手上的残行，完全没数据返回空。"""
+        while True:
+            end = self._rx.find(b"\n")
+            if end >= 0:
+                line, self._rx = self._rx[: end + 1], self._rx[end + 1 :]
+                return line
+            chunk = self.read()
+            if not chunk:
+                line, self._rx = self._rx, b""
+                return line
+            self._rx += chunk
+
+    def purge_input(self) -> None:
+        """丢掉接收缓冲里还没读的数据（命令前后对齐用）。"""
+        self._rx = b""
+        _kernel32.PurgeComm(self._handle, _PURGE_RXCLEAR)
+
+    def flush(self) -> None:
+        """等待发送缓冲里的字节真正写出去。"""
+        _kernel32.FlushFileBuffers(self._handle)
+
+    def pulse_reset(self) -> None:
+        """硬复位：DTR 保持低，RTS 拉高 120 ms 再放下（esptool 的复位脉冲）。"""
+        self._set_rts(True)
+        time.sleep(0.12)
+        self._set_rts(False)
+        self.purge_input()
+
+    def _set_rts(self, level: bool) -> None:
+        dcb = _Dcb()
+        if not _kernel32.GetCommState(self._handle, ctypes.byref(dcb)):
+            self.close()
+            raise _fail("读取串口配置")
+        dcb.fDtrControl = _DTR_CONTROL_DISABLE
+        dcb.fRtsControl = _RTS_CONTROL_ENABLE if level else _RTS_CONTROL_DISABLE
+        if not _kernel32.SetCommState(self._handle, ctypes.byref(dcb)):
+            raise _fail("设置 RTS")
     def close(self) -> None:
         if self._handle:
             _kernel32.CloseHandle(self._handle)
@@ -307,3 +414,19 @@ class SerialLink:
 
     def __exit__(self, *_exc) -> None:
         self.close()
+
+
+def open_port(port: str, baud: int = 115200) -> SerialLink:
+    """打开端口，失败时给出常见原因的提示并以环境问题（退出码 2）结束。"""
+    try:
+        return SerialLink(port, baud)
+    except OSError as exc:
+        code = exc.errno or 0
+        if code in (5, 32):
+            hint = "端口被占用，先结束占用进程（idf.py monitor、桥接程序等）"
+        elif code == 2:
+            hint = "端口不存在，确认设备已插好（Get-PnpDevice -Class Ports）"
+        else:
+            hint = "打开端口失败"
+        print(f"{port}: {hint}", file=sys.stderr)
+        raise SystemExit(2)

@@ -5,9 +5,13 @@
 与转发，屏幕上显示出来的按键位置与直插手柄将来自 USB host 路径时完全一致。
 
 - `link.py`：桥接帧编解码（与固件 `firmware/main/input/input_frame.c` 同一套规则）
-  与免复位的 Win32 串口打开。
+  与免复位的 Win32 串口打开；三个工具共用这一份实现。
 - `bridge.py`：枚举手柄、按帧转发原始报告与设备标识、打印设备回发的反馈帧；
   `--dump` 只打印原始报告，用来核对固件家族表里的字段偏移。
+- `uartctl.py`：串口行命令客户端（固件 CLI 的 PC 端），命令清单见
+  [GETTING-STARTED.md](../docs/GETTING-STARTED.md)。
+- `ota.py`：把固件应用镜像推给设备做 OTA 升级，协议与回滚门槛见
+  [ADR 0022](../docs/adr/0022-ota-over-bridge-frames-with-rollback.md)。
 
 ## 依赖
 
@@ -46,12 +50,11 @@ uv run python bridge.py -p COM3 --logs               # 同时打印设备日志�
 设备只有一根 Type-C：USB-Serial/JTAG 既跑固件日志与串口 CLI，也跑桥接帧。固件侧
 `firmware/main/input/input_link.c` 是这条链路的唯一读取者，按帧头（`A5 5A`）把字节流
 分成两类——桥接帧交给输入源，其余原样交给 CLI 行解析。因此桥接跑着的时候，
-`python scripts/uartctl.py -p COM3 status` 依然可用。
+`uv run python uartctl.py -p COM3 status` 依然可用。
 
 打开这个口绝不能让设备复位：片内状态机把 DTR/RTS 当复位控制线解释（RTS 拉高即复位，
 两条同时拉高会让设备停在不运行应用的状态）。`link.py` 用 Win32 API 打开端口并在打开
-前后把两条线固定为低电平，与 [scripts/uartctl.py](../scripts/uartctl.py) 同一套做法；
-自己写 PC 端工具时按同样规则处理。
+前后把两条线固定为低电平；自己写 PC 端工具时按同样规则处理。
 
 ## 桥接帧格式
 
@@ -59,13 +62,32 @@ uv run python bridge.py -p COM3 --logs               # 同时打印设备日志�
 A5 5A | ver | type | slot | seq | len | payload[len] | crc16(LE)
 ```
 
-CRC-16/CCITT-FALSE（多项式 `0x1021`、初值 `0xFFFF`）覆盖除末尾两字节外的整帧。载荷上限
-72 字节；`REPORT` 帧的载荷是 8 字节设备标识（家族、连接方式、VID/PID 小端、Report ID、
-报告长度）加上最多 64 字节原始报告。类型有 `ATTACH`（0x01）、`DETACH`（0x02）、
-`REPORT`（0x10）、`FEEDBACK`（0x20，设备 → PC）、`PING`（0x7F）。
+CRC-16/CCITT-FALSE（多项式 `0x1021`、初值 `0xFFFF`）覆盖除末尾两字节外的整帧。帧头里的
+长度是单字节（线格式上限 255 字节）；`REPORT` 帧的载荷是 8 字节设备标识（家族、连接方式、
+VID/PID 小端、Report ID、报告长度）加上最多 64 字节原始报告，因此报文帧按 72 字节校验。
+类型有 `ATTACH`（0x01）、`DETACH`（0x02）、`REPORT`（0x10）、`FEEDBACK`（0x20，设备 → PC）
+与 `PING`（0x7F），另有 OTA 升级用的 `OTA_BEGIN`（0x30）、`OTA_DATA`（0x31，载荷到 202 字节）、
+`OTA_END`（0x32）与设备回发的 `OTA_ACK`（0x33）。
 
 设备在主机下发 NS2 反馈（震动 / 玩家灯 / 触觉采样）时回发 `FEEDBACK` 帧，本轮 PC 侧只
 打印；把反馈真正送到手柄在后续里程碑实现。
+
+## OTA 升级（ota.py）
+
+```powershell
+uv run python ota.py --dry-run                 # 只校验镜像，不接设备
+uv run python ota.py -p COM3                   # 升级默认镜像 ../firmware/build/remapad_firmware.bin
+uv run python ota.py -p COM3 --wait            # 升级后等设备重启回来并打印版本
+uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
+```
+
+上传前先在本地校验镜像：首字节 `0xE9`、芯片标识 `0x0009`（ESP32-S3）、偏移 `0x20` 的应用
+描述符（项目名必须是 `remapad_firmware`、版本取自构建时的 `git describe`）与 4 MB 分区上限。
+上传按 16 帧一个窗口推送，收到设备 ACK（含期望序号与已收字节）才发下一窗；ACK 的期望序号
+就是重发起点，因此超时重发不会重复写 flash。窗口末帧在帧头 `slot` 上带标记（末尾不足一窗也带），
+设备收到即应答，不必等固定帧数；整窗重发时设备只回一次应答，不会被重复应答干扰。
+
+设备侧行为与恢复路径见 [GETTING-STARTED.md](../docs/GETTING-STARTED.md) 的「固件 OTA 升级」。
 
 ## 已知限制
 

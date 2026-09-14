@@ -43,7 +43,7 @@ except ImportError:
     print("缺少 hidapi：在 pc/ 目录下执行 uv sync 后重试", file=sys.stderr)
     raise SystemExit(2)
 
-# 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码（与 scripts/uartctl.py 同一做法）。
+# 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码（与 uartctl.py 同一做法）。
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8")
