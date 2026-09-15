@@ -28,20 +28,24 @@ static const pad_layout_t s_rows[] = {
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
-        /* 输出报告 0x02（50 字节）：b1/b2 是两个 valid_flag（0x01 震动、
-         * 0x04 灯条、0x10 玩家灯），b3/b4 是右小马达与左大马达，b46 是玩家灯
-         * 掩码、b47-b49 是灯条 RGB。偏移按公开实现（Linux hid-playstation.c）
-         * 换算，未实机核对。 */
+        /* 输出报告 0x02（48 字节 = Report ID + 47 字节公共段，与 SDL 在
+         * Windows 上发的长度一致）：b1/b2 是两个 valid_flag（0x01 兼容震动、
+         * 0x02 关音频触觉、0x04 灯条、0x10 玩家指示灯），b3/b4 是右小马达与
+         * 左大马达，b39 是第二个 valid_flag2（灯条设置控制）、b42 是灯条设置
+         * 值（淡出，停掉主机的连接动画）、b44 是玩家灯、b45-b47 是灯条 RGB。
+         * 偏移取 Linux hid-playstation.c 的 dualsense_output_report_usb，蓝牙行
+         * 实机核对过震动与灯（灯条设置必须和颜色同一帧才生效），有线行未实机核对。 */
         .out = {
             .report_id = 0x02,
-            .len = 50,
-            .presets = {{1, 0x01}, {2, 0x14}},
+            .len = 48,
+            .presets = {{1, 0x03}, {2, 0x14}, {39, 0x02}, {42, 0x02}},
             .rumble_off = {4, 3},
             .rumble_max = {255, 255},
-            .led_mask_off = 46,
-            .led_rgb_off = 47,
+            .led_mask_off = 44,
+            .led_rgb_off = 45,
             .led_style = PAD_LED_LIGHTBAR,
             .haptic = PAD_HAPTIC_AS_RUMBLE,
+            .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},
         },
     },
     {
@@ -66,17 +70,25 @@ static const pad_layout_t s_rows[] = {
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
-        /* 蓝牙形态报告 0x31 比有线多一字节前缀，其余字段整体后移一位。 */
+        /* 蓝牙形态报告 0x31（78 字节）：b1 是序号/标签字节、b2 是固定魔数
+         * 0x10、公共段从 b3 起，末 4 字节是 CRC32——缺这段主机整份报告都不
+         * 认（实机表现：写回成功而手柄毫无反应）。b41 是灯条设置控制、b44 是
+         * 灯条设置值（淡出）、b46 是玩家灯、b47-b49 是灯条 RGB，偏移取 Linux
+         * dualsense_output_report_bt。蓝牙上主机的连接动画会一直盖着灯，灯条
+         * 设置与颜色必须写在同一帧里才生效（实机核对）。 */
         .out = {
             .report_id = 0x31,
             .len = 78,
-            .presets = {{2, 0x01}, {3, 0x14}},
-            .rumble_off = {5, 4},
+            .presets = {{1, 0x00}, {2, 0x10}, {3, 0x03}, {4, 0x14},
+                        {41, 0x02}, {44, 0x02}},
+            .rumble_off = {6, 5},
             .rumble_max = {255, 255},
-            .led_mask_off = 47,
-            .led_rgb_off = 48,
+            .led_mask_off = 46,
+            .led_rgb_off = 47,
             .led_style = PAD_LED_LIGHTBAR,
             .haptic = PAD_HAPTIC_AS_RUMBLE,
+            .frame = PAD_OUT_FRAME_PS_BT,
+            .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},
         },
     },
 };

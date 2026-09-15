@@ -171,8 +171,9 @@ flowchart TB
   新增输入设备（桥接 PC、将来的 USB 手柄、调试注入）只需实现 `dp_source_t` 并注册，首个注册源拥有摇杆/扳机/触摸/运动与设备标识字段，后续源叠加按键，调试注入最后叠加；
   私有格式 `pad_state_t` 是上下段之间的唯一接缝。
   目标侧 `target_send_pad()` 按注册的 `pad_target_t` 编码（现役 `target/ns2/`，内部仍调 `ns2_output_send()`，可只填需要输出的按键）。
-  主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等），在反馈监听者里归一到 `pad_feedback_t` 并回发桥接帧；
-  投递到插入手柄的动作在后续里程碑实现。电池经 `battery.c` 唯一入口 + `ns2_output_set_battery` 随报告上发；
+  主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等），在反馈监听者里叠加进 `pad_feedback_t` 持续帧并回发桥接帧
+  （事件带哪些字段就覆盖哪些字段：震动与玩家灯是主机的持续状态，回落到默认值会把刚点亮的玩家灯写灭；触觉采样是一次性事件）；
+  写回插入手柄的动作见下一条。电池经 `battery.c` 唯一入口 + `ns2_output_set_battery` 随报告上发；
   amiibo 镜像经 `ns2_output_amiibo_stage` 预置（传输方式待定），Report 0x09 的 NFC 状态字节随预置汇报。
   USB host 直插的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
 - USB host 直插的数据面：`usb/usb_transport.c` 装 host 栈、枚举、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口）。
@@ -278,6 +279,9 @@ classDiagram
 - 桥接帧与 CLI 文本共用一根 USB-Serial/JTAG：接收侧校验 CRC、失步时只丢一个字节继续扫描，非帧字节原样交回命令行解析，因此桥接跑着的时候串口 CLI 照常可用。
 - 布局行现在分三组描述：输入字段（既有）、运动字段（`motion`）与输出（反馈）报告（`out`），外加设备自带的报告语言与期望身份（`native_lang` / `native_identity`）；
   同代透传的判定与状态字节重写见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。
+  `out` 里的 `frame` 标出报告的收尾方式：PS 系的蓝牙形态要在末 4 字节补 CRC32（种子字节 0xA2 参与计算，见 `pad/feedback.c`），缺它的报告手柄整份都不接受（实机表现：写回成功、毫无反应）；
+  `led_mask_map` 把主机玩家灯掩码落到设备自己的灯位模式（DualSense 的五颗灯是固定模式，1P 只有中灯、2P 中灯加外灯，不能直写主机掩码），
+  DualSense 在蓝牙上还要把灯条设置与颜色写进同一帧——主机自己的连接动画会一直盖着灯，单独发一次设置报告压不住。
 - 未登记的 VID/PID 仍回落 Xbox 有线布局并置 `PAD_CAP_FALLBACK_LAYOUT`；
   Nintendo 家族（VID `0x057E`）按系列文件 `pad/layouts/ns.c` 登记，NS2 的 0x05 / 0x09 报文体与 NS1 的 0x30 / 0x3F 各占一行，偏移同样先取自公开资料、待实机回填。
 

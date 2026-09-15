@@ -65,17 +65,20 @@ static const pad_layout_t s_rows[] = {
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
-        /* 蓝牙形态：报告 ID 换成 0x11，字段偏移与有线一致（公开实现如此，
-         * 未实机核对）。 */
+        /* 蓝牙形态 0x11（78 字节）：b1 是 hw_control（0xC0 = HID + CRC32，
+         * 低 6 位是轮询间隔）、b2 是音频控制，公共段从 b3 起（b6/b7 是右小
+         * 马达与左大马达、b8-b10 是灯条 RGB），末 4 字节是 CRC32。偏移取
+         * Linux hid-playstation.c 的 dualshock4_output_report_bt。 */
         .out = {
             .report_id = 0x11,
             .len = 78,
-            .presets = {{1, 0x03}},
-            .rumble_off = {5, 4},
+            .presets = {{1, 0xC0}, {3, 0x03}},
+            .rumble_off = {7, 6},
             .rumble_max = {255, 255},
-            .led_rgb_off = 6,
+            .led_rgb_off = 8,
             .led_style = PAD_LED_LIGHTBAR,
             .haptic = PAD_HAPTIC_AS_RUMBLE,
+            .frame = PAD_OUT_FRAME_PS_BT,
         },
     },
 };

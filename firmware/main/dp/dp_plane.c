@@ -98,55 +98,65 @@ static void refresh_target_facts(void)
     target_set_facts(&facts);
 }
 
-/** 主机反馈的最新一帧：BLE 回调只落这一帧，编码与投递由数据面任务做。 */
+/** 主机反馈的持续帧：BLE 回调只更新这一帧，编码与投递由数据面任务做。 */
 static portMUX_TYPE s_feedback_mux = portMUX_INITIALIZER_UNLOCKED;
 static pad_feedback_t s_feedback;
 static volatile bool s_feedback_pending;
 
 /**
- * 主机反馈监听：归一到私有反馈格式（pad_feedback_t），一帧新版覆盖旧帧
- * （震动包每 20-30ms 一次，投递跟上最新值即可），随后由数据面任务按设备
- * 布局编码并投递，绝不在 BLE 回调里碰 USB 传输。
+ * 主机反馈监听：事件叠加进持续帧（pad_feedback_apply：事件带哪些字段就覆盖
+ * 哪些字段，其余沿用上一帧），随后由数据面任务按设备布局编码并投递，绝不在
+ * BLE 回调里碰 USB 传输。持续帧是必需的——每个事件都从默认值重建，会把刚
+ * 点亮的玩家灯被随后的震动帧写灭，马达强度也在主机不更新时来回跳。
  */
 static void feedback_listener(ns2_feedback_type_t type, const void *payload, void *user)
 {
     (void)user;
-    pad_feedback_t feedback;
-    pad_feedback_defaults(&feedback);
+    pad_feedback_t event;
+    pad_feedback_defaults(&event);
+    uint8_t fields = 0;
     switch (type) {
     case NS2_FEEDBACK_RUMBLE: {
         const ns2_rumble_event_t *rumble = payload;
-        feedback.rumble_on[PAD_TRIGGER_L2] = rumble->left_on;
-        feedback.rumble_on[PAD_TRIGGER_R2] = rumble->right_on;
-        feedback.rumble_strength[PAD_TRIGGER_L2] =
+        event.rumble_on[PAD_TRIGGER_L2] = rumble->left_on;
+        event.rumble_on[PAD_TRIGGER_R2] = rumble->right_on;
+        event.rumble_strength[PAD_TRIGGER_L2] =
             rumble->left_on ? ns2_rumble_strength(rumble->raw) : 0;
-        feedback.rumble_strength[PAD_TRIGGER_R2] =
+        event.rumble_strength[PAD_TRIGGER_R2] =
             rumble->right_on ? ns2_rumble_strength(&rumble->raw[16]) : 0;
-        memcpy(feedback.rumble_raw[PAD_TRIGGER_L2], rumble->raw, 16);
-        memcpy(feedback.rumble_raw[PAD_TRIGGER_R2], &rumble->raw[16], 16);
+        memcpy(event.rumble_raw[PAD_TRIGGER_L2], rumble->raw, 16);
+        memcpy(event.rumble_raw[PAD_TRIGGER_R2], &rumble->raw[16], 16);
+        fields = PAD_FEEDBACK_FIELD_RUMBLE;
         ESP_LOGD(TAG, "feedback rumble: L=%u/%u R=%u/%u", (unsigned)rumble->left_on,
-                 (unsigned)feedback.rumble_strength[PAD_TRIGGER_L2], (unsigned)rumble->right_on,
-                 (unsigned)feedback.rumble_strength[PAD_TRIGGER_R2]);
+                 (unsigned)event.rumble_strength[PAD_TRIGGER_L2], (unsigned)rumble->right_on,
+                 (unsigned)event.rumble_strength[PAD_TRIGGER_R2]);
         break;
     }
     case NS2_FEEDBACK_PLAYER_LED:
-        feedback.player_led = *(const uint8_t *)payload;
-        ESP_LOGD(TAG, "feedback player LED 0x%x", feedback.player_led);
+        event.player_led = *(const uint8_t *)payload;
+        fields = PAD_FEEDBACK_FIELD_PLAYER_LED;
+        ESP_LOGD(TAG, "feedback player LED 0x%x", event.player_led);
         break;
     case NS2_FEEDBACK_HAPTIC_SAMPLE:
-        feedback.haptic_sample_valid = true;
-        feedback.haptic_sample = *(const uint8_t *)payload;
-        ESP_LOGD(TAG, "feedback haptic sample 0x%02x", feedback.haptic_sample);
+        event.haptic_sample_valid = true;
+        event.haptic_sample = *(const uint8_t *)payload;
+        fields = PAD_FEEDBACK_FIELD_HAPTIC;
+        ESP_LOGD(TAG, "feedback haptic sample 0x%02x", event.haptic_sample);
         break;
     default:
         break;
     }
-    /* PC 侧仍收归一化反馈帧（打印与对账用）。 */
-    input_link_send_feedback(&feedback);
+    if (fields == 0) {
+        return;
+    }
+    pad_feedback_t merged;
     portENTER_CRITICAL(&s_feedback_mux);
-    s_feedback = feedback;
+    pad_feedback_apply(&s_feedback, fields, &event);
     s_feedback_pending = true;
+    merged = s_feedback;
     portEXIT_CRITICAL(&s_feedback_mux);
+    /* PC 侧收叠加后的状态（打印与对账用），与写回手柄的帧一致。 */
+    input_link_send_feedback(&merged);
 }
 
 /**
@@ -222,6 +232,24 @@ static void dp_task(void *param)
             s_feedback_pending = false;
             portEXIT_CRITICAL(&s_feedback_mux);
             deliver_feedback(&feedback);
+        }
+        /* 主机断开后没人再更新反馈：持续帧会把手柄悬在最后一次震动上（手柄自己
+         * 不知道主机走了），断开时补一帧把震动与一次性采样清掉。 */
+        if (!ble_controller_connected()) {
+            bool stale = false;
+            portENTER_CRITICAL(&s_feedback_mux);
+            if (s_feedback.rumble_on[PAD_TRIGGER_L2] || s_feedback.rumble_on[PAD_TRIGGER_R2] ||
+                s_feedback.haptic_sample_valid) {
+                pad_feedback_t cleared;
+                pad_feedback_defaults(&cleared);
+                pad_feedback_apply(&s_feedback, PAD_FEEDBACK_FIELD_RUMBLE, &cleared);
+                s_feedback_pending = true;
+                stale = true;
+            }
+            portEXIT_CRITICAL(&s_feedback_mux);
+            if (stale) {
+                ESP_LOGD(TAG, "host gone: clearing held rumble state");
+            }
         }
         if (pad.buttons != last_buttons) {
             const int64_t now_us = esp_timer_get_time();

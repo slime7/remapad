@@ -41,6 +41,14 @@ typedef enum {
     PAD_HAPTIC_VERBATIM,    /**< 设备自己能播采样（NS2 手柄透传，参数原样写回）。 */
 } pad_haptic_style_t;
 
+/** 输出报告的收尾方式：字段写完之后的补字节动作。 */
+typedef enum {
+    PAD_OUT_FRAME_NONE = 0, /**< 写完即可发送（有线形态）。 */
+    /** PS 蓝牙形态：末 4 字节是 CRC32（种子字节 0xA2 参与计算，小端），
+     *  缺它时主机应声不认——手柄收下报告但一个动作都不做。 */
+    PAD_OUT_FRAME_PS_BT,
+} pad_out_frame_t;
+
 /**
  * 运动字段描述：一次性给出取样位置、样本数与轴映射。轴映射把来源轴归一到
  * 私有约定（X 右为正、Y 上为正、Z 朝屏幕外为正）：gyro_src / accel_src 的
@@ -75,6 +83,11 @@ typedef struct {
     uint8_t led_rgb_off;
     uint8_t led_style; /**< pad_led_style_t。 */
     uint8_t haptic;    /**< pad_haptic_style_t。 */
+    uint8_t frame;     /**< pad_out_frame_t。 */
+    /** 玩家灯落地值：四项依次对应主机掩码 bit0-3（1P-4P），0 表示原样写主机
+     *  掩码。DualSense 的五颗灯是一组固定模式（1P 中灯、2P 中加外），不能直写
+     *  主机掩码，需要这张表。 */
+    uint8_t led_mask_map[4];
 } pad_output_layout_t;
 
 /**
