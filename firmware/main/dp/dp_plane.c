@@ -105,10 +105,10 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
     switch (type) {
     case NS2_FEEDBACK_RUMBLE: {
         const ns2_rumble_event_t *rumble = payload;
-        feedback.rumble_on[PAD_TRIGGER_L] = rumble->left_on;
-        feedback.rumble_on[PAD_TRIGGER_R] = rumble->right_on;
-        memcpy(feedback.rumble_raw[PAD_TRIGGER_L], rumble->raw, 16);
-        memcpy(feedback.rumble_raw[PAD_TRIGGER_R], &rumble->raw[16], 16);
+        feedback.rumble_on[PAD_TRIGGER_L2] = rumble->left_on;
+        feedback.rumble_on[PAD_TRIGGER_R2] = rumble->right_on;
+        memcpy(feedback.rumble_raw[PAD_TRIGGER_L2], rumble->raw, 16);
+        memcpy(feedback.rumble_raw[PAD_TRIGGER_R2], &rumble->raw[16], 16);
         ESP_LOGI(TAG, "feedback rumble: L=%u R=%u (delivery pending)",
                  (unsigned)rumble->left_on, (unsigned)rumble->right_on);
         break;

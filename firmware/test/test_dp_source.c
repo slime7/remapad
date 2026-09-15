@@ -20,7 +20,7 @@ static void primary_source(pad_state_t *state)
     state->axis[PAD_AXIS_LY] = 0x222;
     state->axis[PAD_AXIS_RX] = 0x333;
     state->axis[PAD_AXIS_RY] = 0x444;
-    state->trigger[PAD_TRIGGER_L] = 0x555;
+    state->trigger[PAD_TRIGGER_L2] = 0x555;
     state->battery_percent = 77;
     state->battery_present = true;
     state->charging = true;
@@ -34,7 +34,7 @@ static void secondary_source(pad_state_t *state)
     state->buttons = PAD_BTN_CROSS;
     state->axis[PAD_AXIS_LX] = 0x999;
     state->axis[PAD_AXIS_RX] = 0x999;
-    state->trigger[PAD_TRIGGER_L] = 0x999;
+    state->trigger[PAD_TRIGGER_L2] = 0x999;
     state->battery_percent = 1;
     state->family = PAD_FAMILY_PS;
     state->caps = PAD_CAP_MOTION;
@@ -64,7 +64,7 @@ static void composition_rules(void)
     CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CIRCLE);
     CHECK_EQ(state.axis[PAD_AXIS_LX], 0x111);
     CHECK_EQ(state.axis[PAD_AXIS_RY], 0x444);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_L], 0x555);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], 0x555);
     CHECK_EQ(state.battery_percent, 77);
     CHECK(state.battery_present);
     CHECK(state.charging);
@@ -77,7 +77,7 @@ static void composition_rules(void)
     CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_CIRCLE | PAD_BTN_CROSS));
     CHECK_EQ(state.axis[PAD_AXIS_LX], 0x111);
     CHECK_EQ(state.axis[PAD_AXIS_RX], 0x333);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_L], 0x555);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], 0x555);
     CHECK_EQ(state.battery_percent, 77);
     CHECK_EQ(state.family, PAD_FAMILY_XBOX);
 
@@ -227,11 +227,11 @@ static void debug_key_lookup(void)
 
     /* 组合键默认按更长时间保持，对应主机 Grip 界面的确认动作。 */
     CHECK(dp_source_key_lookup("lr", 2, &mask, &hold_ms));
-    CHECK_EQ(mask, (uint32_t)(PAD_BTN_LB | PAD_BTN_RB));
+    CHECK_EQ(mask, (uint32_t)(PAD_BTN_L1 | PAD_BTN_R1));
     CHECK_EQ(hold_ms, 1000);
 
     CHECK(dp_source_key_lookup("ls", 2, &mask, &hold_ms));
-    CHECK_EQ(mask, PAD_BTN_LSTICK);
+    CHECK_EQ(mask, PAD_BTN_L3);
     /* 键名 c 是 NS2 的 C 键，掩码落到私有格式的静音位（PS 的静音键）。 */
     CHECK(dp_source_key_lookup("c", 1, &mask, &hold_ms));
     CHECK_EQ(mask, PAD_BTN_MUTE);

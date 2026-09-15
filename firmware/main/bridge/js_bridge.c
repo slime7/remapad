@@ -498,7 +498,7 @@ static void handle_debug_key(int id, const char *cmd)
          * 的唤醒广播能把它叫醒（约 10 秒突发）。 */
         ns2_session_wake_request();
     } else if (key != NULL && key_len == 2 && strncmp(key, "lr", 2) == 0) {
-        mask = PAD_BTN_LB | PAD_BTN_RB;
+        mask = PAD_BTN_L1 | PAD_BTN_R1;
         hold_ms = 1000;
     }
     if (mask == 0) {

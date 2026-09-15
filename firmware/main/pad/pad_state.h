@@ -48,10 +48,10 @@ enum {
     PAD_BTN_CIRCLE = 1u << 1,   /**< ○ 右 */
     PAD_BTN_CROSS = 1u << 2,    /**< ✕ 下 */
     PAD_BTN_SQUARE = 1u << 3,   /**< □ 左 */
-    PAD_BTN_LB = 1u << 4,
-    PAD_BTN_RB = 1u << 5,
-    PAD_BTN_LSTICK = 1u << 6,
-    PAD_BTN_RSTICK = 1u << 7,
+    PAD_BTN_L1 = 1u << 4,
+    PAD_BTN_R1 = 1u << 5,
+    PAD_BTN_L3 = 1u << 6,
+    PAD_BTN_R3 = 1u << 7,
     /** 触摸板按下：Xbox 的 View（select）与 PS 的触摸板按下都落在这里，
      *  目标侧作减号。 */
     PAD_BTN_TOUCHPAD = 1u << 8,
@@ -84,8 +84,8 @@ enum {
 
 /** 扳机索引（pad_state_t.trigger，保持模拟量）。 */
 enum {
-    PAD_TRIGGER_L = 0,
-    PAD_TRIGGER_R,
+    PAD_TRIGGER_L2 = 0,
+    PAD_TRIGGER_R2,
     PAD_TRIGGER_COUNT,
 };
 

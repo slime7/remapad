@@ -104,8 +104,8 @@ static void face_buttons_keep_position_semantics(void)
 static void shoulders_dpad_and_system_keys(void)
 {
     prepare();
-    expect_buttons(PAD_BTN_LB, 0x03, 4);
-    expect_buttons(PAD_BTN_RB, 0x02, 4);
+    expect_buttons(PAD_BTN_L1, 0x03, 4);
+    expect_buttons(PAD_BTN_R1, 0x02, 4);
     expect_buttons(PAD_BTN_DPAD_UP, 0x03, 3);
     expect_buttons(PAD_BTN_DPAD_DOWN, 0x03, 0);
     expect_buttons(PAD_BTN_DPAD_LEFT, 0x03, 2);
@@ -114,8 +114,8 @@ static void shoulders_dpad_and_system_keys(void)
     expect_buttons(PAD_BTN_TOUCHPAD, 0x03, 6);
     expect_buttons(PAD_BTN_HOME, 0x04, 0);
     expect_buttons(PAD_BTN_SHARE, 0x04, 1);
-    expect_buttons(PAD_BTN_LSTICK, 0x03, 7);
-    expect_buttons(PAD_BTN_RSTICK, 0x02, 7);
+    expect_buttons(PAD_BTN_L3, 0x03, 7);
+    expect_buttons(PAD_BTN_R3, 0x02, 7);
     /* 静音键只有 PS 的 DualSense 有，目标侧作 C 键。 */
     expect_buttons(PAD_BTN_MUTE, 0x04, 4);
 }
@@ -136,27 +136,27 @@ static void analog_triggers_digitize_at_half(void)
     pad_state_defaults(&pad);
 
     /* 阈值下侧：两位都不亮。 */
-    pad.trigger[PAD_TRIGGER_L] = 2047;
-    pad.trigger[PAD_TRIGGER_R] = 2047;
+    pad.trigger[PAD_TRIGGER_L2] = 2047;
+    pad.trigger[PAD_TRIGGER_R2] = 2047;
     target_send_pad(&pad);
     CHECK_EQ(s_capture.body[0x02] & 0x20, 0);
     CHECK_EQ(s_capture.body[0x03] & 0x20, 0);
 
     /* 阈值上侧：ZL 与 ZR 同时点亮。 */
-    pad.trigger[PAD_TRIGGER_L] = 2048;
-    pad.trigger[PAD_TRIGGER_R] = 2048;
+    pad.trigger[PAD_TRIGGER_L2] = 2048;
+    pad.trigger[PAD_TRIGGER_R2] = 2048;
     target_send_pad(&pad);
     CHECK_EQ(s_capture.body[0x02] & 0x20, 0x20);
     CHECK_EQ(s_capture.body[0x03] & 0x20, 0x20);
 
     /* 全按与刚过阈值在报文里没有区别（NS2 只有数字扳机）。 */
-    pad.trigger[PAD_TRIGGER_L] = PAD_AXIS_MAX;
+    pad.trigger[PAD_TRIGGER_L2] = PAD_AXIS_MAX;
     target_send_pad(&pad);
     CHECK_EQ(s_capture.body[0x03] & 0x20, 0x20);
 
     /* 松开：回到不亮。 */
-    pad.trigger[PAD_TRIGGER_L] = 0;
-    pad.trigger[PAD_TRIGGER_R] = 0;
+    pad.trigger[PAD_TRIGGER_L2] = 0;
+    pad.trigger[PAD_TRIGGER_R2] = 0;
     target_send_pad(&pad);
     CHECK_EQ(s_capture.body[0x02] & 0x20, 0);
     CHECK_EQ(s_capture.body[0x03] & 0x20, 0);

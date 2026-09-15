@@ -155,10 +155,10 @@ void input_link_send_feedback(const pad_feedback_t *feedback)
     }
     /* 反馈载荷：左右震动使能与强度、玩家灯、触觉采样，其余位保留。 */
     uint8_t payload[12] = {0};
-    payload[0] = feedback->rumble_on[PAD_TRIGGER_L] ? 1u : 0u;
-    payload[1] = feedback->rumble_on[PAD_TRIGGER_R] ? 1u : 0u;
-    payload[2] = feedback->rumble_strength[PAD_TRIGGER_L];
-    payload[3] = feedback->rumble_strength[PAD_TRIGGER_R];
+    payload[0] = feedback->rumble_on[PAD_TRIGGER_L2] ? 1u : 0u;
+    payload[1] = feedback->rumble_on[PAD_TRIGGER_R2] ? 1u : 0u;
+    payload[2] = feedback->rumble_strength[PAD_TRIGGER_L2];
+    payload[3] = feedback->rumble_strength[PAD_TRIGGER_R2];
     payload[4] = feedback->player_led;
     payload[5] = feedback->haptic_sample_valid ? feedback->haptic_sample : 0u;
     input_link_send_frame(INPUT_FRAME_TYPE_FEEDBACK, 0, payload, sizeof(payload));

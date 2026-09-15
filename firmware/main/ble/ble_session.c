@@ -1157,7 +1157,7 @@ void ns2_session_press_lr(void)
     /* 配对模式期间双身份发现广播已在发（start_pairing_mode 保证），这里只
      * 补 L+R 按键注入：主机 Grip 界面的组合确认动作，双连接时左右两只都
      * 会上报。 */
-    dp_plane_debug_key(PAD_BTN_LB | PAD_BTN_RB, 1000);
+    dp_plane_debug_key(PAD_BTN_L1 | PAD_BTN_R1, 1000);
     ESP_LOGI(TAG, "press LR (mode=%u, pairing=%u)", (unsigned)s_ses.device_mode,
              (unsigned)s_ses.pairing_mode);
 }
@@ -1305,7 +1305,7 @@ void ns2_session_tick(void)
     if (s_ses.device_mode != NS2_ID_PRO &&
         ns2_adv_lr_step(&s_lr_timer, ns2_session_paired(), joycon_pair_ready(),
                         esp_timer_get_time())) {
-        dp_plane_debug_key(PAD_BTN_LB | PAD_BTN_RB, NS2_ADV_LR_HOLD_MS);
+        dp_plane_debug_key(PAD_BTN_L1 | PAD_BTN_R1, NS2_ADV_LR_HOLD_MS);
         ESP_LOGI(TAG, "press L+R for JoyCon pair confirmation");
     }
 

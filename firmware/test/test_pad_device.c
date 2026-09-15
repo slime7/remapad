@@ -65,7 +65,7 @@ static void xbox_dpad_shoulders_and_sticks(void)
     pad_state_t state;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_DPAD_UP | PAD_BTN_DPAD_DOWN | PAD_BTN_LB | PAD_BTN_RB));
+             (uint32_t)(PAD_BTN_DPAD_UP | PAD_BTN_DPAD_DOWN | PAD_BTN_L1 | PAD_BTN_R1));
     CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_MAX);
     CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_MIN);
     CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_CENTER);
@@ -80,9 +80,9 @@ static void xbox_dpad_shoulders_and_sticks(void)
     report.data[3] = 0xFF;
     report.data[4] = 0x80;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MAX);
-    CHECK(state.trigger[PAD_TRIGGER_R] > 2000);
-    CHECK(state.trigger[PAD_TRIGGER_R] < 2100);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
+    CHECK(state.trigger[PAD_TRIGGER_R2] > 2000);
+    CHECK(state.trigger[PAD_TRIGGER_R2] < 2100);
 }
 
 static void ps_report_parses_hat_face_buttons_and_battery(void)
@@ -105,7 +105,7 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     report.data[7] = 0x03; /* PS + 触摸板按下 */
     report.data[8] = 0xFF; /* L2 全按 */
     report.data[9] = 0x00; /* R2 松开 */
-    report.data[12] = 0x1A; /* 电量 10 档 + 充电中 */
+    report.data[30] = 0x1A; /* 电量 10 档 + 充电中（status[0] 在 0x1E） */
     report.data[34] = 0x40; /* 触摸点 X 低位 */
     report.data[35] = 0x05;
     report.data[36] = 0x02;
@@ -114,11 +114,11 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.family, PAD_FAMILY_PS);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_LB | PAD_BTN_RB | PAD_BTN_OPT | PAD_BTN_HOME |
+             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_OPT | PAD_BTN_HOME |
                         PAD_BTN_TOUCHPAD));
     CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MAX);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_R], PAD_AXIS_MIN);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_R2], PAD_AXIS_MIN);
     CHECK_EQ(state.battery_percent, 100);
     CHECK(state.charging);
     CHECK_EQ(state.caps & PAD_CAP_TOUCHPAD, PAD_CAP_TOUCHPAD);
@@ -211,6 +211,194 @@ static void family_detection_and_steam_gap(void)
     CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, PAD_CAP_FALLBACK_LAYOUT);
 }
 
+static pad_report_t ds3_report(pad_conn_t conn)
+{
+    pad_report_t report;
+    memset(&report, 0, sizeof(report));
+    report.family = PAD_FAMILY_PS;
+    report.conn = conn;
+    report.vid = 0x054C;
+    report.pid = 0x0268; /* DualShock 3 */
+    report.report_id = 0x01;
+    report.len = 49;
+    report.data[0] = 0x01;
+    report.data[1] = 0x80; /* LX / LY / RX / RY 都在中位 */
+    report.data[2] = 0x80;
+    report.data[3] = 0x80;
+    report.data[4] = 0x80;
+    return report;
+}
+
+/**
+ * DualShock 3 的有线与蓝牙共用一行（偏移按 49 字节的归一化形式登记）。
+ * 方向键在按键位图里，Select 与 Start 换成减号与加号的位置语义。
+ */
+static void dualshock3_parses_on_usb_and_bt(void)
+{
+    pad_report_t report = ds3_report(PAD_CONN_USB);
+    report.data[5] = 0x05;  /* Select + R3 */
+    report.data[6] = 0x14;  /* L1 + Triangle */
+    report.data[7] = 0x01;  /* PS 键 */
+    report.data[12] = 0xFF; /* L2 压力值满量程 */
+    report.data[13] = 0x80; /* R2 半按 */
+
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.family, PAD_FAMILY_PS);
+    CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_TOUCHPAD | PAD_BTN_R3 | PAD_BTN_L1 | PAD_BTN_TRIANGLE |
+                        PAD_BTN_HOME));
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
+    CHECK(state.trigger[PAD_TRIGGER_R2] > 2000);
+    CHECK(state.trigger[PAD_TRIGGER_R2] < 2100);
+    /* 没有触摸板与电量字段：能力位不置位。 */
+    CHECK_EQ(state.caps & PAD_CAP_TOUCHPAD, 0);
+    CHECK_EQ(state.caps & PAD_CAP_BATTERY, 0);
+
+    /* 方向键在按键位图里（bit4 上、bit5 右、bit6 下、bit7 左）。 */
+    memset(report.data + 5, 0, 3);
+    report.data[5] = 0x10;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_DPAD_UP);
+    report.data[5] = 0x80;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_DPAD_LEFT);
+    report.data[5] = 0x09; /* Select + Start */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_TOUCHPAD | PAD_BTN_OPT));
+
+    /* 蓝牙下同样的字节给出同样的按键。 */
+    report = ds3_report(PAD_CONN_BT);
+    report.data[5] = 0x05;
+    report.data[6] = 0x14;
+    report.data[7] = 0x01;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_TOUCHPAD | PAD_BTN_R3 | PAD_BTN_L1 | PAD_BTN_TRIANGLE |
+                        PAD_BTN_HOME));
+}
+
+static pad_report_t dualshock4_bt_report(void)
+{
+    pad_report_t report;
+    memset(&report, 0, sizeof(report));
+    report.family = PAD_FAMILY_PS;
+    report.conn = PAD_CONN_BT;
+    report.vid = 0x054C;
+    report.pid = 0x05C4; /* DualShock 4 v1 */
+    report.report_id = 0x11;
+    report.len = 64;
+    report.data[0] = 0x11;
+    report.data[1] = 0xC0; /* 蓝牙报告比有线多两个前导字节 */
+    report.data[3] = 0x80; /* LX / LY / RX / RY 都在中位 */
+    report.data[4] = 0x80;
+    report.data[5] = 0x80;
+    report.data[6] = 0x80;
+    report.data[7] = 0x08; /* 帽子开关松开 */
+    return report;
+}
+
+/** DualShock 4 蓝牙（Report ID 0x11）与电量字节偏移（status[0] 在 0x20）。 */
+static void dualshock4_bt_parses_by_pid(void)
+{
+    pad_report_t report = dualshock4_bt_report();
+    report.data[7] = 0x28;  /* Cross + 帽子开关松开 */
+    report.data[8] = 0x03;  /* L1 + R1 */
+    report.data[9] = 0x01;  /* PS 键 */
+    report.data[10] = 0xFF; /* L2 全按 */
+    report.data[32] = 0x1A; /* 电量 10 档 + 充电中 */
+
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.family, PAD_FAMILY_PS);
+    CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_HOME));
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_R2], PAD_AXIS_MIN);
+    CHECK_EQ(state.battery_percent, 100);
+    CHECK(state.charging);
+    CHECK(state.touch[PAD_TOUCH_LEFT].present);
+}
+
+static pad_report_t dualsense_usb_report(void)
+{
+    pad_report_t report;
+    memset(&report, 0, sizeof(report));
+    report.family = PAD_FAMILY_PS;
+    report.conn = PAD_CONN_USB;
+    report.vid = 0x054C;
+    report.pid = 0x0CE6; /* DualSense */
+    report.report_id = 0x01;
+    report.len = 64;
+    report.data[0] = 0x01;
+    report.data[1] = 0x80; /* LX / LY / RX / RY 都在中位 */
+    report.data[2] = 0x80;
+    report.data[3] = 0x80;
+    report.data[4] = 0x80;
+    report.data[8] = 0x08; /* 帽子开关松开 */
+    return report;
+}
+
+/**
+ * DualSense / DualSense Edge 有线（Report ID 0x01）：与 DS4 有线同报 0x01，
+ * 但扳机之后多一个序号字节，靠 PID 分行；键位与蓝牙的 0x31 行共用一份位序。
+ */
+static void dualsense_usb_parses_by_pid(void)
+{
+    pad_report_t report = dualsense_usb_report();
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.family, PAD_FAMILY_PS);
+    CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
+    CHECK_EQ(state.buttons, 0);
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
+
+    /* 面键、肩键、Options 与 Edge 背键与蓝牙同一份位序。 */
+    report.data[8] = 0x28;  /* Cross + 帽子开关松开 */
+    report.data[9] = 0x23;  /* L1 + R1 + Options */
+    report.data[10] = 0xC0; /* Edge 的两颗背键 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_OPT | PAD_BTN_L4 |
+                        PAD_BTN_R4));
+    report.data[10] = 0x07; /* PS + 触摸板按下 + 静音 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_CROSS | PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_OPT | PAD_BTN_HOME |
+                        PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
+
+    /* 摇杆从第 2 字节、扳机从第 6 字节起（序号字节在扳机之后）。 */
+    report.data[1] = 0x00; /* LX 全左 */
+    report.data[2] = 0xFF; /* LY 全下：报告里 0 在上，解析侧翻正 */
+    report.data[5] = 0xFF; /* L2 全按 */
+    report.data[6] = 0x00; /* R2 松开 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_MIN);
+    CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_MIN);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_R2], PAD_AXIS_MIN);
+
+    /* 运动字段在第 17 字节起：角速度 3 轴 + 加速度 3 轴，小端。 */
+    report.data[24] = 0x00;
+    report.data[25] = 0x1F; /* 加速度第二轴约 1 g */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.caps & PAD_CAP_MOTION, PAD_CAP_MOTION);
+    CHECK(state.motion.present);
+    CHECK(state.motion.accel[1] > 7000);
+    CHECK(state.motion.accel[1] < 9000);
+
+    /* Edge 有线与 DualSense 共用一行。 */
+    report = dualsense_usb_report();
+    report.pid = 0x0DF2;
+    report.data[9] = 0x02; /* R1 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_R1);
+}
+
 /**
  * DualSense 蓝牙（Report ID 0x31）空闲帧：字节取自 pc/bridge.py --dump 的实测
  * 报告，第 9 字节读作 0x08，正是方向键帽子开关的松开值、面键位全为 0，
@@ -251,8 +439,8 @@ static void dualsense_bt_buttons_map_by_position(void)
     CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_CENTER);
     CHECK_EQ(state.axis[PAD_AXIS_RX], PAD_AXIS_CENTER);
     CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_CENTER);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MIN);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_R], PAD_AXIS_MIN);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MIN);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_R2], PAD_AXIS_MIN);
 
     /* 面键按位置：物理 ✕ 下、○ 右、□ 左、△ 上（第 9 字节的高四位）。 */
     report.data[9] = 0x28;
@@ -273,10 +461,10 @@ static void dualsense_bt_buttons_map_by_position(void)
     report.data[10] = 0x73;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_LB | PAD_BTN_RB | PAD_BTN_SHARE | PAD_BTN_OPT | PAD_BTN_LSTICK));
+             (uint32_t)(PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_SHARE | PAD_BTN_OPT | PAD_BTN_L3));
     report.data[10] = 0x80;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_RSTICK);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_R3);
 
     /* PS、触摸板按下与 DualSense 的静音键在第 11 字节。 */
     report.data[10] = 0x00;
@@ -312,9 +500,9 @@ static void dualsense_bt_sticks_triggers_and_motion(void)
     CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_MIN);
     CHECK_EQ(state.axis[PAD_AXIS_RX], PAD_AXIS_CENTER);
     CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_MAX);
-    CHECK_EQ(state.trigger[PAD_TRIGGER_L], PAD_AXIS_MAX);
-    CHECK(state.trigger[PAD_TRIGGER_R] > 2000);
-    CHECK(state.trigger[PAD_TRIGGER_R] < 2100);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
+    CHECK(state.trigger[PAD_TRIGGER_R2] > 2000);
+    CHECK(state.trigger[PAD_TRIGGER_R2] < 2100);
 
     /* 运动字段：静止帧里三轴角速度接近 0、加速度有一轴约 1 g，偏移对不上不会成立。 */
     CHECK_EQ(state.caps & PAD_CAP_MOTION, PAD_CAP_MOTION);
@@ -363,6 +551,9 @@ HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"摇杆死区与 Y 轴方向", stick_deadzone_and_y_direction},
                 {"未识别型号回落 Xbox 布局并标记兜底", unknown_model_falls_back_to_xbox_layout},
                 {"VID 判定家族（Steam 布局未定，走兜底）", family_detection_and_steam_gap},
+                {"DS3 有线与蓝牙都按 PS 键位解析", dualshock3_parses_on_usb_and_bt},
+                {"DS4 蓝牙按键与电量按 PID 匹配", dualshock4_bt_parses_by_pid},
+                {"DualSense 有线按 PID 与 DS4 有线分开解析", dualsense_usb_parses_by_pid},
                 {"DualSense 蓝牙按键不再乱配（面键、方向键、肩键、静音键）",
                  dualsense_bt_buttons_map_by_position},
                 {"DualSense 蓝牙摇杆、扳机与运动字段量程",

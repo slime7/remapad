@@ -25,10 +25,10 @@ static const struct {
     {PAD_BTN_CROSS, NS2_BTN_B},    /* ✕ 下 → B 下 */
     {PAD_BTN_TRIANGLE, NS2_BTN_X}, /* △ 上 → X 上 */
     {PAD_BTN_SQUARE, NS2_BTN_Y},   /* □ 左 → Y 左 */
-    {PAD_BTN_LB, NS2_BTN_L},
-    {PAD_BTN_RB, NS2_BTN_R},
-    {PAD_BTN_LSTICK, NS2_BTN_LSTICK},
-    {PAD_BTN_RSTICK, NS2_BTN_RSTICK},
+    {PAD_BTN_L1, NS2_BTN_L},
+    {PAD_BTN_R1, NS2_BTN_R},
+    {PAD_BTN_L3, NS2_BTN_LSTICK},
+    {PAD_BTN_R3, NS2_BTN_RSTICK},
     {PAD_BTN_TOUCHPAD, NS2_BTN_MINUS}, /* 触摸板按下 / View → 减号 */
     {PAD_BTN_OPT, NS2_BTN_PLUS},       /* Options / Menu → 加号 */
     {PAD_BTN_HOME, NS2_BTN_HOME},      /* PS 键 / 西瓜键 → Home */
@@ -64,10 +64,10 @@ static void ns2_from_pad(const pad_state_t *pad, ns2_controller_state_t *out)
             out->buttons |= s_button_map[i].ns2;
         }
     }
-    if (pad->trigger[PAD_TRIGGER_L] >= NS2_TRIGGER_THRESHOLD) {
+    if (pad->trigger[PAD_TRIGGER_L2] >= NS2_TRIGGER_THRESHOLD) {
         out->buttons |= NS2_BTN_ZL;
     }
-    if (pad->trigger[PAD_TRIGGER_R] >= NS2_TRIGGER_THRESHOLD) {
+    if (pad->trigger[PAD_TRIGGER_R2] >= NS2_TRIGGER_THRESHOLD) {
         out->buttons |= NS2_BTN_ZR;
     }
     out->stick_lx = pad->axis[PAD_AXIS_LX];
