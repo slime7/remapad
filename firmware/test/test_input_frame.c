@@ -7,7 +7,9 @@
 
 #include <string.h>
 
+#include "feedback.h"
 #include "input_frame.h"
+#include "layout.h"
 #include "ota_proto.h"
 
 typedef struct {
@@ -296,6 +298,39 @@ static void empty_detach_frame_round_trip(void)
     CHECK_EQ(cap.seqs[0], 5);
 }
 
+/**
+ * 反馈写回的硬前提：布局行里的输出报告必须装得进输出报告帧。蓝牙 PS 两行
+ * 的输出报告各 78 字节（Report ID + 77 字节字段），比报文帧的 72 字节大一档；
+ * 装不下时报告在设备侧就被丢掉，PC 上的写回计数永远是 0，主机震动与玩家灯
+ * 都到不了手柄。
+ */
+static void out_report_frame_carries_bluetooth_row(void)
+{
+    const pad_layout_t *layout = pad_layout_find_by_ids(0x054C, 0x0DF2, PAD_CONN_BT, NULL);
+    REQUIRE(layout != NULL);
+    const size_t out_len = layout->out.len;
+    REQUIRE(out_len > 0);
+
+    uint8_t payload[PAD_OUTPUT_MAX];
+    for (size_t i = 0; i < out_len; i++) {
+        payload[i] = (uint8_t)(i + 1);
+    }
+    uint8_t frame[INPUT_FRAME_MAX_LEN];
+    const size_t len = input_frame_encode(frame, sizeof(frame), INPUT_FRAME_TYPE_OUT_REPORT, 0,
+                                          0x2A, payload, out_len);
+    CHECK(len != 0);
+
+    capture_t cap;
+    input_frame_rx_t rx;
+    memset(&cap, 0, sizeof(cap));
+    input_frame_rx_reset(&rx);
+    feed(&cap, &rx, frame, len);
+    CHECK_EQ(cap.frames, 1);
+    CHECK_EQ(cap.types[0], INPUT_FRAME_TYPE_OUT_REPORT);
+    CHECK_EQ(cap.lens[0], out_len);
+    CHECK_BYTES(cap.payload[0], payload, out_len);
+}
+
 HOST_TEST_SUITE(suite_input_frame, "input_frame",
                 {"CRC 已知向量与黄金帧字节", crc_known_vector_and_golden_frame},
                 {"编码拒绝越界载荷、缓冲不足与空指针", encode_rejects_invalid_arguments},
@@ -308,4 +343,6 @@ HOST_TEST_SUITE(suite_input_frame, "input_frame",
                  ota_and_report_frames_share_one_stream},
                 {"CRC 不符的帧被丢弃且后续帧照常",
                  bad_crc_is_dropped_and_stream_recovers},
-                {"零载荷断开帧往返", empty_detach_frame_round_trip});
+                {"零载荷断开帧往返", empty_detach_frame_round_trip},
+                {"78 字节输出报告帧可编码并往返（蓝牙手柄写回）",
+                 out_report_frame_carries_bluetooth_row});

@@ -25,6 +25,7 @@ from link import (
     CONN_UNKNOWN,
     CONN_USB,
     FAMILY_NAMES,
+    OUT_REPORT_MAX,
     TYPE_ATTACH,
     TYPE_DETACH,
     TYPE_FEEDBACK,
@@ -117,7 +118,7 @@ def print_feedback(payload: bytes) -> None:
 
 def write_output_report(device, payload: bytes, enabled: bool) -> bool:
     """把设备编码好的输出报告写回手柄：震动与玩家灯的字段布局只在固件里有一份。"""
-    if not enabled or device is None or not payload or len(payload) > 64:
+    if not enabled or device is None or not payload or len(payload) > OUT_REPORT_MAX:
         return False
     try:
         device.write(payload)

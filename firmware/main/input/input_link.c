@@ -200,7 +200,8 @@ void input_link_send_feedback(const pad_feedback_t *feedback)
 
 void input_link_send_out_report(const uint8_t *report, size_t len)
 {
-    if (!s_running || report == NULL || len == 0 || len > PAD_RAW_MAX) {
+    /* 上限按输出报告帧算，不用原始报告的上限：蓝牙 PS 的输出报告 78 字节。 */
+    if (!s_running || report == NULL || len == 0 || len > INPUT_FRAME_OUT_MAX_PAYLOAD) {
         return;
     }
     input_link_send_frame(INPUT_FRAME_TYPE_OUT_REPORT, 0, report, len);

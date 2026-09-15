@@ -35,8 +35,14 @@ SYNC1 = 0x5A
 VERSION = 0x01
 HEADER_LEN = 7
 CRC_LEN = 2
+#: PC → 设备报文帧的载荷上限：8 字节设备标识 + 单帧最多 64 字节原始报告。
 MAX_PAYLOAD = 72
 MAX_FRAME = HEADER_LEN + MAX_PAYLOAD + CRC_LEN
+#: 设备 → PC 输出报告帧的载荷上限：DualSense / DualShock 4 蓝牙输出报告各
+#: 78 字节（Report ID + 77 字节字段），比报文帧大一档。
+OUT_REPORT_MAX = 78
+#: 解码器接受的单帧载荷上限：两类方向里更大的那一档。
+DECODE_MAX_PAYLOAD = OUT_REPORT_MAX
 #: 线格式上限：帧头里的长度字段是单字节，OTA 数据帧用到 202 字节。
 WIRE_MAX_PAYLOAD = 255
 
@@ -198,7 +204,7 @@ class FrameDecoder:
             if len(self._buf) < HEADER_LEN:
                 break
             payload_len = self._buf[6]
-            if payload_len > MAX_PAYLOAD:
+            if payload_len > DECODE_MAX_PAYLOAD:
                 del self._buf[:1]
                 continue
             total = HEADER_LEN + payload_len + CRC_LEN

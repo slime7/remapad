@@ -284,7 +284,7 @@ classDiagram
 | :--- | :--- | :--- |
 | `0x01` ATTACH / `0x02` DETACH | PC → 设备 | 8 字节设备标识（家族 / 连接方式 / VID:PID / Report ID / 报告长度） |
 | `0x10` REPORT | PC → 设备 | 设备标识 + 原始报告（最多 64 字节） |
-| `0x11` OUT_REPORT | 设备 → PC | 要写回手柄的输出报告原始字节（首字节是 Report ID，最多 64 字节） |
+| `0x11` OUT_REPORT | 设备 → PC | 要写回手柄的输出报告原始字节（首字节是 Report ID，最多 78 字节） |
 | `0x20` FEEDBACK | 设备 → PC | 左右震动使能与强度、玩家灯、触觉采样 |
 | `0x30` OTA_BEGIN | PC → 设备 | `ROM1` + 镜像字节数（u32 小端） |
 | `0x31` OTA_DATA | PC → 设备 | 块序号（u16 小端）+ 最多 200 字节镜像数据；帧内 `slot=1` 标记该窗口的末帧 |
@@ -292,7 +292,8 @@ classDiagram
 | `0x33` OTA_ACK | 设备 → PC | 状态 + 错误码 + 期望序号（u16 小端）+ 已收字节（u32 小端）；对 BEGIN 的应答末尾再附 16 字节运行版本 |
 | `0x7F` PING | 双向 | 协议版本号（1 字节） |
 
-解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验（8 字节设备标识 + 最多 64 字节报告）。
+解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验（8 字节设备标识 + 最多 64 字节报告），
+输出报告帧按 78 字节校验（DualSense / DualShock 4 的蓝牙输出报告长度）。
 OTA 帧由 `input_link` 交给 `ota/ota_session`，PING 由 `input_link` 直接应答，其余交给 `input_source`；
 升级协议、流控与回滚门槛见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」。
 

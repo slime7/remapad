@@ -72,7 +72,9 @@ VID/PID 小端、Report ID、报告长度）加上最多 64 字节原始报告�
 
 设备在主机下发 NS2 反馈（震动 / 玩家灯 / 触觉采样）时回发两种帧：
 `FEEDBACK` 是归一化状态（打印与对账用），`OUT_REPORT` 是已经编码好的手柄输出报告——震动与玩家灯的字段布局只在固件里有一份（`firmware/main/pad/feedback.c` 按设备布局行编码）。
-PC 侧只把它交给 `hid.write()`，不参与任何映射。默认开启，`--no-rumble` 关掉。
+PC 侧只把它交给 `hid.write()`，不参与任何映射。输出报告的字节数按设备布局行的 `out` 描述来，
+最长的两行是 DualSense 与 DualShock 4 的蓝牙形态（78 字节），因此这一帧按 78 字节校验。
+默认开启，`--no-rumble` 关掉。
 
 ## OTA 升级（ota.py）
 
