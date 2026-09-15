@@ -49,13 +49,14 @@
 | [0021](0021-input-path-three-stage-layering.md) | active | 输入通路按 input/pad/target 三段分层（接收 / 处理 / 转换），部分取代 0011 的目录划分 |
 | [0022](0022-ota-over-bridge-frames-with-rollback.md) | active | OTA 升级复用桥接帧（USB-Serial/JTAG 双分区回写）与回滚健康门槛 |
 | [0023](0023-ns2-sub-spec-conn-interval-and-wake-burst.md) | active | NS2 手柄链路采用亚规范连接间隔（5 ms）与显式唤醒广播（0x81 突发）；广播形态与唤醒突发由 0024 部分取代，连接间隔、特性启用门槛与上报节奏仍生效 |
-| [0024](0024-ns2-steady-wake-adv-and-pairing-key.md) | active | 已配对身份常驻唤醒广播（0x81 + 主机地址）自动回连，配对页按钮改真机配对键语义，切换手柄走断连重连；部分取代 0023 的广播形态与唤醒突发；广播里的主机地址来源由 0030 部分取代 |
+| [0024](0024-ns2-steady-wake-adv-and-pairing-key.md) | active | 已配对身份常驻唤醒广播（0x81 + 主机地址）自动回连，配对页按钮改真机配对键语义，切换手柄走断连重连；部分取代 0023 的广播形态与唤醒突发；广播里的主机地址来源由 0030 部分取代，常态广播形态由 0031 部分取代 |
 | [0025](0025-pad-layout-modules-per-series.md) | active | 家族布局按系列分文件登记（layout.h/layout.c + layouts/），注册表统一匹配；补全 0021 在 pad/ 内的文件划分 |
 | [0026](0026-same-generation-input-passthrough.md) | active | 手柄输入按同代透传、异代解析分发：设备自带报告语言与目标语言一致时原样转发报文体 |
 | [0027](0027-runtime-usb-role-switch.md) | active | USB host 直插采用运行时角色切换（日志改走 UART0），复位回到串口 |
 | [0028](0028-pad-combo-captures-screen.md) | active | 手柄组合键 L1+R1+L3+R3 捕获为屏幕操控（方向键移动焦点、圆圈键确认），捕获期间停发报文并补一帧全松开 |
 | [0029](0029-pad-ui-axis-split.md) | active | 手柄操控屏幕的方向键分两个轴：上下走页面内容（到末尾再按下继续滚到页底）、左右只在底栏两项之间走；实机 L1 / R1 等价于左右 |
 | [0030](0030-ns2-wake-adv-host-address.md) | active | NS2 唤醒与回连广播携带主机最近一次连接记录到的地址（凭证地址作兜底），部分取代 0024 的广播地址来源 |
+| [0031](0031-ns2-reconnect-adv-and-explicit-wake-window.md) | active | NS2 常态广播回到 0x00 回连形态（不叫醒休眠主机），0x81 收成显式唤醒窗口，调试页 HOME 按实体手柄语义分流；部分取代 0024 的常态广播形态 |
 
 ## 创建 ADR 脚本用法
 

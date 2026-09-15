@@ -279,27 +279,60 @@ static void factory_init(void)
 /** 本次上电已执行的休眠断开次数（上限 NS2_DORMANT_MAX_DROPS）。 */
 static uint8_t s_dormant_drops;
 
-/** 已配对身份的常态广播形态（唤醒或回连）：默认唤醒，只有串口诊断命令
- *  `adv reconnect` 会临时改成回连形态做实机 A/B 对账（见 ADR 0024）。 */
-static ns2_adv_mode_t s_steady_adv = NS2_ADV_WAKE;
+/** 唤醒窗口：显式唤醒请求（调试页 HOME、串口 wake）开窗，主机连上或窗口到期
+ *  收窗。窗口内未连接时发唤醒形态 0x81；窗口外只发回连形态 0x00——0x81 会把
+ *  休眠中的主机叫醒，常态挂着它就等于主机一进待机就被叫起来（见 ADR 0031）。 */
+static ns2_adv_wake_window_t s_wake_win;
+
+/** 常态形态的实机对账开关（串口 `adv auto|wake|reconnect`）：钉住一种形态
+ *  做 A/B 对账，auto 时按唤醒窗口决策。 */
+static ns2_steady_form_t s_steady_form = NS2_STEADY_AUTO;
 
 /** JoyCon 组合的 L+R 自动注入计时：未配对期间每 3 秒重试。 */
 static ns2_adv_lr_timer_t s_lr_timer;
 
+/** 已配对、未连接时的常态形态：对账开关优先，其次看唤醒窗口。 */
+static ns2_adv_mode_t steady_mode(void)
+{
+    switch (s_steady_form) {
+    case NS2_STEADY_WAKE:
+        return NS2_ADV_WAKE;
+    case NS2_STEADY_RECONNECT:
+        return NS2_ADV_RECONNECT;
+    default:
+        return ns2_adv_steady_mode(
+            ns2_adv_wake_window_active(&s_wake_win, esp_timer_get_time()));
+    }
+}
+
+/** 对账开关形态的日志名。 */
+static const char *steady_form_name(ns2_steady_form_t form)
+{
+    switch (form) {
+    case NS2_STEADY_WAKE:
+        return "wake (0x81)";
+    case NS2_STEADY_RECONNECT:
+        return "reconnect (0x00)";
+    default:
+        return "auto (wake window)";
+    }
+}
+
 /** 身份的广播形态：配对流程中或当前形态还没配齐凭证 → 发现广播（新主机
- * 要能搜到它，也不能带着旧主机地址发唤醒）；已配对 → 常态形态，默认唤醒
- * 0x81——主机醒着停在任意页面也认它，这是自动回连的唯一可靠入口。
+ * 要能搜到它，也不能带着旧主机地址发唤醒）；已配对 → 常态形态（默认回连
+ * 0x00：醒着的主机自己会连回来，休眠中的主机不被吵醒，实机对账见 ADR 0031）。
  * 地址的挑选规则见 ns2_adv_choose_host_mac。 */
 static ns2_adv_mode_t adv_mode_for(ns2_identity_t identity, const uint8_t **out_mac)
 {
     static uint8_t s_adv_host_mac[6];
+    const ns2_adv_mode_t steady = steady_mode();
     if (s_ses.pairing_mode) {
         *out_mac = NULL;
-        return ns2_adv_choose_mode(false, true, s_steady_adv);
+        return ns2_adv_choose_mode(false, true, steady);
     }
     if (!ns2_session_paired()) {
         *out_mac = NULL;
-        return ns2_adv_choose_mode(false, false, s_steady_adv);
+        return ns2_adv_choose_mode(false, false, steady);
     }
     /* 记录值只在「对端命中凭证」的连接与配对交换里写入（普通 BLE 主机不写），
      * 凭证作兜底：配好还没连过时只有凭证地址可用。挑选规则在 ns2_adv。 */
@@ -320,11 +353,11 @@ static ns2_adv_mode_t adv_mode_for(ns2_identity_t identity, const uint8_t **out_
         /* 形态已配齐但这一只没有可用地址：退回发现广播，绝不发全零地址的
          * 唤醒广播（主机既不会回连也不会被唤醒）。 */
         *out_mac = NULL;
-        return ns2_adv_choose_mode(false, false, s_steady_adv);
+        return ns2_adv_choose_mode(false, false, steady);
     }
     memcpy(s_adv_host_mac, picked, sizeof(s_adv_host_mac));
     *out_mac = s_adv_host_mac;
-    return ns2_adv_choose_mode(true, false, s_steady_adv);
+    return ns2_adv_choose_mode(true, false, steady);
 }
 
 static const char *adv_mode_name(ns2_adv_mode_t mode)
@@ -385,14 +418,17 @@ void ns2_session_wake_request(void)
         ESP_LOGI(TAG, "wake request ignored (pairing flow)");
         return;
     }
-    /* 常态广播本身已是唤醒形态，唤醒请求的实际动作是「把链路重新走一遍」：
-     * 已连接就断开，让主机按唤醒广播重新连上来（从握把/顺序页连上来的会话
-     * 不采用输入报文，靠这一次重连纠正）；未连接就把广播重发一次。 */
+    /* 唤醒是显式请求：开窗让常态广播升到唤醒形态 0x81（窗口到期自动落回
+     * 回连形态，主机随后睡下不会再被叫醒）；已连接就断开，让主机按唤醒广播
+     * 重新连上来（从握把/顺序页连上来的会话不采用输入报文，靠这次重连纠正）。 */
+    ns2_adv_wake_window_open(&s_wake_win, esp_timer_get_time());
     if (ble_controller_connected()) {
         ESP_LOGI(TAG, "wake: dropping current link to force a reconnect");
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
         return;
     }
+    ESP_LOGI(TAG, "wake: wake advertising for %llds",
+             (long long)(NS2_ADV_WAKE_WINDOW_US / 1000000LL));
     resume_advertising();
 }
 
@@ -547,24 +583,31 @@ uint8_t ns2_session_ltk_form(void)
     return s_ltk_form;
 }
 
-void ns2_session_set_steady_adv(ns2_adv_mode_t mode)
+void ns2_session_set_steady_form(ns2_steady_form_t form)
 {
-    /* 只允许在唤醒与回连之间切：发现形态由凭证与配对流程决定，不在这里设。 */
-    s_steady_adv = mode == NS2_ADV_RECONNECT ? NS2_ADV_RECONNECT : NS2_ADV_WAKE;
-    ESP_LOGI(TAG, "steady advertising -> %s", adv_mode_name(s_steady_adv));
+    /* 只在这里切唤醒/回连/自动：发现形态由凭证与配对流程决定。 */
+    s_steady_form = form;
+    ESP_LOGI(TAG, "steady form -> %s", steady_form_name(s_steady_form));
     if (!ble_controller_connected() && !s_ses.pairing_mode) {
         resume_advertising();
     }
 }
 
-ns2_adv_mode_t ns2_session_steady_adv(void)
+ns2_steady_form_t ns2_session_steady_form(void)
 {
-    return s_steady_adv;
+    return s_steady_form;
 }
 
 void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
 {
     session_slot_t *slot = NULL;
+
+    /* 主机已经连上：收掉唤醒窗口。主机随后睡下（链路断开）时才会回到常态
+     * 广播，那时窗口必须已经关闭，否则会把它重新叫起来。 */
+    if (ns2_adv_wake_window_active(&s_wake_win, esp_timer_get_time())) {
+        ESP_LOGI(TAG, "wake window closed (host connected)");
+        ns2_adv_wake_window_close(&s_wake_win);
+    }
     for (size_t i = 0; i < SESSION_MAX; i++) {
         if (!s_ses.sess[i].active) {
             slot = &s_ses.sess[i];
@@ -1282,8 +1325,19 @@ void ns2_session_tick(void)
         fwupd_finish();
     }
 
+    /* 唤醒窗口到期：常态广播从唤醒形态落回回连形态（未连接时要重发一次广播
+     * 改形态），主机随后睡下就不会再被叫醒。 */
+    if (s_wake_win.until_us != 0 &&
+        !ns2_adv_wake_window_active(&s_wake_win, esp_timer_get_time())) {
+        ns2_adv_wake_window_close(&s_wake_win);
+        ESP_LOGI(TAG, "wake window expired: steady advertising -> reconnect");
+        if (!ble_controller_connected() && !s_ses.pairing_mode) {
+            resume_advertising();
+        }
+    }
+
     /* 配对流程收尾：主机真的配好并连上（当前形态每个身份都凭证在手、会话
-     * 注册完成）才自动退出，回到常态唤醒广播——真机配完就处于已连接状态，
+     * 注册完成）才自动退出，回到常态广播——真机配完就处于已连接状态，
      * 不需要用户再按；没有主机来配就一直挂着发现广播。 */
     if (s_ses.pairing_mode && pairing_flow_done()) {
         s_ses.pairing_mode = false;

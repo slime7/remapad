@@ -257,16 +257,16 @@ uv run python uartctl.py -p COM3 pad             # 识别到的手柄：来源�
 uv run python uartctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
 uv run python uartctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
 uv run python uartctl.py -p COM3 pairing start   # 配对键：断开当前主机后进发现广播，等新主机搜索配对（stop 退出）
-uv run python uartctl.py -p COM3 wake            # 强制重连：已连接则断开，让主机按唤醒广播重新连上来
-uv run python uartctl.py -p COM3 adv wake        # 常态广播形态（wake 0x81 默认 / reconnect 0x00），实机 A/B 对账用
+uv run python uartctl.py -p COM3 wake            # 开唤醒窗口：未连接时发 0x81 把休眠主机叫起来，已连接则断开让它重连
+uv run python uartctl.py -p COM3 adv auto        # 常态广播形态（auto 默认按唤醒窗口 / wake / reconnect），实机 A/B 对账用
 uv run python uartctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
 uv run python uartctl.py -p COM3 reboot          # 软重启回 COM 模式
 uv run python uartctl.py -p COM3 log --seconds 20        # 只读设备日志 20 秒
 uv run python uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完整启动日志
 ```
 
-`key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr lr ui`。
-默认保持 250 ms（`lr` 为 1000 ms，对应主机 Grip 界面的组合确认；`ui` 为 500 ms，盖过组合键 300 ms 的翻转阈值），最长 60000 ms；注入叠加在输入源之上。
+`key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr ui`。
+默认保持 250 ms（`ui` 为 500 ms，盖过组合键 300 ms 的翻转阈值），最长 60000 ms；注入叠加在输入源之上。
 `stick` 设定的一侧摇杆持续生效、未设定的一侧沿用输入源，因此 JoyCon 组合下可以分别推左摇杆与右摇杆，验证左右两只各自上报。`link` 打印当前形态与每个身份一行：
 对外广播地址、连接句柄、会话状态（idle / advertising / wait-pair / normal）、报告格式、已开启的通知通道、已发送报告数与凭证条数，配对与回连过程可以直接在串口上对账。
 

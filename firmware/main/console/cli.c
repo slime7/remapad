@@ -47,7 +47,7 @@ static void cli_help(void)
     cli_print("  status              system status one-liner");
     cli_print("  key <name> [ms]     inject debug key (key release clears)");
     cli_print("                      a b x y plus minus home capture c l r zl zr");
-    cli_print("                      ls rs up down left right gl gr lr ui");
+    cli_print("                      ls rs up down left right gl gr ui");
     cli_print("  stick l|r <x> <y>   set stick level (0-4095, center)");
     cli_print("  stick reset         center both sticks");
     cli_print("  ui [on|off]         pad-captured screen control (no arg = state)");
@@ -57,8 +57,9 @@ static void cli_help(void)
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  pairing start|stop  sync key: drop link + discovery advertising");
-    cli_print("  wake                force a reconnect of the paired console");
-    cli_print("  adv wake|reconnect  steady form while paired (default wake)");
+    cli_print("  wake                open the wake window (drop link if connected)");
+    cli_print("  adv auto|wake|reconnect");
+    cli_print("                      steady form while paired (default auto)");
     cli_print("  report              dump the last input report actually sent");
     cli_print("  motion 0|1|2|3      0x09 motion block: zeros / stamp / none / sensor");
     cli_print("  ltk 0|1             LTK store form (0 reversed, 1 as-is)");
@@ -342,26 +343,41 @@ static void cli_pairing(const char *arg)
     }
 }
 
-/** 唤醒请求：已配对设备常态就发唤醒形态（0x81），这里的动作是把链路重新
- *  走一遍——已连接就断开让主机按唤醒广播重连，未连接就重发一次广播。 */
+/** 唤醒请求：打开唤醒窗口（未连接时常态广播升到 0x81 把休眠主机叫起来），
+ *  已连接就断开让主机按唤醒广播重连一次。 */
 static void cli_wake(void)
 {
     ns2_session_wake_request();
-    cli_print("ok reconnect requested");
+    cli_print("ok wake window opened");
 }
 
-/** 常态广播形态 A/B：实机对比唤醒（0x81，默认）与回连（0x00）两种形态。 */
+/** 常态广播形态 A/B：auto 按唤醒窗口决策（默认），wake/reconnect 钉住一种
+ *  形态做实机对账。 */
 static void cli_adv(const char *arg)
 {
-    if (strcmp(arg, "wake") == 0 || strcmp(arg, "reconnect") == 0) {
-        ns2_session_set_steady_adv(arg[0] == 'w' ? NS2_ADV_WAKE : NS2_ADV_RECONNECT);
-        cli_print("ok steady advertising updated");
+    if (strcmp(arg, "auto") == 0) {
+        ns2_session_set_steady_form(NS2_STEADY_AUTO);
+        cli_print("ok steady form: auto");
+    } else if (strcmp(arg, "wake") == 0) {
+        ns2_session_set_steady_form(NS2_STEADY_WAKE);
+        cli_print("ok steady form: wake (0x81)");
+    } else if (strcmp(arg, "reconnect") == 0) {
+        ns2_session_set_steady_form(NS2_STEADY_RECONNECT);
+        cli_print("ok steady form: reconnect (0x00)");
     } else if (arg[0] == '\0') {
-        cli_print(ns2_session_steady_adv() == NS2_ADV_WAKE
-                      ? "steady advertising: wake (0x81)"
-                      : "steady advertising: reconnect (0x00)");
+        switch (ns2_session_steady_form()) {
+        case NS2_STEADY_WAKE:
+            cli_print("steady form: wake (0x81)");
+            break;
+        case NS2_STEADY_RECONNECT:
+            cli_print("steady form: reconnect (0x00)");
+            break;
+        default:
+            cli_print("steady form: auto (wake window)");
+            break;
+        }
     } else {
-        cli_print("err usage: adv wake|reconnect");
+        cli_print("err usage: adv auto|wake|reconnect");
     }
 }
 

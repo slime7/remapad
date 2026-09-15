@@ -17,10 +17,11 @@ extern "C" {
  *   - 回连广播：带主机地址，状态位 0x00；
  *   - 唤醒广播：带主机地址，状态位 0x81。
  *
- * 状态位是主机唯一的唤醒判据：已配对设备在未连接期间常驻唤醒形态——主机
- * 醒着但停在任意页面时也只认 0x81（0x00 回连形态不被采纳），这是「只有主机
- * 停在配对页面才连得上」的解法；未配对或处于配对流程时发发现广播等主机
- * 搜索。策略与取舍见 ADR 0024。
+ * 状态位是主机唯一的唤醒判据：0x81 会把休眠中的主机叫起来，0x00 不会。
+ * 已配对设备在未连接期间默认发回连形态——主机醒着会自己按它连回来（实机：
+ * 主机停在首页、顺序页或刚从待机醒来都会连），休眠中的主机安静地睡；只有
+ * 显式唤醒请求打开的唤醒窗口内才发唤醒形态，把睡下的主机叫起来。
+ * 未配对或处于配对流程时发发现广播等主机搜索。策略与取舍见 ADR 0031。
  */
 
 #define NS2_ADV_PAYLOAD_LEN 31
@@ -38,10 +39,41 @@ typedef enum {
 } ns2_adv_mode_t;
 
 /** 广播形态决策：配对流程中或未配对的身份发发现广播（未配对身份绝不发唤醒
- *  广播——不允许把主机从休眠里叫醒）；已配对身份发 steady，默认 NS2_ADV_WAKE，
- *  只有实机 A/B 对账时才用 NS2_ADV_RECONNECT 退回 0x00 回连形态。 */
+ *  广播——不允许把主机从休眠里叫醒）；已配对身份发 steady——常态是
+ *  NS2_ADV_RECONNECT（见 ns2_adv_steady_mode），唤醒窗口内才是 NS2_ADV_WAKE。 */
 ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
                                    ns2_adv_mode_t steady);
+
+/** 唤醒窗口时长（微秒）：显式唤醒请求（调试页 HOME、串口 wake）开窗，主机连上
+ *  或窗口到期收窗。窗口内未连接时发唤醒形态，窗口外只发回连形态。 */
+#define NS2_ADV_WAKE_WINDOW_US (10 * 1000 * 1000LL)
+
+/** 唤醒窗口：本机时基（微秒）。 */
+typedef struct {
+    int64_t until_us; /**< 到期时刻；0 = 未开窗。 */
+} ns2_adv_wake_window_t;
+
+/** 开窗（重新计时）：重复请求不会把窗口算短。 */
+void ns2_adv_wake_window_open(ns2_adv_wake_window_t *win, int64_t now_us);
+
+/** 收窗：主机连上、或窗口到期后调用。已收窗时调用无副作用。 */
+void ns2_adv_wake_window_close(ns2_adv_wake_window_t *win);
+
+/** 窗口是否仍然有效（未开窗或已到期都返回 false）。 */
+bool ns2_adv_wake_window_active(const ns2_adv_wake_window_t *win, int64_t now_us);
+
+/** 已配对、未连接时的常态广播形态：窗口内是唤醒形态（会把休眠中的主机叫醒
+ *  并回连），窗口外是回连形态（休眠中的主机不受打扰，醒着的主机自己连回来）。 */
+ns2_adv_mode_t ns2_adv_steady_mode(bool wake_window);
+
+/** 调试页 HOME 按键的动作（实体手柄语义）。 */
+typedef enum {
+    NS2_HOME_INJECT = 0, /**< 主机在线：HOME 就是主页键，注入按键即可。 */
+    NS2_HOME_WAKE = 1,   /**< 未连接：按键到不了主机，改走唤醒窗口。 */
+} ns2_home_action_t;
+
+/** 主机在线与否决定 HOME 按键的动作：醒着当主页键、睡眠当唤醒。 */
+ns2_home_action_t ns2_adv_home_action(bool connected);
 
 /** 回连/唤醒广播要携带的主机地址（纯逻辑，主机端用例钉住）：优先「最近一次
  *  NS2 会话记录到的对端地址」——配对交换给的是主机两条只差一位（末字节 ±1）

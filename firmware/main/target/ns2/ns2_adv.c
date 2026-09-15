@@ -8,9 +8,35 @@ ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
     if (pairing_requested || !paired) {
         return NS2_ADV_DISCOVERY;
     }
-    /* 常态形态二选一（唤醒为默认）；发现形态只由未配对/配对流程触发，
-     * 传进来也按唤醒处理，避免把已配对身份静默掉。 */
-    return steady == NS2_ADV_RECONNECT ? NS2_ADV_RECONNECT : NS2_ADV_WAKE;
+    /* 常态形态二选一（见 ns2_adv_steady_mode：默认回连，唤醒窗口内才是唤醒）；
+     * 发现形态只由未配对/配对流程触发，传进来按回连处理，避免把已配对身份
+     * 静默掉。 */
+    return steady == NS2_ADV_WAKE ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
+}
+
+void ns2_adv_wake_window_open(ns2_adv_wake_window_t *win, int64_t now_us)
+{
+    win->until_us = now_us + NS2_ADV_WAKE_WINDOW_US;
+}
+
+void ns2_adv_wake_window_close(ns2_adv_wake_window_t *win)
+{
+    win->until_us = 0;
+}
+
+bool ns2_adv_wake_window_active(const ns2_adv_wake_window_t *win, int64_t now_us)
+{
+    return win->until_us != 0 && now_us < win->until_us;
+}
+
+ns2_adv_mode_t ns2_adv_steady_mode(bool wake_window)
+{
+    return wake_window ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
+}
+
+ns2_home_action_t ns2_adv_home_action(bool connected)
+{
+    return connected ? NS2_HOME_INJECT : NS2_HOME_WAKE;
 }
 
 bool ns2_adv_lr_step(ns2_adv_lr_timer_t *timer, bool paired, bool both_ready,

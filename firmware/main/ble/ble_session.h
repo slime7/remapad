@@ -61,23 +61,29 @@ bool ns2_session_rumble_enabled(void);
  *  广播（Pro 单身份 / JoyCon 双身份），等新主机搜索配对。 */
 void ns2_session_start_pairing_mode(void);
 
-/** 结束配对流程：已配对回到常态唤醒广播；未配对停止广播（真机没配对时
- *  不广播，等下一次配对请求）。 */
+/** 结束配对流程：已配对回到常态广播（唤醒窗口外是回连形态）；未配对停止
+ *  广播（真机没配对时不广播，等下一次配对请求）。 */
 void ns2_session_stop_pairing_mode(void);
 
 /** 手动配对模式是否开启（供控制面推导 UI 六态）。 */
 bool ns2_session_pairing_mode_active(void);
 
-/** 唤醒请求（调试页「唤醒 HOME」、串口 wake）：常态广播本身已是唤醒形态，
- *  这里的动作是把链路重新走一遍——已连接就断开，让主机按唤醒广播重连
- *  （握把/顺序页连上来的会话不采用输入报文）；未连接就重发一次广播。
+/** 唤醒请求（调试页 HOME 在未连接时、串口 wake）：打开唤醒窗口，让常态广播
+ *  升到唤醒形态 0x81 把休眠中的主机叫起来（窗口到期落回回连形态）；已连接
+ *  就断开让主机按唤醒广播重连（握把/顺序页连上来的会话不采用输入报文）。
  *  配对流程进行时忽略。 */
 void ns2_session_wake_request(void);
 
-/** 已配对身份的常态广播形态（默认 NS2_ADV_WAKE，可切 NS2_ADV_RECONNECT）。
- *  只有串口 `adv` 诊断命令用它做实机 A/B 对账，见 ADR 0024。 */
-void ns2_session_set_steady_adv(ns2_adv_mode_t mode);
-ns2_adv_mode_t ns2_session_steady_adv(void);
+/** 常态（已配对、未连接）广播形态的来源。 */
+typedef enum {
+    NS2_STEADY_AUTO = 0,      /**< 按唤醒窗口：窗口内唤醒形态，窗口外回连形态。 */
+    NS2_STEADY_WAKE = 1,      /**< 钉住唤醒形态 0x81。 */
+    NS2_STEADY_RECONNECT = 2, /**< 钉住回连形态 0x00。 */
+} ns2_steady_form_t;
+
+/** 常态形态的实机对账开关：只有串口 `adv` 诊断命令改它，见 ADR 0031。 */
+void ns2_session_set_steady_form(ns2_steady_form_t form);
+ns2_steady_form_t ns2_session_steady_form(void);
 
 /** LTK 注入形态（0 = 反转后写入，1 = 原样写入）。主机连上但链路未加密时
  *  用它做现场 A/B；改动在下次连接时生效。 */

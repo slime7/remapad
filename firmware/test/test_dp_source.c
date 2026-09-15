@@ -226,11 +226,6 @@ static void debug_key_lookup(void)
     CHECK(dp_source_key_lookup("up", 2, &mask, &hold_ms));
     CHECK_EQ(mask, PAD_BTN_DPAD_UP);
 
-    /* 组合键默认按更长时间保持，对应主机 Grip 界面的确认动作。 */
-    CHECK(dp_source_key_lookup("lr", 2, &mask, &hold_ms));
-    CHECK_EQ(mask, (uint32_t)(PAD_BTN_L1 | PAD_BTN_R1));
-    CHECK_EQ(hold_ms, 1000);
-
     CHECK(dp_source_key_lookup("ls", 2, &mask, &hold_ms));
     CHECK_EQ(mask, PAD_BTN_L3);
     /* 键名 c 是 NS2 的 C 键，掩码落到私有格式的静音位（PS 的静音键）。 */
@@ -253,6 +248,10 @@ static void debug_key_lookup(void)
     CHECK_EQ(mask, 0);
     CHECK(!dp_source_key_lookup("", 0, &mask, &hold_ms));
     CHECK(!dp_source_key_lookup("aa", 2, &mask, &hold_ms));
+    /* 配对 L+R 不再是调试键：主机 Grip 页不再是配对入口，JoyCon 组合未配对
+     * 期间由固件自动注入（见 ns2_adv_lr_step），面板上不再需要手动兜底。 */
+    CHECK(!dp_source_key_lookup("lr", 2, &mask, &hold_ms));
+    CHECK_EQ(mask, 0);
 }
 
 HOST_TEST_SUITE(suite_dp_source, "dp_source",
