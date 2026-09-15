@@ -151,9 +151,11 @@ void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],
     ns2_pack_stick(state->stick_rx, state->stick_ry, &out[0x08]);
     /* 状态标志：特性位 5（触觉）开启时 0x38，否则 0x30（真机抓包：开启触觉
      * 的 0x09 报文该字节恒为 0x38）。0x0C NFC 状态由 amiibo 预置数据驱动
-     * （空闲 0x00）；0x0D 耳机状态为 0。 */
+     * （空闲 0x00）；0x0D 耳机状态按输入设备的 3.5mm 状态（或串口 headset
+     * 覆盖值）填，未插入为 0x00。 */
     out[0x0B] = state->rumble_enabled ? 0x38 : 0x30;
     out[0x0C] = state->nfc_state;
+    out[NS2_09_OFF_HEADSET] = state->headset_state;
     /* 运动块（0x0E 长度 + 0x0F 起 40 字节）：主机开启 IMU 特性位（掩码
      * bit2）后，长度 0 的报文会被当作不完整输入。板卡没有 IMU，按 mode 填
      * 占位；NS2_MOTION_NONE 用于实机确认主机是否真的要求运动数据。 */
@@ -208,6 +210,10 @@ void ns2_encode_input_05(uint8_t out[NS2_INPUT_05_LEN],
     out[0x02] = (uint8_t)((counter >> 16) & 0xFF);
     out[0x03] = (uint8_t)((counter >> 24) & 0xFF);
     buttons_05(state, &out[0x04]);
+    /* 耳机插入位（第 3 字节 bit4）：0x09 侧的耳机状态字节非零即视为已插入。 */
+    if (state->headset_state != NS2_HEADSET_NONE) {
+        out[0x07] |= NS2_05_BTN3_HEADSET;
+    }
     ns2_pack_stick(state->stick_lx, state->stick_ly, &out[0x0A]);
     ns2_pack_stick(state->stick_rx, state->stick_ry, &out[0x0D]);
     /* 鼠标、磁力计与电池电流依附的特性位均未启用，保持 0。 */

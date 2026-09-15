@@ -331,6 +331,69 @@ static void out_report_frame_carries_bluetooth_row(void)
     CHECK_BYTES(cap.payload[0], payload, out_len);
 }
 
+/**
+ * 截图帧（IMAGE_INFO / IMAGE_DATA / IMAGE_END）：单块载荷是偏移加 200 字节
+ * 像素，比报文帧的 72/78 字节上限大一档，必须走线格式编码入口；报文入口
+ * 仍要拒绝它，否则报文帧的长度约定会被悄悄放宽。
+ */
+static void image_frames_round_trip_at_wire_size(void)
+{
+    capture_t cap;
+    input_frame_rx_t rx;
+    memset(&cap, 0, sizeof(cap));
+    input_frame_rx_reset(&rx);
+
+    const uint8_t info_payload[INPUT_FRAME_IMAGE_INFO_LEN] = {
+        0xF0, 0x00, 0x18, 0x01, INPUT_FRAME_IMAGE_FORMAT_RGB565_LE};
+    uint8_t info[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t info_len = input_frame_encode_wire(info, sizeof(info),
+                                                   INPUT_FRAME_TYPE_IMAGE_INFO, 0, 0,
+                                                   info_payload, sizeof(info_payload));
+    REQUIRE(info_len == INPUT_FRAME_HEADER_LEN + sizeof(info_payload) + INPUT_FRAME_CRC_LEN);
+
+    uint8_t chunk[INPUT_FRAME_IMAGE_OFF_LEN + INPUT_FRAME_IMAGE_CHUNK_MAX];
+    chunk[0] = 0x00;
+    chunk[1] = 0x02;
+    chunk[2] = 0x00;
+    chunk[3] = 0x00; /* 偏移 0x200：行带首块 */
+    for (size_t i = 0; i < INPUT_FRAME_IMAGE_CHUNK_MAX; i++) {
+        chunk[INPUT_FRAME_IMAGE_OFF_LEN + i] = (uint8_t)(i & 0xFFu);
+    }
+    uint8_t data[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t data_len = input_frame_encode_wire(data, sizeof(data),
+                                                   INPUT_FRAME_TYPE_IMAGE_DATA, 0, 0, chunk,
+                                                   sizeof(chunk));
+    REQUIRE(data_len == INPUT_FRAME_HEADER_LEN + sizeof(chunk) + INPUT_FRAME_CRC_LEN);
+
+    const uint8_t end_payload[INPUT_FRAME_IMAGE_END_LEN] = {0x00, 0x0D, 0x02, 0x00};
+    uint8_t end[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t end_len = input_frame_encode_wire(end, sizeof(end), INPUT_FRAME_TYPE_IMAGE_END,
+                                                  0, 0, end_payload, sizeof(end_payload));
+    REQUIRE(end_len == INPUT_FRAME_HEADER_LEN + sizeof(end_payload) + INPUT_FRAME_CRC_LEN);
+
+    feed(&cap, &rx, info, info_len);
+    feed(&cap, &rx, data, data_len);
+    feed(&cap, &rx, end, end_len);
+    CHECK_EQ(cap.frames, 3);
+    CHECK_EQ(cap.types[0], INPUT_FRAME_TYPE_IMAGE_INFO);
+    CHECK_EQ(cap.types[1], INPUT_FRAME_TYPE_IMAGE_DATA);
+    CHECK_EQ(cap.types[2], INPUT_FRAME_TYPE_IMAGE_END);
+    CHECK_EQ(cap.lens[0], sizeof(info_payload));
+    CHECK_EQ(cap.lens[1], sizeof(chunk));
+    CHECK_EQ(cap.lens[2], sizeof(end_payload));
+    CHECK_BYTES(cap.payload[0], info_payload, sizeof(info_payload));
+    CHECK_BYTES(cap.payload[1], chunk, sizeof(chunk));
+    CHECK_BYTES(cap.payload[2], end_payload, sizeof(end_payload));
+
+    /* 报文编码入口的上限不受影响；输出缓冲不足时线格式入口同样拒绝。 */
+    CHECK_EQ(input_frame_encode(data, sizeof(data), INPUT_FRAME_TYPE_IMAGE_DATA, 0, 0, chunk,
+                                sizeof(chunk)),
+             0);
+    CHECK_EQ(input_frame_encode_wire(data, 8, INPUT_FRAME_TYPE_IMAGE_DATA, 0, 0, chunk,
+                                     sizeof(chunk)),
+             0);
+}
+
 HOST_TEST_SUITE(suite_input_frame, "input_frame",
                 {"CRC 已知向量与黄金帧字节", crc_known_vector_and_golden_frame},
                 {"编码拒绝越界载荷、缓冲不足与空指针", encode_rejects_invalid_arguments},
@@ -345,4 +408,6 @@ HOST_TEST_SUITE(suite_input_frame, "input_frame",
                  bad_crc_is_dropped_and_stream_recovers},
                 {"零载荷断开帧往返", empty_detach_frame_round_trip},
                 {"78 字节输出报告帧可编码并往返（蓝牙手柄写回）",
-                 out_report_frame_carries_bluetooth_row});
+                 out_report_frame_carries_bluetooth_row},
+                {"截图帧（INFO / DATA / END）按线格式编码并往返",
+                 image_frames_round_trip_at_wire_size});

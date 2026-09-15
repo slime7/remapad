@@ -29,6 +29,12 @@ static struct {
     uint8_t motion_mode; /* ns2_motion_mode_t：0x09 运动块占位方式 */
     bool rumble_enabled; /* 主机开启了触觉特性 */
 
+    /* 耳机状态字节（0x09 偏移 0x0D，同时决定 0x05 的插入位）：派生值来自
+     * 输入设备的 3.5mm 状态，覆盖值供实机 A/B（串口 headset 命令）。 */
+    bool headset_override_on;
+    uint8_t headset_override;
+    uint8_t headset_derived;
+
     uint8_t *amiibo;
     size_t amiibo_len;
 } s_out;
@@ -57,6 +63,7 @@ void ns2_output_send(const ns2_controller_state_t *state)
     /* 电池字段以 ns2_output_set_battery 的最新值为准（输入源可能不带电池）。 */
     ns2_controller_state_t merged = *state;
     merged.motion_mode = s_out.motion_mode;
+    merged.headset_state = ns2_output_headset_byte();
     if (s_out.battery_level != 0 || s_out.battery_mv != 0) {
         merged.battery_level = s_out.battery_level;
         merged.battery_mv = s_out.battery_mv;
@@ -108,6 +115,35 @@ uint8_t ns2_output_motion_mode(void)
     return s_out.motion_mode;
 }
 
+void ns2_output_set_headset_derived(uint8_t value)
+{
+    s_out.headset_derived = value;
+}
+
+uint8_t ns2_output_headset_derived(void)
+{
+    return s_out.headset_derived;
+}
+
+void ns2_output_set_headset_override(bool enabled, uint8_t value)
+{
+    s_out.headset_override_on = enabled;
+    s_out.headset_override = value;
+}
+
+bool ns2_output_headset_override(uint8_t *out_value)
+{
+    if (out_value != NULL) {
+        *out_value = s_out.headset_override;
+    }
+    return s_out.headset_override_on;
+}
+
+uint8_t ns2_output_headset_byte(void)
+{
+    return s_out.headset_override_on ? s_out.headset_override : s_out.headset_derived;
+}
+
 /** 设备期望身份 → 会话身份；PAD_IDENTITY_ANY 用 NS2_ID_COUNT 表示「不限」。 */
 static uint8_t session_identity_for(uint8_t identity)
 {
@@ -154,7 +190,8 @@ bool ns2_output_send_raw(const pad_state_t *pad)
         if (report_id == NS2_REPORT_ID_09) {
             body[NS2_09_OFF_STATUS] = s_out.rumble_enabled ? 0x38 : 0x30;
             body[NS2_09_OFF_NFC] = ns2_output_nfc_state();
-            body[NS2_09_OFF_HEADSET] = 0x00;
+            /* 耳机状态与编码路径同源：PC 手柄的 3.5mm 状态或串口覆盖值。 */
+            body[NS2_09_OFF_HEADSET] = ns2_output_headset_byte();
         }
         s_out.sink.send_report(i, report_id, body, body_len, s_out.sink.user);
         delivered++;

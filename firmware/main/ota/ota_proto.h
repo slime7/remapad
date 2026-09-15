@@ -13,7 +13,7 @@ extern "C" {
  * 拼成镜像字节流，负责序号判定、窗口应答、4 KB 聚合成块与空闲超时；真正
  * 写 flash 与写启动分区由 `ota_flush_fn` 回调与上层（ota_session）承担。
  *
- * 载荷布局（PC 端 pc/link.py 与 ota.py 按同名常量镜像一份）：
+ * 载荷布局（PC 端 pc/link.py 与 remapadctl.py 按同名常量镜像一份）：
  *   BEGIN: "ROM1" + image_size(u32 LE)
  *   DATA:  seq(u16 LE) + 数据（最多 200 字节）
  *   END:   无载荷

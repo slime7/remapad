@@ -278,6 +278,22 @@ static void parse_battery(const pad_report_t *report, const pad_layout_t *layout
     state->charging = (raw & 0x10u) != 0;
 }
 
+/**
+ * 3.5mm 耳机状态：PS 系的音频状态字节 bit0 是插入、bit1 是带麦。偏移与位序
+ * 都要靠实机插拔核对，因此只有显式登记了 headset_style 的行才解析（默认
+ * PAD_HEADSET_NONE 时主机看到的就是「未插入」）；核对方法见 pc/README.md。
+ */
+static void parse_headset(const pad_report_t *report, const pad_layout_t *layout,
+                          pad_state_t *state)
+{
+    if (layout->headset_style != PAD_HEADSET_PS || !range_ok(report, layout->headset_off, 1)) {
+        return;
+    }
+    const uint8_t raw = report->data[layout->headset_off];
+    state->headset_present = (raw & 0x01u) != 0;
+    state->headset_mic = (raw & 0x02u) != 0;
+}
+
 void pad_state_from_report(const pad_report_t *report, pad_state_t *state)
 {
     pad_state_defaults(state);
@@ -320,4 +336,5 @@ void pad_state_from_report(const pad_report_t *report, pad_state_t *state)
     parse_motion(report, layout, state);
     parse_touch(report, layout, state);
     parse_battery(report, layout, state);
+    parse_headset(report, layout, state);
 }

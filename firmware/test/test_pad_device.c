@@ -3,7 +3,7 @@
  * 或「摇杆漂移」，这类问题在真机上只能靠猜；这里用构造好的报告把每个家族
  * 的按键位置映射、量程归一、死区与兜底行为逐条钉住。
  *
- * 报告样本按家族表的偏移构造，与 pc/bridge.py --dump 的实测结果对账。
+ * 报告样本按家族表的偏移构造，与 pc/remapadctl.py --dump 的实测结果对账。
  */
 #include "host_test.h"
 
@@ -400,7 +400,7 @@ static void dualsense_usb_parses_by_pid(void)
 }
 
 /**
- * DualSense 蓝牙（Report ID 0x31）空闲帧：字节取自 pc/bridge.py --dump 的实测
+ * DualSense 蓝牙（Report ID 0x31）空闲帧：字节取自 pc/remapadctl.py --dump 的实测
  * 报告，第 9 字节读作 0x08，正是方向键帽子开关的松开值、面键位全为 0，
  * 因此按键位图从第 9 字节起、四轴从第 2 字节起。
  */
@@ -542,6 +542,59 @@ static void dualsense_edge_back_buttons_map_to_gl_gr(void)
     CHECK_EQ(state.buttons, 0);
 }
 
+/**
+ * 耳机状态字段的偏移与位序都要靠实机插拔核对（headset_style 默认
+ * PAD_HEADSET_NONE）：未登记的行即便整份报文字节全是 0xFF，也必须保持
+ * 「未插入」——抓包里跟音频无关的字节不能被当成插入状态。核对方法见
+ * pc/README.md 的「3.5mm 耳机状态」。
+ */
+static void unregistered_headset_row_reports_nothing(void)
+{
+    pad_report_t report = dualshock4_bt_report();
+    pad_state_t state;
+
+    memset(report.data, 0xFF, report.len);
+    report.data[0] = report.report_id;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.headset_present, 0);
+    CHECK_EQ(state.headset_mic, 0);
+
+    report = ds3_report(PAD_CONN_BT);
+    memset(report.data, 0xFF, report.len);
+    report.data[0] = report.report_id;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.headset_present, 0);
+    CHECK_EQ(state.headset_mic, 0);
+}
+
+/**
+ * DualSense 蓝牙行登记了耳机状态字节（第 55 字节）：bit0 是插入、bit1 是
+ * 带麦。取值来自 2026-09-15 的 DualSense Edge（0x0DF2）插拔差分：拔掉 0x00、
+ * 插入 0x01、插入带麦 0x03（第 56 字节跟着 bit0 走）。
+ */
+static void dualsense_bt_headset_state_parses(void)
+{
+    pad_report_t report = dualsense_bt_report();
+    pad_state_t state;
+
+    report.data[55] = 0x00;
+    report.data[56] = 0x00;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.headset_present, 0);
+    CHECK_EQ(state.headset_mic, 0);
+
+    report.data[55] = 0x01;
+    report.data[56] = 0x01;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.headset_present, 1);
+    CHECK_EQ(state.headset_mic, 0);
+
+    report.data[55] = 0x03;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.headset_present, 1);
+    CHECK_EQ(state.headset_mic, 1);
+}
+
 HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"Xbox 面键按位置映射（物理 A 下 → ✕、物理 B 右 → ○）",
                  xbox_face_buttons_map_by_position},
@@ -559,4 +612,8 @@ HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"DualSense 蓝牙摇杆、扳机与运动字段量程",
                  dualsense_bt_sticks_triggers_and_motion},
                 {"DualSense Edge 背键能当 GL / GR 用",
-                 dualsense_edge_back_buttons_map_to_gl_gr});
+                 dualsense_edge_back_buttons_map_to_gl_gr},
+                {"未登记耳机偏移的行不上报耳机状态",
+                 unregistered_headset_row_reports_nothing},
+                {"DualSense 蓝牙耳机状态按第 55 字节解析",
+                 dualsense_bt_headset_state_parses});

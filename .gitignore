@@ -32,6 +32,11 @@ __pycache__/
 *.pyc
 # uv 为 pc/ 桥接程序建的虚拟环境（uv.lock 需要提交）
 .venv/
+# remapadctl --shot 落地的实机截图（调试产物，不进仓库）
+pc/shots/
+# 代理与调试的临时文件（脚本、抓包输出、截图、日志；见 AGENTS.md）
+agent-temp/*
+!agent-temp/.gitkeep
 
 # Rust 编译临时产物 (若本地引入 Rust 渲染核心)
 target/

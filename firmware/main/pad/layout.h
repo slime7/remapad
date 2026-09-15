@@ -27,6 +27,13 @@ typedef enum {
     PAD_BATTERY_NS2,    /**< bit0 外部供电、bit1 充电中、bits2-5 电量等级 0-9。 */
 } pad_battery_style_t;
 
+/** 耳机（3.5mm）状态字节的解读方式；零值表示该行没有这个字段。 */
+typedef enum {
+    PAD_HEADSET_NONE = 0, /**< 不解析（未登记或未核对偏移）。 */
+    /** PS 系单字节：bit0 插入、bit1 带麦（DS4 / DualSense 的音频状态字节）。 */
+    PAD_HEADSET_PS,
+} pad_headset_style_t;
+
 /** 玩家灯映射方式。 */
 typedef enum {
     PAD_LED_NONE = 0,    /**< 设备没有可控灯。 */
@@ -100,7 +107,7 @@ typedef struct {
  *
  * 各系列的行放在 pad/layouts/ 下，一族一个文件；加一个系列＝加一个文件并在
  * layout.c 的模块表里登记一行。偏移初值多取自公开资料，实机接线时用
- * `pc/bridge.py --dump` 抓包核对，偏差只影响布局文件，不影响上下游。
+ * `pc/remapadctl.py --dump` 抓包核对，偏差只影响布局文件，不影响上下游。
  */
 typedef struct {
     pad_family_t family;
@@ -118,11 +125,15 @@ typedef struct {
     uint8_t touch_off;
     uint8_t motion_off;
     uint8_t battery_off;
+    /** 耳机状态字节偏移；读法与 headset_style 配套，PAD_OFF_NONE 表示未登记。 */
+    uint8_t headset_off;
     uint16_t touch_max_x;
     uint16_t touch_max_y;
     pad_stick_style_t stick_style;
     /** 电量字节风格；PAD_CAP_BATTERY 未置位时不参与解析。 */
     pad_battery_style_t battery_style;
+    /** 耳机状态读法；PAD_HEADSET_NONE（默认）时 headset_off 不参与解析。 */
+    pad_headset_style_t headset_style;
     uint32_t caps;
     /** 设备 Y 轴向下为正时置位，解析侧翻成「上为正」。 */
     bool invert_y;

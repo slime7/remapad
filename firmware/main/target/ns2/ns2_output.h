@@ -105,6 +105,22 @@ void ns2_output_set_motion_mode(uint8_t mode);
 /** 当前运动块占位方式（CLI 回显用）。 */
 uint8_t ns2_output_motion_mode(void);
 
+/**
+ * 耳机状态字节（0x09 偏移 0x0D，NS2_HEADSET_*）：生效值优先取覆盖值，
+ * 否则取输入设备派生的 auto 值；编码路径与同代透传路径都从这里取，
+ * 保证两边的 0x09 与 0x05 对得上。
+ */
+uint8_t ns2_output_headset_byte(void);
+
+/** auto 模式下的派生取值（由目标侧按输入设备的 3.5mm 状态更新）。 */
+uint8_t ns2_output_headset_derived(void);
+void ns2_output_set_headset_derived(uint8_t value);
+
+/** 覆盖开关与取值（串口 headset 命令）：enabled 为 true 时钉住一个值做
+ *  实机 A/B，false 回到 auto；out_value 非 NULL 时回读当前覆盖值。 */
+bool ns2_output_headset_override(uint8_t *out_value);
+void ns2_output_set_headset_override(bool enabled, uint8_t value);
+
 /** 预置 amiibo / NTAG215 镜像（最长 NS2_AMIIBO_MAX 字节，拷贝进 PSRAM）。
  *  成功后 ns2_output_nfc_state() 汇报 0x01（已就绪待感应），供输入报告
  *  的 NFC 状态字节使用；传 NULL/0 清除。 */

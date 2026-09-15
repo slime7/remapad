@@ -19,6 +19,7 @@
 #include "console_out.h"
 #include "dp_source.h"
 #include "dp_ui.h"
+#include "dp_plane.h"
 #include "input_source.h"
 #include "layout.h"
 #include "ns2_identity.h"
@@ -26,6 +27,7 @@
 #include "ota_session.h"
 #include "pad_device.h"
 #include "pad_state.h"
+#include "pocketjs_host.h"
 #include "target.h"
 #include "usb_transport.h"
 #include "usb_input.h"
@@ -52,6 +54,7 @@ static void cli_help(void)
     cli_print("  stick reset         center both sticks");
     cli_print("  ui [on|off]         pad-captured screen control (no arg = state)");
     cli_print("  link                per-identity BLE link status");
+    cli_print("  shot                capture the real screen to the PC (PNG on the PC side)");
     cli_print("  backlight 0-100     set + persist backlight");
     cli_print("  screen on|off       screen power");
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
@@ -62,6 +65,7 @@ static void cli_help(void)
     cli_print("                      steady form while paired (default auto)");
     cli_print("  report              dump the last input report actually sent");
     cli_print("  motion 0|1|2|3      0x09 motion block: zeros / stamp / none / sensor");
+    cli_print("  headset [auto|0xNN] 0x09 headset byte sent to the host (auto = input device)");
     cli_print("  ltk 0|1             LTK store form (0 reversed, 1 as-is)");
     cli_print("  drop                disconnect the current host");
     cli_print("  pad                 recognized pad, layout row and relay state");
@@ -427,6 +431,53 @@ static void cli_motion(const char *arg)
     cli_print(line);
 }
 
+/**
+ * 实机截图：请求交给 PocketJS owner task 在下一帧把整幅画面重渲染一遍，
+ * 像素经桥接图像帧回传；PC 侧（pc/remapadctl.py 的 shot）落地成 PNG。
+ * 这里只置标志，不等回传，回复 ok 表示请求已入队。
+ */
+static void cli_shot(void)
+{
+    remapad_ui_request_shot();
+    cli_print("ok shot queued (PC side saves the PNG)");
+}
+
+/**
+ * 3.5mm 耳机状态字节（0x09 的 0x0D 与 0x05 的插入位）：auto 用输入设备
+ * 派生的值，0xNN 钉住一个取值做主机侧 A/B（例如 controller.md 里的 0x0D）。
+ * 不带参数回显覆盖开关、覆盖值与 auto 派生值。
+ */
+static void cli_headset(const char *arg)
+{
+    char line[96];
+    if (arg[0] == '\0') {
+        uint8_t override_value = 0;
+        if (ns2_output_headset_override(&override_value)) {
+            snprintf(line, sizeof(line), "headset override 0x%02x (auto value 0x%02x)",
+                     (unsigned)override_value, (unsigned)ns2_output_headset_derived());
+        } else {
+            snprintf(line, sizeof(line), "headset auto (value 0x%02x)",
+                     (unsigned)ns2_output_headset_derived());
+        }
+        cli_print(line);
+        return;
+    }
+    if (strcmp(arg, "auto") == 0) {
+        ns2_output_set_headset_override(false, 0);
+        cli_print("ok headset auto (derived from the input device)");
+        return;
+    }
+    char *end = NULL;
+    const unsigned long value = strtoul(arg, &end, 16);
+    if (end == arg || *end != '\0' || value > 0xFF) {
+        cli_print("err usage: headset auto|0xNN");
+        return;
+    }
+    ns2_output_set_headset_override(true, (uint8_t)value);
+    snprintf(line, sizeof(line), "ok headset override 0x%02lx", value);
+    cli_print(line);
+}
+
 /** LTK 注入形态切换：主机连上但 link 显示 enc=0（未加密）时现场对比两种
  *  形态，判断是不是密钥字节序导致主机不认这台手柄。 */
 static void cli_ltk(const char *arg)
@@ -679,6 +730,10 @@ static void cli_dispatch(char *line)
         cli_report();
     } else if (strcmp(line, "motion") == 0) {
         cli_motion(arg);
+    } else if (strcmp(line, "shot") == 0) {
+        cli_shot();
+    } else if (strcmp(line, "headset") == 0) {
+        cli_headset(arg);
     } else if (strcmp(line, "pad") == 0) {
         cli_pad();
     } else if (strcmp(line, "usb") == 0) {

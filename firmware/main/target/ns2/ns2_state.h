@@ -40,6 +40,15 @@ enum {
 #define NS2_STICK_CENTER 2048
 #define NS2_STICK_MAX 4095
 
+/** 0x09 报文的耳机音频状态字节（偏移 0x0D）取值：未插入 / 纯耳机 / 带麦。
+ *  controller.md 另记了 0x0D / 0x0F 一档（未确认语义），实机 A/B 用串口
+ *  `headset 0x0d` 之类的覆盖值。 */
+#define NS2_HEADSET_NONE 0x00
+#define NS2_HEADSET_STEREO 0x05
+#define NS2_HEADSET_WITH_MIC 0x07
+/** Report 0x05 按键位图第 3 字节的耳机插入位（插入时置位）。 */
+#define NS2_05_BTN3_HEADSET 0x10
+
 /** 0x09 运动块填充方式。真机在特性位 bit2（IMU）开启后发 40 字节传感器
  *  数据；板卡没有 IMU，只能用占位。实机排查「连上但主机不采用输入」时用
  *  CLI `motion` 在几种占位间切换，确认主机是否校验运动块内容。 */
@@ -83,6 +92,10 @@ typedef struct {
     /** NFC 状态字节（Report 0x09 偏移 0x0C）：0x00 空闲，0x01-0x07 感应中。
      *  由 amiibo 预置数据驱动（ns2_output），无预置时保持 0x00。 */
     uint8_t nfc_state;
+    /** 耳机音频状态字节（Report 0x09 偏移 0x0D，NS2_HEADSET_*）：由
+     *  ns2_output 按输入设备的 3.5mm 状态填，串口 headset 可现场覆盖；
+     *  非 0x00 时 Report 0x05 的耳机插入位一并置位。 */
+    uint8_t headset_state;
     /** 运动块填充方式（ns2_motion_mode_t）。 */
     uint8_t motion_mode;
     /** 运动数据：输入设备带 IMU（PAD_CAP_MOTION）时才有效。板卡本身没有
@@ -107,6 +120,7 @@ static inline void ns2_state_defaults(ns2_controller_state_t *state)
     state->battery_mv = 0;
     state->rumble_enabled = false;
     state->nfc_state = 0;
+    state->headset_state = NS2_HEADSET_NONE;
     state->motion_mode = NS2_MOTION_ZERO;
     state->motion_valid = false;
     state->gyro[0] = 0;

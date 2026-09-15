@@ -89,7 +89,7 @@ flowchart LR
 | 调度 | 产品 owner task | `remapad-pjs` 固定 tick 任务，承载 guest 生命周期与每帧 UI turn；官方 `pocketjs_runner` 保留在 `firmware/components/` 但当前未接入 |
 | 渲染 | `pocketjs_render_rgb565` | 软件 RGB565 renderer、damage plan 和事务提交 |
 | 控制器数据面 | ESP-IDF USB/BLE/GATT/FreeRTOS（规划） | USB 输入接收、输入规范化、NS2 报告编码、BLE 广播/GATT/配对和状态持久化；协议见 [controller.md](controller.md) |
-| 升级 | `pc/ota.py` + `main/ota/` | 经桥接帧推送整包应用镜像，写非运行分区、`esp_ota_end` 校验后切启动分区并重启；回滚健康门槛见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md) |
+| 升级 | `pc/remapadctl.py --upgrade` + `main/ota/` | 经桥接帧推送整包应用镜像，写非运行分区、`esp_ota_end` 校验后切启动分区并重启；回滚健康门槛见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md) |
 | 硬件 | 产品 BSP + ESP-IDF | 输入采样、面板初始化、DMA 传输、电源和其他外设 |
 
 ## 双工作区结构
@@ -100,7 +100,7 @@ flowchart TB
     Root --> RootFiles["AGENTS.md / package.json / pnpm-workspace.yaml"]
     Root --> Scripts["scripts/：create_adr.py / pocketjs.mjs（官方工具链与触摸预览入口）/ preview-server.mjs"]
     Root --> Patches["patches/：上游 PocketJS 对账记录与发布说明"]
-    Root --> PC["pc/：PC 侧桥接程序（hidapi 读手柄 → 桥接帧）"]
+    Root --> PC["pc/：PC 侧单工具 remapadctl（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）"]
     Root --> Docs["docs/：VISION / ARCHITECTURE / ABSTRACTIONS / GETTING-STARTED / controller / hardware / adr/"]
     Root --> UI["ui/：PocketJS 前端工作区"]
     Root --> Firmware["firmware/：ESP-IDF 固件工作区"]
@@ -255,7 +255,7 @@ NS2 的广播字段、GATT、HID 报告、配对和震动命令见 [controller.m
 
 ```mermaid
 flowchart LR
-    Tool["pc/ota.py<br/>校验镜像头与应用描述符"]
+    Tool["pc/remapadctl.py --upgrade<br/>校验镜像头与应用描述符"]
     Link["input/input_link.c<br/>USJ 唯一读取者"]
     Session["ota/ota_session.c<br/>队列 + 内部 RAM 栈任务"]
     Proto["ota/ota_proto.c<br/>序号 / 窗口 / 4 KB 聚合 / 超时"]
@@ -318,7 +318,7 @@ flowchart LR
 | `nvs` | data/nvs | `0x9000` | 24 KB | 设置项（亮度、连发/改建、手柄颜色）、BLE 配对密钥 |
 | `phy_init` | data/phy | `0xf000` | 4 KB | 射频校准 |
 | `ota_0` | app/ota_0 | `0x10000` | 4 MB | 主应用分区，固件及内置 `.pocket`（继承原 factory 偏移） |
-| `ota_1` | app/ota_1 | `0x410000` | 4 MB | OTA 目标分区：`pc/ota.py` 推送的镜像先写这里，校验通过后切为启动分区 |
+| `ota_1` | app/ota_1 | `0x410000` | 4 MB | OTA 目标分区：`pc/remapadctl.py --upgrade` 推送的镜像先写这里，校验通过后切为启动分区 |
 | `otadata` | data/ota | `0x810000` | 8 KB | OTA 启动选择数据 |
 | `storage` | data/spiffs | `0x812000` | 约 7.9 MB | 通用数据存储区（首个用途：用户上传的 amiibo/NTAG215），将来挂 littlefs |
 

@@ -160,6 +160,10 @@ typedef struct {
     pad_motion_t motion;
     uint16_t mic_level; /**< 0-4095。 */
     bool mic_muted;
+    /** 3.5mm 耳机状态（PAD_CAP_MIC 未置位时无意义）：是否插入、是否带麦。
+     *  目标侧按它派生出 NS2 报文的耳机状态字节。 */
+    bool headset_present;
+    bool headset_mic;
     uint8_t battery_percent; /**< 0-100，PAD_CAP_BATTERY 未置位时无意义。 */
     bool battery_present;
     bool charging;

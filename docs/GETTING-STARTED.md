@@ -14,7 +14,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | PocketJS compiler | 仓库内的 `ui/vendor/pocketjs` 快照 | 提供 `tools/pocket.ts` 与 ESP-IDF host profile 支持；npm 上发布的 0.11.0 尚不含该支持 |
 | Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 仅在升级组件、重新生成 ESP32-S3 原生归档时需要 |
 | Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
-| uv | 当前稳定版 | 运行 `pc/` 下的桥接程序（`cd pc ; uv run python bridge.py -p COMx`）；第三方依赖只有 `hidapi`，由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`，解释器要 3.10 或更高，uv 找不到会自己下载 |
+| uv | 当前稳定版 | 运行 `pc/` 下的工具（`cd pc ; uv run python remapadctl.py -p COMx`）；第三方依赖只有 `hidapi`，由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`，解释器要 3.10 或更高，uv 找不到会自己下载 |
 | ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
@@ -235,35 +235,38 @@ pnpm run test:firmware    # 固件主机端：把纯逻辑模块编译成本机�
 
 
 固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。
-项目自带 [pc/uartctl.py](../pc/uartctl.py)，与 `bridge.py`、`ota.py` 共用 [pc/link.py](../pc/link.py) 的免复位串口实现。
+项目自带 [pc/remapadctl.py](../pc/remapadctl.py)（桥接转发、命令行、实机截图与 OTA 都在同一个进程里），串口与帧编解码实现在 [pc/link.py](../pc/link.py)。
 依赖由 uv 管理（在 `pc/` 目录下执行，见 [pc/README.md](../pc/README.md)）：
 
 ```powershell
 cd pc
-uv run python uartctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长/电池/版本/升级状态
-uv run python uartctl.py -p COM3 key a           # 注入 A 键（键名见下方说明）
-uv run python uartctl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
-uv run python uartctl.py -p COM3 key release     # 立即释放注入的按键
-uv run python uartctl.py -p COM3 ui on           # 手动进出屏幕操控模式（on / off，不带参数看状态）
-uv run python uartctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
-uv run python uartctl.py -p COM3 stick reset     # 两侧摇杆回中
-uv run python uartctl.py -p COM3 link            # 两只手柄的地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
-uv run python uartctl.py -p COM3 fwver 2.0.0     # 改写上报给主机的手柄固件版本（0x10 查询与出厂块共用；不带参数看当前值）
-uv run python uartctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
-uv run python uartctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
-uv run python uartctl.py -p COM3 backlight 60    # 背光并持久化
-uv run python uartctl.py -p COM3 screen off      # 息屏（on 恢复）
-uv run python uartctl.py -p COM3 mode host       # 切到 host：COM 口消失，日志与 CLI 改走 UART0（otg 仍被拒绝）
-uv run python uartctl.py -p COM3 pad             # 识别到的手柄：来源、家族、型号、命中布局行、兜底与透传状态
-uv run python uartctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
-uv run python uartctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
-uv run python uartctl.py -p COM3 pairing start   # 配对键：断开当前主机后进发现广播，等新主机搜索配对（stop 退出）
-uv run python uartctl.py -p COM3 wake            # 开唤醒窗口：未连接时发 0x81 把休眠主机叫起来，已连接则断开让它重连
-uv run python uartctl.py -p COM3 adv auto        # 常态广播形态（auto 默认按唤醒窗口 / wake / reconnect），实机 A/B 对账用
-uv run python uartctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
-uv run python uartctl.py -p COM3 reboot          # 软重启回 COM 模式
-uv run python uartctl.py -p COM3 log --seconds 20        # 只读设备日志 20 秒
-uv run python uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完整启动日志
+uv run python remapadctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长/电池/版本/升级状态
+uv run python remapadctl.py -p COM3 key a           # 注入 A 键（键名见下方说明）
+uv run python remapadctl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
+uv run python remapadctl.py -p COM3 key release     # 立即释放注入的按键
+uv run python remapadctl.py -p COM3 ui on           # 手动进出屏幕操控模式（on / off，不带参数看状态）
+uv run python remapadctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
+uv run python remapadctl.py -p COM3 stick reset     # 两侧摇杆回中
+uv run python remapadctl.py -p COM3 link            # 两只手柄的地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
+uv run python remapadctl.py -p COM3 headset auto    # 耳机状态字节：auto 按输入设备派生，也可钉住 0xNN 做主机侧 A/B
+uv run python remapadctl.py -p COM3 shot            # 请求一次实机截图（PC 侧拼齐后存 PNG）
+uv run python remapadctl.py -p COM3 fwver 2.0.0     # 改写上报给主机的手柄固件版本（0x10 查询与出厂块共用；不带参数看当前值）
+uv run python remapadctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
+uv run python remapadctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
+uv run python remapadctl.py -p COM3 backlight 60    # 背光并持久化
+uv run python remapadctl.py -p COM3 screen off      # 息屏（on 恢复）
+uv run python remapadctl.py -p COM3 mode host       # 切到 host：COM 口消失，日志与 CLI 改走 UART0（otg 仍被拒绝）
+uv run python remapadctl.py -p COM3 pad             # 识别到的手柄：来源、家族、型号、命中布局行、兜底与透传状态
+uv run python remapadctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
+uv run python remapadctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
+uv run python remapadctl.py -p COM3 pairing start   # 配对键：断开当前主机后进发现广播，等新主机搜索配对（stop 退出）
+uv run python remapadctl.py -p COM3 wake            # 开唤醒窗口：未连接时发 0x81 把休眠主机叫起来，已连接则断开让它重连
+uv run python remapadctl.py -p COM3 adv auto        # 常态广播形态（auto 默认按唤醒窗口 / wake / reconnect），实机 A/B 对账用
+uv run python remapadctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
+uv run python remapadctl.py -p COM3 reboot          # 软重启回 COM 模式
+uv run python remapadctl.py -p COM3 --log --seconds 20         # 只读设备日志 20 秒
+uv run python remapadctl.py -p COM3 --log --reset --seconds 25  # 先复位再抓完整启动日志
+uv run python remapadctl.py -p COM3 --shot --out shots\ui.png   # 抓实机截图并指定输出路径
 ```
 
 `key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr ui`。
@@ -279,11 +282,12 @@ uv run python uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完�
 进入模式会先向主机补发一帧全松开，捕获期间按原来的上报节奏续发同样的中性帧：玩家的按键不再上行，主机也不会因为上报流中断把手柄判成离线。
 模式里用 `key up` / `key down` / `key left` / `key right` 移动焦点，`key a` 等价于点按屏幕（键名表的 `a` 就是私有格式的圆圈键位，与手柄上的圆圈键同一位）。
 
-不带命令进入交互模式；命令回复为 `ok`/`err` 单行，串口上同时会滚动固件日志。命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑。
-`log` 子命令只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：
+不带设备命令时进入桥接 + 交互模式：不是 `:` 开头的行按固件 CLI 命令发送（回复是 `ok`/`err` 单行，串口上同时会滚动固件日志），`:` 开头的是工具命令（`:help` 看清单，另有 `:shot` / `:log` / `:ota` / `:quit`）。
+命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑；同一个进程持有串口，因此桥接转发、命令行、截图与升级可以同时进行（`idf.py monitor` 仍与之互斥）。
+`--log` 只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：
 USB-Serial/JTAG 的片内状态机把 CDC 的 DTR/RTS 当复位控制线解释——RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态；
-`uartctl.py` 用 Win32 API 打开端口并把两条线固定为低电平，因此打开、读取、关闭都不会复位设备（连续调用 `uptime` 会持续增长）。
-需要复位时用 `log --reset`（只脉冲 RTS），自己写 PC 端工具时按同样规则处理这两条线。抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
+`remapadctl.py` 用 Win32 API 打开端口并把两条线固定为低电平，因此打开、读取、关闭都不会复位设备（连续调用 `status`，uptime 会持续增长）。
+需要复位时用 `--log --reset`（只脉冲 RTS），自己写 PC 端工具时按同样规则处理这两条线。抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
 
 PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；
 **长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。
@@ -300,22 +304,22 @@ PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmwa
 
 整包应用镜像（固件 + 内嵌 `.pocket`）可以在不接线烧录的情况下升级：PC 端把镜像经 USB-Serial/JTAG 推给设备，设备写进当前未运行的应用分区，`esp_ota_end` 校验通过后切换启动分区并重启。
 选型与协议见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)。
-设备侧实现在 `firmware/main/ota/`，PC 端工具是 [pc/ota.py](../pc/ota.py)：
+设备侧实现在 `firmware/main/ota/`，PC 端入口是 [pc/remapadctl.py](../pc/remapadctl.py) 的 `--upgrade`：
 
 ```powershell
 cd pc
-uv run python ota.py --dry-run                 # 只校验镜像，不接设备
-uv run python ota.py -p COM3                   # 升级默认镜像 ../firmware/build/remapad_firmware.bin
-uv run python ota.py -p COM3 --image ..\firmware\build\remapad_firmware.bin
-uv run python ota.py -p COM3 --wait            # 升级后等设备重启回来并打印新版本
-uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
+uv run python remapadctl.py --dry-run                     # 只校验镜像，不接设备
+uv run python remapadctl.py -p COM3 --upgrade             # 升级默认镜像 ../firmware/build/remapad_firmware.bin
+uv run python remapadctl.py -p COM3 --upgrade --image ..\firmware\build\remapad_firmware.bin
+uv run python remapadctl.py -p COM3 --upgrade --wait      # 升级后等设备重启回来并打印新版本
+uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备日志
 ```
 
 要点：
 
 - 升级前先跑 `pnpm run build` 与 `idf.py build`，镜像就是 `firmware/build/remapad_firmware.bin`；
   设备只接受项目名为 `remapad_firmware` 的 ESP32-S3 应用镜像，尺寸上限是应用分区容量 4 MB。
-- 升级期间设备独占 COM 口，先退出 `bridge.py`、`idf.py monitor` 等占用进程；设备必须处于 COM 模式（host 模式或 OTG 切换后 COM 口不存在）。
+ 升级由持有 COM 口的那个进程执行：`remapadctl.py --upgrade` 自己就是持有者，桥接转发与命令行在同一会话里照常；先退出 `idf.py monitor` 等其它占用进程，设备必须处于 COM 模式（host 模式或 OTG 切换后 COM 口不存在）。
   升级与设备当前是否连着 NS2 主机无关，重启后按凭证回连。
 - 校验通过后设备自动重启，首次启动处于「待验证」状态：UI 首帧成功且稳定运行满 30 秒才标记为有效，在此之前断电或重启会自动回退到升级前的镜像，此时 `version` 显示 `image=pending-verify`。
 - 升级中断（PC 退出、拔线、断电）不影响启动：`otadata` 在成功前不动，设备仍从旧镜像启动，残留在另一个分区的半镜像会在下次升级时重新擦写。
@@ -344,13 +348,13 @@ uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
   契约与注册表是 [layout.h](../firmware/main/pad/layout.h) / [layout.c](../firmware/main/pad/layout.c)。
 - 目标编码接口 [target.c](../firmware/main/target/target.c) 与 NS2 输出封装 [ns2/](../firmware/main/target/ns2)：
   涵盖按键构建报告、结构化反馈、电池与 amiibo 预置。
-- [pc/bridge.py](../pc/bridge.py) 与 [pc/link.py](../pc/link.py)：
-  PC 侧桥接程序（hidapi 读手柄 → 桥接帧，`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
-- [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端配套工具是 [pc/ota.py](../pc/ota.py)。
+- [pc/remapadctl.py](../pc/remapadctl.py) 与 [pc/link.py](../pc/link.py)：
+  PC 侧单工具（hidapi 读手柄 → 桥接帧、串口命令行、实机截图与 OTA 在同一个进程里；`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
+- [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端入口是 `remapadctl.py --upgrade`。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。
 - [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
-- [pc/uartctl.py](../pc/uartctl.py)：串口 CLI 的 PC 端客户端（命令行的免复位串口实现）。
+- [agent-temp/](../agent-temp)：代理与调试的临时文件目录（脚本、抓包输出、截图与日志；内容不进版本库，约定见 [AGENTS.md](../AGENTS.md)）。
 - [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
 - [ui/src/App.tsx](../ui/src/App.tsx)：
   首屏前一次挂完七个页面的页面调度（切页由页面根节点自行切换 `hidden`，新增页面直接写在 JSX 里，见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。

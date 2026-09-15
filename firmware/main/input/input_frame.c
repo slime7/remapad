@@ -19,10 +19,11 @@ uint16_t input_frame_crc16(const uint8_t *data, size_t len)
     return crc;
 }
 
-size_t input_frame_encode(uint8_t *out, size_t out_len, uint8_t type, uint8_t slot,
-                          uint8_t seq, const uint8_t *payload, size_t payload_len)
+static size_t encode_with_limit(uint8_t *out, size_t out_len, uint8_t type, uint8_t slot,
+                                uint8_t seq, const uint8_t *payload, size_t payload_len,
+                                size_t max_payload)
 {
-    if (out == NULL || payload_len > INPUT_FRAME_MAX_PAYLOAD) {
+    if (out == NULL || payload_len > max_payload) {
         return 0;
     }
     const size_t total = INPUT_FRAME_HEADER_LEN + payload_len + INPUT_FRAME_CRC_LEN;
@@ -43,6 +44,20 @@ size_t input_frame_encode(uint8_t *out, size_t out_len, uint8_t type, uint8_t sl
     out[total - 2] = (uint8_t)(crc & 0xFFu);
     out[total - 1] = (uint8_t)(crc >> 8);
     return total;
+}
+
+size_t input_frame_encode(uint8_t *out, size_t out_len, uint8_t type, uint8_t slot,
+                          uint8_t seq, const uint8_t *payload, size_t payload_len)
+{
+    return encode_with_limit(out, out_len, type, slot, seq, payload, payload_len,
+                             INPUT_FRAME_MAX_PAYLOAD);
+}
+
+size_t input_frame_encode_wire(uint8_t *out, size_t out_len, uint8_t type, uint8_t slot,
+                               uint8_t seq, const uint8_t *payload, size_t payload_len)
+{
+    return encode_with_limit(out, out_len, type, slot, seq, payload, payload_len,
+                             INPUT_FRAME_WIRE_MAX_PAYLOAD);
 }
 
 void input_frame_rx_reset(input_frame_rx_t *rx)

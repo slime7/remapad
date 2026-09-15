@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remapad 桥接链路的 PC 侧：免复位串口打开 + 桥接帧编解码。
 
-串口打开是全仓库 PC 侧工具的唯一实现（bridge.py / uartctl.py / ota.py 共用）：
+串口打开是全仓库 PC 侧工具的唯一实现（remapadctl.py 的转发、命令行、截图与 OTA 共用）：
 直接用 Win32 API，并在打开前后把 DTR/RTS 固定为低电平——USB-Serial/JTAG 的
 片内状态机把这两条线当复位控制线解释（RTS 拉高即复位），普通串口库默认会在
 打开端口时拉起它们。
@@ -41,10 +41,18 @@ MAX_FRAME = HEADER_LEN + MAX_PAYLOAD + CRC_LEN
 #: 设备 → PC 输出报告帧的载荷上限：DualSense / DualShock 4 蓝牙输出报告各
 #: 78 字节（Report ID + 77 字节字段），比报文帧大一档。
 OUT_REPORT_MAX = 78
-#: 解码器接受的单帧载荷上限：两类方向里更大的那一档。
-DECODE_MAX_PAYLOAD = OUT_REPORT_MAX
 #: 线格式上限：帧头里的长度字段是单字节，OTA 数据帧用到 202 字节。
 WIRE_MAX_PAYLOAD = 255
+#: 解码器接受的单帧载荷上限：取线格式上限。截图分块帧的载荷是 4 字节偏移 +
+#: 200 字节像素，比输出报告帧大一档；CRC 仍然逐帧校验，放宽上限只是让这类
+#: 长载荷帧能被收下。
+DECODE_MAX_PAYLOAD = WIRE_MAX_PAYLOAD
+#: 截图声明载荷：宽 u16 LE + 高 u16 LE + 格式 u8。
+IMAGE_INFO_LEN = 5
+#: 像素格式 1 = RGB565 小端：固件把渲染缓冲原样回传，不换字节序。
+IMAGE_FORMAT_RGB565_LE = 1
+#: 截图分块载荷：偏移 u32 LE + 像素数据。
+IMAGE_OFF_LEN = 4
 
 TYPE_ATTACH = 0x01
 TYPE_DETACH = 0x02
@@ -52,6 +60,10 @@ TYPE_REPORT = 0x10
 #: 设备 → PC：要写回手柄的输出报告（原始字节，首字节是 Report ID）。
 TYPE_OUT_REPORT = 0x11
 TYPE_FEEDBACK = 0x20
+#: 设备 → PC：实机截图（声明 / 分块 / 收尾），与固件 input_frame.h 同名。
+TYPE_IMAGE_INFO = 0x21
+TYPE_IMAGE_DATA = 0x22
+TYPE_IMAGE_END = 0x23
 TYPE_OTA_BEGIN = 0x30
 TYPE_OTA_DATA = 0x31
 TYPE_OTA_END = 0x32
@@ -158,6 +170,29 @@ def parse_ota_ack(payload: bytes) -> dict:
         "received": int.from_bytes(payload[4:8], "little"),
         "version": version.decode("utf-8", errors="replace"),
     }
+
+
+def parse_image_info(payload: bytes) -> tuple[int, int, int]:
+    """解析截图声明：返回（宽, 高, 像素格式）。"""
+    if len(payload) < IMAGE_INFO_LEN:
+        raise ValueError(f"截图声明过短：{len(payload)} 字节")
+    width = int.from_bytes(payload[0:2], "little")
+    height = int.from_bytes(payload[2:4], "little")
+    return width, height, payload[4]
+
+
+def parse_image_chunk(payload: bytes) -> tuple[int, bytes]:
+    """解析截图分块：返回（整幅画面的字节偏移, 像素数据）。"""
+    if len(payload) < IMAGE_OFF_LEN:
+        raise ValueError(f"截图分块过短：{len(payload)} 字节")
+    return int.from_bytes(payload[0:IMAGE_OFF_LEN], "little"), payload[IMAGE_OFF_LEN:]
+
+
+def parse_image_end(payload: bytes) -> int:
+    """解析截图收尾：返回整幅画面的总字节数。"""
+    if len(payload) < 4:
+        raise ValueError(f"截图收尾过短：{len(payload)} 字节")
+    return int.from_bytes(payload[0:4], "little")
 
 
 def device_id(family: int, conn: int, vid: int, pid: int, report_id: int, report_len: int) -> bytes:

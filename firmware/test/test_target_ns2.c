@@ -23,6 +23,9 @@ static struct {
     unsigned sends;
 } s_capture;
 
+/** 捕获会话的报告格式：0x09 为主，0x05 的耳机插入位另行切换断言。 */
+static uint8_t s_capture_format = NS2_REPORT_ID_09;
+
 static size_t capture_session_count(void *user)
 {
     (void)user;
@@ -37,7 +40,7 @@ static bool capture_session_info(size_t index, uint8_t *identity, uint8_t *repor
         return false;
     }
     *identity = NS2_ID_PRO;
-    *report_format = NS2_REPORT_ID_09;
+    *report_format = s_capture_format;
     return true;
 }
 
@@ -72,6 +75,10 @@ static void prepare(void)
     ns2_output_set_sink(&sink);
     target_set(ns2_target_get());
     target_set_facts(&facts);
+    /* 耳机状态是跨用例的模块级状态：每个用例都从 auto + 未插入开始。 */
+    ns2_output_set_headset_override(false, 0);
+    ns2_output_set_headset_derived(NS2_HEADSET_NONE);
+    s_capture_format = NS2_REPORT_ID_09;
     memset(&s_capture, 0, sizeof(s_capture));
 }
 
@@ -276,6 +283,73 @@ static void rumble_payload_accepts_ble_form(void)
     CHECK(!ns2_rumble_parse(ble, sizeof(ble), NULL));
 }
 
+/**
+ * 3.5mm 耳机状态：能力位声明了耳机字段才当真，插入即派生出 0x09 的 0x0D =
+ * 0x05；未声明时保持「未插入」——兜底布局的随机字节不能冒充耳机状态。
+ * 带麦一档（0x07 / 0x0F）会被主机拒绝（换上后约 150 ms 掉订阅），因此派生
+ * 值不上报带麦位，私有格式里的 headset_mic 仍然照常解析。
+ */
+static void headset_state_follows_the_input_device(void)
+{
+    prepare();
+    pad_state_t pad;
+    pad_state_defaults(&pad);
+    pad.caps = PAD_CAP_MIC;
+
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[NS2_09_OFF_HEADSET], NS2_HEADSET_NONE);
+
+    pad.headset_present = true;
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[NS2_09_OFF_HEADSET], NS2_HEADSET_STEREO);
+
+    pad.headset_mic = true;
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[NS2_09_OFF_HEADSET], NS2_HEADSET_STEREO);
+
+    pad.caps = 0;
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[NS2_09_OFF_HEADSET], NS2_HEADSET_NONE);
+}
+
+/** 0x05 会话同样带耳机插入位（第 3 字节 bit4），与 0x09 的 0x0D 同一个来源。 */
+static void headset_bit_rides_report_05_too(void)
+{
+    prepare();
+    s_capture_format = NS2_REPORT_ID_05;
+    pad_state_t pad;
+    pad_state_defaults(&pad);
+    pad.caps = PAD_CAP_MIC;
+    pad.headset_present = true;
+
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.report_id, NS2_REPORT_ID_05);
+    CHECK_EQ(s_capture.body[0x07], NS2_05_BTN3_HEADSET);
+}
+
+/** 串口 headset 覆盖值：0x09 的 0x0D 跟覆盖值走，auto 回来即恢复派生值。 */
+static void headset_override_pins_the_reported_byte(void)
+{
+    prepare();
+    pad_state_t pad;
+    pad_state_defaults(&pad);
+    pad.caps = PAD_CAP_MIC;
+    pad.headset_present = true;
+
+    ns2_output_set_headset_override(true, 0x0D);
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[NS2_09_OFF_HEADSET], 0x0D);
+
+    ns2_output_set_headset_override(false, 0);
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[NS2_09_OFF_HEADSET], NS2_HEADSET_STEREO);
+
+    uint8_t value = 0xFF;
+    CHECK(!ns2_output_headset_override(&value));
+    CHECK_EQ(value, 0x00);
+    CHECK_EQ(ns2_output_headset_byte(), ns2_output_headset_derived());
+}
+
 HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"面键按位置映射到 NS2 的 A/B/X/Y（私有用 PS 键名）",
                  face_buttons_keep_position_semantics},
@@ -286,4 +360,9 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"目标事实折进电量字节", target_facts_fold_into_power_byte},
                 {"NS2 吃不下能力位也不改报文", unconsumed_caps_do_not_change_the_report},
                 {"未识别型号兜底后仍照常上报", unknown_model_still_reports_keys},
-                {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form});
+                {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form},
+                {"耳机状态按输入设备的 3.5mm 状态派生（0x09 的 0x0D，只报插入）",
+                 headset_state_follows_the_input_device},
+                {"0x05 报告带耳机插入位", headset_bit_rides_report_05_too},
+                {"串口 headset 覆盖值钉住上报的耳机字节",
+                 headset_override_pins_the_reported_byte});

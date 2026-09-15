@@ -167,7 +167,7 @@ NVS、PHY 初始化、4 MB `ota_0`/`ota_1` 双应用分区、`otadata` 和约 7.
 `ota_0` 继承原 `factory` 的 `0x10000` 偏移，`storage` 将来挂 littlefs，首个用途是用户上传的 amiibo（NTAG215）。
 
 两个应用分区已用于 OTA 升级：
-`cd pc ; uv run python ota.py -p COM3` 把 `firmware/build/remapad_firmware.bin` 经 USB-Serial/JTAG 写进非运行分区，校验通过后切启动分区并重启；
+`cd pc ; uv run python remapadctl.py -p COM3 --upgrade` 把 `firmware/build/remapad_firmware.bin` 经 USB-Serial/JTAG 写进非运行分区，校验通过后切启动分区并重启；
 回滚保护下新镜像要过「UI 首帧成功 + 开机 30 秒」的健康门槛才被确认。
 否则下次重启回退旧镜像。
 原因见 [ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)。

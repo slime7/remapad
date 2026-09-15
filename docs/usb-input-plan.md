@@ -17,7 +17,7 @@ USB 复用开关事实见 [hardware.md](hardware.md)「USB 控制器复用」，
 - VBUS 5V 供电路径未确认（host 模式要给插入的手柄供电），是 M5 的门禁项。
 - 桥接路径的 PC 侧配套程序已落地（[pc/README.md](../pc/README.md)），手柄插板卡这条路径的固件实现也已完成；剩下的门禁是 VBUS 供电（见上一条）与 mux 切换的实机核对。
 - USB-Serial/JTAG 的 DTR/RTS 由片内状态机解释成复位控制线：RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态（需复位脉冲恢复）。
-  PC 侧工具打开这个口时必须把两条线固定为低电平，[pc/link.py](../pc/link.py) 的 `SerialLink` 是已验证的实现（`bridge.py`、`uartctl.py`、`ota.py` 共用）。
+  PC 侧工具打开这个口时必须把两条线固定为低电平，[pc/link.py](../pc/link.py) 的 `SerialLink` 是已验证的实现（`remapadctl.py` 的转发、命令行、截图与 OTA 共用）。
 
 ## 目标数据流（M5：USB host 手柄 → NS2）
 
@@ -48,7 +48,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    Bridge["pc/bridge.py<br/>hidapi 读手柄原始报告"]
+    Bridge["pc/remapadctl.py<br/>hidapi 读手柄原始报告"]
     Link["input/input_link.c<br/>USB-Serial/JTAG 唯一读取者"]
     CLI["console/ CLI 行解析"]
     Src["input/input_source.c（dp_source_t）<br/>最近一帧报告 + 设备标识"]

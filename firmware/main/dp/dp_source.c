@@ -76,7 +76,12 @@ void dp_source_register(const dp_source_t *source)
     ESP_LOGI(TAG, "input source registered: %s (%u)", source->name, (unsigned)s_source_count);
 }
 
-/** 主输入源拥有除按键之外的全部字段：摇杆、扳机、触摸、运动与设备标识。 */
+/**
+ * 主输入源拥有除按键之外的全部字段：摇杆、扳机、触摸、运动、耳机状态与设备
+ * 标识（含同代透传要用的原始报文体）。这里漏掉一个字段的后果是它永远停在
+ * `pad_state_defaults` 的初值上——耳机状态漏掉就是「插着耳机主机也看不到」，
+ * 透传字段漏掉就是原始报文永远为空、只能走解析重编码。
+ */
 static void copy_primary_fields(pad_state_t *dst, const pad_state_t *src)
 {
     memcpy(dst->axis, src->axis, sizeof(dst->axis));
@@ -85,6 +90,8 @@ static void copy_primary_fields(pad_state_t *dst, const pad_state_t *src)
     dst->motion = src->motion;
     dst->mic_level = src->mic_level;
     dst->mic_muted = src->mic_muted;
+    dst->headset_present = src->headset_present;
+    dst->headset_mic = src->headset_mic;
     dst->battery_percent = src->battery_percent;
     dst->battery_present = src->battery_present;
     dst->charging = src->charging;
@@ -96,6 +103,13 @@ static void copy_primary_fields(pad_state_t *dst, const pad_state_t *src)
     dst->report_id = src->report_id;
     dst->report_len = src->report_len;
     dst->seq = src->seq;
+    dst->native_lang = src->native_lang;
+    dst->native_identity = src->native_identity;
+    dst->raw_report_id = src->raw_report_id;
+    dst->raw_len = src->raw_len;
+    if (src->raw_len > 0) {
+        memcpy(dst->raw, src->raw, src->raw_len);
+    }
 }
 
 void dp_source_sample(pad_state_t *state)

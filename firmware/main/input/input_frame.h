@@ -36,7 +36,7 @@ extern "C" {
 #define INPUT_FRAME_WIRE_MAX_LEN \
     (INPUT_FRAME_HEADER_LEN + INPUT_FRAME_WIRE_MAX_PAYLOAD + INPUT_FRAME_CRC_LEN)
 
-/** 帧类型：输入通路 0x01-0x20，OTA 升级 0x30-0x33，探测 0x7F。 */
+/** 帧类型：输入通路 0x01-0x20，截图 0x21-0x23，OTA 升级 0x30-0x33，探测 0x7F。 */
 typedef enum {
     INPUT_FRAME_TYPE_ATTACH = 0x01,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_DETACH = 0x02,   /**< 载荷 = 设备标识（8 字节）。 */
@@ -44,12 +44,29 @@ typedef enum {
     /** 设备 → PC：要写回手柄的输出报告（原始字节，首字节是 Report ID）。 */
     INPUT_FRAME_TYPE_OUT_REPORT = 0x11,
     INPUT_FRAME_TYPE_FEEDBACK = 0x20, /**< 载荷 = 反馈（设备 → PC）。 */
+    /** 设备 → PC：截图声明。载荷 = 宽 u16 LE + 高 u16 LE + 格式 u8。 */
+    INPUT_FRAME_TYPE_IMAGE_INFO = 0x21,
+    /** 设备 → PC：截图分块。载荷 = 偏移 u32 LE + 最多 200 字节像素。 */
+    INPUT_FRAME_TYPE_IMAGE_DATA = 0x22,
+    /** 设备 → PC：截图收尾。载荷 = 总字节数 u32 LE；完整与否由 PC 侧按
+     *  偏移是否覆盖满判定，不做跨语言校验算法约定。 */
+    INPUT_FRAME_TYPE_IMAGE_END = 0x23,
     INPUT_FRAME_TYPE_OTA_BEGIN = 0x30, /**< 载荷 = 镜像大小声明（设备 ← PC）。 */
     INPUT_FRAME_TYPE_OTA_DATA = 0x31,  /**< 载荷 = 块序号 + 镜像数据（设备 ← PC）。 */
     INPUT_FRAME_TYPE_OTA_END = 0x32,   /**< 无载荷，声明数据发完（设备 ← PC）。 */
     INPUT_FRAME_TYPE_OTA_ACK = 0x33,   /**< 载荷 = 升级状态应答（设备 → PC）。 */
     INPUT_FRAME_TYPE_PING = 0x7F,     /**< 载荷 = 版本号（1 字节）。 */
 } input_frame_type_t;
+
+/** 截图声明的载荷长度与像素格式；格式 1 = RGB565 小端，行序自上而下。 */
+#define INPUT_FRAME_IMAGE_INFO_LEN 5u
+#define INPUT_FRAME_IMAGE_FORMAT_RGB565_LE 1u
+/** 截图分块的偏移字段长度与单块像素上限（与 OTA 数据帧同量级，避免
+ *  设备→PC 方向再多一档缓冲尺寸）。 */
+#define INPUT_FRAME_IMAGE_OFF_LEN 4u
+#define INPUT_FRAME_IMAGE_CHUNK_MAX 200u
+/** IMAGE_END 载荷长度：总字节数 u32。 */
+#define INPUT_FRAME_IMAGE_END_LEN 4u
 
 /** 设备标识载荷：家族、连接方式、VID/PID 与报告标识（8 字节小端）。 */
 #define INPUT_DEVICE_ID_LEN 8u
@@ -73,6 +90,15 @@ uint16_t input_frame_crc16(const uint8_t *data, size_t len);
  */
 size_t input_frame_encode(uint8_t *out, size_t out_len, uint8_t type, uint8_t slot,
                           uint8_t seq, const uint8_t *payload, size_t payload_len);
+
+/**
+ * 线格式编码入口：字节布局与 input_frame_encode 完全一致，但载荷上限放宽到
+ * INPUT_FRAME_WIRE_MAX_PAYLOAD（255 字节）。OTA 数据帧（202 字节）与截图
+ * 分块帧（偏移 + 200 字节像素）走这里；报文帧继续用 input_frame_encode，
+ * 把上限钉在 INPUT_FRAME_MAX_PAYLOAD。输出缓冲不足同样返回 0。
+ */
+size_t input_frame_encode_wire(uint8_t *out, size_t out_len, uint8_t type, uint8_t slot,
+                               uint8_t seq, const uint8_t *payload, size_t payload_len);
 
 /** 解帧状态机：把字节流切成桥接帧与其余文本（CLI 行命令）。 */
 typedef struct {

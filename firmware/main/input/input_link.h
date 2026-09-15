@@ -52,3 +52,17 @@ void input_link_send_feedback(const pad_feedback_t *feedback);
  * 知识只在固件里有一份，PC 只是搬运。未接入或链路停用时丢弃。
  */
 void input_link_send_out_report(const uint8_t *report, size_t len);
+
+/**
+ * 实机截图通路（设备 → PC）：INFO 声明尺寸与像素格式，DATA 按偏移分块回传
+ * 像素，END 汇报总字节数。三者都用等待式发送并可能超时，供 UI owner task
+ * 在调试命令里同步回传整幅画面；PC 侧按偏移是否覆盖满判定完整性。
+ * 链路未运行时返回 ESP_ERR_INVALID_STATE，参数越界返回 ESP_ERR_INVALID_ARG。
+ */
+esp_err_t input_link_send_image_info(uint16_t width, uint16_t height, uint32_t timeout_ms);
+
+/** 偏移单位是整幅画面的字节偏移（行序自上而下、每像素 2 字节，小端）。 */
+esp_err_t input_link_send_image_data(uint32_t offset, const uint8_t *data, size_t len,
+                                    uint32_t timeout_ms);
+
+esp_err_t input_link_send_image_end(uint32_t total_bytes, uint32_t timeout_ms);

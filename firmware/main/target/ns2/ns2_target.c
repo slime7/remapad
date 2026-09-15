@@ -90,10 +90,28 @@ static void ns2_from_pad(const pad_state_t *pad, ns2_controller_state_t *out)
     }
 }
 
+/** 私有 3.5mm 状态 → NS2 耳机状态字节：未插入 0x00、插入 0x05。
+ *
+ *  带麦那一档（0x07 / 0x0F）经实机对照会被主机拒绝：换上这两个值后约
+ *  150 ms 主机就取消 0x000E 的订阅，输入不再被采用；0x00 / 0x05 / 0x0D 则
+ *  全程保持订阅。主机认这一档的前提是 0x002C 上的音频 / 麦克风通路，本轮
+ *  不做，因此派生值只报「插入」，带麦位不上行；要 A/B 时用串口 headset
+ *  钉一个值（见 pc/README.md 与 ADR 0035）。 */
+static uint8_t ns2_headset_state_from_pad(const pad_state_t *pad)
+{
+    if ((pad->caps & PAD_CAP_MIC) == 0u || !pad->headset_present) {
+        return NS2_HEADSET_NONE;
+    }
+    return NS2_HEADSET_STEREO;
+}
+
 static void ns2_send_pad(const pad_state_t *pad)
 {
     ns2_controller_state_t state;
     ns2_from_pad(pad, &state);
+    /* 3.5mm 耳机状态：把派生值交给输出模块（覆盖值也在那里），编码路径与
+     * 同代透传路径都从它取，0x09 与 0x05 因此不会各写一个值。 */
+    ns2_output_set_headset_derived(ns2_headset_state_from_pad(pad));
     ns2_output_send(&state);
 
     /* 私有格式里有目标吃不下、本轮也不做映射的字段（IMU、触摸板、麦克风）。

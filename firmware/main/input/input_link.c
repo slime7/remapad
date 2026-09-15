@@ -142,6 +142,28 @@ static size_t encode_frame(uint8_t *frame, uint8_t type, uint8_t slot, const uin
     return input_frame_encode(frame, INPUT_FRAME_MAX_LEN, type, slot, 0, payload, payload_len);
 }
 
+/** 把已编码的一帧分片推进发送环：超时即放弃，不无限阻塞调用任务。 */
+static esp_err_t send_encoded_wait(const uint8_t *frame, size_t len, uint32_t timeout_ms)
+{
+    const int64_t deadline_us = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
+    size_t sent = 0;
+    while (sent < len) {
+        const int n = usb_serial_jtag_write_bytes(&frame[sent], len - sent,
+                                                  pdMS_TO_TICKS(INPUT_LINK_TX_SLICE_MS));
+        if (n > 0) {
+            sent += (size_t)n;
+        }
+        if (sent < len && esp_timer_get_time() >= deadline_us) {
+            ESP_LOGW(TAG, "frame 0x%02x blocked (%u/%u bytes in %u ms)", frame[3], (unsigned)sent,
+                     (unsigned)len, (unsigned)timeout_ms);
+            return ESP_ERR_TIMEOUT;
+        }
+    }
+    /* 环里还排着日志字节：等驱动推完再返回，调用方紧接着重启也不会截断应答。 */
+    usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(INPUT_LINK_TX_SLICE_MS));
+    return ESP_OK;
+}
+
 void input_link_send_frame(uint8_t type, uint8_t slot, const uint8_t *payload,
                            size_t payload_len)
 {
@@ -162,24 +184,71 @@ esp_err_t input_link_send_frame_wait(uint8_t type, uint8_t slot, const uint8_t *
     if (len == 0) {
         return ESP_ERR_INVALID_ARG;
     }
-    /* 发送环会被日志填满：分片重试到写完全帧，超时即放弃，不无限阻塞调用任务。 */
-    const int64_t deadline_us = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
-    size_t sent = 0;
-    while (sent < len) {
-        const int n = usb_serial_jtag_write_bytes(&frame[sent], len - sent,
-                                                  pdMS_TO_TICKS(INPUT_LINK_TX_SLICE_MS));
-        if (n > 0) {
-            sent += (size_t)n;
-        }
-        if (sent < len && esp_timer_get_time() >= deadline_us) {
-            ESP_LOGW(TAG, "frame 0x%02x blocked (%u/%u bytes in %u ms)", type, (unsigned)sent,
-                     (unsigned)len, (unsigned)timeout_ms);
-            return ESP_ERR_TIMEOUT;
-        }
+    return send_encoded_wait(frame, len, timeout_ms);
+}
+
+esp_err_t input_link_send_image_info(uint16_t width, uint16_t height, uint32_t timeout_ms)
+{
+    if (!s_running) {
+        return ESP_ERR_INVALID_STATE;
     }
-    /* 环里还排着日志字节：等驱动推完再返回，调用方紧接着重启也不会截断应答。 */
-    usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(INPUT_LINK_TX_SLICE_MS));
-    return ESP_OK;
+    const uint8_t payload[INPUT_FRAME_IMAGE_INFO_LEN] = {
+        (uint8_t)(width & 0xFFu),
+        (uint8_t)(width >> 8),
+        (uint8_t)(height & 0xFFu),
+        (uint8_t)(height >> 8),
+        INPUT_FRAME_IMAGE_FORMAT_RGB565_LE,
+    };
+    uint8_t frame[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t len = input_frame_encode_wire(frame, sizeof(frame), INPUT_FRAME_TYPE_IMAGE_INFO, 0,
+                                              0, payload, sizeof(payload));
+    if (len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return send_encoded_wait(frame, len, timeout_ms);
+}
+
+esp_err_t input_link_send_image_data(uint32_t offset, const uint8_t *data, size_t len,
+                                    uint32_t timeout_ms)
+{
+    if (!s_running || data == NULL || len == 0 || len > INPUT_FRAME_IMAGE_CHUNK_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    uint8_t payload[INPUT_FRAME_IMAGE_OFF_LEN + INPUT_FRAME_IMAGE_CHUNK_MAX];
+    payload[0] = (uint8_t)(offset & 0xFFu);
+    payload[1] = (uint8_t)((offset >> 8) & 0xFFu);
+    payload[2] = (uint8_t)((offset >> 16) & 0xFFu);
+    payload[3] = (uint8_t)((offset >> 24) & 0xFFu);
+    memcpy(&payload[INPUT_FRAME_IMAGE_OFF_LEN], data, len);
+    uint8_t frame[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t payload_len = INPUT_FRAME_IMAGE_OFF_LEN + len;
+    const size_t frame_len = input_frame_encode_wire(frame, sizeof(frame),
+                                                    INPUT_FRAME_TYPE_IMAGE_DATA, 0, 0,
+                                                    payload, payload_len);
+    if (frame_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return send_encoded_wait(frame, frame_len, timeout_ms);
+}
+
+esp_err_t input_link_send_image_end(uint32_t total_bytes, uint32_t timeout_ms)
+{
+    if (!s_running) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    const uint8_t payload[INPUT_FRAME_IMAGE_END_LEN] = {
+        (uint8_t)(total_bytes & 0xFFu),
+        (uint8_t)((total_bytes >> 8) & 0xFFu),
+        (uint8_t)((total_bytes >> 16) & 0xFFu),
+        (uint8_t)((total_bytes >> 24) & 0xFFu),
+    };
+    uint8_t frame[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t len = input_frame_encode_wire(frame, sizeof(frame), INPUT_FRAME_TYPE_IMAGE_END, 0,
+                                              0, payload, sizeof(payload));
+    if (len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return send_encoded_wait(frame, len, timeout_ms);
 }
 
 void input_link_send_feedback(const pad_feedback_t *feedback)

@@ -20,7 +20,7 @@
 | **接收段（input/、usb/）** | 输入通路的第一段：桥接帧的编解码与串口分帧、USB-Serial/JTAG 的唯一读取者、USB host 枚举与 HID 收发，以及实现 `dp_source_t` 的桥接源与 USB 源。 |
 | **处理段（pad/）** | 输入通路的第二段：家族布局表把各家手柄报告解析成私有格式 `pad_state_t`（按键按位置语义、摇杆归一、能力位）。 |
 | **转换段（target/）** | 输入通路的第三段：目标编码器 `pad_target_t` 把私有格式编码成具体目标家族的报文，现役实现为 `target/ns2/`。 |
-| **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、输出报告帧（`0x11`，设备 → PC 的反馈写回）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
+| **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、输出报告帧（`0x11`，设备 → PC 的反馈写回）、截图帧（`0x21`-`0x23`，设备 → PC 的像素分块）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
 | **同代透传** | 设备自带的报告语言与目标语言一致时，把设备报文体原样交给目标发送（NS2 手柄 → NS2 主机），只重写由本机会话决定的状态字节；判定与取舍见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。 |
 | **输出报告（反馈）** | 主机下发的震动 / 玩家灯 / 触觉采样经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告，USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。 |
 | **OTA 会话（ota/）** | 升级通道的固件侧：`ota_session` 负责帧队列、非阻塞分派、flash 写入与重启，`ota_proto` 是纯逻辑的序号判定、窗口应答、4 KB 聚合与超时；镜像写进非运行分区，校验通过后切启动分区（见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)）。 |
@@ -117,8 +117,12 @@ flowchart TB
   固件只观测不主动请求（GAP 连接更新事件记日志，`link` 打印 `itvl`）——NimBLE 主机侧按规范拒绝 itvl < 6 的请求。输入被主机采纳的门槛有两个：
   一是 **0x0C/0x04（启用特性）**，未启用的链路（握把/顺序页的快捷回连形态，跳过完整握手、反复重发 0x0C/0x02）即使 itvl=4 也不采纳输入。
   输入通知从启用后才发送，已订阅却迟迟不启用的会话由休眠看门狗断开重连（15 秒未启用，每次上电至多 3 次，`ns2_adv_dormant_link()` 判定）；
-  二是**稳定不跳号的上报流**，上报按 15 ms 分频（dp 仍 5 ms 采样，`DP_SEND_DIV=3`，对齐已验证实现的 `HID_REPORT_INTERVAL=15ms`）。
-  以 5 ms 从任务侧灌 63B 通知会打爆发送队列（实测近半数因 mbuf 耗尽被丢、计数器跳号）。`0x0E` 运动数据长度必须非零，按 40 字节零值占位（板卡无 IMU）。
+  二是**稳定不跳号的上报流**：dp 每 5 ms 采样、每 15 ms 发一份报告（`DP_SEND_DIV=3`，节奏写在 `dp_plane.c` 里、没有运行时档位）；
+  主机在初始化末尾用报告率描述符（0x0010 写 `85 00`）点的就是这一量级，以 5 ms 从任务侧灌 63B 通知会打爆发送队列（2026-09-15 实测四成以上因 mbuf 耗尽被丢、有效投递掉到 20 次/秒上下），实测记录见 [controller.md](controller.md)。
+  `0x0E` 运动数据长度必须非零，按 40 字节零值占位（板卡无 IMU）。
+   耳机状态（3.5 mm）由输入设备派生：`pad_state_t` 的 `headset_present` / `headset_mic` 经 NS2 目标的单一来源映射成 `0x09` 偏移 `0x0D`（未插入 0x00、插入 0x05）与 `0x05` 的耳机插入位，编码路径与同代透传路径共用；串口 `headset auto|0xNN` 可钉住覆盖值做主机侧 A/B。
+   带麦位不上行：主机接受 0x05 / 0x0D，换上 0x07 / 0x0F 后约 150 ms 就取消 0x000E 的订阅（2026-09-15 实测），认那一档要先有 0x002C 的音频 / 麦克风通路。
+   PC 手柄报告里耳机状态字节的偏移与位序：DualSense 蓝牙行已按实机插拔差分核对（第 55 字节），其余行未核对（未登记的行一律按未插入上报），见 [ADR 0035](adr/0035-ns2-headset-state-passthrough.md) 与 [pc/README.md](../pc/README.md)。
 - flash 写入期间 cache 被禁用，而 PocketJS owner task 的栈在 PSRAM——从该任务直接执行任何 flash 写都会在禁缓存窗口访问 PSRAM 并触发 cache 异常重启（「停止配对即重启」的根因）。
   凭证等持久化写一律收敛到 `ble_creds` 的内部 RAM 栈写任务：各任务只更新内存表并投递快照，新增持久化需求必须沿用同一模式。
 - `ui/src/bridge/` 与 `firmware/main/bridge/` 只承载低频的模式切换、配对开关、连接状态、电池与诊断：
@@ -174,7 +178,8 @@ flowchart TB
   凭证条数与广播形态（`adv`，取 wake / reconnect / discovery / off）；按键变化另有数据面限频日志（`buttons 0x… -> 0x…`，最小间隔 200 ms）。
 - 输入与输出已解耦成三段稳定接口（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）：
   `dp/dp_source.h`、`pad/pad_state.h` 与 `target/target.h`。
-  新增输入设备（桥接 PC、将来的 USB 手柄、调试注入）只需实现 `dp_source_t` 并注册，首个注册源拥有摇杆/扳机/触摸/运动与设备标识字段，后续源叠加按键，调试注入最后叠加；
+  新增输入设备（桥接 PC、USB 手柄、调试注入）只需实现 `dp_source_t` 并注册，首个注册源拥有摇杆/扳机/触摸/运动/耳机状态/透传原始报文与设备标识字段，后续源叠加按键，调试注入最后叠加；
+  合成只拷这些主源字段（`copy_primary_fields`），新增字段忘了加进去会静默停在默认值上（耳机状态漏拷就是「插着耳机主机也看不到」），`firmware/test/test_dp_source.c` 逐个钉住；
   私有格式 `pad_state_t` 是上下段之间的唯一接缝。
   目标侧 `target_send_pad()` 按注册的 `pad_target_t` 编码（现役 `target/ns2/`，内部仍调 `ns2_output_send()`，可只填需要输出的按键）。
   主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等），在反馈监听者里叠加进 `pad_feedback_t` 持续帧并回发桥接帧
@@ -202,7 +207,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph PC["PC（pc/ 桥接程序）"]
-        HID["手柄 HID 报告"] --> BR["bridge.py：原始报告 + 设备标识"]
+        HID["手柄 HID 报告"] --> BR["remapadctl.py：原始报告 + 设备标识"]
     end
 
     BR -- "桥接帧（USB-Serial/JTAG）" --> LINK
@@ -246,6 +251,8 @@ classDiagram
         pad_motion_t motion
         uint16 mic_level
         bool mic_muted
+        bool headset_present
+        bool headset_mic
         uint8 battery_percent
         bool charging
         uint32 caps
@@ -315,7 +322,7 @@ PC 手柄到 NS2 主机的完整时序（映射表把家族差异收敛在 `pad/
 ```mermaid
 sequenceDiagram
     autonumber
-    participant PC as pc/bridge.py
+    participant PC as pc/remapadctl.py
     participant RECV as input/input_link
     participant SRC as input/input_source
     participant DP as dp/dp_task
@@ -363,7 +370,7 @@ sequenceDiagram
 家族表按系列拆在 `firmware/main/pad/layouts/` 下，契约与注册表是 `pad/layout.h` / `pad/layout.c`。
 取舍见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)。表按（家族、Report ID、连接方式、PID）定位偏移，同一个 Report ID 下的不同型号按 PID 分行：
 PS 系的 DS3、DS4 与 DualSense 有线都报 0x01，DS3 有线与蓝牙字段一致、共用一行。
-各行的偏移初值取自公开资料，落地时用 `pc/bridge.py --dump` 抓原始报告核对后再固化（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过）；
+各行的偏移初值取自公开资料，落地时用 `pc/remapadctl.py --dump` 抓原始报告核对后再固化（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过）；
 DS3 的按键极性、蓝牙前缀长度，以及 DualSense 的电量与触摸板坐标仍未核对，见 [ROADMAP.md](ROADMAP.md) 的家族表回填。Steam 原生布局未抓包，整族走 Xbox 兜底并在能力位里标记。
 
 手柄组合键 L1+R1+L3+R3 按住 300 ms 会捕获输入、转为屏幕操控（[ADR 0028](adr/0028-pad-combo-captures-screen.md)）：

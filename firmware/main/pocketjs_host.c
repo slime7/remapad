@@ -20,6 +20,7 @@
 #include "boot_splash.h"
 #include "bridge/js_bridge.h"
 #include "dp_ui.h"
+#include "input_link.h"
 #include "ota_session.h"
 #include "panel.h"
 #include "render_accel.h"
@@ -62,6 +63,18 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_BAND_MAX 16
 /** strip 缓冲的 DMA 对齐（面板驱动的约定值）。 */
 #define REMAPAD_STRIP_ALIGN 64
+
+/** 截图单块回传的等待上限：PC 侧没在读时让这次截图尽快失败，不留半张图。 */
+#define REMAPAD_SHOT_TX_TIMEOUT_MS 200u
+
+/** 截图请求标志：串口 CLI（input_link / 控制台任务）置位、owner task 消费。 */
+static atomic_bool s_shot_requested;
+
+/** 一次截图已回传的进度：字节偏移与分块数，供日志与失败诊断。 */
+typedef struct {
+    uint32_t sent;
+    uint32_t chunks;
+} remapad_shot_progress_t;
 
 
 /* PocketJS 启动阶段：串口失败日志的标签与启动画面进度共用同一份顺序。 */
@@ -289,6 +302,46 @@ static esp_err_t sample_input(pocketjs_ui_input_t *input, void *user_data)
 }
 
 
+/**
+ * 请求一次实机截图：置位后由 owner task 在下一帧消费（它手上才有当前 frame）。
+ * 串口 CLI 在别的任务上调用，这里只写一个原子标志，不做任何重活。
+ */
+void remapad_ui_request_shot(void)
+{
+    atomic_store_explicit(&s_shot_requested, true, memory_order_relaxed);
+}
+
+/**
+ * 把一条已渲染行带的像素按 200 字节分块回传（截图通路）：strip 的行距是
+ * 视口全宽，窗口窄于视口时逐行取窗口内的列。返回非 ESP_OK 表示这次截图
+ * 放弃——PC 侧按偏移是否覆盖满判定，半张图不会被写成文件。
+ */
+static esp_err_t shot_stream_band(const uint16_t *strip, size_t physical_width, int band_x,
+                                  size_t band_width, size_t band_height,
+                                  remapad_shot_progress_t *progress)
+{
+    const size_t row_bytes = band_width * sizeof(uint16_t);
+    for (size_t line = 0; line < band_height; ++line) {
+        const uint8_t *row = (const uint8_t *)(strip + line * physical_width + (size_t)band_x);
+        size_t done = 0;
+        while (done < row_bytes) {
+            size_t piece = row_bytes - done;
+            if (piece > INPUT_FRAME_IMAGE_CHUNK_MAX) {
+                piece = INPUT_FRAME_IMAGE_CHUNK_MAX;
+            }
+            const esp_err_t err = input_link_send_image_data(progress->sent, &row[done], piece,
+                                                            REMAPAD_SHOT_TX_TIMEOUT_MS);
+            if (err != ESP_OK) {
+                return err;
+            }
+            progress->sent += (uint32_t)piece;
+            progress->chunks++;
+            done += piece;
+        }
+    }
+    return ESP_OK;
+}
+
 static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_data)
 {
     remapad_pocketjs_runtime_t *runtime = user_data;
@@ -311,6 +364,15 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
 
     const pocketjs_rgb565_accelerator_t *accelerator = render_accel();
 
+    /* 截图请求：这一帧按整屏渲染一遍，逐条带把像素回传（PC 侧另存 PNG）。
+     * 链路没在跑（host 模式）时直接丢弃请求，别让它一直挂在标志位上。 */
+    const bool shot = atomic_exchange_explicit(&s_shot_requested, false, memory_order_relaxed) &&
+                      input_link_active();
+    remapad_shot_progress_t shot_progress = {.sent = 0U, .chunks = 0U};
+    uint32_t shot_total = 0U;
+    uint32_t shot_height = 0U;
+    bool shot_failed = false;
+
     /* damage 折成行带表：行带是渲染与提交的最小单位，一条行带内多个 region 的
      * 横向范围合并成一个区间。本帧的每条行带都在本帧画完——隔行刷新在实机滚动
      * 时留下相邻行带相差一帧的纵向错位，观感上不可接受，因此不做字段切分。
@@ -324,6 +386,16 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
     }
     /* 整屏重画（full_redraw）时按整屏补一条区域，不依赖渲染器是否给出 region。 */
     if (plan.region_count == 0U && plan.full_redraw) {
+        plan.region_count = 1U;
+        plan.regions[0] = (pocketjs_rgb565_rect_t){
+            .x = 0U,
+            .y = 0U,
+            .width = frame->logical_width,
+            .height = frame->logical_height,
+        };
+    }
+    /* 截图要整幅画面：把 damage 计划换成整屏一条区域，让每条行带都渲染。 */
+    if (shot) {
         plan.region_count = 1U;
         plan.regions[0] = (pocketjs_rgb565_rect_t){
             .x = 0U,
@@ -357,6 +429,27 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
                 runtime->band_pending[band] = true;
                 runtime->band_x0[band] = x0;
                 runtime->band_x1[band] = x1;
+            }
+        }
+    }
+    /* 截图先声明尺寸与像素格式，再逐条带回传；尺寸越界或链路没答应就放弃
+     * 这次截图（本帧仍照常渲染并提交面板）。 */
+    if (shot) {
+        size_t physical_height = 0;
+        if (scaled_dimension(logical_height, scale, &physical_height) != ESP_OK ||
+            physical_width > UINT16_MAX || physical_height > UINT16_MAX ||
+            physical_width * physical_height > UINT32_MAX / sizeof(uint16_t)) {
+            ESP_LOGW(TAG, "screenshot size out of range: %ux%u", (unsigned)physical_width,
+                     (unsigned)physical_height);
+            shot_failed = true;
+        } else {
+            shot_height = (uint32_t)physical_height;
+            shot_total = (uint32_t)(physical_width * physical_height * sizeof(uint16_t));
+            const esp_err_t announce = input_link_send_image_info(
+                (uint16_t)physical_width, (uint16_t)physical_height, REMAPAD_SHOT_TX_TIMEOUT_MS);
+            if (announce != ESP_OK) {
+                ESP_LOGW(TAG, "screenshot announce failed: %s", esp_err_to_name(announce));
+                shot_failed = true;
             }
         }
     }
@@ -420,6 +513,19 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return result;
         }
+        /* 截图回传必须在面板传输之前：panel_transfer_async 会把缓冲原地改成
+         * SPI 线序（大端），之后再读就不是 RGB565 小端了。 */
+        if (shot && !shot_failed) {
+            const esp_err_t stream_err = shot_stream_band(strip, physical_width, band_x,
+                                                          band_width, band_height,
+                                                          &shot_progress);
+            if (stream_err != ESP_OK) {
+                ESP_LOGW(TAG, "screenshot aborted at %u/%u bytes: %s",
+                         (unsigned)shot_progress.sent, (unsigned)shot_total,
+                         esp_err_to_name(stream_err));
+                shot_failed = true;
+            }
+        }
         /* renderer 先把条带缓冲里 region 覆盖的那块填成背景色，再画内容，
          * 调用方因此不必预先清零：传输范围永远落在它填过的那块里。
          *
@@ -462,6 +568,16 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
     if (result != ESP_OK) {
         pocketjs_rgb565_abort(runtime->renderer, runtime->target);
         return result;
+    }
+    if (shot && !shot_failed) {
+        const esp_err_t end_err = input_link_send_image_end(shot_total, REMAPAD_SHOT_TX_TIMEOUT_MS);
+        if (end_err != ESP_OK) {
+            ESP_LOGW(TAG, "screenshot end frame failed: %s", esp_err_to_name(end_err));
+        } else {
+            ESP_LOGI(TAG, "screenshot sent: %" PRIu32 "x%" PRIu32 " %u bytes in %u chunks",
+                     (uint32_t)physical_width, shot_height, (unsigned)shot_total,
+                     (unsigned)shot_progress.chunks);
+        }
     }
     if (!runtime->first_frame_logged) {
         ESP_LOGI(TAG,
@@ -858,6 +974,7 @@ esp_err_t remapad_pocketjs_start(void)
     }
 
     atomic_init(&s_runtime.stopping, false);
+    atomic_init(&s_shot_requested, false);
     const BaseType_t created = xTaskCreatePinnedToCoreWithCaps(
         pocketjs_owner_task,
         REMAPAD_POCKETJS_TASK_NAME,

@@ -17,7 +17,7 @@ extern "C" {
  * 在 ota_proto，这里只做队列、flash 写入、回滚健康门槛与重启。
  *
  * 通道复用 USB-Serial/JTAG 上的桥接帧，不切 USB mux、不经过 BLE；PC 端工具
- * 见 pc/ota.py。flash 写入必须在内部 RAM 栈上执行（本模块任务由 xTaskCreate
+ * 见 pc/remapadctl.py --upgrade。flash 写入必须在内部 RAM 栈上执行（本模块任务由 xTaskCreate
  * 创建，栈来自内部 RAM），聚合缓冲与帧队列同样固定在内部 RAM。
  */
 

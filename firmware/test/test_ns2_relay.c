@@ -235,10 +235,40 @@ static void target_prefers_relay_until_turned_off(void)
     CHECK_EQ(s_sent[0x02], 0x01);
 }
 
+/**
+ * 透传路径的耳机状态与编码路径同源：原实现把它写死成 0x00，PC 手柄插着
+ * 3.5mm 耳机时主机侧永远显示未插入。两条来源（输入设备派生的 auto 值与
+ * 串口 headset 覆盖值）都要进 0x09 的 0x0D。
+ */
+static void relay_reports_headset_state_from_same_source(void)
+{
+    pad_state_t pad = relay_pad_state();
+    reset_sink(1, NS2_ID_PRO, NS2_REPORT_ID_09);
+
+    ns2_output_set_headset_override(false, 0);
+    ns2_output_set_headset_derived(NS2_HEADSET_NONE);
+    CHECK(ns2_output_send_raw(&pad));
+    CHECK_EQ(s_sent[NS2_09_OFF_HEADSET], NS2_HEADSET_NONE);
+
+    ns2_output_set_headset_derived(NS2_HEADSET_WITH_MIC);
+    CHECK(ns2_output_send_raw(&pad));
+    CHECK_EQ(s_sent[NS2_09_OFF_HEADSET], NS2_HEADSET_WITH_MIC);
+
+    ns2_output_set_headset_override(true, 0x0D);
+    CHECK(ns2_output_send_raw(&pad));
+    CHECK_EQ(s_sent[NS2_09_OFF_HEADSET], 0x0D);
+
+    /* 复原：后面的用例从 auto + 未插入开始。 */
+    ns2_output_set_headset_override(false, 0);
+    ns2_output_set_headset_derived(NS2_HEADSET_NONE);
+}
+
 HOST_TEST_SUITE(suite_ns2_relay, "ns2_relay",
                 {"运动数据填进 0x05 的 IMU 字段", motion_fills_report_05_imu_field},
                 {"实验运动块按样本填 0x09 的运动区", motion_sensor_mode_fills_09_block},
                 {"透传保留设备载荷并重写状态字节",
                  relay_keeps_device_payload_and_rewrites_status},
                 {"透传要求身份与报告格式都对上", relay_requires_matching_identity_and_format},
-                {"目标优先透传，关闭后回到解析重编码", target_prefers_relay_until_turned_off});
+                {"目标优先透传，关闭后回到解析重编码", target_prefers_relay_until_turned_off},
+                {"透传路径的耳机状态与编码路径同源",
+                 relay_reports_headset_state_from_same_source});

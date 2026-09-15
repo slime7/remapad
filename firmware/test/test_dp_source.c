@@ -27,6 +27,16 @@ static void primary_source(pad_state_t *state)
     state->charging = true;
     state->family = PAD_FAMILY_XBOX;
     state->caps = PAD_CAP_TRIGGER_ANALOG;
+    state->headset_present = true;
+    state->headset_mic = true;
+    /* 同代透传的字段也归主源：漏拷会让原始报文体永远是空的。 */
+    state->native_lang = PAD_LANG_NS2;
+    state->native_identity = PAD_IDENTITY_PRO;
+    state->raw_report_id = 0x09;
+    state->raw_len = 3;
+    state->raw[0] = 0x09;
+    state->raw[1] = 0x2A;
+    state->raw[2] = 0x80;
 }
 
 /** 后续源只有按键能生效：摇杆、扳机与设备字段应当被忽略。 */
@@ -39,6 +49,11 @@ static void secondary_source(pad_state_t *state)
     state->battery_percent = 1;
     state->family = PAD_FAMILY_PS;
     state->caps = PAD_CAP_MOTION;
+    state->headset_present = false;
+    state->headset_mic = false;
+    state->native_lang = PAD_LANG_NS1;
+    state->raw_len = 1;
+    state->raw[0] = 0x3F;
 }
 
 static void tertiary_source(pad_state_t *state)
@@ -71,6 +86,15 @@ static void composition_rules(void)
     CHECK(state.charging);
     CHECK_EQ(state.family, PAD_FAMILY_XBOX);
     CHECK_EQ(state.caps, (uint32_t)PAD_CAP_TRIGGER_ANALOG);
+    /* 耳机状态与透传字段同样只认主源：它们在支路被覆盖会让主机看到不存在的耳机，
+     * 或者把支路的报文当成主手柄的原始报文转发出去。 */
+    CHECK(state.headset_present);
+    CHECK(state.headset_mic);
+    CHECK_EQ(state.native_lang, PAD_LANG_NS2);
+    CHECK_EQ(state.native_identity, PAD_IDENTITY_PRO);
+    CHECK_EQ(state.raw_len, 3);
+    CHECK_EQ(state.raw[0], 0x09);
+    CHECK_EQ(state.raw[2], 0x80);
 
     /* 第二个源只叠加按键：摇杆、扳机与设备字段仍是主源的。 */
     dp_source_register(&SOURCE_SECONDARY);
@@ -81,6 +105,10 @@ static void composition_rules(void)
     CHECK_EQ(state.trigger[PAD_TRIGGER_L2], 0x555);
     CHECK_EQ(state.battery_percent, 77);
     CHECK_EQ(state.family, PAD_FAMILY_XBOX);
+    CHECK(state.headset_present);
+    CHECK_EQ(state.native_lang, PAD_LANG_NS2);
+    CHECK_EQ(state.raw_len, 3);
+    CHECK_EQ(state.raw[1], 0x2A);
 
     /* 第三个源同理。 */
     dp_source_register(&SOURCE_TERTIARY);

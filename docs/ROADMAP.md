@@ -43,7 +43,7 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
 
 - [ ] 实机验收：PC 侧插 Xbox / PS / Steam 任一手柄 → NS2 主机的按键与摇杆正确；扳机按 50% 阈值触发 ZL/ZR；背键进 GL/GR；PC 侧拔线后状态回中不卡键；串口日志显示识别到的家族与型号。
 - [ ] 家族表按实测抓包回填：
-  用 `cd pc ; uv run python bridge.py --dump` 抓 Xbox 有线与蓝牙 / DS3 / DS4 有线与蓝牙 / DualSense 有线 / Steam 原生布局的原始报告。
+  用 `cd pc ; uv run python remapadctl.py --dump` 抓 Xbox 有线与蓝牙 / DS3 / DS4 有线与蓝牙 / DualSense 有线 / Steam 原生布局的原始报告。
   核对 `firmware/main/pad/layouts/` 里对应系列的字段偏移。现有偏移都取自公开资料（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过），待确认项：
   Xbox Series 的分享位、DS3 的按键极性（是否低电平有效）与蓝牙前缀长度、DualSense 的电量字节与触摸板坐标（每点 4 字节，DS4 是 3 字节，两处当前都不登记）。
 
@@ -65,12 +65,12 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
 
 ### M6 — 固件 OTA 升级（整包应用镜像）　状态：代码完成，实机验收待做
 
-升级走 USB-Serial/JTAG 上的桥接帧：PC 端 `pc/ota.py` 按窗口推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）。
+升级走 USB-Serial/JTAG 上的桥接帧：PC 端 `pc/remapadctl.py --upgrade` 按窗口推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）。
 设备侧 `firmware/main/ota/` 写进非运行应用分区，`esp_ota_end` 校验通过后切启动分区并重启；回滚保护下新镜像以「待验证」启动，UI 首帧成功且开机满 30 秒才确认有效。
 选型见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)。
 协议见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」，操作见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「固件 OTA 升级」。剩余：
 
-- [ ] 实机验收：正常升级（记录用时）→ 自动重启 → `uartctl.py version` 与系统页显示新版本；升级期间 NS2 主机连接的表现与重启后免配对回连。
+- [ ] 实机验收：正常升级（记录用时）→ 自动重启 → `remapadctl.py -p COMx version` 与系统页显示新版本；升级期间 NS2 主机连接的表现与重启后免配对回连。
 - [ ] 异常路径：中途杀掉 PC 端进程 → 设备回 TIMEOUT 且仍从旧镜像启动；发送被截断的镜像 → 在首帧写入或 `esp_ota_end` 处被拒；人为丢帧 → 从 ACK 的期望序号续传成功。
 - [ ] 回滚演练：把 `ota_session.c` 的健康门槛临时改成 300 秒，升级后立刻断电/重启 → 设备自动回到旧镜像；确认 `rollback` 命令在待验证状态下可用。
 - [ ] 开发流程对账：
@@ -91,6 +91,20 @@ UI 侧按「当前页 + 无弹窗」开关各页的 focusable、上下与左右�
 - [ ] 方向键分工与肩键：上下只在页面内容里走、左右与 L1 / R1 只在底栏两项之间走；焦点停在最后一项后继续按下能一路滚到页底，中途不被跟随滚动拉回。
 
 ## Phase 3 — UI 性能与启动时间　状态：未开始
+### M8 — PC 侧单工具、实机截图与耳机状态透传　状态：实机验收进行中
+
+PC 侧合并成单进程 `pc/remapadctl.py`（转发 + 命令行 + 截图 + OTA，见 [ADR 0033](adr/0033-pc-single-process-tool-and-device-screenshot.md)）；
+桥接协议新增设备 → PC 的图像帧（0x21-0x23）与固件串口命令 `shot`；上报节奏经实机复测后固定 15 ms（ADR 0023 的取值，不再提供运行时档位）；
+耳机状态按输入设备的 3.5 mm 状态透传并提供 `headset auto|0xNN` 覆盖值（[ADR 0035](adr/0035-ns2-headset-state-passthrough.md)）。剩余：
+
+- [x] 实机截图：`--shot` 与设备命令 `shot` 都能落盘，240 × 280 / 840 块，状态页的中文与图标与面板一致；触摸预览页同帧对照待补。
+- [x] 上报节奏 A/B（2026-09-15，主机「查找手柄」）：15 ms 下 66.7 帧/秒、发送失败计数为 0、主机全程保持订阅，震动与操作正常；
+  临时把节奏改成 5 ms 后失败计数随已发计数一起涨（四成以上通知因 mbuf 耗尽被丢）、有效投递掉到 20 次/秒上下，主观表现为操作延迟、震动丢失。
+  结论：15 ms 写死，A/B 用的 `rate` 开关与相关接口一并移除。
+- [x] 桥接运行中的控制通路：转发同时跑 `status` / `link` / `shot` 与 `headset`，互不干扰；`--upgrade --wait` 在同一会话里完成升级并打印新版本。
+- [x] 3.5 mm 耳机状态核对（2026-09-15，DualSense Edge 蓝牙）：插拔差分定位到第 55 字节（bit0 插入、bit1 带麦），已回填 `pad/layouts/ds5.c`；
+  主机接受 0x05 / 0x0D，换上 0x07 / 0x0F 后约 150 ms 取消订阅，因此派生值只报插入，带麦档留待 0x002C 音频通路落地后再评估；DS4 与 DS5 有线行未核对。
+
 
 UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重建上（见 [adr/0017](adr/0017-display-path-and-scroll-frame-budget.md)）。
 启动成本集中在 guest 侧 bundle 的解析与执行（`guest_eval` 约占 16 秒）。两个里程碑分别针对这两处瓶颈；应用侧能动的只有「每帧画多少像素」和「包怎么加载」，因此都先与官方 PocketJS 上游确认可行边界。

@@ -50,7 +50,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   输入通路的三段边界见 [docs/adr/0021](docs/adr/0021-input-path-three-stage-layering.md)，它部分取代 0011 的目录划分。
   数据面汇合约定仍见 [docs/adr/0011](docs/adr/0011-controller-dataplane-module-boundary.md)。
   显示通路的条带划分与整幅刷新取值见 [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md)。
-  PC 桥接已落地，PC 侧程序在 `pc/`，见 [pc/README.md](pc/README.md)。
+  PC 桥接已落地，PC 侧程序在 `pc/`（单工具 `pc/remapadctl.py`：转发 + 命令行 + 实机截图 + OTA），见 [pc/README.md](pc/README.md)。
   OTA 升级见 [docs/adr/0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)。
   USB host 直插也已落地，方案与实机核对清单见 [docs/usb-input-plan.md](docs/usb-input-plan.md)。
   取舍见 [docs/adr/0027](docs/adr/0027-runtime-usb-role-switch.md)。
@@ -76,9 +76,10 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 | **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件 |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器；禁止对已写入用户数据的设备执行 `erase-flash`（会清空 NVS 设置/配对与 `storage` 分区，布局约束见 [ADR 0009](docs/adr/0009-ota-storage-flash-layout.md)） |
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
-| **固件 OTA 升级** | `cd pc ; uv run python ota.py -p COMx` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata`（见 [ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)） |
-| **PC 手柄桥接** | `cd pc ; uv run python bridge.py -p COMx` | 读 PC 端手柄的原始报告并按桥接帧转发给设备（依赖由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移） |
-| **串口 CLI** | `cd pc ; uv run python uartctl.py -p COMx status` | 行命令控制台（免复位打开、`log` 只读日志、`link` 看连接间隔、上报计数与广播形态、`wake` 强制重连主机、`adv` 切常态广播形态、`key ui` 与 `ui on/off` 进出屏幕操控模式、`version` 看镜像版本与升级状态、`fwver a.b.c` 改写上报给主机的手柄固件版本、`fwpost a.b.c` 改写更新完成后上报的版本、`fwack` 换升级帧应答体、`fwapply on|off` 武装收尾重启、`rollback` 回滚待验证镜像） |
+| **固件 OTA 升级** | `cd pc ; uv run python remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；升级与桥接在同一个进程里，从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata`（见 [ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)） |
+| **PC 手柄桥接** | `cd pc ; uv run python remapadctl.py -p COMx` | 读 PC 端手柄的原始报告并按桥接帧转发给设备，同一个进程里同时提供串口命令行、实机截图与 OTA（依赖由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移；转发默认只在交互模式开，`--pad` 让一次性命令 / 截图 / 日志 / 升级也转发、`--no-pad` 全关） |
+| **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台（免复位打开、位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；`link` 看连接间隔与上报计数、`headset auto\|0xNN` 改耳机状态字节、`shot` 抓实机截图、`key ui` 与 `ui on/off` 进出屏幕操控模式、`version` 看镜像版本与升级状态、`rollback` 回滚待验证镜像） |
+| **实机截图** | `cd pc ; uv run python remapadctl.py -p COMx --shot` | 让固件把当前画面整屏重渲染一遍并按图像帧回传，PC 侧拼齐写成 PNG（默认 `pc/shots/remapad-<时间戳>.png`，`--out` 指定路径；截图期间 UI 冻结约 0.2-1 秒，见 [ADR 0033](docs/adr/0033-pc-single-process-tool-and-device-screenshot.md)） |
 
 固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行。
 配置工程时用的解释器记录在 `firmware/build/CMakeCache.txt`，用 `rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可以查到。
@@ -92,6 +93,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - `firmware/build/` 为 ESP-IDF 编译目录。
   - `ui/.pocket/` 为 PocketJS 计划文件目录。
 - `.pocket` 包由官方 PocketJS CLI 生成；ESP-IDF 的 `pocketjs_embed_package` 会在 `firmware/build/` 中生成临时 C/汇编嵌入文件，禁止提交或手动维护。
+- **项目相关的临时文件一律放 `agent-temp/`**：临时脚本、抓包与 `--dump` 输出、截图、日志、一次性分析产物都写进这个目录（`.gitignore` 已忽略其内容，只有 `.gitkeep` 会被跟踪），不要散落到源码目录、仓库根或系统临时目录；
+  目录不存在时自建一次即可，真正要留的东西（脚本、布局表回填、文档）仍按各自的目录约定落位。
 
 ## 项目特有约束
 
