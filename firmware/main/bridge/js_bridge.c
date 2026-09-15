@@ -30,7 +30,10 @@ static const char *TAG = "remapad_bridge";
 #define REMAPAD_CHIP_NAME "ESP32-S3"
 #define REMAPAD_BRIDGE_CMD_MAX 256
 #define REMAPAD_BRIDGE_QUEUE_LEN 8
-#define REMAPAD_EVENT_MAX 320
+/** 事件 JSON 缓冲：systemStatus 是最大的一条，字段取现实中上界约 330 字节
+ *  （含 playerLed），再加上 post_event_json 的调用包装约 50 字节；320 会在
+ *  长时间运行后（uptimeMs 位数增长）截断，取 384 留出余量。 */
+#define REMAPAD_EVENT_MAX 384
 
 /** 重启前留出的应答时间：先让 UI 收到 rebooting 再重启。 */
 #define REMAPAD_REBOOT_DELAY_US (150 * 1000LL)
@@ -62,6 +65,8 @@ static struct {
     QueueHandle_t ext_cmds;
     QueueHandle_t ext_events;
     const char *last_pairing_state; /* 字面量常量指针，用于变化检测。 */
+    /** 上次上报给 UI 的玩家灯掩码；-1 表示尚未上报（0 是有效值：四格全灭）。 */
+    int last_player_led;
     bool usb_role_host; /* UI 请求的角色；host 数据面未接入，仅记录。 */
     int64_t reboot_at_us;
     bool reboot_pending;
@@ -73,6 +78,7 @@ static struct {
 esp_err_t js_bridge_init(void)
 {
     memset(&s_bridge, 0, sizeof(s_bridge));
+    s_bridge.last_player_led = -1;
     s_bridge.ext_cmds = xQueueCreate(REMAPAD_EXT_QUEUE_LEN, sizeof(ext_msg_slot_t));
     s_bridge.ext_events = xQueueCreate(REMAPAD_EXT_QUEUE_LEN, sizeof(ext_msg_slot_t));
     if (s_bridge.ext_cmds == NULL || s_bridge.ext_events == NULL) {
@@ -222,6 +228,7 @@ static void handle_get_system_status(int id)
              "\"percentage\":%d,\"charging\":%s},\"backlight\":%u,\"screenOn\":%s,"
              "\"mode\":\"ble\","
              "\"pairing\":\"%s\",\"controller\":%s,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
+             "\"playerLed\":%u,"
              "\"uptimeMs\":%lld,"
              "\"heapFree\":%u,\"heapSize\":%u,\"psramFree\":%u}",
              id, (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
@@ -232,6 +239,7 @@ static void handle_get_system_status(int id)
                  ? "\"pro-controller-2\"" : "null",
              s_bridge.usb_role_host ? "host" : "device",
              s_bridge.usb_role_host ? "false" : "true",
+             (unsigned)ns2_session_player_leds(),
              (long long)(esp_timer_get_time() / 1000LL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
@@ -640,9 +648,25 @@ const char *js_bridge_pairing_state(void)
     return real_pairing_state();
 }
 
+/** 每帧轮询主机下发的玩家序号灯掩码（Command 0x09）：变化即广播
+ *  playerLedChanged，首页四格指示灯据此更新；断开连接后掩码回落到 0。 */
+static void player_led_poll(void)
+{
+    const int led = (int)ns2_session_player_leds();
+    if (s_bridge.last_player_led == led) {
+        return;
+    }
+    s_bridge.last_player_led = led;
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event), "{\"t\":\"playerLedChanged\",\"led\":%d}", led);
+    reply_raw(event);
+    ESP_LOGI(TAG, "player led -> 0x%x", (unsigned)led);
+}
+
 void js_bridge_service(void)
 {
     pairing_state_poll();
+    player_led_poll();
 
     /* 关机两阶段：先释放电源锁存，再确认是否真的断电。电池供电时第一步
      * 之后系统已经断电、不回到这里；能走到第二步说明外部供电旁路了锁存。 */

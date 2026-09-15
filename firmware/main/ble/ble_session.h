@@ -146,6 +146,11 @@ bool ns2_session_status(uint8_t identity, ns2_session_status_t *out);
  * host 尚未同步时地址未确定，返回 false。 */
 bool ns2_session_identity_mac(uint8_t identity, uint8_t out[6]);
 
+/** 主机下发的玩家序号灯掩码（Command 0x09，bit0-3 对应 LED1-4）：取活跃会话的
+ * 并集（JoyCon 组合左右各自成会话，主机通常下发同一掩码），无连接时为 0。
+ * 控制面据此在首页显示四格序号指示灯。 */
+uint8_t ns2_session_player_leds(void);
+
 #ifdef __cplusplus
 }
 #endif

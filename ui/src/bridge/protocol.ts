@@ -100,6 +100,9 @@ export type DeviceMsg =
       controller: ControllerModel | null;
       usbRole: UsbRole;
       usbRoleActive: boolean;
+      /** 主机下发的玩家序号灯掩码（Command 0x09）：bit0-3 对应四格指示灯，
+       *  未连接主机时为 0。 */
+      playerLed: number;
       uptimeMs: number;
       /** 内部堆内存：可用 / 总量（字节）。 */
       heapFree: number;
@@ -130,6 +133,7 @@ export type DeviceMsg =
   | { t: 'batteryChanged'; battery: BatteryInfo }
   | { t: 'usbRoleChanged'; role: UsbRole; active: boolean }
   | { t: 'pairingStateChanged'; state: PairingState }
+  | { t: 'playerLedChanged'; led: number }
   | { t: 'buttonEvent'; buttons: ControllerButtons }
   /** 关机被外部供电拦下（USB 供电时电源锁存被旁路，系统仍在运行）。 */
   | { t: 'powerOffBlocked' }

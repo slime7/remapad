@@ -20,6 +20,18 @@ export const NAV_BAR = { x: 8, y: 208, width: 224, height: 64 } as const;
 export const NAV_STATUS = { x: 84, y: 240 } as const;
 export const NAV_SETTINGS = { x: 188, y: 240 } as const;
 
+/**
+ * 首页玩家序号指示灯：4 个 16 见方的方块（间距 8），居中排在两枚 56 状态圆
+ * （pt-[38]，圆行 38..94）下方 18 处，即 y 112..128。on/off 是这两种状态的
+ * 底色：点亮为绿色，未点亮为暗绿灯槽。
+ */
+export const PLAYER_LED = {
+  y: 120,
+  xs: [84, 108, 132, 156],
+  on: '#4ade80',
+  off: '#14432a',
+} as const;
+
 export interface FlatNode {
   i: number;
   t: string;

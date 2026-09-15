@@ -94,6 +94,10 @@ export const STYLE = {
   pairMainStop: 'w-[76] h-[76] rounded-full bg-[#8a1a1e] flex-col items-center justify-center shrink-0 active:bg-[#a02a2e] transition-colors duration-150',
   pairAux: 'w-[76] h-[76] rounded-full bg-[#14263e] flex-col items-center justify-center shrink-0 active:bg-[#1c3350] transition-colors duration-150',
 
+  /** 首页玩家序号四格指示灯（对齐 NS2 手柄的绿色序号灯）：点亮 / 未点亮。 */
+  playerLedOn: 'w-[16] h-[16] rounded-[4] shrink-0 bg-[#4ade80]',
+  playerLedOff: 'w-[16] h-[16] rounded-[4] shrink-0 bg-[#14432a]',
+
   /**
    * 模式页/手柄设置页的选项卡（未选中 / 选中）。
    * 这两条不带 transition-colors：选中态要一步到位。加过渡后切换要连画 9 帧
