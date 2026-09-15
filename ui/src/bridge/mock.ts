@@ -67,7 +67,7 @@ const state: MockHardwareState = {
 /** 模拟主机侧的配对耗时：设备发发现广播等主机搜索、配对、握手完成。 */
 const HOST_PAIR_MS = 8000;
 
-/** 已配对身份的回连耗时：主机被唤醒广播叫起来后直接握手，比首次配对快。 */
+/** 已配对身份的回连耗时：主机醒着时认回连形态直接握手，比首次配对快。 */
 const HOST_RECONNECT_MS = 2000;
 
 /** 模拟的主机侧凭证：Pro 与 JoyCon 组合在主机眼里是两台设备，各记一份。 */
@@ -133,7 +133,7 @@ function startPairingFlow(): void {
   later(HOST_PAIR_MS, hostConnects);
 }
 
-/** 已配对身份的回连：主机按唤醒广播连上来，只剩握手窗口。 */
+/** 已配对身份的回连：主机按常驻的回连形态连上来，只剩握手窗口。 */
 function startReconnectFlow(): void {
   setPairing('pairing');
   later(HOST_RECONNECT_MS, hostConnects);

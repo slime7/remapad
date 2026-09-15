@@ -30,20 +30,27 @@ export async function openSettings(app: RemapadApp): Promise<void> {
 
 /**
  * 打开设置页里的某个列表项。末两项被底栏压住，先滚到底再按实测位移换算
- * 落点，避免把「滚动多少」写死在用例里。
+ * 落点；列表也可能停在上一次离开时的滚动位置，所以落点一律按当前位移算——
+ * 行缩到状态栏底下就先甩回顶部重算。位移都取自实测，不把「滚动多少」
+ * 写死在用例里。
  */
 export async function openSettingsItem(app: RemapadApp, item: SettingsItem): Promise<void> {
   const index = SETTINGS_ITEMS.indexOf(item);
   await openSettings(app);
-  let y = itemCenter(index);
+  const content = await app.findVisibleByClass('px-4 pt-[34]');
+  expect(content, '没找到设置页滚动列').toBeDefined();
+  const readOffset = async () => (await app.scrollOffset(content!.i)) ?? 0;
+  let offset = await readOffset();
+  if (itemCenter(index) - offset < TOP_PAD + ITEM_H / 2) {
+    await app.touch.flick({ x: 120, y: 150 }, { x: 120, y: 200 });
+    await app.waitSettled();
+    offset = await readOffset();
+  }
+  let y = itemCenter(index) - offset;
   if (y > 200) {
-    const content = await app.findVisibleByClass('px-4 pt-[34]');
-    expect(content, '没找到设置页滚动列').toBeDefined();
     await app.touch.flick({ x: 120, y: 190 }, { x: 120, y: 140 });
     await app.waitSettled();
-    const offset = await app.scrollOffset(content!.i);
-    expect(offset, '设置页应当能滚到底').not.toBeNull();
-    y -= offset!;
+    y = itemCenter(index) - (await readOffset());
   }
   await app.touch.tap(120, y);
 }
@@ -76,5 +83,12 @@ export async function openPairing(app: RemapadApp): Promise<void> {
 export async function openSystem(app: RemapadApp): Promise<void> {
   await openSettingsItem(app, '系统');
   await expect.poll(() => app.hasVisibleText('重启设备')).toBe(true);
+  await app.refreshTree();
+}
+
+/** 打开调试页（设置列表第五行，需要滚动）。 */
+export async function openDebug(app: RemapadApp): Promise<void> {
+  await openSettingsItem(app, '调试');
+  await expect.poll(() => app.hasVisibleText('按键指令')).toBe(true);
   await app.refreshTree();
 }

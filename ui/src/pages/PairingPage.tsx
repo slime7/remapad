@@ -5,15 +5,16 @@
  * 主机回连，主机停在任意页面都能连上，从未配过则开机自动进入本流程。配对
  * 成功由固件自动退出配对流程，不需要按停止。JoyCon 是左右两只各自独立
  * 连接，主机的 Grip/顺序界面只用于调整顺序与确认；两只未配对期间固件会
- * 自动注入 L+R 120ms 并每 3 秒重试，本页按钮是手动兜底，Pro 则注入 L+R
- * 按键。内容单屏放得下，静态页不挂滚动。七个页面在首屏前一次挂完，切页由
+ * 自动注入 L+R 120ms 并每 3 秒重试，本页按钮是手动兜底（JoyCon 触发左右
+ * 双机配对，Pro 注入 L+R 按键）。内容单屏放得下，静态页不挂滚动。七个页面在
+ * 首屏前一次挂完，切页由
  * 根节点翻转 hidden 完成（见 docs/adr/0016-mount-all-pages-before-first-frame.md）。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { COLOR, STYLE } from '../theme';
 import { BottomPlaceholder } from '../components/BottomPlaceholder';
-import { hw, pressLr, sendDebugKey, startPairing, stopPairing } from '../hooks/useHardware';
+import { hw, pressLr, startPairing, stopPairing } from '../hooks/useHardware';
 import { SPINNER_FRAMES } from '../spinner';
 import { pairingColor, pairingLabel } from '../utils';
 
@@ -66,9 +67,7 @@ export function PairingPage(props: {
           {isBusy() ? (
             <View
               focusable={props.interactive()}
-              onPress={() =>
-                hw.controllerConfig.type === 'joycon' ? pressLr() : sendDebugKey('lr')
-              }
+              onPress={pressLr}
               class={STYLE.pairAux}
             >
               <Text class="text-sm font-bold" style={{ textColor: COLOR.onSurface }}>
