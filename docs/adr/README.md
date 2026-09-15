@@ -54,6 +54,7 @@
 | [0026](0026-same-generation-input-passthrough.md) | active | 手柄输入按同代透传、异代解析分发：设备自带报告语言与目标语言一致时原样转发报文体 |
 | [0027](0027-runtime-usb-role-switch.md) | active | USB host 直插采用运行时角色切换（日志改走 UART0），复位回到串口 |
 | [0028](0028-pad-combo-captures-screen.md) | active | 手柄组合键 L1+R1+L3+R3 捕获为屏幕操控（方向键移动焦点、圆圈键确认），捕获期间停发报文并补一帧全松开 |
+| [0029](0029-pad-ui-axis-split.md) | active | 手柄操控屏幕的方向键分两个轴：上下走页面内容（到末尾再按下继续滚到页底）、左右只在底栏两项之间走；实机 L1 / R1 等价于左右 |
 
 ## 创建 ADR 脚本用法
 
