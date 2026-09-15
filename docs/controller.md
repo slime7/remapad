@@ -144,19 +144,7 @@ sequenceDiagram
   应答码 B2 = 标准 AES-128 在 ECB 模式下以 `reverse(A1) XOR reverse(B1)` 为密钥、加密 `reverse(A2)` 的**原始输出**，线上不再反转：
   `B2 = AES128_ECB(Key=reverse(A1) XOR reverse(B1), Data=reverse(A2))`
 
-Python 算法参考（已验证可通过主机配对确认）：
-```python
-from Crypto.Cipher import AES
-
-def calculate_pairing_response(a1_wire, a2_wire):
-    # 手柄固定公钥 B1（线序即常量序）
-    b1 = bytes.fromhex("5cf6ee792cdf05e1ba2b6325c41a5f10")
-    # 密钥：双方线上字节各自反转后异或
-    key = bytes(a ^ b for a, b in zip(a1_wire[::-1], b1[::-1]))
-    # 挑战码反转后加密，输出不反转
-    b2 = AES.new(key, AES.MODE_ECB).encrypt(a2_wire[::-1])
-    return key, b2
-```
+实现见 `firmware/main/ble/ble_session.c` 的 0x15 处理分支（密钥派生与挑战应答）与 `firmware/main/target/ns2/ns2_frames.c` 的 `ns2_pair_pubkey_b1`（固定公钥常量）：字节反转由 `reverse_bytes()` 统一处理，AES-128-ECB 走 PSA Crypto。
 
 ---
 
@@ -283,19 +271,7 @@ def calculate_pairing_response(a1_wire, a2_wire):
 - `data[1] = ((X >> 8) & 0x0F) | ((Y & 0x0F) << 4)`
 - `data[2] = (Y >> 4) & 0xFF`
 
-C 语言实现示例：
-```c
-void pack_stick(uint16_t x, uint16_t y, uint8_t *out) {
-    out[0] = (uint8_t)(x & 0xFF);
-    out[1] = (uint8_t)(((x >> 8) & 0x0F) | ((y & 0x0F) << 4));
-    out[2] = (uint8_t)((y >> 4) & 0xFF);
-}
-
-void unpack_stick(const uint8_t *in, uint16_t *x, uint16_t *y) {
-    *x = (uint16_t)(in[0] | ((in[1] & 0x0F) << 8));
-    *y = (uint16_t)((in[1] >> 4) | (in[2] << 4));
-}
-```
+实现见 `firmware/main/target/ns2/ns2_report.c` 的 `ns2_pack_stick()` 与 `ns2_unpack_stick()`；编码与解码由主机端用例钉住。
 
 ---
 
@@ -529,44 +505,9 @@ Switch 2 手柄（Joy-Con 2 右手柄及 Pro Controller 2）内置了 NXP PN7160
 
 ### 8.3 Amiibo 读写完整交互时序
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Host as Switch 2 主机
-    participant Controller as 手柄 (PN7160 NFC)
-    participant Amiibo as Amiibo (NTAG215)
+主机侧的四段时序（本节是协议参考，本工程未实现）：0x01/0x03 开射频场轮询 → 卡入场后输入报告的 NFC 状态位变化、0x01/0x05 取 7B UID 与卡片类型 → 0x01/0x06 读卡、0x01/0x15 按 70 字节分块取回 540 字节镜像 → 需要回写时 0x01/0x14 装载写缓冲、0x01/0x08 写卡 → 0x01/0x04 关射频场。
 
-    Note over Host,Controller: 阶段 1：开启 NFC 扫描
-    Host->>Controller: 发送指令 0x01/0x03 (启动射频场与轮询)
-    Controller-->>Host: 响应指令 0x01/0x03 (ACK)
-
-    Note over Controller,Amiibo: 阶段 2：卡片感应与 UID 获取
-    Amiibo->>Controller: 靠近感应区 (RF 载波感应)
-    Controller->>Amiibo: 发送 ISO14443-A REQA / WUPA / 选卡
-    Amiibo-->>Controller: 返回 7 字节 UID (如 04 8A 6D ...)
-    Controller-->>Host: 输入报告中 NFC 状态更新 (0x01~0x07)
-    Host->>Controller: 发送指令 0x01/0x05 (查询卡片状态)
-    Controller-->>Host: 响应指令 0x01/0x05 (返回 7B UID 与卡片类型数据)
-
-    Note over Host,Controller: 阶段 3：分块读取 Amiibo 数据镜像
-    Host->>Controller: 发送指令 0x01/0x06 (开始读取标签内容)
-    Controller->>Amiibo: 读取 NTAG215 扇区与页面 (Pages 0-134)
-    Amiibo-->>Controller: 返回 540 字节原始数据
-    Controller-->>Host: 响应指令 0x01/0x06 (ACK)
-    Host->>Controller: 发送指令 0x01/0x15 (分块读取缓冲区, offset=0)
-    Controller-->>Host: 响应指令 0x01/0x15 (返回前 70 字节数据镜像)
-    Host->>Controller: 发送指令 0x01/0x15 (分块读取缓冲区, offset=0x46 ...)
-    Controller-->>Host: 响应指令 0x01/0x15 (返回后续数据块)
-
-    Note over Host,Controller: 阶段 4：停止或写回更新
-    opt 若需回写游戏存档数据
-        Host->>Controller: 发送指令 0x01/0x14 (加载写缓冲区)
-        Host->>Controller: 发送指令 0x01/0x08 (触发写卡)
-        Controller->>Amiibo: 写入 NTAG215 对应页面
-    end
-    Host->>Controller: 发送指令 0x01/0x04 (关闭 NFC 射频场)
-    Controller-->>Host: 响应指令 0x01/0x04 (ACK)
-```
+板卡没有 NFC 前端，模拟读卡器要额外硬件，因此 NFC 与 amiibo 镜像暂存按 [ROADMAP.md](ROADMAP.md) 的「本阶段明确不做」处理；固件只保留 `ns2_output_amiibo_stage()` 的预置入口与报告里的 NFC 状态字节。
 
 ---
 
@@ -596,14 +537,7 @@ Switch 2 手柄内置硬件级安全恢复模式。在 USB 连接下使用特定
 ```mermaid
 stateDiagram-v2
     [*] --> IdleState : 硬件上电复位
-    IdleState --> SleepState : 无活动超时
-    IdleState --> AdvertisingState : 按下按键 / 触发唤醒
-
-    state SleepState {
-        [*] --> DeepSleep
-        DeepSleep --> WakeBurst : 按键外部中断唤醒
-        WakeBurst --> [*] : 发送2秒 0x81 唤醒广播
-    }
+    IdleState --> AdvertisingState : 配对键 / 开机自动配对
 
     state AdvertisingState {
         [*] --> AdvInd
@@ -626,7 +560,7 @@ stateDiagram-v2
         state NormalOperation {
             [*] --> ConfigFeatures : 接收 0x0C 特性配置
             ConfigFeatures --> ReportLoop : 主机启用 0x000B / 0x000F CCCD 通知
-            ReportLoop --> ReportLoop : 每 5ms 发送 Input Report (0x05 或 0x09)
+            ReportLoop --> ReportLoop : 每 15ms 发送 Input Report (0x05 或 0x09)
             ReportLoop --> HandleRumble : 接收 0x0012 震动输出
             ReportLoop --> HandleCommand : 接收 0x0014 控制指令
         }
@@ -634,6 +568,8 @@ stateDiagram-v2
 
     ConnectedState --> IdleState : 蓝牙断开
 ```
+
+参考实现里还有「无活动超时进休眠、按键唤醒后发 2 秒 0x81 突发」的分支，本设备不采用：待机主机只认唤醒形态，常驻比定时突发可靠；突发形态保留为诊断开关（串口 `adv reconnect`），见 §12 与 [ADR 0024](adr/0024-ns2-steady-wake-adv-and-pairing-key.md)。
 
 **JoyCon 组合双连接形态（本工程实现）**：手柄类型选 JoyCon 组合时，设备以左右两只身份同时在线——两个广播实例各携带独立静态随机 AdvA，各自的序列号（HBW/HCW 前缀）、PID（0x2067/0x2066）与出厂块按连接身份提供，配对凭证按身份分槽持久化；输入报告按身份切分（左：L/ZL/减号/截屏/十字键/左摇杆，右：A/B/X/Y/C/R/ZR/Home/右摇杆，NFC 状态只在右手柄保留），配对页「按下 LR」触发双身份广播并注入 L+R 按键。Pro 模式保持单连接双 PDU（扩展 + legacy）广播。
 
@@ -697,103 +633,26 @@ sequenceDiagram
 
 ---
 
-### 10.3 核心实现关键代码片段（基于 ESP-IDF 与 NimBLE）
+### 10.3 关键实现位置
 
-#### 1. 唤醒广播数据构造
-```c
-#include <stdint.h>
-#include <string.h>
+本工程按上述时序实现，代码是这份规范的执行版本，本节只做索引，不再重复贴等价片段（早期参考实现的两段示例代码与本工程实现等价，留着就会两处漂移）：
 
-void build_switch2_wake_payload(
-    uint16_t pid,
-    const uint8_t target_switch_mac[6],
-    uint8_t out_payload[31]
-) {
-    const uint8_t template_payload[] = {
-        0x02, 0x01, 0x06,                                   // BLE Flags
-        0x1B, 0xFF,                                         // 厂商数据头 (27 字节)
-        0x53, 0x05,                                         // 任天堂 Company ID
-        0x01, 0x00, 0x03,                                   // 协议头
-        0x7E, 0x05,                                         // 任天堂 VID (0x057E)
-        0x00, 0x00,                                         // PID 占位
-        0x00, 0x01, 0x81,                                   // 状态标志 (0x81 表示休眠唤醒)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,                 // 主机 MAC 占位 (反向)
-        0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00      // 尾部对齐
-    };
+| 环节 | 位置 |
+| :--- | :--- |
+| 广播成型（发现 / 回连 / 唤醒三形态）与形态决策 | `firmware/main/target/ns2/ns2_adv.c` |
+| 指令解析与应答分发（0x02 SPI、0x07 握手、0x0C 特性、0x09 玩家灯、0x10 版本、0x15 配对） | `firmware/main/ble/ble_session.c` |
+| 输入报告与出厂块编码 | `firmware/main/target/ns2/ns2_report.c`、`ns2_serial.c`、`ns2_identity.c` |
 
-    memcpy(out_payload, template_payload, sizeof(template_payload));
-
-    // 填入手柄 PID (小端序)
-    out_payload[12] = (uint8_t)(pid & 0xFF);
-    out_payload[13] = (uint8_t)((pid >> 8) & 0xFF);
-
-    // 填入目标主机 MAC (反向字节序)
-    for (int i = 0; i < 6; i++) {
-        out_payload[17 + i] = target_switch_mac[5 - i];
-    }
-}
-```
-
-#### 2. 指令解析与应答分发器框架
-```c
-void handle_incoming_command(uint8_t *cmd_data, size_t len, uint8_t *resp_data, size_t *resp_len) {
-    if (len < 8) return;
-
-    uint8_t cmd = cmd_data[0];
-    uint8_t subcmd = cmd_data[3];
-
-    // 构造响应标准头
-    resp_data[0] = cmd;
-    resp_data[1] = 0x01; // 响应方向
-    resp_data[2] = cmd_data[2]; // 保持 Transport
-    resp_data[3] = subcmd;
-    resp_data[4] = 0x10;
-    resp_data[5] = 0x78; // 成功 ACK
-    resp_data[6] = 0x00;
-    resp_data[7] = 0x00;
-
-    switch (cmd) {
-        case 0x07: // 初始握手
-            resp_data[8] = 0x00;
-            *resp_len = 9;
-            break;
-
-        case 0x10: // 固件版本
-            if (subcmd == 0x01) {
-                resp_data[8] = 0x01; resp_data[9] = 0x00; resp_data[10] = 0x0E; // 固件 1.0.14
-                resp_data[11] = 0x02; // Pro Controller
-                resp_data[12] = 0x0C; resp_data[13] = 0x00; resp_data[14] = 0x00; // BT 补丁
-                resp_data[15] = 0x00;
-                resp_data[16] = 0xFF; resp_data[17] = 0xFF; resp_data[18] = 0xFF; resp_data[19] = 0xFF;
-                *resp_len = 20;
-            }
-            break;
-
-        case 0x15: // 配对指令
-            handle_pairing_command(subcmd, &cmd_data[8], len - 8, &resp_data[8], resp_len);
-            *resp_len += 8;
-            break;
-
-        case 0x0C: // 特性配置
-            memset(&resp_data[8], 0, 4);
-            *resp_len = 12;
-            break;
-
-        default:
-            *resp_len = 8;
-            break;
-    }
-}
-```
+逐字节对照看主机端用例 `firmware/test/test_ns2_adv.c`、`test_ns2_frames.c`、`test_ns2_report.c` 里的黄金字节。
 
 ---
 
 ## 11. 常见问题排查与注意事项
 
-- **BLE 连接间隔要求**：必须在 BLE 连接建立后通过 HCI 命令将 Connection Interval 协商至 5ms ~ 10ms，否则高延迟会导致输入卡顿或主机主动断开连接。
-- **MAC 地址一致性**：广播发送方的自身蓝牙 MAC 地址必须与配对存储区中记录的 MAC 地址完全一致。
-- **字节序反转**：在配对数据（MAC 地址、AES 挑战码、LTK）以及广播中的主机 MAC 字段，任天堂协议均要求采用**反向字节序**。
-- **GATT 特征值写类型**：所有 Output Report 与 Command 写入均采用 `WRITE_WITHOUT_RESPONSE`（Write Command），无需返回 ATT Write Response。
+- **连接间隔**：由主机下发（实测 4 单位即 5 ms，低于规范下限），固件只观测不请求——外设侧主动协商会被主机按规范拒绝，见 §12 与 [ADR 0023](adr/0023-ns2-sub-spec-conn-interval-and-wake-burst.md)。
+- **MAC 地址一致性**：广播地址必须与配对存储区里的主机地址对应，否则主机不采纳这条广播。
+- **字节序反转**：配对数据（MAC、AES 挑战码、LTK）与广播里的主机 MAC 字段一律用**反向字节序**。
+- **GATT 特征值写类型**：Output Report 与 Command 写入都采用 `WRITE_WITHOUT_RESPONSE`，不需要 ATT 应答。
 
 ---
 

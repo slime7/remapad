@@ -31,8 +31,7 @@
 设备侧按 `input/` → `pad/` → `target/` 三段改造并打通到 BLE 输出，PC 侧新增 `pc/` 桥接程序（hidapi 读手柄 → 串口桥接帧，免复位、与串口 CLI 共用一根 Type-C）。数据流、私有格式与家族映射见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」，模块边界见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)。剩余：
 
 - [ ] 实机验收：PC 侧插 Xbox / PS / Steam 任一手柄 → NS2 主机的按键与摇杆正确；扳机按 50% 阈值触发 ZL/ZR；背键进 GL/GR；PC 侧拔线后状态回中不卡键；串口日志显示识别到的家族与型号。
-- [ ] 家族表按实测抓包回填：用 `cd pc ; uv run python bridge.py --dump` 抓 Xbox 有线 / Xbox 蓝牙 / DS4 / Steam 原生布局的原始报告，核对并修正 `firmware/main/pad/pad_device.c` 家族表里的字段偏移（Steam 原生布局尚未登记，当前走 Xbox 兜底并置能力位标记）。重点核对 Xbox Series 的分享位——仍按公开资料填，抓包前只作初值。DualSense 蓝牙（Report ID 0x31）已按 DualSense Edge 实测登记：按键位图、四轴、扳机与运动偏移逐条核对过，偏移与核对依据记在该行注释里；Edge 的两颗背键映射到 L4 / R4（目标侧折进 GL / GR），左右 Fn 键暂不映射。
-- [ ] PS 侧按 PID 分行：DualSense 蓝牙已单列一行（0x31 与 DS4 的 0x11 不同），剩下的是 DualSense 有线——它与 DS4 同报 Report ID 0x01、字段偏移却不同，要按 PID 分行后才能登记；另有 DualSense 的电量字节与触摸板坐标（每点 4 字节，DS4 是 3 字节）尚未核对，两处当前都不登记。触摸板按下与静音键在按键位图里，不受这两项影响。
+- [ ] 家族表按实测抓包回填：用 `cd pc ; uv run python bridge.py --dump` 抓 Xbox 有线与蓝牙 / DS3 / DS4 有线与蓝牙 / DualSense 有线 / Steam 原生布局的原始报告，核对 `firmware/main/pad/pad_device.c` 里的字段偏移。现有偏移都取自公开资料（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过），待确认项：Xbox Series 的分享位、DS3 的按键极性（是否低电平有效）与蓝牙前缀长度、DualSense 的电量字节与触摸板坐标（每点 4 字节，DS4 是 3 字节，两处当前都不登记）。
 
 **USB host 直插（手柄插在板卡上）　状态：未开始**
 
