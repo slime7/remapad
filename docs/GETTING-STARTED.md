@@ -219,8 +219,9 @@ uv run python uartctl.py -p COM3 rollback        # 回滚到上一个可用镜�
 uv run python uartctl.py -p COM3 backlight 60    # 背光并持久化
 uv run python uartctl.py -p COM3 screen off      # 息屏（on 恢复）
 uv run python uartctl.py -p COM3 mode host       # 连接模式（otg 被固件拒绝）
-uv run python uartctl.py -p COM3 pairing start   # 配对广播开关
-uv run python uartctl.py -p COM3 wake            # 唤醒突发：把休眠中的 NS2 主机叫醒（0x81 广播约 10 秒）
+uv run python uartctl.py -p COM3 pairing start   # 配对键：断开当前主机后进发现广播，等新主机搜索配对（stop 退出）
+uv run python uartctl.py -p COM3 wake            # 强制重连：已连接则断开，让主机按唤醒广播重新连上来
+uv run python uartctl.py -p COM3 adv wake        # 常态广播形态（wake 0x81 默认 / reconnect 0x00），实机 A/B 对账用
 uv run python uartctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
 uv run python uartctl.py -p COM3 reboot          # 软重启回 COM 模式
 uv run python uartctl.py -p COM3 log --seconds 20        # 只读设备日志 20 秒
