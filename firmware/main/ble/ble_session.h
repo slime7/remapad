@@ -50,9 +50,26 @@ void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle
 /** 复合输出通道（0x0016）写入：震动参数 + 指令帧。 */
 void ns2_session_on_composite(const uint8_t *data, size_t len, uint16_t conn_handle);
 
-/** 固件升级数据块（0x0018 WRITE NO RSP）：假升级会话入口——接收计数、
- * 静默超时后递增上报版本并落盘（假装升级到新版本）。 */
-void ns2_session_on_fw_upgrade(const uint8_t *data, size_t len);
+/** 固件升级数据块（0x0018 WRITE NO RSP）：假升级会话入口——按记录拼接
+ * 0x0d/0x04 命令帧，帧凑齐即按指令通道的格式应答，静默超时后递增上报版本
+ * 并落盘（假装升级到新版本）。 */
+void ns2_session_on_fw_upgrade(const uint8_t *data, size_t len, uint16_t conn_handle);
+
+/** 升级帧的应答体（默认空体）：主机更新流程无公开文档，串口 fwack 现场替换做 A/B。 */
+void ns2_session_set_fw_ack_body(const uint8_t *body, size_t len);
+
+/** 读回当前升级帧应答体（写入 out，返回写入字节数）。 */
+size_t ns2_session_fw_ack_body(uint8_t *out, size_t cap);
+
+/** 更新应用后上报给主机的版本（默认 9.9.9，主机据此判断还要不要再推一次）。 */
+void ns2_session_set_fw_post_version(const uint8_t ver[3]);
+void ns2_session_fw_post_version(uint8_t out[3]);
+
+/** 主机更新收尾（0x0d/0x07）时是否重启伪装「已升级」：默认关闭——实测重启
+ *  会被主机当成更新没生效而重推整包，形成推包与重启的循环。武装是一次性的：
+ *  触发后自动撤防，串口 fwapply on|off 控制。 */
+void ns2_session_set_fw_restart_armed(bool armed);
+bool ns2_session_fw_restart_armed(void);
 
 /** 特性掩码 bit5（触觉震动）是否在任一活跃会话开启，影响 0x09 状态标志字节。 */
 bool ns2_session_rumble_enabled(void);
@@ -111,6 +128,10 @@ void ns2_session_press_lr(void);
  * 配色与广播拓扑；host 已同步时立即生效。 */
 void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
                               uint32_t button_rgb, uint32_t grip_rgb);
+
+/** 上报固件版本改动后重建出厂块（0x7E40 / 0x13000 的版本字段来自工厂数据）；
+ *  0x10 版本查询直接读配置，无需重建。 */
+void ns2_session_refresh_fw_version(void);
 
 /* --- 输出会话视图（供 dp 的输出通道接线；ns2_output 经 sink 间接调用）--- */
 

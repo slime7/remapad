@@ -67,6 +67,10 @@ static void cli_help(void)
     cli_print("  pad                 recognized pad, layout row and relay state");
     cli_print("  usb                 usb host state (role, device, counters)");
     cli_print("  relay 0|1           same-generation passthrough (default on)");
+    cli_print("  fwver [a.b.c]       handset fw version reported to the host");
+    cli_print("  fwack [hex bytes]   ack body for the host update frame (default empty)");
+    cli_print("  fwpost [a.b.c]      version reported after a host update (default 9.9.9)");
+    cli_print("  fwapply [on|off]    arm the host-update reboot (one shot, default off)");
     cli_print("  version             running image version, partition and ota state");
     cli_print("  rollback            roll back to the previous image (pending verify only)");
     cli_print("  poweroff            release power latch (battery only)");
@@ -510,6 +514,130 @@ static void cli_relay(const char *arg)
     cli_print(line);
 }
 
+/** 解析 a.b.c 版本串（每段 0-255）。 */
+static bool parse_version(const char *text, uint8_t out[3])
+{
+    unsigned major = 0;
+    unsigned minor = 0;
+    unsigned revision = 0;
+    if (sscanf(text, "%u.%u.%u", &major, &minor, &revision) != 3) {
+        return false;
+    }
+    if (major > 255 || minor > 255 || revision > 255) {
+        return false;
+    }
+    out[0] = (uint8_t)major;
+    out[1] = (uint8_t)minor;
+    out[2] = (uint8_t)revision;
+    return true;
+}
+
+/** 上报给主机的手柄固件版本（0x10 查询与两个出厂块共用；假升级会话完成时
+ *  自行递增）。实机对账用：把版本抬到主机认为无需更新的值，或复位到出厂
+ *  版本再走一次主机的更新流程。 */
+static void cli_fwver(const char *arg)
+{
+    char line[64];
+    const app_config_t *cfg = app_config_get();
+    if (arg[0] == '\0') {
+        snprintf(line, sizeof(line), "handset fw %u.%u.%u (reported to host)",
+                 cfg->fw_version[0], cfg->fw_version[1], cfg->fw_version[2]);
+        cli_print(line);
+        return;
+    }
+    uint8_t ver[3];
+    if (!parse_version(arg, ver)) {
+        cli_print("err usage: fwver <major>.<minor>.<revision>");
+        return;
+    }
+    app_config_set_fw_version(ver);
+    ns2_session_refresh_fw_version();
+    snprintf(line, sizeof(line), "ok handset fw -> %u.%u.%u", ver[0], ver[1], ver[2]);
+    cli_print(line);
+}
+
+/** 假升级收尾后上报的版本：主机拿它判断还要不要再推一次更新。 */
+static void cli_fwpost(const char *arg)
+{
+    char line[64];
+    uint8_t ver[3];
+    if (arg[0] == '\0') {
+        ns2_session_fw_post_version(ver);
+        snprintf(line, sizeof(line), "fw upgrade post version %u.%u.%u", ver[0], ver[1], ver[2]);
+        cli_print(line);
+        return;
+    }
+    if (!parse_version(arg, ver)) {
+        cli_print("err usage: fwpost <major>.<minor>.<revision>");
+        return;
+    }
+    ns2_session_set_fw_post_version(ver);
+    snprintf(line, sizeof(line), "ok fw upgrade post version -> %u.%u.%u", ver[0], ver[1], ver[2]);
+    cli_print(line);
+}
+
+/** 升级帧应答体：主机更新流程无公开文档，现场替换做 A/B（空体 = 只回帧头）。 */
+static void cli_fwack(const char *arg)
+{
+    char line[96];
+    uint8_t body[16];
+    if (arg[0] == '\0') {
+        const size_t len = ns2_session_fw_ack_body(body, sizeof(body));
+        int used = snprintf(line, sizeof(line), "fw upgrade ack body (%uB):", (unsigned)len);
+        for (size_t i = 0; i < len && used > 0 && (size_t)used + 4 < sizeof(line); i++) {
+            used += snprintf(&line[used], sizeof(line) - (size_t)used, " %02x", body[i]);
+        }
+        cli_print(line);
+        return;
+    }
+    size_t len = 0;
+    const char *p = arg;
+    while (*p != '\0' && len < sizeof(body)) {
+        while (*p == ' ') {
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+        char *end = NULL;
+        const unsigned long byte = strtoul(p, &end, 16);
+        if (end == p || byte > 0xFF) {
+            cli_print("err usage: fwack [hex bytes]  e.g. fwack 01 00");
+            return;
+        }
+        body[len++] = (uint8_t)byte;
+        p = end;
+    }
+    ns2_session_set_fw_ack_body(body, len);
+    snprintf(line, sizeof(line), "ok fw upgrade ack body -> %uB", (unsigned)len);
+    cli_print(line);
+}
+
+/** 假升级收尾动作：主机推完更新后会等控制器重启回来。实测重启会被主机当成
+ *  更新没生效而重推整包（推包→重启→再推包），所以默认不重启；这里只做
+ *  一次性武装，留给实机对账那一次。 */
+static void cli_fwapply(const char *arg)
+{
+    char line[64];
+    if (arg[0] == '\0') {
+        snprintf(line, sizeof(line), "fw upgrade reboot armed=%u",
+                 ns2_session_fw_restart_armed() ? 1u : 0u);
+        cli_print(line);
+        return;
+    }
+    if (strcmp(arg, "on") == 0) {
+        ns2_session_set_fw_restart_armed(true);
+        cli_print("ok next host update applies the post version and reboots");
+        return;
+    }
+    if (strcmp(arg, "off") == 0) {
+        ns2_session_set_fw_restart_armed(false);
+        cli_print("ok host update no longer reboots");
+        return;
+    }
+    cli_print("err usage: fwapply on|off");
+}
+
 static void cli_dispatch(char *line)
 {
     char *space = strchr(line, ' ');
@@ -561,6 +689,14 @@ static void cli_dispatch(char *line)
         cli_ltk(arg);
     } else if (strcmp(line, "drop") == 0) {
         cli_drop();
+    } else if (strcmp(line, "fwver") == 0) {
+        cli_fwver(arg);
+    } else if (strcmp(line, "fwack") == 0) {
+        cli_fwack(arg);
+    } else if (strcmp(line, "fwpost") == 0) {
+        cli_fwpost(arg);
+    } else if (strcmp(line, "fwapply") == 0) {
+        cli_fwapply(arg);
     } else if (strcmp(line, "version") == 0) {
         cli_version();
     } else if (strcmp(line, "rollback") == 0) {

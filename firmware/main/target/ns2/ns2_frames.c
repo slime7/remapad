@@ -39,7 +39,7 @@ size_t ns2_frame_response(uint8_t *out, size_t cap, uint8_t cmd, uint8_t transpo
 
 void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN], uint8_t identity)
 {
-    /* 固件版本取持久化值（默认 1.6.1，主机固件更新事件由假升级会话递增）；
+    /* 固件版本取持久化值（出厂值固化在 app_config.h 的 CONFIG_DEFAULT_FW_VERSION_*）；
      * 手柄类型按当前会话身份（0x00 JC L / 0x01 JC R / 0x02 Pro）；
      * BT 栈补丁 0.0.12，音频 DSP 固件未实现，按参考实现填 0xFF。 */
     const uint8_t *ver = app_config_get()->fw_version;

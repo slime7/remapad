@@ -249,6 +249,20 @@ static int read_flat(struct ble_gatt_access_ctxt *ctxt, const void *data, size_t
     return os_mbuf_append(ctxt->om, data, len) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
+/** 未知特征值写入留痕：长度 + 前 8 字节，只作实机对账（协议未定，不参与业务）。 */
+static void log_write_head(const char *what, uint16_t tag, const struct os_mbuf *om)
+{
+    const size_t total = OS_MBUF_PKTLEN(om);
+    uint8_t head[8] = {0};
+    const size_t n = total < sizeof(head) ? total : sizeof(head);
+    if (n > 0) {
+        os_mbuf_copydata(om, 0, (int)n, head);
+    }
+    ESP_LOGI(TAG, "%s %uB (tag %u) %02x %02x %02x %02x %02x %02x %02x %02x", what,
+             (unsigned)total, (unsigned)tag, head[0], head[1], head[2], head[3],
+             head[4], head[5], head[6], head[7]);
+}
+
 static conn_slot_t *conn_slot(uint16_t conn_handle)
 {
     for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
@@ -269,6 +283,11 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     ns2_session_touch(conn_handle);
 
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+        /* 输入通道之外的特征值读取（含未实现特征值）留痕：主机在升级等流程
+         * 里若读某个状态位，日志里能看出它期待什么。 */
+        if (tag != CHR_INPUT05 && tag != CHR_INPUT09) {
+            ESP_LOGI(TAG, "chr read tag=%u (handle=0x%04x)", (unsigned)tag, attr_handle);
+        }
         switch (tag) {
         case CHR_INPUT05:
             return read_flat(ctxt, slot ? slot->last_input05 : (uint8_t[63]){0}, 63);
@@ -312,25 +331,35 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
         return BLE_ATT_ERR_UNLIKELY;
     }
 
-    uint8_t buf[128];
+    /* 写缓冲按 ATT 载荷上限取（MTU 512 → 有效载荷 509B）：升级数据块与复合
+     * 帧都可能超过 128B，短于整块的缓冲会让上层把整块记成 0 字节。NimBLE
+     * 主机任务串行处理各连接的 ATT 写，静态缓冲不跨任务共享。 */
+    static uint8_t wbuf[512];
     uint16_t len = 0;
-    ble_hs_mbuf_to_flat(ctxt->om, buf, sizeof(buf), &len);
+    ble_hs_mbuf_to_flat(ctxt->om, wbuf, sizeof(wbuf), &len);
+    memset(&wbuf[len], 0, sizeof(wbuf) - len);
     switch (tag) {
     case CHR_RUMBLE:
-        ns2_session_on_output(buf, len, conn_handle);
+        ns2_session_on_output(wbuf, len, conn_handle);
         break;
     case CHR_CMD:
-        ns2_session_on_command(buf, len, NS2_FRAME_TRANSPORT_BLE, conn_handle);
+        ns2_session_on_command(wbuf, len, NS2_FRAME_TRANSPORT_BLE, conn_handle);
         break;
     case CHR_COMPOSITE:
-        ns2_session_on_composite(buf, len, conn_handle);
+        ns2_session_on_composite(wbuf, len, conn_handle);
         break;
-    case CHR_FWUPG:
-        /* 固件升级数据块（0x0018 WRITE NO RSP）：交给会话的假升级会话。 */
-        ns2_session_on_fw_upgrade(buf, len);
+    case CHR_FWUPG: {
+        /* 固件升级数据块（0x0018 WRITE NO RSP）：整块交给假升级会话逐块留痕。 */
+        const size_t total = OS_MBUF_PKTLEN(ctxt->om);
+        if (total > sizeof(wbuf)) {
+            ESP_LOGW(TAG, "fwupd block %uB over %uB buffer", (unsigned)total,
+                     (unsigned)sizeof(wbuf));
+        }
+        ns2_session_on_fw_upgrade(wbuf, len, conn_handle);
         break;
+    }
     case CHR_BASE_CONFIG:
-        ESP_LOGI(TAG, "vendor base config write %uB", len);
+        log_write_head("vendor base config write", tag, ctxt->om);
         break;
     case CHR_EXT22:
     case CHR_EXT26:
@@ -339,7 +368,7 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     case CHR_EXT2E:
     case CHR_EXT32:
         /* 未知功能特征值（0x0022-0x0032 段）：接受写入即认可。 */
-        ESP_LOGI(TAG, "ext chr write %uB (tag %u)", len, (unsigned)tag);
+        log_write_head("ext chr write", tag, ctxt->om);
         break;
     default:
         return BLE_ATT_ERR_WRITE_NOT_PERMITTED;

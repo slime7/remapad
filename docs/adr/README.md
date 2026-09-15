@@ -57,6 +57,7 @@
 | [0029](0029-pad-ui-axis-split.md) | active | 手柄操控屏幕的方向键分两个轴：上下走页面内容（到末尾再按下继续滚到页底）、左右只在底栏两项之间走；实机 L1 / R1 等价于左右 |
 | [0030](0030-ns2-wake-adv-host-address.md) | active | NS2 唤醒与回连广播携带主机最近一次连接记录到的地址（凭证地址作兜底），部分取代 0024 的广播地址来源 |
 | [0031](0031-ns2-reconnect-adv-and-explicit-wake-window.md) | active | NS2 常态广播回到 0x00 回连形态（不叫醒休眠主机），0x81 收成显式唤醒窗口，调试页 HOME 按实体手柄语义分流；部分取代 0024 的常态广播形态 |
+| [0032](0032-ns2-fw-update-masquerade.md) | active | 主机推手柄固件更新时按「接住数据、逐帧空体应答、不重启」伪装（重启改由串口一次性武装），上报版本固化在 CONFIG_DEFAULT_FW_VERSION_* |
 
 ## 创建 ADR 脚本用法
 

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "host/ble_store.h"
 #include "psa/crypto.h"
@@ -19,9 +20,13 @@
 #include "ns2_output.h"
 #include "ns2_report.h"
 #include "ns2_serial.h"
+#include "ns2_upgrade.h"
 #include "pad_state.h"
 
 static const char *TAG = "remapad_blses";
+
+/** 假升级的收尾动作（定义在文件末尾的假升级会话段）。 */
+static void fwupd_schedule_apply(void);
 
 #define ANSWER_PREFIX_LEN 14
 #define FACTORY_SIZE 2048u
@@ -991,6 +996,21 @@ static const char *hex_prefix(const uint8_t *data, size_t len, char *out, size_t
     return out;
 }
 
+/** 按 16 字节一行留痕一段字节（上限 max），供升级等协议的实机对账。 */
+static void log_hex_block(const char *what, const uint8_t *data, size_t len, size_t max)
+{
+    const size_t n = len < max ? len : max;
+    char line[3 * 16 + 4];
+    for (size_t off = 0; off < n; off += 16) {
+        const size_t chunk = (n - off) < 16 ? (n - off) : 16;
+        ESP_LOGI(TAG, "%s+%03u %s", what, (unsigned)off,
+                 hex_prefix(&data[off], chunk, line, sizeof(line)));
+    }
+    if (len > n) {
+        ESP_LOGI(TAG, "%s .. %u more bytes", what, (unsigned)(len - n));
+    }
+}
+
 void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
                             uint16_t conn_handle)
 {
@@ -1010,6 +1030,10 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
      * 主机重复轮询某条命令（重复轮询说明该应答没被主机接受）。 */
     ESP_LOGI(TAG, "cmd 0x%02x/0x%02x (%uB) %s", data[0], data[3], (unsigned)len,
              hex_prefix(data, len, resp_hex, sizeof(resp_hex)));
+    if (len > 16) {
+        /* 长指令（升级推送若走指令通道就是这种形态）逐字节留痕。 */
+        log_hex_block("cmd", data, len, 128);
+    }
     const uint8_t cmd = data[0];
     const uint8_t subcmd = data[3];
 
@@ -1042,6 +1066,16 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     }
     case 0x0C:
         resp_len = handle_feature_cmd(ses, data, len, subcmd, frame);
+        break;
+    case 0x0D:
+        /* 手柄固件更新流程（实机抓包）：0x01 进入、0x02/0x03 参数、0x04 数据帧
+         * （经 0x0018 分记录推送，由假升级会话应答）、0x05/0x06 收尾与校验、
+         * 0x07 应用。主机接受空应答体；0x07 之后主机在等控制器带着新固件回来，
+         * 这里补一次伪装重启。 */
+        if (subcmd == 0x07) {
+            fwupd_schedule_apply();
+        }
+        resp_len = NS2_FRAME_HEADER_LEN;
         break;
     case 0x11:
         /* 抓包样例：0x11/0x01 返回 4B 确认字，0x11/0x03 返回 0x1C 传感器块。 */
@@ -1241,41 +1275,180 @@ void ns2_session_unpair(void)
 
 /* --- 固件假升级会话：主机经 0x0018 推送升级数据的伪装接收 --- */
 
+/** 会话状态：记录流的装配与留样在 target/ns2/ns2_upgrade.c（有主机端用例），
+ *  这里只持会话级计数、应答与收尾动作。 */
+#define FWUPD_ACK_BODY_MAX 16u
+
 static struct {
     bool active;
+    uint32_t writes;
     uint32_t bytes;
+    size_t prev_len;
+    int64_t start_us;
     int64_t last_us;
+    ns2_upgrade_t up;
 } s_fwupd;
 
-/** 静默视为传输结束：真实升级流程未逆向（无公开文档），按「收完即成功」
- * 处理——递增上报版本并落盘，主机随后的版本查询即视为已升级到新版本。 */
+/** 升级记录的应答体（帧装配完成时回给主机）：主机更新流程无公开文档，实测
+ *  主机在数据帧后停住等应答；应答体经串口 fwack 现场替换做 A/B 对账。 */
+static uint8_t s_fwupd_ack[FWUPD_ACK_BODY_MAX];
+static size_t s_fwupd_ack_len;
+
+void ns2_session_set_fw_ack_body(const uint8_t *body, size_t len)
+{
+    if (len > sizeof(s_fwupd_ack)) {
+        len = sizeof(s_fwupd_ack);
+    }
+    memset(s_fwupd_ack, 0, sizeof(s_fwupd_ack));
+    if (len > 0) {
+        memcpy(s_fwupd_ack, body, len);
+    }
+    s_fwupd_ack_len = len;
+}
+
+size_t ns2_session_fw_ack_body(uint8_t *out, size_t cap)
+{
+    const size_t n = s_fwupd_ack_len < cap ? s_fwupd_ack_len : cap;
+    if (n > 0) {
+        memcpy(out, s_fwupd_ack, n);
+    }
+    return n;
+}
+
+/** 更新应用后上报给主机的版本（主机据此判断还要不要再推一次）：默认跟上
+ *  固化值，现场用串口 fwpost 改写做 A/B。 */
+static uint8_t s_fwupd_post[3] = {CONFIG_DEFAULT_FW_VERSION_MAJOR,
+                                  CONFIG_DEFAULT_FW_VERSION_MINOR,
+                                  CONFIG_DEFAULT_FW_VERSION_REVISION};
+
+void ns2_session_set_fw_post_version(const uint8_t ver[3])
+{
+    memcpy(s_fwupd_post, ver, sizeof(s_fwupd_post));
+}
+
+void ns2_session_fw_post_version(uint8_t out[3])
+{
+    memcpy(out, s_fwupd_post, sizeof(s_fwupd_post));
+}
+
+/** 伪装重启分两拍：先改写上报版本并落盘（等一拍让 NVS 写完），再重启让主机
+ *  看到控制器断开后带着新版本回来——真机在这一步重启进新固件。
+ *
+ *  默认不重启：实测主机把「控制器重启」当成更新没生效，会自动重推整包，
+ *  形成「推包 → 重启 → 再推包」的循环；重启因此改为一次性武装（串口
+ *  fwapply on），只用于实机对账的那一次，触发后自动撤防。 */
+static int64_t s_fwupd_apply_us;
+static int64_t s_fwupd_restart_us;
+static bool s_fwupd_restart_armed;
+
+void ns2_session_set_fw_restart_armed(bool armed)
+{
+    s_fwupd_restart_armed = armed;
+}
+
+bool ns2_session_fw_restart_armed(void)
+{
+    return s_fwupd_restart_armed;
+}
+
+static void fwupd_schedule_apply(void)
+{
+    if (!s_fwupd_restart_armed) {
+        ESP_LOGW(TAG, "fw upgrade applied by host: reboot not armed, staying up");
+        return;
+    }
+    s_fwupd_restart_armed = false;
+    s_fwupd_apply_us = esp_timer_get_time() + 1000000;
+    ESP_LOGI(TAG, "fw upgrade apply armed: report version -> %u.%u.%u, reboot soon",
+             s_fwupd_post[0], s_fwupd_post[1], s_fwupd_post[2]);
+}
+
+/** 按指令通道的同一套帧格式回一条应答（含 14 字节 0 前缀）。 */
+static void fwupd_send_answer(uint16_t conn_handle)
+{
+    uint8_t resp[ANSWER_PREFIX_LEN + NS2_FRAME_HEADER_LEN + FWUPD_ACK_BODY_MAX];
+    memset(resp, 0, ANSWER_PREFIX_LEN);
+    uint8_t *frame = &resp[ANSWER_PREFIX_LEN];
+    const uint8_t cmd = s_fwupd.up.frame[0];
+    const uint8_t subcmd = s_fwupd.up.frame[3];
+    ns2_frame_response_header(frame, cmd, NS2_FRAME_TRANSPORT_BLE, subcmd);
+    if (s_fwupd_ack_len > 0) {
+        memcpy(&frame[NS2_FRAME_HEADER_LEN], s_fwupd_ack, s_fwupd_ack_len);
+    }
+    const size_t len = ANSWER_PREFIX_LEN + NS2_FRAME_HEADER_LEN + s_fwupd_ack_len;
+    ble_controller_notify_answer(conn_handle, resp, len);
+    ESP_LOGI(TAG, "fw frame #%u complete: cmd 0x%02x/0x%02x body=%uB buffered=%uB -> rsp %uB",
+             (unsigned)s_fwupd.up.frames, cmd, subcmd,
+             (unsigned)ns2_upgrade_frame_body(&s_fwupd.up), (unsigned)s_fwupd.up.frame_len,
+             (unsigned)s_fwupd_ack_len);
+}
+
+/** 静默视为传输结束：真实升级流程未逆向（无公开文档），这里只做统计与留样
+ *  输出，不改上报版本——版本由编译期常量与串口 fwver 决定（见 ns2_frames.h）。 */
 #define FWUPD_IDLE_TIMEOUT_US (10 * 1000000LL)
 
-void ns2_session_on_fw_upgrade(const uint8_t *data, size_t len)
+void ns2_session_on_fw_upgrade(const uint8_t *data, size_t len, uint16_t conn_handle)
 {
+    const int64_t now = esp_timer_get_time();
     if (!s_fwupd.active) {
         s_fwupd.active = true;
+        s_fwupd.writes = 0;
         s_fwupd.bytes = 0;
-        ESP_LOGI(TAG, "fw upgrade session started (masquerade)");
+        s_fwupd.prev_len = 0;
+        s_fwupd.start_us = now;
+        ns2_upgrade_reset(&s_fwupd.up);
+        ESP_LOGI(TAG, "fw upgrade session started (masquerade): logging records");
     }
-    s_fwupd.bytes += len;
-    s_fwupd.last_us = esp_timer_get_time();
+    const int64_t gap_us = s_fwupd.writes == 0 ? 0 : now - s_fwupd.last_us;
+    s_fwupd.writes++;
+    s_fwupd.bytes += (uint32_t)len;
+    s_fwupd.last_us = now;
+    const ns2_upgrade_event_t event = ns2_upgrade_feed(&s_fwupd.up, data, len);
+    if (event == NS2_UPGRADE_MALFORMED) {
+        ESP_LOGW(TAG, "fw record too short (%u)", (unsigned)len);
+        s_fwupd.prev_len = len;
+        return;
+    }
+
+    /* 逐条记录的日志密度：前 16 条全覆盖（看开头结构），之后每 32 条一条，
+     * 长度变化时补一条——长传输不淹日志，结构切换处仍留痕。 */
+    char line[160];
+    const int used = snprintf(line, sizeof(line),
+                              "fw rec #%u +%ums gap=%ums type=0x%02x idx=%u %uB total=%u",
+                              (unsigned)s_fwupd.writes,
+                              (unsigned)((now - s_fwupd.start_us) / 1000),
+                              (unsigned)(gap_us / 1000), data[0], data[1], (unsigned)len,
+                              (unsigned)s_fwupd.bytes);
+    const bool verbose = s_fwupd.writes <= 16 || (s_fwupd.writes % 32) == 0 ||
+                         (s_fwupd.writes > 1 && len != s_fwupd.prev_len);
+    if (verbose && used > 0 && (size_t)used < sizeof(line)) {
+        char preview[3 * 16 + 4];
+        snprintf(&line[used], sizeof(line) - (size_t)used, " %s",
+                 hex_prefix(data, len, preview, sizeof(preview)));
+    }
+    ESP_LOGI(TAG, "%s", line);
+    s_fwupd.prev_len = len;
+
+    if (event == NS2_UPGRADE_FRAME) {
+        fwupd_send_answer(conn_handle);
+    }
 }
 
 static void fwupd_finish(void)
 {
-    uint8_t ver[3];
-    memcpy(ver, app_config_get()->fw_version, sizeof(ver));
-    if (++ver[2] > 0x63) {
-        ver[2] = 0x00;
-        if (++ver[1] > 0x63) {
-            ver[1] = 0x00;
-            ++ver[0];
-        }
+    const uint32_t bytes = s_fwupd.bytes;
+    const int64_t span_us = s_fwupd.last_us - s_fwupd.start_us;
+    ESP_LOGI(TAG, "fw upgrade idle -> done: %u frames, %u records, %u bytes, span %us, rec %u..%uB",
+             (unsigned)s_fwupd.up.frames, (unsigned)s_fwupd.up.records, (unsigned)bytes,
+             (unsigned)(span_us / 1000000),
+             (unsigned)(s_fwupd.up.min_record == SIZE_MAX ? 0 : s_fwupd.up.min_record),
+             (unsigned)s_fwupd.up.max_record);
+    if (s_fwupd.up.truncated) {
+        ESP_LOGW(TAG, "fw upgrade: frame over %uB buffer", (unsigned)NS2_UPGRADE_FRAME_CAP);
     }
-    app_config_set_fw_version(ver);
-    ESP_LOGI(TAG, "fw upgrade finished: %u bytes received, report version -> %u.%u.%u",
-             (unsigned)s_fwupd.bytes, ver[0], ver[1], ver[2]);
+    log_hex_block("fw frame", s_fwupd.up.sample, s_fwupd.up.sample_len,
+                  sizeof(s_fwupd.up.sample));
+    log_hex_block("fw tail", s_fwupd.up.tail, s_fwupd.up.tail_len, sizeof(s_fwupd.up.tail));
     s_fwupd.active = false;
 }
 
@@ -1323,6 +1496,21 @@ void ns2_session_tick(void)
 {
     if (s_fwupd.active && esp_timer_get_time() - s_fwupd.last_us > FWUPD_IDLE_TIMEOUT_US) {
         fwupd_finish();
+    }
+
+    /* 假升级的收尾：改写上报版本并落盘，一拍后重启（见 fwupd_schedule_apply）。 */
+    if (s_fwupd_apply_us != 0 && esp_timer_get_time() >= s_fwupd_apply_us) {
+        s_fwupd_apply_us = 0;
+        app_config_set_fw_version(s_fwupd_post);
+        app_config_flush();
+        ESP_LOGI(TAG, "fw upgrade applied: report version -> %u.%u.%u, restarting soon",
+                 s_fwupd_post[0], s_fwupd_post[1], s_fwupd_post[2]);
+        s_fwupd_restart_us = esp_timer_get_time() + 1500000;
+    }
+    if (s_fwupd_restart_us != 0 && esp_timer_get_time() >= s_fwupd_restart_us) {
+        s_fwupd_restart_us = 0;
+        ESP_LOGW(TAG, "fw upgrade restart (masquerade)");
+        esp_restart();
     }
 
     /* 唤醒窗口到期：常态广播从唤醒形态落回回连形态（未连接时要重发一次广播
@@ -1449,6 +1637,13 @@ void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *
         }
         n++;
     }
+}
+
+/** 上报版本改动后重建出厂块：0x10 查询直接读配置即刻生效，两个出厂块
+ * （0x7E40 / 0x13000）的版本字段在工厂数据里，重建一次才对得上。 */
+void ns2_session_refresh_fw_version(void)
+{
+    factory_init();
 }
 
 /** 控制面下发手柄身份（类型 + 配色）：切换等价于「旧手柄断电、新手柄上电」

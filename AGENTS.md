@@ -78,7 +78,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
 | **固件 OTA 升级** | `cd pc ; uv run python ota.py -p COMx` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata`（见 [ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)） |
 | **PC 手柄桥接** | `cd pc ; uv run python bridge.py -p COMx` | 读 PC 端手柄的原始报告并按桥接帧转发给设备（依赖由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移） |
-| **串口 CLI** | `cd pc ; uv run python uartctl.py -p COMx status` | 行命令控制台（免复位打开、`log` 只读日志、`link` 看连接间隔、上报计数与广播形态、`wake` 强制重连主机、`adv` 切常态广播形态、`key ui` 与 `ui on/off` 进出屏幕操控模式、`version` 看镜像版本与升级状态、`rollback` 回滚待验证镜像） |
+| **串口 CLI** | `cd pc ; uv run python uartctl.py -p COMx status` | 行命令控制台（免复位打开、`log` 只读日志、`link` 看连接间隔、上报计数与广播形态、`wake` 强制重连主机、`adv` 切常态广播形态、`key ui` 与 `ui on/off` 进出屏幕操控模式、`version` 看镜像版本与升级状态、`fwver a.b.c` 改写上报给主机的手柄固件版本、`fwpost a.b.c` 改写更新完成后上报的版本、`fwack` 换升级帧应答体、`fwapply on|off` 武装收尾重启、`rollback` 回滚待验证镜像） |
 
 固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行。
 配置工程时用的解释器记录在 `firmware/build/CMakeCache.txt`，用 `rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可以查到。

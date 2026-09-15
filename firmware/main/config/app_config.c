@@ -31,6 +31,8 @@ static const char *TAG = "remapad_config";
 static struct {
     app_config_t cfg;
     SemaphoreHandle_t lock;
+    /** 提交任务的就绪信号：周期超时或被 app_config_flush() 提前叫醒。 */
+    SemaphoreHandle_t wake;
     /** 内存表存在未落盘的改动（由 lock 保护）。 */
     bool dirty;
 } s_appcfg;
@@ -94,7 +96,7 @@ static void commit_task(void *param)
 {
     (void)param;
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_COMMIT_PERIOD_MS));
+        xSemaphoreTake(s_appcfg.wake, pdMS_TO_TICKS(CONFIG_COMMIT_PERIOD_MS));
         if (s_appcfg.lock == NULL ||
             xSemaphoreTake(s_appcfg.lock, portMAX_DELAY) != pdTRUE) {
             continue;
@@ -116,7 +118,8 @@ static void commit_task(void *param)
 esp_err_t app_config_init(void)
 {
     s_appcfg.lock = xSemaphoreCreateMutex();
-    if (s_appcfg.lock == NULL ||
+    s_appcfg.wake = xSemaphoreCreateBinary();
+    if (s_appcfg.lock == NULL || s_appcfg.wake == NULL ||
         xTaskCreate(commit_task, "appcfg", 4096, NULL, 2, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
@@ -128,10 +131,10 @@ esp_err_t app_config_init(void)
     s_appcfg.cfg.body_color = 0;
     s_appcfg.cfg.button_color = 0;
     s_appcfg.cfg.grip_color = 0;
-    /* 上报固件版本默认 1.6.1（与出厂块历史值一致，高于抓包样本 1.0.14）。 */
-    s_appcfg.cfg.fw_version[0] = 0x01;
-    s_appcfg.cfg.fw_version[1] = 0x06;
-    s_appcfg.cfg.fw_version[2] = 0x01;
+    /* 上报固件版本：出厂值固化在 app_config.h 的 CONFIG_DEFAULT_FW_VERSION_*。 */
+    s_appcfg.cfg.fw_version[0] = CONFIG_DEFAULT_FW_VERSION_MAJOR;
+    s_appcfg.cfg.fw_version[1] = CONFIG_DEFAULT_FW_VERSION_MINOR;
+    s_appcfg.cfg.fw_version[2] = CONFIG_DEFAULT_FW_VERSION_REVISION;
 
     nvs_handle_t handle;
     const esp_err_t err = nvs_open(CONFIG_NS, NVS_READONLY, &handle);
@@ -235,4 +238,11 @@ void app_config_set_fw_version(const uint8_t ver[3])
         xSemaphoreGive(s_appcfg.lock);
     }
     mark_dirty();
+}
+
+void app_config_flush(void)
+{
+    if (s_appcfg.wake != NULL) {
+        xSemaphoreGive(s_appcfg.wake);
+    }
 }

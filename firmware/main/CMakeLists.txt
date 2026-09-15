@@ -55,6 +55,7 @@ idf_component_register(
         "target/ns2/ns2_report.c"
         "target/ns2/ns2_adv.c"
         "target/ns2/ns2_frames.c"
+        "target/ns2/ns2_upgrade.c"
         "target/ns2/ns2_output.c"
         "target/ns2/ns2_serial.c"
         "target/ns2/ns2_identity.c"

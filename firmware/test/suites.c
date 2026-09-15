@@ -8,6 +8,7 @@ extern const host_test_suite_t suite_ns2_report;
 extern const host_test_suite_t suite_ns2_adv;
 extern const host_test_suite_t suite_ns2_serial;
 extern const host_test_suite_t suite_ns2_frames;
+extern const host_test_suite_t suite_ns2_upgrade;
 extern const host_test_suite_t suite_ns2_identity;
 extern const host_test_suite_t suite_render_accel;
 extern const host_test_suite_t suite_dp_source;
@@ -26,6 +27,7 @@ static const host_test_suite_t *const s_suites[] = {
     &suite_ns2_adv,
     &suite_ns2_serial,
     &suite_ns2_frames,
+    &suite_ns2_upgrade,
     &suite_ns2_identity,
     &suite_render_accel,
     &suite_dp_source,

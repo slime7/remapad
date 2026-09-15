@@ -248,6 +248,7 @@ uv run python uartctl.py -p COM3 ui on           # 手动进出屏幕操控模�
 uv run python uartctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
 uv run python uartctl.py -p COM3 stick reset     # 两侧摇杆回中
 uv run python uartctl.py -p COM3 link            # 两只手柄的地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
+uv run python uartctl.py -p COM3 fwver 2.0.0     # 改写上报给主机的手柄固件版本（0x10 查询与出厂块共用；不带参数看当前值）
 uv run python uartctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
 uv run python uartctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
 uv run python uartctl.py -p COM3 backlight 60    # 背光并持久化

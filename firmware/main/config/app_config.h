@@ -10,6 +10,16 @@ extern "C" {
 #endif
 
 /**
+ * 上报给主机的手柄固件版本（主.次.修订）的出厂值。主机（Switch 2）拿它判断
+ * 要不要推手柄固件更新：实测版本偏低时会弹更新提示、并在「更新手柄」菜单里
+ * 推整包。想固定上报版本就改这三个常量并连固件一起刷；串口 fwver 写的值存在
+ * NVS 里、优先于这里的出厂值（清除 NVS 后回到出厂值）。
+ */
+#define CONFIG_DEFAULT_FW_VERSION_MAJOR 9u
+#define CONFIG_DEFAULT_FW_VERSION_MINOR 9u
+#define CONFIG_DEFAULT_FW_VERSION_REVISION 9u
+
+/**
  * 用户设置持久化（NVS 命名空间 "remapad"，键 "cfg"）：背光亮度、手柄身份
  * 配置（类型 + 机身配色）与上报固件版本。USB 连接模式只在内存中生效、
  * 不落盘，开机恒为串口。内存表在 app_config_init 时读入，setter 只改内存
@@ -46,8 +56,9 @@ typedef struct {
     uint32_t grip_color;
     /**
      * 上报给主机的手柄固件版本（主.次.修订），0x10 版本查询、0x7E40 与
-     * 0x13000 出厂块的版本字段共用。默认 1.6.1；主机的固件更新推送由
-     * 假升级会话接收，完成后递增并落盘（假装升级到新版本）。
+     * 0x13000 出厂块的版本字段共用。出厂值见 CONFIG_DEFAULT_FW_VERSION_*；
+     * 主机的固件更新推送由假升级会话接收并逐帧应答（见 controller.md §12），
+     * 是否重启伪装成「已升级」由串口 fwapply 一次性武装。
      */
     uint8_t fw_version[3];
 } app_config_t;
@@ -67,6 +78,10 @@ void app_config_set_controller(app_config_ctrl_type_t type,
 
 /** 覆盖上报固件版本（假升级完成时递增），随周期检查落盘。 */
 void app_config_set_fw_version(const uint8_t ver[3]);
+
+/** 立即叫醒提交任务落盘（默认每 1 分钟检查一次）。用于「改完就要重启」的
+ * 场景：不落盘直接重启会丢掉刚改的版本。 */
+void app_config_flush(void);
 
 #ifdef __cplusplus
 }
