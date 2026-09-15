@@ -16,10 +16,12 @@
 | **Damage region** | 一帧中需要重新光栅化的逻辑矩形；renderer 将其输出为 full-width RGB565 strip。 |
 | **Host BSP** | 项目自己的 ESP-IDF 硬件层，负责面板、DMA、触控、按键、电源和其他外设。 |
 | **USB input** | 由 ESP32 USB host 接收的外部输入报告，先进入产品数据面，不直接进入 PocketJS。 |
-| **接收段（input/）** | 输入通路的第一段：桥接帧的编解码与串口分帧、USB-Serial/JTAG 的唯一读取者、实现 `dp_source_t` 的输入源。 |
+| **接收段（input/、usb/）** | 输入通路的第一段：桥接帧的编解码与串口分帧、USB-Serial/JTAG 的唯一读取者、USB host 枚举与 HID 收发，以及实现 `dp_source_t` 的桥接源与 USB 源。 |
 | **处理段（pad/）** | 输入通路的第二段：家族布局表把各家手柄报告解析成私有格式 `pad_state_t`（按键按位置语义、摇杆归一、能力位）。 |
 | **转换段（target/）** | 输入通路的第三段：目标编码器 `pad_target_t` 把私有格式编码成具体目标家族的报文，现役实现为 `target/ns2/`。 |
-| **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
+| **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、输出报告帧（`0x11`，设备 → PC 的反馈写回）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
+| **同代透传** | 设备自带的报告语言与目标语言一致时，把设备报文体原样交给目标发送（NS2 手柄 → NS2 主机），只重写由本机会话决定的状态字节；判定与取舍见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。 |
+| **输出报告（反馈）** | 主机下发的震动 / 玩家灯 / 触觉采样经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告，USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。 |
 | **OTA 会话（ota/）** | 升级通道的固件侧：`ota_session` 负责帧队列、非阻塞分派、flash 写入与重启，`ota_proto` 是纯逻辑的序号判定、窗口应答、4 KB 聚合与超时；镜像写进非运行分区，校验通过后切启动分区（见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)）。 |
 | **NS2 report encoder** | 将私有手柄状态（`pad_state_t`）编码为目标 NS2 手柄的 USB/BLE 报告，位于 `firmware/main/target/ns2/`。 |
 | **BLE controller peripheral** | 对 NS2 主机执行广播、GATT 服务、输入通知、输出命令和配对状态管理的 ESP32 外设角色。 |
@@ -58,28 +60,28 @@ USB 到 NS2 BLE 的目标链路如下：
 ```mermaid
 flowchart TB
     Bridge["PC 手柄（已实现）<br/>pc/ 桥接程序读原始报告并转发"]
-    Host["USB host 手柄（未实现，M5）<br/>手柄插在板卡上：USB mux 切换 + HID 接收"]
+    Host["USB host 手柄（已实现）<br/>手柄插在板卡上：OTG host 枚举 + HID 收发"]
     Recv["input/ 接收段<br/>帧解码 / 串口分帧 / dp_source_t 输入源"]
     Parse["pad/ 处理段<br/>家族布局表解析 + 归一 → pad_state_t"]
     Encode["target/ 转换段<br/>pad_target_t → NS2 报告编码（target/ns2/）"]
     Ble["BLE 广播 / GATT / 输入通知 / 输出命令"]
     Session["NS2 主机的连接与配对"]
     Feedback["pad_feedback_t：主机反馈（震动 / 玩家 LED / 触觉采样）"]
+    FbEnc["pad/feedback.c<br/>按设备布局行编码输出报告"]
 
     Bridge -->|"桥接帧，USB-Serial/JTAG"| Recv
-    Host -. "IN 64B 中断传输（HID 报告 + Report ID）" .-> Recv
+    Host -->|"IN 64B 中断传输（HID 报告 + Report ID）"| Recv
     Recv -->|pad_report_t| Parse
     Parse --> Encode
     Encode --> Ble
     Ble --> Session
     Ble -.-> Feedback
-    Feedback -. 输入侧投递 .-> Recv
-
-    classDef planned stroke-dasharray: 5 5
-    class Host planned
+    Feedback --> FbEnc
+    FbEnc -->|"OUT 中断传输（手柄插板卡）"| Host
+    FbEnc -->|"OUT_REPORT 帧 → PC 写手柄"| Bridge
 ```
 
-实线是已经落地的路径（PC 侧插手柄，经桥接帧进来），虚线是尚未实现的部分：USB host 直插（手柄插在板卡上）需要先做 USB mux 实验与 VBUS 供电确认，方案见 [usb-input-plan.md](usb-input-plan.md)，待办见 [ROADMAP.md](ROADMAP.md) M5。两条路径在这里汇合，之后共用 `pad/` 与 `target/` 两段，解析与映射只有一份。
+两条输入路径都已落地（PC 桥接走 USB-Serial/JTAG 的桥接帧，USB host 直插走 OTG host 的 HID 中断传输），在 `input/` 汇合之后共用 `pad/` 与 `target/` 两段，解析与映射只有一份；反馈方向同样收敛在 `pad/feedback.c` 一处（按设备布局行编码输出报告，USB 写 OUT 端点，桥接把原始报告交给 PC）。推进结论与实机待办（USB mux 实验、VBUS 供电确认）见 [usb-input-plan.md](usb-input-plan.md) 与 [ROADMAP.md](ROADMAP.md) M5；同代透传的判定见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)，角色切换见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
 
 这条链路需要保持低延迟和确定性：
 
@@ -92,13 +94,16 @@ flowchart TB
 - `ui/src/bridge/` 与 `firmware/main/bridge/` 只承载低频的模式切换、配对开关、连接状态、电池与诊断：guest 侧 `HardwareDriver` 经 `globalThis.__nativeBridge.postMessage(json)` 发命令，owner task 每帧 `js_bridge_service()` 处理队列并用 `pocketjs_guest_eval` 调 `__onNativeBridgeMessage(json)` 回发应答与事件（入队出队都在 owner task 上，无锁）；PWR 按键与串口 CLI 等非 owner task 上下文经 `js_bridge_submit_command` / `js_bridge_post_event` 的外部队列转移。命令与事件清单以 `ui/src/bridge/protocol.ts` 为准。
 - **屏幕文案一律取自 ui/src 的字面量**，桥接只回状态与错误码、不回可上屏的文本：构建期字体字符集按源码字面量扫描烘焙，固件回传的文本直接渲染就是豆腐块（联合类型 `PairingNotice` / `RoleNotice` 把这条规则钉在类型上）。
 - 玩家序号灯（主机 Command 0x09 下发的 4 位掩码）由 `ns2_session_player_leds()` 按活跃会话汇总，随 `systemStatus.playerLed` 与变化时的 `playerLedChanged` 事件供首页四格指示灯使用（bit0-3 从左到右对应四格，无主机时为 0，断连自动回落）。用户设置（背光亮度、手柄身份类型与配色、上报固件版本）由 `firmware/main/config/app_config.c` 持久化到 NVS（内部 RAM 栈提交任务，与 ble_creds 同一模式），开机恢复。
-- USB 角色（`usbRole`: device=插电脑 COM 口，host=插手柄）目前只由固件记录并如实上报 `usbRoleActive`，且只在本次运行有效（不写 NVS），重启回到串口；USB OTG PHY 切换属于数据面，未接入前任何代码都不触碰 RTC_CNTL USB mux，复位后永远回到默认的 USB-Serial/JTAG（COM 设备模式），"重启回 COM 模式"因此天然成立。
+- USB 角色（`usbRole`: device=插电脑 COM 口，host=插手柄）会真实切换：切到 host 时先把日志与 CLI 出口换到 UART0（GPIO43/44），再放掉 USB-Serial/JTAG、装 USB host 栈（复用开关随之切到 OTG host），PC 上的 COM 口消失直到复位；切回串口按相反顺序还原。角色只在本次运行有效（不写 NVS），复位后复用开关回默认的 USB-Serial/JTAG（COM 设备模式），"重启回 COM 模式"因此天然成立，恢复路径与取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
 - 配对与连接状态接的是真实 BLE 会话（NimBLE 手柄外设，进度见 [ROADMAP.md](ROADMAP.md)）：配对页「开始」等价于真机按住配对键——`startPairing` 先断开当前主机再进发现广播等新主机搜索，`stopPairing` 退出流程（已配对回常态广播，未配对静默）；开机时当前形态没有任何凭证就自动进入配对流程，凭证拿齐且会话注册完成才由 tick 退出流程——只看凭证会让已配对设备一按配对键就被判成完成。解除配对走显式 `unpair`（清 NVS 凭证并回到配对流程），UI 不暴露入口。已连接却停在握手等待态的主机（手机/PC 自动回连）由 3 秒无协议活动的空闲超时断开，主机连接地址是随机地址，不能按 OUI 识别。配对成功以协议证据判定（初始化 / 0x15 握手完成，或凭证匹配回连），NVS 凭证只是重启后仍成立的持久化证据，两者独立；配对六态由此实时推导并经 `pairingStateChanged` 推送。Command 0x15 与 NVS 凭证见 [controller.md](controller.md) 与 [ADR 0010](adr/0010-nimble-ble-controller-stack.md)。电池由 `battery.c` 真实采样（BAT_ADC=GPIO1 / ADC1_CH0，分压 3:1 还原 VBAT，静置电压—容量表折算百分比），充电状态没有可测量的引脚，是按电压趋势推断的值，限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。
 - 手柄身份与配对凭证按 `ns2_identity_t`（Pro / JoyCon L / JoyCon R）分槽（`ble_creds`，NVS v2 格式，旧单表记录迁移进 Pro 槽）：切换手柄类型后主机眼中是另一台设备，配对信息不共用。Pro 为单连接双 PDU 广播；JoyCon 组合为左右双连接（`CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2`），各占一个广播实例与静态随机 AdvA——地址由 `ns2_identity_adv_addr()` 按身份的固定盐从公共伪装地址扩散，再置成静态随机形态（最高字节 bit7/bit6 置一，最低位右置一、左清零），三种形态的地址互不共用字节序列，避免主机把不同形态认成同一台或把两只认成一只，同一芯片上结果稳定；NimBLE 每实例地址仅支持 RANDOM，与真机 public 形态不同，兼容性待实机验证。序列号 / PID / 出厂块（0x7E40 与 0x13000）按连接身份提供，输入报告按身份切分左右半边（左：L/ZL/减号/截屏/十字键/左摇杆，右：A/B/X/Y/C/R/ZR/Home/右摇杆，NFC 状态只在右手柄保留）。身份由会话层显式传给传输层，不从广播地址反推——芯片地址最低位奇偶不定，反推会把左只认成右只。切换身份（或配色）等价于旧手柄断电、新手柄上电：断开现有连接、按新身份重算配对状态与出厂块，由断连回调恢复广播；未配对的新身份自动进配对流程，已配对身份直接发唤醒广播等回连。配对页「按下 LR」（`pressLr`）是手动兜底，未配对期间固件自动注入 L+R 120ms 并每 3 秒重试。会话层面向连接分槽（最多 2 个），桥接命令 / 应答 / 通知都带连接上下文，并维护每槽的报告计数与链路快照（`ns2_session_status()`，串口 `link` 与日志取用）；`controllerConfig` 应答带 `addresses`（pro / left / right，显示序大写十六进制，host 未同步时为空串），手柄设置页的身份信息行取用它。
 - 配对对外的心智模型是「开机即连接，界面只管配对键」：配过主机就常驻唤醒广播自动回连（主机停在任意页面都能连上），从未配过则开机自动进入配对流程，主机侧配对记录在首次连接握手时完成，用户不需要在屏幕上做任何确认动作；屏幕上的配对页只用于观察会话状态、按配对键配新主机或退出流程，主机 Grip / 手柄顺序界面只用于调整手柄顺序与确认 JoyCon 已配对。JoyCon 组合保持左右两条独立连接与两条独立凭证（各占一个广播实例），未配对期间固件自动注入 L+R 120ms 并每 3 秒重试——主机靠同时按下的 L 与 R 把两只认成一对，屏幕 UI 不做合并成单个设备的展示。
 - 主机推送的手柄固件更新按「接受并假装升级」处理：0x0018 升级数据块写入被计数接收，静默 10 秒视为完成，上报版本（app_config 持久化，0x10 查询与两个出厂块共用）递增落盘；真实升级协议无公开文档，需抓包后再对齐（见 controller.md §12）。
 - 调试注入是控制面进入数据面的唯一低频通道，采样与编码仍由数据面任务独立完成（`firmware/main/dp/dp_source.c`）：按键注入经 `dp_source_inject()` 叠加一次按下并按时长自动释放（默认 250 ms，配对 L+R 约 1 s，上限 60 s，`dp_source_inject_release()` 可提前释放）；摇杆注入经 `dp_source_inject_stick()` 给出持续电平（0-4095，两侧独立，未设定的一侧沿用输入源，`dp_source_inject_stick_reset()` 回中并解除注入）。注入是合成的最后一步：按键叠加在合成按键上，设定过的摇杆覆盖合成摇杆。按键名表由 `dp_source_key_lookup()` 提供，串口 CLI 与主机端用例共用；UI 调试页「按键指令」区走 bridge 的 `debugKey`（a / home / lr 三个键；「唤醒 HOME」在注入 HOME 的同时请求重连——已连接则断开让主机按唤醒广播重连，主机休眠时按键进不去，只有 0x81 广播能叫醒它）。串口 `link` 按身份打印链路快照（`ns2_session_status()`）：对外广播地址、连接句柄、连接间隔（`itvl`，4 = 5 ms）、会话状态、报告格式、已开启的通知通道、特性启用位（`feat`）、已发送报告数、凭证条数与广播形态（`adv`，取 wake / reconnect / discovery / off）；按键变化另有数据面限频日志（`buttons 0x… -> 0x…`，最小间隔 200 ms）。
 - 输入与输出已解耦成三段稳定接口（`firmware/main/dp/dp_source.h`、`firmware/main/pad/pad_state.h`、`firmware/main/target/target.h`，边界见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）：新增输入设备（桥接 PC、将来的 USB 手柄、调试注入）只需实现 `dp_source_t` 并注册，首个注册源拥有摇杆/扳机/触摸/运动与设备标识字段，后续源叠加按键，调试注入最后叠加；私有格式 `pad_state_t` 是上下段之间的唯一接缝，目标侧 `target_send_pad()` 按注册的 `pad_target_t` 编码（现役 `target/ns2/`，内部仍调 `ns2_output_send()`，可只填需要输出的按键）。主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等），在反馈监听者里归一到 `pad_feedback_t` 并回发桥接帧；投递到插入手柄的动作在后续里程碑实现。电池经 `battery.c` 唯一入口 + `ns2_output_set_battery` 随报告上发；amiibo 镜像经 `ns2_output_amiibo_stage` 预置（传输方式待定），Report 0x09 的 NFC 状态字节随预置汇报。USB host 直插的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
+- USB host 直插的数据面：`usb/usb_transport.c` 装 host 栈、枚举、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口），`usb/usb_input.c` 把 IN 报告组成 `pad_report_t` 交给同一份家族表并把反馈写回 OUT 端点，`usb/usb_role.c` 负责运行时切换角色（先迁日志到 UART0，再让出 USB-Serial/JTAG）。实机步骤与 VBUS 门禁见 [usb-input-plan.md](usb-input-plan.md)。
+- 反馈方向已投递到实体手柄：主机下发的震动 / 玩家 LED / 触觉采样经 ble_session 解析成结构化事件，在反馈监听者里归一到 `pad_feedback_t`，由 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告（DS4 / DualSense / Xbox / DS3 / NS1 各有一行描述，NS2 手柄原样吃主机的 LRA 参数包），USB 直插写 OUT 端点，桥接路径发 `0x11` OUT_REPORT 帧给 PC 写回。
+- 运动数据（陀螺仪与加速度）：布局行描述取样位置、样本数与轴映射（NS1 一次三份取最新一份），解析进 `pad_motion_t`；0x05 报文的 IMU 字段按 controller.md §5.1 的偏移填真值，0x09 的 40 字节运动块结构未公开，因此只提供 CLI `motion 3` 的实验填充档（默认关），真 NS2 手柄走同代透传时运动块原样到达主机。
 - USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
 
 ## 输入通路：接收 / 处理 / 转换
@@ -188,6 +193,8 @@ classDiagram
 - `caps` 标注这一帧里哪些字段真的来自设备（运动、触摸板、模拟扳机、背键、麦克风、电池、震动）；型号未识别时回落 Xbox 布局并置 `PAD_CAP_FALLBACK_LAYOUT`，结果仍可用但字段可能错位。
 - 目标只消费自己 `caps` 范围内的字段：不在集合里的部分（IMU、触摸板、麦克风）不映射，能力集合变化时提示一次，不逐帧刷日志。
 - 桥接帧与 CLI 文本共用一根 USB-Serial/JTAG：接收侧校验 CRC、失步时只丢一个字节继续扫描，非帧字节原样交回命令行解析，因此桥接跑着的时候串口 CLI 照常可用。
+- 布局行现在分三组描述：输入字段（既有）、运动字段（`motion`）与输出（反馈）报告（`out`），外加设备自带的报告语言与期望身份（`native_lang` / `native_identity`）；同代透传的判定与状态字节重写见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。
+- 未登记的 VID/PID 仍回落 Xbox 有线布局并置 `PAD_CAP_FALLBACK_LAYOUT`；Nintendo 家族（VID `0x057E`）按系列文件 `pad/layouts/ns.c` 登记，NS2 的 0x05 / 0x09 报文体与 NS1 的 0x30 / 0x3F 各占一行，偏移同样先取自公开资料、待实机回填。
 
 帧类型（固件侧定义在 `firmware/main/input/input_frame.h`，PC 端在 `pc/link.py` 镜像一份）：
 
@@ -195,6 +202,7 @@ classDiagram
 | :--- | :--- | :--- |
 | `0x01` ATTACH / `0x02` DETACH | PC → 设备 | 8 字节设备标识（家族 / 连接方式 / VID:PID / Report ID / 报告长度） |
 | `0x10` REPORT | PC → 设备 | 设备标识 + 原始报告（最多 64 字节） |
+| `0x11` OUT_REPORT | 设备 → PC | 要写回手柄的输出报告原始字节（首字节是 Report ID，最多 64 字节） |
 | `0x20` FEEDBACK | 设备 → PC | 左右震动使能与强度、玩家灯、触觉采样 |
 | `0x30` OTA_BEGIN | PC → 设备 | `ROM1` + 镜像字节数（u32 小端） |
 | `0x31` OTA_DATA | PC → 设备 | 块序号（u16 小端）+ 最多 200 字节镜像数据；帧内 `slot=1` 标记该窗口的末帧 |

@@ -100,7 +100,7 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 ## 板级注意事项
 
 - **I2C 地址冲突**：板内已占用 `0x15`（触摸）、`0x6B`（IMU）、`0x51`（RTC）。外接 I2C 设备必须避开这三个地址。
-- **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志、以及未来的 USB 输入共用同一个物理口。当前实机以 `USB-Serial/JTAG` 模式枚举。产品数据面若要通过该口接收 USB 输入设备，需要这块口工作在 host 模式，届时会与串口调试通道互斥；具体方案留到产品 BSP 阶段确定并实测，不要在文档里预设已经可用。复用开关与切换机制见下文「USB 控制器复用」。
+- **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志与 USB 输入共用同一个物理口，复位后默认以 `USB-Serial/JTAG` 模式枚举。固件已实现运行时角色切换（`usb/usb_role.c`）：选「手柄」后该口交给 OTG host，PC 上的 COM 口消失直到复位，host 期间日志与 CLI 走 UART0。复用开关与切换机制见下文「USB 控制器复用」，取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
 - **`GPIO19` / `GPIO20`** 已接 Type-C，不要当普通 GPIO 使用。
 - **`GPIO0` 是 BOOT**、`CHIP_PU` 是复位信号，都不适合作为普通用户输入。
 - **按键资源**：`BOOT`(GPIO0)、`RST`(CHIP_PU)、`PWR`(SYS_OUT=GPIO40 / SYS_EN=GPIO41)。PWR 键支持上电检测、单击、双击、多击和长按，属于电源功能电路，接入前要确认它不会切断系统供电。电池供电时 SYS_EN 必须由固件锁存（见「产品 BSP 接入状态」），否则松开 PWR 键即断电。
@@ -131,10 +131,10 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 
 - host 固件运行期间把板子插到 PC 上不会出现 COM 口——此时板子是 host 身份，PC 侧什么都枚举不出来。
 - 烧录不受影响：按住 BOOT 复位进下载模式，ROM 以复位默认 mux 接 USB-Serial/JTAG，COM 口出现，`idf.py flash` 照常工作；固件也可以实现"重启进下载模式"的软命令。
-- host 运行期间的日志通道改为 UART0（GPIO43/44 扩展焊盘 + USB-UART 适配器）——这就是「与串口调试通道互斥」的确切含义。
-- host 模式还需板级向插入的手柄提供 VBUS 5V，供电路径仍待原理图确认，见板级注意事项。
+- host 运行期间的日志通道改为 UART0（GPIO43/44 扩展焊盘 + USB-UART 适配器）——这就是「与串口调试通道互斥」的确切含义；固件在切 host 之前先把日志与 CLI 出口迁到 UART0（`console/console_out.c`），切回串口再迁回来。
+- host 模式还需板级向插入的手柄提供 VBUS 5V，供电路径仍待原理图确认，见板级注意事项；未确认前手柄能否枚举只有在实机上才能验证。
 
-以上为芯片与 IDF v6.1 源码事实；本固件尚未接入 USB host，接入时按本文实施并以实机验证为准。
+以上为芯片与 IDF v6.1 源码事实；固件已按这套机制接入 USB host（枚举、HID 收发与角色切换，方案见 [usb-input-plan.md](usb-input-plan.md)），实机核对项见 [ROADMAP.md](ROADMAP.md) M5，结论回填本节。
 
 ## 产品 BSP 接入状态
 
@@ -143,7 +143,7 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 尚未接入的硬件：
 
 - IMU（QMI8658C）与 RTC（PCF85063ATL）的驱动与状态上报；
-- USB host 输入接收与 NS2 报告编码（方案见 [usb-input-plan.md](usb-input-plan.md)）；
+- USB host 输入的实机验收（代码已落地，VBUS 供电与 mux 切换待实测，清单见 [ROADMAP.md](ROADMAP.md) M5）；
 - 充电状态与外部供电的测量：核对原理图后确认 ETA6098 的 STAT 引脚（9 脚）空置、没有引出任何网络，板上也没有 VBUS 检测网络；固件的充电标志是按采样电压趋势推断的，不是实测值（见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)）。要拿到实测值，得另加测量：在 VBUS / PMID 网络上取分压接空闲 GPIO（外部供电），或在电池回路串采样电阻、并一颗电量计（电量与充放电方向）；
 
 屏幕事实已写入 `firmware/pocket.host.json`：`input.touch` 随触摸采样接入一并声明。

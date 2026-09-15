@@ -121,7 +121,7 @@ flowchart TB
     FwMain --> MainOta["ota/：升级会话（分区回写与回滚门槛）"]
 ```
 
-仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；数据面按 `input/`、`pad/`、`target/` 三段划分（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)），其中 USB host 直插仍是架构预留（方案见 [usb-input-plan.md](usb-input-plan.md)）。
+仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。`ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；数据面按 `input/`、`pad/`、`target/` 三段划分（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)），USB host 直插由 `usb/` 提供接收传输与运行时角色切换（见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)，实机门禁见 [usb-input-plan.md](usb-input-plan.md)），反馈方向由 `pad/feedback.c` 按布局行编码成设备输出报告后经 OUT 端点或桥接帧投递。
 
 UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 50 ms（240×280，成本在 Vue Vapor 的逐节点挂载，不在宿主 op 或样式解析）。`ui/src/App.tsx` 因此在首次渲染里一次挂完七个页面，首屏只在全部建树完成后提交，等待期由固件启动画面覆盖；把建树摊到首帧之后会让首帧后仍有数秒的阻塞帧（切页与滚动都在这段时间里卡住）。切页只翻转各页根节点的 `hidden`，App 没有页面容器层也没有待挂队列，新增页面直接写在 JSX 里（见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
 
@@ -187,7 +187,7 @@ QuickJS 的栈守卫判据是 `rt->stack_limit = rt->stack_top - rt->stack_size`
 ```mermaid
 flowchart LR
     Bridge["PC 桥接（pc/ 桥接程序）"]
-    Host["USB host 手柄（待接入）"]
+    Host["USB host 手柄（usb/ 接收段）"]
 
     subgraph Plane[产品控制器数据面]
         Recv["input/ 接收段<br/>帧解码 / 串口分帧 / dp_source_t 输入源"]
@@ -211,7 +211,7 @@ flowchart LR
 
 该数据面由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，高频报告不经过 UI bridge，也不经过每帧 `pocketjs_ui_turn`。PocketJS UI 只读取低频连接/电量/配对状态，并发出开始配对、停止配对、背光等控制命令。
 
-三段之间只有两种数据：`pad_report_t`（原始报告 + 设备标识）与 `pad_state_t`（私有格式）。新增一种手柄在 `pad/layouts/` 下的对应系列文件里加一行（新系列则加一个文件并在 `pad/layout.c` 登记，见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)），新增一个目标（例如 NS1）在 `target/` 下加一个 `pad_target_t` 实现；桥接 PC 与将来的 USB host 直插共用 `pad/` 与 `target/` 两段，按键位置映射与轴归一只有一份，展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
+三段之间只有两种数据：`pad_report_t`（原始报告 + 设备标识）与 `pad_state_t`（私有格式）。新增一种手柄在 `pad/layouts/` 下的对应系列文件里加一行（新系列则加一个文件并在 `pad/layout.c` 登记，见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)），新增一个目标（例如 NS1）在 `target/` 下加一个 `pad_target_t` 实现；桥接 PC 与 USB host 直插共用 `pad/` 与 `target/` 两段，按键位置映射与轴归一只有一份；设备自带报告语言与目标一致时由目标原样转发报文体（同代透传，见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)），展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
 
 现有 `ui/src/bridge/` 和 `firmware/main/bridge/` 是这一控制面已接入的实现（UI 命令/事件 + 供 PWR 按键与串口 CLI 使用的外部队列入口）。NS2 的广播字段、GATT、HID 报告、配对和震动命令见 [controller.md](controller.md)，实现前必须用真实设备抓包和互操作测试确认。
 

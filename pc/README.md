@@ -39,6 +39,7 @@ uv run python bridge.py -p COM3                      # 转发到设备
 uv run python bridge.py -p COM3 --vid 0x054C --pid 0x0CE6
 uv run python bridge.py -p COM3 --max-rate 250       # 限制转发帧率（0 表示不限制）
 uv run python bridge.py -p COM3 --logs               # 同时打印设备日志文本
+uv run python bridge.py -p COM3 --no-rumble          # 不把主机的震动/玩家灯写回手柄
 ```
 
 `--dump` 打印的每行是「时间戳 + 报告长度 + 原始字节」，用来与固件 `pad/layouts/` 里
@@ -65,12 +66,11 @@ A5 5A | ver | type | slot | seq | len | payload[len] | crc16(LE)
 CRC-16/CCITT-FALSE（多项式 `0x1021`、初值 `0xFFFF`）覆盖除末尾两字节外的整帧。帧头里的
 长度是单字节（线格式上限 255 字节）；`REPORT` 帧的载荷是 8 字节设备标识（家族、连接方式、
 VID/PID 小端、Report ID、报告长度）加上最多 64 字节原始报告，因此报文帧按 72 字节校验。
-类型有 `ATTACH`（0x01）、`DETACH`（0x02）、`REPORT`（0x10）、`FEEDBACK`（0x20，设备 → PC）
+类型有 `ATTACH`（0x01）、`DETACH`（0x02）、`REPORT`（0x10）、`OUT_REPORT`（0x11，设备 → PC）、`FEEDBACK`（0x20，设备 → PC）
 与 `PING`（0x7F），另有 OTA 升级用的 `OTA_BEGIN`（0x30）、`OTA_DATA`（0x31，载荷到 202 字节）、
 `OTA_END`（0x32）与设备回发的 `OTA_ACK`（0x33）。
 
-设备在主机下发 NS2 反馈（震动 / 玩家灯 / 触觉采样）时回发 `FEEDBACK` 帧，本轮 PC 侧只
-打印；把反馈真正送到手柄在后续里程碑实现。
+设备在主机下发 NS2 反馈（震动 / 玩家灯 / 触觉采样）时回发两种帧：`FEEDBACK` 是归一化状态（打印与对账用），`OUT_REPORT` 是已经编码好的手柄输出报告——震动与玩家灯的字段布局只在固件里有一份（`firmware/main/pad/feedback.c` 按设备布局行编码），PC 侧只把它交给 `hid.write()`，不参与任何映射。默认开启，`--no-rumble` 关掉。
 
 ## OTA 升级（ota.py）
 
@@ -98,3 +98,4 @@ uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
   `--list` 的型号与连接方式可用于判断命中了哪一行。
 - 转发的是原始报告，不做任何按键重排：重排规则（用户自定义映射）在固件侧，本轮未做。
 - 拔线或退出程序时发送 `DETACH` 帧，设备侧状态回到静置，不会留下卡住的按键。
+- 反馈写回依赖固件里的输出报告偏移（DS4 / DualSense / Xbox / DS3 / NS1 各一行），这些偏移多数取自公开资料、尚未逐条实机核对；写回没效果时先看该系列布局行的 `out` 描述。

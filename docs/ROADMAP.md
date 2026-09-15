@@ -24,7 +24,7 @@
 - **震动输出**：Output Report 0x02 解析正确（板卡无马达，最终转发给 USB 源手柄，属 M5）。
 - **UI 观感**：启动画面时序、切页与滚动观感在实机确认。
 
-### M5 — 输入接入：桥接（PC）已落地，USB host 待接入　状态：进行中
+### M5 — 输入接入：桥接（PC）与 USB host 直插均已落地，实机验收待做　状态：进行中
 
 **桥接（PC 输入 → NS2）　状态：代码完成，实机验收待做**
 
@@ -33,16 +33,19 @@
 - [ ] 实机验收：PC 侧插 Xbox / PS / Steam 任一手柄 → NS2 主机的按键与摇杆正确；扳机按 50% 阈值触发 ZL/ZR；背键进 GL/GR；PC 侧拔线后状态回中不卡键；串口日志显示识别到的家族与型号。
 - [ ] 家族表按实测抓包回填：用 `cd pc ; uv run python bridge.py --dump` 抓 Xbox 有线与蓝牙 / DS3 / DS4 有线与蓝牙 / DualSense 有线 / Steam 原生布局的原始报告，核对 `firmware/main/pad/layouts/` 里对应系列的字段偏移。现有偏移都取自公开资料（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过），待确认项：Xbox Series 的分享位、DS3 的按键极性（是否低电平有效）与蓝牙前缀长度、DualSense 的电量字节与触摸板坐标（每点 4 字节，DS4 是 3 字节，两处当前都不登记）。
 
-**USB host 直插（手柄插在板卡上）　状态：未开始**
+**USB host 直插（手柄插在板卡上）　状态：代码完成，实机验收待做**
 
-新建 `firmware/main/usb/`：
+模块 `firmware/main/usb/` 与切换策略：
 
-- [ ] USB mux 切换实验定案：`usb_new_phy()`（OTG + HOST）+ USB-Serial-JTAG 让出、日志切 UART0（GPIO43/44）；结论回填 [hardware.md](hardware.md) 并出 ADR。
-- [ ] VBUS 5V 供电路径确认（hardware.md 挂起项，决定 host 模式能否给手柄供电，必要时调整方案）。
-- [ ] `usb_host_hid.c`：host lib 安装、复合设备枚举（跳过 Vendor Bulk / 音频接口）、claim HID 接口、IN 64B 接收 + OUT 发送队列；原始报告按 `pad_report_t` 交给 `pad/` 的家族表（与桥接路径共用同一份解析与映射），再接 dp_task 输入源；BLE 下发的震动/LED 经 OUT 反向转发。
-- [ ] `usbRole` 命令真实化（切换策略预计"确认后重启进入 host 模式"，实验后定）。
+- [x] `usb/` 模块：`usb_transport.c` 装 host 栈与枚举（按报告描述符挑手柄用途的 HID 接口，跳过厂商与音频接口）、IN 64B 中断接收与 OUT 写回队列；`usb_input.c` 组成 `pad_report_t` 交给同一份家族表；`usb_role.c` 运行时切换角色（先迁日志与 CLI 到 UART0，再放掉 USB-Serial/JTAG），取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
+- [x] `usbRole` 命令真实化：模式页「手柄」卡片、PWR 长按与 CLI `mode host` 都会真实切换；角色不落盘，复位即回串口。
+- [ ] USB mux 切换实机核对：切 host 后 PC 上的 COM 口消失、UART0（GPIO43/44）能看到日志与 CLI、切回串口或复位后 COM 口回来；结论回填 [hardware.md](hardware.md)。
+- [ ] VBUS 5V 供电路径确认（hardware.md 挂起项，决定 host 模式能否给插入的手柄供电；未确认前手柄枚举结果都要在实机复核）。
+- [ ] 识别与透传实机核对：开关各家族手柄看 `pad` / `usb` 命令的识别结果、命中布局行与兜底标记；NS2 手柄插入后确认主机收到的是设备原样报文体（真电量与真运动数据）、`relay 0` 时回到解析重编码路径。
+- [ ] 反馈写实机核对：主机震动与玩家灯在 USB 直插与 PC 桥接两条路径上都能到实体手柄（`pad_feedback.c` 的偏移统统待核对，Xbox 与 DS3 尤其不确定）。
+- [ ] `motion 3` 实验档实机 A/B：确认主机是否接受按 NS1 样本风格填的 0x09 运动块；不接受则保持全零占位，等抓到真手柄运动报文再解。
 
-**验收**：NS2 手柄插板 → Switch 2 收到真实手柄输入；主机震动可传到手柄；模式页 host 角色真实生效。
+**验收**：NS2 手柄插板 → Switch 2 收到真实手柄输入（透传路径带真电量与真运动数据）；主机震动与玩家灯可传到手柄；模式页 host 角色真实生效，复位后 COM 口回来。
 
 ### M6 — 固件 OTA 升级（整包应用镜像）　状态：代码完成，实机验收待做
 

@@ -16,7 +16,7 @@
 | ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
-目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围。PC 手柄经桥接程序进入设备这条路径已经可用（见 [pc/README.md](../pc/README.md)），USB host 直插（手柄插在板卡上）尚未实现。不要因为 Web 预览可以交互就认为真实 BLE 链路已经可用。
+目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围。两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）的代码都已落地，实机核对与 VBUS 供电确认待做。不要因为 Web 预览可以交互就认为真实 BLE 链路已经可用。
 
 板卡已知信息都记录在 [hardware.md](hardware.md)：屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)、[ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，进度见 [ROADMAP.md](ROADMAP.md)）但主机互操作待实机验证；USB 输入与 IMU/RTC 等其余外设仍待实现（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
 
@@ -218,7 +218,10 @@ uv run python uartctl.py -p COM3 version         # 运行镜像版本与分区�
 uv run python uartctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
 uv run python uartctl.py -p COM3 backlight 60    # 背光并持久化
 uv run python uartctl.py -p COM3 screen off      # 息屏（on 恢复）
-uv run python uartctl.py -p COM3 mode host       # 连接模式（otg 被固件拒绝）
+uv run python uartctl.py -p COM3 mode host       # 切到 host：COM 口消失，日志与 CLI 改走 UART0（otg 仍被拒绝）
+uv run python uartctl.py -p COM3 pad             # 识别到的手柄：来源、家族、型号、命中布局行、兜底与透传状态
+uv run python uartctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
+uv run python uartctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
 uv run python uartctl.py -p COM3 pairing start   # 配对键：断开当前主机后进发现广播，等新主机搜索配对（stop 退出）
 uv run python uartctl.py -p COM3 wake            # 强制重连：已连接则断开，让主机按唤醒广播重新连上来
 uv run python uartctl.py -p COM3 adv wake        # 常态广播形态（wake 0x81 默认 / reconnect 0x00），实机 A/B 对账用
@@ -234,7 +237,7 @@ uv run python uartctl.py -p COM3 log --reset --seconds 25  # 先复位再抓完�
 
 PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；**长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。软件关机走系统页「关机」按钮（bridge 的 `powerOff` 命令，串口对应 `poweroff`）：电池供电下释放锁存即断电，USB 供电下锁存被旁路、关不掉，固件重新锁存后界面提示「USB 供电下无法关机，请拔线后再试」。
 
-用户设置（背光亮度、手柄类型与配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmware/main/input/`，PC 侧见 [pc/README.md](../pc/README.md)；USB host 直插仍是架构预留，推进方案见 [usb-input-plan.md](usb-input-plan.md)。
+用户设置（背光亮度、手柄类型与配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmware/main/input/`，PC 侧见 [pc/README.md](../pc/README.md)；手柄插在板卡上的 USB host 直插也已落地（`firmware/main/usb/`），实机核对清单见 [ROADMAP.md](ROADMAP.md) M5 与 [usb-input-plan.md](usb-input-plan.md)。
 
 ## 固件 OTA 升级
 
@@ -269,7 +272,9 @@ uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
 - [firmware/main/config/app_config.c](../firmware/main/config/app_config.c)：用户设置 NVS 持久化（亮度 / 连接模式 / 手柄身份）。
 - [firmware/main/console/cli.c](../firmware/main/console/cli.c)：串口行命令 CLI（USB-Serial/JTAG）。
 - [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按切模式）。
-- [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制；桥接源在 `input/`，USB host 源预留）。
+- [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制；桥接源在 `input/`，USB host 源在 `usb/`）。
+- [firmware/main/usb/](../firmware/main/usb)：USB host 直插（枚举与 HID 收发、输入源、运行时角色切换）与主机反馈写回。
+- [firmware/main/pad/feedback.c](../firmware/main/pad/feedback.c)：反馈编码（按设备布局行把震动 / 玩家灯 / 触觉采样编码成该手柄的输出报告）。
 - [firmware/main/input/input_link.c](../firmware/main/input/input_link.c)：桥接链路的设备侧（USB-Serial/JTAG 唯一读取者、桥接帧与 CLI 文本分流）。
 - [firmware/main/pad/pad_device.c](../firmware/main/pad/pad_device.c)：私有手柄格式与解析（按键位置映射、轴归一、死区）；家族布局表按系列拆在 [firmware/main/pad/layouts/](../firmware/main/pad/layouts)，契约与注册表是 [layout.h](../firmware/main/pad/layout.h) / [layout.c](../firmware/main/pad/layout.c)。
 - [firmware/main/target/target.c](../firmware/main/target/target.c) 与 [firmware/main/target/ns2/](../firmware/main/target/ns2)：目标编码接口与 NS2 输出封装（按键构建报告、结构化反馈、电池、amiibo 预置）。
@@ -284,13 +289,24 @@ uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
 - [docs/hardware.md](hardware.md)：目标板卡的 SoC/存储、屏幕、触摸、外设、GPIO 分配和板级注意事项。
-- [docs/usb-input-plan.md](usb-input-plan.md)：USB host 直插的方案预案（桥接路径已落地，见 [pc/README.md](../pc/README.md)）。
+- [docs/usb-input-plan.md](usb-input-plan.md)：USB host 直插的方案与实机核对清单（代码已落地，桥接路径见 [pc/README.md](../pc/README.md)）。
+
+### USB 手柄直插（host 模式）
+
+手柄插在板卡 Type-C 上时设备做 USB 主机：`firmware/main/usb/` 装 host 栈、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口）、收 IN 报告后按 VID/PID 走同一份家族布局表。真 Switch 2 手柄的报文体原样转发给 NS2 主机（真电量与真陀螺仪直达），其余家族解析成私有格式后重新编码；主机下发的震动与玩家灯按布局行编码写回手柄的 OUT 端点。
+
+切换入口有三个：模式页「手柄」卡片、PWR 长按 3-6 秒、串口 `mode host`；角色只在本次运行有效、不写 NVS。切过去之后在 UART0 上敲 `pad` 看识别结果与是否透传，敲 `usb` 看 host 栈状态与收发计数。
+
+- host 模式下 PC 上不再有 COM 口：串口 CLI、桥接程序与 OTA 都用不了，日志与 CLI 改走 UART0（GPIO43/44 扩展焊盘接 USB-UART 适配器，115200）。
+- 回到串口有两条路：在 UART0 上敲 `mode device`（或再长按 PWR），或者复位——复用开关复位默认回 USB-Serial/JTAG，COM 口天然回来，烧录不受影响。
+- 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 Xbox 有线布局并打兜底标记。
+- 门禁：host 模式要给插入的手柄供 VBUS 5V，供电路径还没确认（[hardware.md](hardware.md) 挂起项）；确认前手柄能否枚举只能在实机验证。
 
 ## 最终产品数据面（当前规划）
 
 后续固件工作按以下顺序拆分（进度跟踪见 [ROADMAP.md](ROADMAP.md)，BLE 链路先行、USB 输入殿后）：
 
-1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（未开始，需先确认 VBUS 供电与 USB mux 切换）
+1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（代码完成：`firmware/main/usb/` 枚举 HID 手柄、按 VID/PID 走同一份家族表，实机核对与 VBUS 供电确认待做）
 2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。（已完成，按 `firmware/main/input/` → `pad/` → `target/` 三段划分，见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）
 3. PC 手柄经桥接程序与串口帧进入设备，映射与编码走同一套 `pad/` + `target/`。（设备侧与 PC 侧代码已完成，实机验收与家族表抓包核对待做）
 3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。（代码完成，`firmware/main/ble/` + `firmware/main/dp/`，合成源静置、按键由调试页注入，实机互操作待验证）
