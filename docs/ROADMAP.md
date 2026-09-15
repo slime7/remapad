@@ -94,7 +94,7 @@ UI 侧按「当前页 + 无弹窗」开关各页的 focusable、上下与左右�
 ### M8 — PC 侧单工具、实机截图与耳机状态透传　状态：实机验收进行中
 
 PC 侧合并成单进程 `pc/remapadctl.py`（转发 + 命令行 + 截图 + OTA，见 [ADR 0033](adr/0033-pc-single-process-tool-and-device-screenshot.md)）；
-桥接协议新增设备 → PC 的图像帧（0x21-0x23）与固件串口命令 `shot`；上报节奏经实机复测后固定 15 ms（ADR 0023 的取值，不再提供运行时档位）；
+桥接协议新增设备 → PC 的图像帧（0x21-0x23）与固件串口命令 `shot`；上报节奏经实机复测后固定 15 ms、不再提供运行时档位（[ADR 0034](adr/0034-ns2-report-interval-fixed-15ms.md)）；
 耳机状态按输入设备的 3.5 mm 状态透传并提供 `headset auto|0xNN` 覆盖值（[ADR 0035](adr/0035-ns2-headset-state-passthrough.md)）。剩余：
 
 - [x] 实机截图：`--shot` 与设备命令 `shot` 都能落盘，240 × 280 / 840 块，状态页的中文与图标与面板一致；触摸预览页同帧对照待补。
