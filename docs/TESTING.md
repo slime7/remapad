@@ -22,7 +22,7 @@
 | [ui/tests/e2e/fixtures.ts](../ui/tests/e2e/fixtures.ts) | 测试台：触摸驱动、组件树、像素、读数面板 |
 | [ui/tests/e2e/harness.ts](../ui/tests/e2e/harness.ts) | 页面侧探针：接住官方 DevTools 通道，提供组件树与边界命中 |
 | [ui/tests/e2e/pages.ts](../ui/tests/e2e/pages.ts) | 页面级操作：从默认状态走到某个功能页 |
-| `ui/tests/e2e/*.spec.ts` | 用例：启动、页面切换、滚动、手柄设置、配对、系统 |
+| `ui/tests/e2e/*.spec.ts` | 用例：启动、页面切换、滚动、手柄设置、配对、系统、手柄操控屏幕 |
 
 ### 运行
 
@@ -39,7 +39,7 @@ pnpm exec playwright test -g 滚动     # 只跑匹配的用例（在 ui/ 目录
 断言越靠前越稳：
 
 1. **组件树**（`app.nodes()` / `app.visibleTexts()`）——官方节点树镜像，含文本、class 与 hidden 传播结果。只改样式、不改行为时不会误报。
-2. **屏幕像素**（`app.colorAt()` / `app.regionSignature()` / `app.colorShare()`）——视觉与位移类事实。区域指纹只回答「这块画面变没变、变回去了没有」，不把整幅截图当基线。
+2. **屏幕像素**（`app.colorAt()` / `app.regionSignature()` / `app.colorShare()` / `app.brightShare(rect, threshold)`）——视觉与位移类事实。区域指纹只回答「这块画面变没变、变回去了没有」，不把整幅截图当基线；`brightShare` 数区域内「亮到发白」的像素占比，用来判 2px 焦点环这类抗锯齿描边（按精确色判会漏掉大半）。
 3. **预览页读数**（`app.readout()`）——上屏状态、帧率、触点与命中节点，用来确认宿主侧链路本身正常。
 
 坐标一律使用**设备逻辑像素**（240 × 280 视口）：`app.touch` 按画布实际显示尺寸换算，预览页的缩放开关不影响用例。
@@ -50,7 +50,7 @@ pnpm exec playwright test -g 滚动     # 只跑匹配的用例（在 ui/ 目录
 - `app.touch.drag(from, to, { steps, dwellMs })`：逐帧跟随的慢速拖动，松手速度接近 0，用于精确落点。
 - `app.touch.flick(from, to)`：整段位移在一两帧内走完并立刻抬手，用于触发惯性滚动。**抬手必须紧跟最后一次移动**：中间等帧会把触点速度采样成 0，手势层只会停在手指位置，不产生甩动。
 - `app.tapText('开始')`：按文本定位并点击。定位用官方边界命中（与触摸按下同一条判定）扫描「节点自己 → 最近的祖先 → 后代」，所以「定位到」就等于「点得到」，且不受增量重绘影响。
-- `app.scrollOffset(nodeId)` / `app.sampleScroll(nodeId, ms)`：内容列的滚动位移与轨迹采样，用于边界与回弹类断言。
+- `app.pad.press('ArrowLeft')` / `app.pad.pressTimes('ArrowLeft', 3)`：手柄按键驱动。预览页把方向键 / WASD 当十字键位、回车 / 空格当圆圈键位（与真机同一份按键位契约，见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)），每次按下至少跨一帧应用才看得到，连按是逐次独立的下沿。
 
 ### 三个已知坑
 
@@ -89,6 +89,7 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 | `main/target/ns2/ns2_target.c` 与 `ns2_output.c` | 私有格式到 NS2 报文的映射（面键位置、背键折并 GL/GR、扳机 50% 阈值、电量折进报告）错了就是实机上「按键对不上」；测试驱动真实编码路径断言报文字节 |
 | `main/render_accel.c` | 本机像素回调必须与软件路径逐像素一致，差一档就是色带或错行 |
 | `main/dp/dp_source.c` | 多路输入叠加规则错了会表现为摇杆漂移、注入按键卡住；按键名表与摇杆注入的分侧语义也在这里钉住 |
+| `main/dp/dp_ui.c` | 组合键捕获的判定错了会表现为「按住组合键没反应」或普通按键被吞掉，真机上不好复现；四键同按、300 ms 阈值与十字键 / 圆圈键到官方按键位的映射在这里钉住 |
 
 不在这套测试里：面板/触摸/背光驱动、BLE 与 NVS、USB host、桥接链路的串口驱动与接收任务、启动画面与 owner task 调度——它们依赖真实硬件时序与协议栈，只能在真机上验证。
 

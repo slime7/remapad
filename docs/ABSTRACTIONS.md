@@ -47,7 +47,7 @@ flowchart LR
 
 - `requires` 是应用运行所必需的能力，host 不提供时构建应失败。
 - `enhances` 是应用可以利用但不应作为最低运行条件的能力。
-- `capabilities` 只能填写固件确实会提供的能力。当前 Remapad profile 声明 `text.glyphs.baked` 与 `input.touch`；后者随触摸 BSP（CST816T 采样，见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）接入一并加入，按键和模拟量能力仍不在 profile 中。
+- `capabilities` 只能填写固件确实会提供的能力。当前 Remapad profile 声明 `text.glyphs.baked`、`input.touch` 与 `input.buttons`；触摸能力随触摸 BSP（CST816T 采样，见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）接入一并加入，按键能力自手柄组合键捕获（见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)）起声明——组合键把十字键与圆圈键映射成官方按键位，模拟量仍不在 profile 中。
 - profile 的 canonical hash 会进入构建计划和 package variant，运行时 `pocketjs_package_select` 会校验目标、ABI、tick、视口、density、presentation 和 profile hash。
 - 当前设备的逻辑和物理视口均为 `240×280`。生成的 JavaScript bundle 可能仍包含官方 framework 的 `SCREEN_W = 480`、`SCREEN_H = 272` fallback 常量；它们不是设备 profile 的显示事实，也不应手动修改生成产物。ESP-IDF host 按 package contract 创建 `pocketjs_ui_core`，并通过 `globalThis.ui.__viewport` 发布 `240×280`；构建计划和运行时 frame 才是设备尺寸的校验依据。
 
@@ -264,6 +264,8 @@ sequenceDiagram
 
 家族表按系列拆在 `firmware/main/pad/layouts/` 下（契约与注册表是 `pad/layout.h` / `pad/layout.c`，取舍见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)），按（家族、Report ID、连接方式、PID）定位偏移，同一个 Report ID 下的不同型号按 PID 分行——PS 系的 DS3、DS4 与 DualSense 有线都报 0x01，DS3 有线与蓝牙字段一致、共用一行。各行的偏移初值取自公开资料，落地时用 `pc/bridge.py --dump` 抓原始报告核对后再固化（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过）；DS3 的按键极性、蓝牙前缀长度，以及 DualSense 的电量与触摸板坐标仍未核对，见 [ROADMAP.md](ROADMAP.md) 的家族表回填。Steam 原生布局未抓包，整族走 Xbox 兜底并在能力位里标记。
 
+手柄组合键 L1+R1+L3+R3 按住 300 ms 会捕获输入、转为屏幕操控（[ADR 0028](adr/0028-pad-combo-captures-screen.md)）：判定在私有格式层完成（`firmware/main/dp/dp_ui.c`），家族表只需要把 L1/R1/L3/R3 映射到 `PAD_BTN_L1/R1/L3/R3`，既有与将来的布局都自动可用。dp_task 在捕获的那一刻先向主机补发一帧全松开（清掉 `raw_len` 与 `native_lang`，避免同代透传把旧按键带过去），其后按原来的上报节奏续发同一份中性帧——主机按稳定不跳号的上报流判断链路健康，整段停发会被它判成手柄离线，而玩家输入从捕获起一点不上行；同时把十字键与圆圈键映射成 PocketJS 按键位，经 owner task 的 `sample_input` 交给 UI；再按一次同样的组合退出并恢复转发。UI 侧把各页与底栏的 `focusable` 绑在「自己是当前页、且没有弹窗盖住」上（`ui/src/App.tsx` 的 `interactive` 往下传，`hooks/usePadControl.ts` 只管操控窗口与非操控状态下的焦点清理），框架的遍历因此只含画面上的控件，圆圈键与触摸点按汇入同一个 onPress 入口；可滚动页把可聚焦行的位置表交给 `usePageScroll`，焦点走到下方时内容跟着滚。 模式状态经 `systemStatus.padUiMode` 与 `padUiModeChanged` 事件同步到 bridge，调试页、串口 `ui [on|off]` 与 `key ui` 都能在不插手柄时进出。
+
 ## UI 图元与资源
 
 `ui/src/App.tsx` 使用 PocketJS Vue Vapor 的 `<View>`、`<Text>` 和 `<Image>` 等图元：
@@ -349,7 +351,7 @@ flowchart TB
 - `analog_x`、`analog_y`：左模拟量。
 - `touches`、`touch_count`：当前触点数组。
 
-输入采样属于 host/BSP，不属于 PocketJS 应用包。当前实现由 owner task 的 `sample_input` 回调返回零按键、零模拟量、零触点；屏幕是触摸屏，接入后应把 CST816T 的采样转换为官方 `pocketjs_ui_touch_t` 触点数组，触点 `id` 在同一按压期间保持稳定、坐标使用逻辑像素（板卡引脚见 [hardware.md](hardware.md)）。USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
+输入采样属于 host/BSP，不属于 PocketJS 应用包。当前实现由 owner task 的 `sample_input` 回调填三样：按键取自数据面的手柄操控映射（`dp_ui_buttons()`，只在组合键捕获期间非零，见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)），模拟量恒为零，触点由 CST816T 采样转换为官方 `pocketjs_ui_touch_t` 触点数组（CST816T 是单点触摸，触点 `id` 在同一按压期间恒为 0、坐标使用逻辑像素，板卡引脚见 [hardware.md](hardware.md)）。USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
 
 ## 渲染抽象
 

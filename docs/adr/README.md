@@ -53,6 +53,7 @@
 | [0025](0025-pad-layout-modules-per-series.md) | active | 家族布局按系列分文件登记（layout.h/layout.c + layouts/），注册表统一匹配；补全 0021 在 pad/ 内的文件划分 |
 | [0026](0026-same-generation-input-passthrough.md) | active | 手柄输入按同代透传、异代解析分发：设备自带报告语言与目标语言一致时原样转发报文体 |
 | [0027](0027-runtime-usb-role-switch.md) | active | USB host 直插采用运行时角色切换（日志改走 UART0），复位回到串口 |
+| [0028](0028-pad-combo-captures-screen.md) | active | 手柄组合键 L1+R1+L3+R3 捕获为屏幕操控（方向键移动焦点、圆圈键确认），捕获期间停发报文并补一帧全松开 |
 
 ## 创建 ADR 脚本用法
 

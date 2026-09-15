@@ -56,6 +56,14 @@
 - [ ] 回滚演练：把 `ota_session.c` 的健康门槛临时改成 300 秒，升级后立刻断电/重启 → 设备自动回到旧镜像；确认 `rollback` 命令在待验证状态下可用。
 - [ ] 开发流程对账：跑到 `ota_1` 后验证 `idf.py app-flash` 的错位现象与 `idf.py erase-otadata` 的恢复路径，结论回填 [GETTING-STARTED.md](GETTING-STARTED.md)。
 
+### M7 — 手柄组合键操控屏幕　状态：代码完成，实机验收待做
+
+手柄同时按住 L1+R1+L3+R3 约 300 ms 由数据面捕获（`firmware/main/dp/dp_ui.c`）：设备先向主机补发一帧全松开，其后按原上报节奏续发中性帧（玩家输入不再上行，主机也不会判手柄离线），同时把十字键与圆圈键映射成 PocketJS 按键位，方向键移动屏幕焦点、圆圈键等价于点按屏幕，再按一次组合键退出并恢复转发；判定放在私有格式层，各家族布局不需要逐条登记。UI 侧按「当前页 + 无弹窗」开关各页的 focusable、可滚动页按焦点行跟随滚动，状态经 `systemStatus.padUiMode` 同步到调试页，串口 `key ui` 与 `ui on|off` 也能进出。取舍见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)。剩余：
+
+- [ ] 实机验收：真手柄按组合键进出模式，焦点环跟手、圆圈键点得动、退出后主机侧输入立即恢复（先松开的键不应卡在主机那头）。
+- [ ] 误触与手感：正常游戏操作里不会意外触发；JoyCon 分体下四键能否同按，结论回填 [ADR 0028](adr/0028-pad-combo-captures-screen.md)。
+- [ ] `key ui` 与 `ui on` / `ui off` 在实机上与组合键路径表现一致（进入补发全松开、退出恢复转发）。
+
 ## Phase 3 — UI 性能与启动时间　状态：未开始
 
 UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重建上（见 [adr/0017](adr/0017-display-path-and-scroll-frame-budget.md)），启动成本集中在 guest 侧 bundle 的解析与执行（`guest_eval` 约占 16 秒）。两个里程碑分别针对这两处瓶颈；应用侧能动的只有「每帧画多少像素」和「包怎么加载」，因此都先与官方 PocketJS 上游确认可行边界。
