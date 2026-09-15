@@ -20,6 +20,8 @@ interface MockHardwareState {
   usbRole: UsbRole;
   /** host 数据面未接入，mock 里只有 device 角色是"生效"的。 */
   usbRoleActive: boolean;
+  /** 主机下发的玩家序号灯掩码（bit0-3），无主机时为 0。 */
+  playerLed: number;
   bootAt: number;
   heapSize: number;
   heapFree: number;
@@ -55,6 +57,7 @@ const state: MockHardwareState = {
   controllerConfig: { ...DEFAULT_CONTROLLER_CONFIG },
   usbRole: 'device',
   usbRoleActive: true,
+  playerLed: 0,
   bootAt: Date.now(),
   heapSize: 320 * 1024,
   heapFree: 186 * 1024,
@@ -78,6 +81,15 @@ function setPairing(
 ): void {
   state.pairing = pairing;
   broadcast(reply, { t: 'pairingStateChanged', state: pairing });
+}
+
+/** 主机注册后下发玩家序号灯（Command 0x09）：mock 里随配对完成给出 Player 1。 */
+function setPlayerLed(reply: (msg: DeviceMsg) => void, led: number): void {
+  if (state.playerLed === led) {
+    return;
+  }
+  state.playerLed = led;
+  broadcast(reply, { t: 'playerLedChanged', led });
 }
 
 /** 浏览器环境下的产品控制面协议 mock；不模拟 PocketJS UI binding。 */
@@ -107,6 +119,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         controller: state.controller,
         usbRole: state.usbRole,
         usbRoleActive: state.usbRoleActive,
+        playerLed: state.playerLed,
         uptimeMs: Date.now() - state.bootAt,
         heapFree: state.heapFree,
         heapSize: state.heapSize,
@@ -193,7 +206,13 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       setPairing(reply, 'scanning');
       reply({ t: 'pairingResult', id, state: 'scanning', message: '开始广播（模拟）' });
       pairingTimers.push(setTimeout(() => setPairing(reply, 'pairing'), 1500));
-      pairingTimers.push(setTimeout(() => setPairing(reply, 'paired'), 4200));
+      pairingTimers.push(
+        setTimeout(() => {
+          // 主机在注册完成后下发玩家序号灯，序号 1 对应掩码最低位。
+          setPlayerLed(reply, 0b0001);
+          setPairing(reply, 'paired');
+        }, 4200),
+      );
       break;
 
     case 'stopPairing':
@@ -208,6 +227,8 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
     case 'unpair':
       clearPairingTimers();
       state.controller = null;
+      // 解除配对后主机不再认这台手柄，序号灯随之熄灭。
+      setPlayerLed(reply, 0);
       setPairing(reply, 'idle');
       reply({ t: 'unpairResult', id, state: 'idle', message: '已解除配对' });
       break;

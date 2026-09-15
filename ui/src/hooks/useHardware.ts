@@ -43,6 +43,8 @@ export interface HardwareUiState {
   usbRole: UsbRole;
   /** USB host 数据面未接入，host 角色仅记录请求。 */
   usbRoleActive: boolean;
+  /** 主机下发的玩家序号灯掩码（bit0-3 对应首页四格指示灯），无主机时为 0。 */
+  playerLed: number;
   /** 模式页角色切换的一次性提示（如桥接禁切原因）。 */
   roleMessage: string;
   /** 本地推算的实时开机时长。 */
@@ -88,6 +90,7 @@ export const hw = reactive<HardwareUiState>({
   controller: null,
   usbRole: 'device',
   usbRoleActive: true,
+  playerLed: 0,
   roleMessage: '',
   uptimeMs: 0,
   fps: null,
@@ -117,6 +120,7 @@ function applySystemStatus(msg: Extract<DeviceMsg, { t: 'systemStatus' }>): void
   hw.controller = msg.controller;
   hw.usbRole = msg.usbRole;
   hw.usbRoleActive = msg.usbRoleActive;
+  hw.playerLed = msg.playerLed;
   hw.uptimeMs = msg.uptimeMs;
   hw.heapFree = msg.heapFree;
   hw.heapSize = msg.heapSize;
@@ -318,6 +322,9 @@ export function useHardware(): void {
         break;
       case 'screenPowerChanged':
         hw.screenOn = msg.on;
+        break;
+      case 'playerLedChanged':
+        hw.playerLed = msg.led;
         break;
       case 'batteryChanged':
         hw.battery = msg.battery;

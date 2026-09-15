@@ -1163,6 +1163,18 @@ bool ns2_session_identity_mac(uint8_t identity, uint8_t out[6])
     return identity_mac(identity, out);
 }
 
+uint8_t ns2_session_player_leds(void)
+{
+    /* 会话槽在连接建立与断开时被整体清零，掩码因此随连接自动复位。 */
+    uint8_t mask = 0;
+    for (size_t i = 0; i < SESSION_MAX; i++) {
+        if (s_ses.sess[i].active) {
+            mask |= s_ses.sess[i].player_leds;
+        }
+    }
+    return (uint8_t)(mask & 0x0F);
+}
+
 bool ns2_session_status(uint8_t identity, ns2_session_status_t *out)
 {
     if (out == NULL || !identity_in_mode((ns2_identity_t)identity)) {
