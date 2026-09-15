@@ -9,10 +9,9 @@
  * 异常）：宽键（grow 后 152×64）由左半 64×64 + 中段 32×64 + 右半 64×64
  * 拼接，相邻两块同色重叠 8 px、接缝落在实心区；方键 64×64 单图。图标与
  * 文字放在绝对定位覆盖层内居中，配色行为
- * 与旧版一致：状态键 tertiary 家族、设置键 primary 家族，disabled 时仅
- * 前景置灰、背景保持当前 on/off 形态。
+ * 与旧版一致：状态键 tertiary 家族、设置键 primary 家族。
  * 滚动页在滚动列末尾放 BottomPlaceholder 垫高，避免最后一段被菜单遮挡。
- * disabled() 为真时（如配对进行中）忽略切换并置灰按钮，锁定当前页面。
+ * 底栏任何时候都可切页：配对流程可能长期挂着等主机，不该锁住导航。
  *
  * 注意 Vue Vapor 响应性：条件必须以函数调用形式出现在 JSX 里（读取发生在
  * 渲染作用内才会被跟踪），setup 期赋值的常量不会随 props 更新。
@@ -43,19 +42,13 @@ const SET_BG = { on: 'nav-set-on.svg', off: 'nav-set-off.svg' };
 
 export function AppNavBar(props: {
   tab: TabKey;
-  disabled: () => boolean;
   onChange: (tab: TabKey) => void;
 }) {
   const statusActive = () => props.tab === 'home';
   const settingsActive = () => props.tab === 'settings';
-  const pick = (next: TabKey) => {
-    if (!props.disabled()) {
-      props.onChange(next);
-    }
-  };
   return (
     <View class="absolute left-[8] right-[8] bottom-[8] h-[64] flex-row gap-2 z-40">
-      <View focusable onPress={() => pick('home')} class="grow h-[64] flex-col items-center justify-center">
+      <View focusable onPress={() => props.onChange('home')} class="grow h-[64] flex-col items-center justify-center">
         <Image
           class="absolute left-0 top-0 w-[64] h-[64]"
           src={statusActive() ? HOME_BG.onL : HOME_BG.offL}
@@ -71,22 +64,18 @@ export function AppNavBar(props: {
         <Icon
           glyph={ICON.home}
           class="shrink-0 text-xl"
-          color={props.disabled() ? COLOR.disabled : statusActive() ? COLOR.onTertiaryContainer : COLOR.onSecondaryContainer}
+          color={statusActive() ? COLOR.onTertiaryContainer : COLOR.onSecondaryContainer}
         />
         <Text
-          class={props.disabled() || !statusActive() ? 'text-xs' : 'text-xs font-bold'}
+          class={statusActive() ? 'text-xs font-bold' : 'text-xs'}
           style={{
-            textColor: props.disabled()
-              ? COLOR.disabled
-              : statusActive()
-                ? COLOR.onTertiaryContainer
-                : COLOR.onSecondaryContainer,
+            textColor: statusActive() ? COLOR.onTertiaryContainer : COLOR.onSecondaryContainer,
           }}
         >
           状态
         </Text>
       </View>
-      <View focusable onPress={() => pick('settings')} class="w-[64] h-[64] shrink-0 flex-col items-center justify-center">
+      <View focusable onPress={() => props.onChange('settings')} class="w-[64] h-[64] shrink-0 flex-col items-center justify-center">
         <Image
           class="absolute left-0 top-0 w-[64] h-[64]"
           src={settingsActive() ? SET_BG.on : SET_BG.off}
@@ -94,16 +83,12 @@ export function AppNavBar(props: {
         <Icon
           glyph={ICON.settings}
           class="shrink-0 text-xl"
-          color={props.disabled() ? COLOR.disabled : settingsActive() ? COLOR.onPrimaryContainer : COLOR.onSurfaceVariant}
+          color={settingsActive() ? COLOR.onPrimaryContainer : COLOR.onSurfaceVariant}
         />
         <Text
-          class={props.disabled() || !settingsActive() ? 'text-xs' : 'text-xs font-bold'}
+          class={settingsActive() ? 'text-xs font-bold' : 'text-xs'}
           style={{
-            textColor: props.disabled()
-              ? COLOR.disabled
-              : settingsActive()
-                ? COLOR.onPrimaryContainer
-                : COLOR.onSurfaceVariant,
+            textColor: settingsActive() ? COLOR.onPrimaryContainer : COLOR.onSurfaceVariant,
           }}
         >
           设置

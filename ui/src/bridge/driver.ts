@@ -1,5 +1,5 @@
 import type { DeviceCmd, DeviceMsg } from './protocol';
-import { mockHandleCmd } from './mock';
+import { mockAttachSink, mockHandleCmd } from './mock';
 
 export type MessageCallback = (msg: DeviceMsg) => void;
 export type Unsubscribe = () => void;
@@ -61,6 +61,10 @@ export class HardwareDriver {
     if (this.isNative()) {
       (globalThis as any).__nativeBridge.postMessage(JSON.stringify(cmd));
     } else {
+      /* mock 的状态变化在命令之外发生（定时器模拟主机侧动作），挂上事件出口。 */
+      mockAttachSink((msg) => {
+        this.routeMessage(msg);
+      });
       mockHandleCmd(cmd, (msg) => {
         this.routeMessage(msg);
       });

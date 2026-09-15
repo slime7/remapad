@@ -1,10 +1,13 @@
 /**
  * 配对页：状态流转 + 大号开始/停止按钮 + 配对 L+R 确认按钮。
- * 设备开机即按凭证回连或发发现广播，配对不需要打开本页；本页只负责手动
- * 开关发现广播与按下确认键。JoyCon 是左右两只各自独立连接，主机的 Grip/
- * 顺序界面只用于调整顺序与确认，因此确认按钮触发固件左右双机配对，Pro 则
- * 注入 L+R 按键。内容单屏放得下，静态页不挂滚动。七个页面在首屏前一次挂完，
- * 切页由根节点翻转 hidden 完成（见 docs/adr/0016-mount-all-pages-before-first-frame.md）。
+ * 「开始」等价于真机按住配对键：固件先断开当前主机，再发发现广播等新主机
+ * 搜索（见 ADR 0024）；不按它时设备完全自动——配过主机就常驻唤醒广播等
+ * 主机回连，主机停在任意页面都能连上，从未配过则开机自动进入本流程。配对
+ * 成功由固件自动退出配对流程，不需要按停止。JoyCon 是左右两只各自独立
+ * 连接，主机的 Grip/顺序界面只用于调整顺序与确认；两只未配对期间固件会
+ * 自动注入 L+R 120ms 并每 3 秒重试，本页按钮是手动兜底，Pro 则注入 L+R
+ * 按键。内容单屏放得下，静态页不挂滚动。七个页面在首屏前一次挂完，切页由
+ * 根节点翻转 hidden 完成（见 docs/adr/0016-mount-all-pages-before-first-frame.md）。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';

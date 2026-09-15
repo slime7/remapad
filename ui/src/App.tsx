@@ -30,8 +30,6 @@ export default function App() {
   const tab = ref<TabKey>('home');
   const rebootAsk = ref(false);
   const powerOffAsk = ref(false);
-  /** 配对进行中锁定底部导航，保证流程在配对页内完成。 */
-  const pairingBusy = () => hw.pairing === 'scanning' || hw.pairing === 'pairing';
 
   /** 切页：所有页面已挂载，只翻转 hidden。 */
   const goToTab = (next: TabKey) => {
@@ -65,7 +63,7 @@ export default function App() {
         />
         <DebugPage active={() => tab.value === 'debug'} />
       </View>
-      <AppNavBar tab={tab.value} disabled={pairingBusy} onChange={goToTab} />
+      <AppNavBar tab={tab.value} onChange={goToTab} />
 
       {rebootAsk.value ? (
         <ConfirmDialog

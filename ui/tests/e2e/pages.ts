@@ -62,10 +62,13 @@ export async function openMode(app: RemapadApp): Promise<void> {
   await app.refreshTree();
 }
 
-/** 打开配对页（设置列表第二行）。 */
+/**
+ * 打开配对页（设置列表第二行）。配对流程可能从开机就在跑，页面一开始就是
+ * 「扫描中…」，所以这里只等页面自身的「配对」副标题可见，状态由用例各自轮询。
+ */
 export async function openPairing(app: RemapadApp): Promise<void> {
   await openSettingsItem(app, '手柄配对');
-  await expect.poll(() => app.hasVisibleText('未配对')).toBe(true);
+  await expect.poll(() => app.hasVisibleText('配对')).toBe(true);
   await app.refreshTree();
 }
 

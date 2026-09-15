@@ -64,32 +64,91 @@ const state: MockHardwareState = {
   psramFree: Math.round(2.8 * 1024 * 1024),
 };
 
-let pairingTimers: ReturnType<typeof setTimeout>[] = [];
+/** 模拟主机侧的配对耗时：设备发发现广播等主机搜索、配对、握手完成。 */
+const HOST_PAIR_MS = 8000;
 
-function clearPairingTimers(): void {
-  pairingTimers.forEach(clearTimeout);
-  pairingTimers = [];
+/** 已配对身份的回连耗时：主机被唤醒广播叫起来后直接握手，比首次配对快。 */
+const HOST_RECONNECT_MS = 2000;
+
+/** 模拟的主机侧凭证：Pro 与 JoyCon 组合在主机眼里是两台设备，各记一份。 */
+const bonded: Record<'pro' | 'joycon', boolean> = { pro: false, joycon: false };
+
+/** 当前手柄配置对应的凭证槽。 */
+function bondKey(): 'pro' | 'joycon' {
+  return state.controllerConfig.type === 'joycon' ? 'joycon' : 'pro';
 }
 
-function broadcast(reply: (msg: DeviceMsg) => void, msg: DeviceMsg): void {
-  pairingTimers.push(setTimeout(() => reply(msg), 0));
+/**
+ * 事件出口：固件侧的状态变化是主动推送，浏览器里由 driver 在每次 send 时
+ * 挂上路由回调，mock 的定时器随后用它推事件（事件没有 id，走事件监听路径）。
+ */
+let sink: ((msg: DeviceMsg) => void) | null = null;
+
+export function mockAttachSink(reply: (msg: DeviceMsg) => void): void {
+  sink = reply;
 }
 
-function setPairing(
-  reply: (msg: DeviceMsg) => void,
-  pairing: PairingState,
-): void {
+let mockTimers: ReturnType<typeof setTimeout>[] = [];
+
+function clearMockTimers(): void {
+  mockTimers.forEach(clearTimeout);
+  mockTimers = [];
+}
+
+function emit(msg: DeviceMsg): void {
+  sink?.(msg);
+}
+
+/** 延时动作，随下一次流程启动整体作废。 */
+function later(delayMs: number, action: () => void): void {
+  mockTimers.push(setTimeout(action, delayMs));
+}
+
+function setPairing(pairing: PairingState): void {
   state.pairing = pairing;
-  broadcast(reply, { t: 'pairingStateChanged', state: pairing });
+  emit({ t: 'pairingStateChanged', state: pairing });
 }
 
-/** 主机注册后下发玩家序号灯（Command 0x09）：mock 里随配对完成给出 Player 1。 */
-function setPlayerLed(reply: (msg: DeviceMsg) => void, led: number): void {
+/** 主机注册后下发玩家序号灯（Command 0x09）：mock 里随连接完成给出 Player 1。 */
+function setPlayerLed(led: number): void {
   if (state.playerLed === led) {
     return;
   }
   state.playerLed = led;
-  broadcast(reply, { t: 'playerLedChanged', led });
+  emit({ t: 'playerLedChanged', led });
+}
+
+/** 主机完成注册：序号灯亮起、进入已连接，当前身份的凭证落一份。 */
+function hostConnects(): void {
+  bonded[bondKey()] = true;
+  state.controller = state.controllerConfig.type === 'joycon' ? 'joycon-l' : 'pro-controller-2';
+  setPlayerLed(0b0001);
+  setPairing('connected');
+}
+
+/** 配对流程（发现广播）：主机搜到并配对，配完固件自动退出流程。 */
+function startPairingFlow(): void {
+  setPairing('scanning');
+  later(Math.round(HOST_PAIR_MS * 0.6), () => setPairing('pairing'));
+  later(HOST_PAIR_MS, hostConnects);
+}
+
+/** 已配对身份的回连：主机按唤醒广播连上来，只剩握手窗口。 */
+function startReconnectFlow(): void {
+  setPairing('pairing');
+  later(HOST_RECONNECT_MS, hostConnects);
+}
+
+/** 切换手柄身份（类型或配色）：旧手柄断电、新手柄上电，按新身份的凭证重走。 */
+function beginIdentityFlow(): void {
+  clearMockTimers();
+  state.controller = null;
+  setPlayerLed(0);
+  if (bonded[bondKey()]) {
+    startReconnectFlow();
+  } else {
+    startPairingFlow();
+  }
 }
 
 /** 浏览器环境下的产品控制面协议 mock；不模拟 PocketJS UI binding。 */
@@ -149,7 +208,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         state.backlight = 0;
       }
       reply({ t: 'screenPowerSet', id, on: state.screenOn });
-      broadcast(reply, { t: 'screenPowerChanged', on: state.screenOn });
+      emit({ t: 'screenPowerChanged', on: state.screenOn });
       break;
     }
 
@@ -174,7 +233,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       const message =
         cmd.role === 'host' ? 'USB host 数据面未接入，切换暂不生效' : undefined;
       reply({ t: 'usbRoleSet', id, role: cmd.role, active: state.usbRoleActive, message });
-      broadcast(reply, { t: 'usbRoleChanged', role: cmd.role, active: state.usbRoleActive });
+      emit({ t: 'usbRoleChanged', role: cmd.role, active: state.usbRoleActive });
       break;
     }
 
@@ -187,7 +246,13 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       });
       break;
 
-    case 'setControllerConfig':
+    case 'setControllerConfig': {
+      /* 切换等价于「旧手柄断电、新手柄上电」：身份或配色变了就重走连接流程。 */
+      const configChanged =
+        state.controllerConfig.type !== cmd.config.type ||
+        state.controllerConfig.bodyColor !== cmd.config.bodyColor ||
+        state.controllerConfig.buttonColor !== cmd.config.buttonColor ||
+        state.controllerConfig.gripColor !== cmd.config.gripColor;
       state.controllerConfig = { ...cmd.config };
       reply({
         t: 'controllerConfigSet',
@@ -195,42 +260,36 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         config: { ...state.controllerConfig },
         success: true,
       });
+      if (configChanged) {
+        beginIdentityFlow();
+      }
       break;
+    }
 
     case 'startPairing':
-      if (state.pairing === 'scanning' || state.pairing === 'pairing') {
-        reply({ t: 'pairingResult', id, state: state.pairing, message: '配对已在进行中' });
-        break;
-      }
-      clearPairingTimers();
-      setPairing(reply, 'scanning');
-      reply({ t: 'pairingResult', id, state: 'scanning', message: '开始广播（模拟）' });
-      pairingTimers.push(setTimeout(() => setPairing(reply, 'pairing'), 1500));
-      pairingTimers.push(
-        setTimeout(() => {
-          // 主机在注册完成后下发玩家序号灯，序号 1 对应掩码最低位。
-          setPlayerLed(reply, 0b0001);
-          setPairing(reply, 'paired');
-        }, 4200),
-      );
+      /* 配对键：先断开当前主机，再发发现广播等新主机搜索（配完自动退出）。 */
+      clearMockTimers();
+      state.controller = null;
+      setPlayerLed(0);
+      startPairingFlow();
+      reply({ t: 'pairingResult', id, state: 'scanning', message: '已进入配对流程' });
       break;
 
     case 'stopPairing':
-      clearPairingTimers();
-      // 停止搜索只退出配对模式：未配成则回 idle，已配对则凭证保持。
-      if (state.pairing === 'scanning' || state.pairing === 'pairing') {
-        setPairing(reply, 'idle');
-      }
-      reply({ t: 'pairingResult', id, state: state.pairing, message: '已退出配对模式' });
+      clearMockTimers();
+      /* 已配对回常态等主机回连；未配对静默（真机没配对时不广播）。 */
+      setPairing(bonded[bondKey()] ? 'paired' : 'idle');
+      reply({ t: 'pairingResult', id, state: state.pairing, message: '已退出配对流程' });
       break;
 
     case 'unpair':
-      clearPairingTimers();
+      clearMockTimers();
+      bonded[bondKey()] = false;
       state.controller = null;
-      // 解除配对后主机不再认这台手柄，序号灯随之熄灭。
-      setPlayerLed(reply, 0);
-      setPairing(reply, 'idle');
-      reply({ t: 'unpairResult', id, state: 'idle', message: '已解除配对' });
+      setPlayerLed(0);
+      // 凭证清空后按「从未配过」处理：回到配对流程发发现广播。
+      startPairingFlow();
+      reply({ t: 'unpairResult', id, state: 'scanning', message: '已解除配对' });
       break;
 
     case 'pressLr':
@@ -260,7 +319,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       reply({ t: 'powerOffAck', id });
       // 浏览器里没有电源通路，按设备插着 USB 时的行为回报：锁存被旁路，
       // 固件在确认自己还活着之后告诉 UI 关不掉。
-      pairingTimers.push(setTimeout(() => reply({ t: 'powerOffBlocked' }), 1500));
+      later(1500, () => reply({ t: 'powerOffBlocked' }));
       break;
 
     case 'reboot':
@@ -277,3 +336,6 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       break;
   }
 }
+
+/* 上电即按凭证决定形态：mock 里主机从未配过，开机自动进入配对流程。 */
+startPairingFlow();
