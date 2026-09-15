@@ -271,7 +271,7 @@ uv run python ota.py -p COM3 --verbose         # 同时透传设备日志
 - [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按切模式）。
 - [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制；桥接源在 `input/`，USB host 源预留）。
 - [firmware/main/input/input_link.c](../firmware/main/input/input_link.c)：桥接链路的设备侧（USB-Serial/JTAG 唯一读取者、桥接帧与 CLI 文本分流）。
-- [firmware/main/pad/pad_device.c](../firmware/main/pad/pad_device.c)：私有手柄格式与家族布局表（各家报告的字段偏移、按键位置映射与轴归一）。
+- [firmware/main/pad/pad_device.c](../firmware/main/pad/pad_device.c)：私有手柄格式与解析（按键位置映射、轴归一、死区）；家族布局表按系列拆在 [firmware/main/pad/layouts/](../firmware/main/pad/layouts)，契约与注册表是 [layout.h](../firmware/main/pad/layout.h) / [layout.c](../firmware/main/pad/layout.c)。
 - [firmware/main/target/target.c](../firmware/main/target/target.c) 与 [firmware/main/target/ns2/](../firmware/main/target/ns2)：目标编码接口与 NS2 输出封装（按键构建报告、结构化反馈、电池、amiibo 预置）。
 - [pc/bridge.py](../pc/bridge.py) 与 [pc/link.py](../pc/link.py)：PC 侧桥接程序（hidapi 读手柄 → 桥接帧，`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
 - [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端配套工具是 [pc/ota.py](../pc/ota.py)。

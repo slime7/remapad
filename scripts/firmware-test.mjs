@@ -21,6 +21,11 @@ const EXE_PATH = resolve(BUILD_DIR, EXE_NAME);
 /** 被测固件源码：只列与硬件无关的模块。 */
 const FIRMWARE_SOURCES = [
   'firmware/main/pad/pad_state.c',
+  'firmware/main/pad/layout.c',
+  'firmware/main/pad/layouts/xbox.c',
+  'firmware/main/pad/layouts/ds3.c',
+  'firmware/main/pad/layouts/ds4.c',
+  'firmware/main/pad/layouts/ds5.c',
   'firmware/main/pad/pad_device.c',
   'firmware/main/input/input_frame.c',
   'firmware/main/ota/ota_proto.c',

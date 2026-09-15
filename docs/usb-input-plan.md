@@ -32,7 +32,7 @@ flowchart LR
     Out -. "震动与 LED 转发" .-> Pad
 ```
 
-接入方式：实现一个 `dp_source_t`（如 `{"name":"usb", .sample=usb_source_sample}`）在 `dp_plane_start` 里注册，把原始报告按 `pad_report_t` 交给 `pad/pad_device.c` 的家族表——与桥接路径共用同一份解析与映射，USB 侧不再自己解析 0x05 / 0x09。`ns2_output` 的反馈监听者已把主机反馈归一到 `pad_feedback_t`，USB 路径接入时在这里补一层 OUT 投递。编码、发送与 UI 都不需要改动——这正是三段划分与 `dp_source_t` 解耦的目的。
+接入方式：实现一个 `dp_source_t`（如 `{"name":"usb", .sample=usb_source_sample}`）在 `dp_plane_start` 里注册，把原始报告按 `pad_report_t` 交给 `pad/` 的家族布局表（`pad_layout_find()`）——与桥接路径共用同一份解析与映射，USB 侧不再自己解析 0x05 / 0x09。`ns2_output` 的反馈监听者已把主机反馈归一到 `pad_feedback_t`，USB 路径接入时在这里补一层 OUT 投递。编码、发送与 UI 都不需要改动——这正是三段划分与 `dp_source_t` 解耦的目的。
 
 ## 目标数据流（桥接：PC 输入 → NS2，需 PC 配套程序）
 

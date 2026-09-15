@@ -211,7 +211,7 @@ flowchart LR
 
 该数据面由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，高频报告不经过 UI bridge，也不经过每帧 `pocketjs_ui_turn`。PocketJS UI 只读取低频连接/电量/配对状态，并发出开始配对、停止配对、背光等控制命令。
 
-三段之间只有两种数据：`pad_report_t`（原始报告 + 设备标识）与 `pad_state_t`（私有格式）。新增一种手柄在 `pad/pad_device.c` 的家族表里加一行，新增一个目标（例如 NS1）在 `target/` 下加一个 `pad_target_t` 实现；桥接 PC 与将来的 USB host 直插共用 `pad/` 与 `target/` 两段，按键位置映射与轴归一只有一份，展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
+三段之间只有两种数据：`pad_report_t`（原始报告 + 设备标识）与 `pad_state_t`（私有格式）。新增一种手柄在 `pad/layouts/` 下的对应系列文件里加一行（新系列则加一个文件并在 `pad/layout.c` 登记，见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)），新增一个目标（例如 NS1）在 `target/` 下加一个 `pad_target_t` 实现；桥接 PC 与将来的 USB host 直插共用 `pad/` 与 `target/` 两段，按键位置映射与轴归一只有一份，展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
 
 现有 `ui/src/bridge/` 和 `firmware/main/bridge/` 是这一控制面已接入的实现（UI 命令/事件 + 供 PWR 按键与串口 CLI 使用的外部队列入口）。NS2 的广播字段、GATT、HID 报告、配对和震动命令见 [controller.md](controller.md)，实现前必须用真实设备抓包和互操作测试确认。
 
