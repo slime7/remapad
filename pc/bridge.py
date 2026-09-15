@@ -28,6 +28,7 @@ from link import (
     TYPE_ATTACH,
     TYPE_DETACH,
     TYPE_FEEDBACK,
+    TYPE_OUT_REPORT,
     TYPE_PING,
     TYPE_REPORT,
     FrameDecoder,
@@ -114,6 +115,18 @@ def print_feedback(payload: bytes) -> None:
     )
 
 
+def write_output_report(device, payload: bytes, enabled: bool) -> bool:
+    """把设备编码好的输出报告写回手柄：震动与玩家灯的字段布局只在固件里有一份。"""
+    if not enabled or device is None or not payload or len(payload) > 64:
+        return False
+    try:
+        device.write(payload)
+    except OSError as exc:
+        print(f"反馈写回失败：{exc}", file=sys.stderr)
+        return False
+    return True
+
+
 def run_dump(args) -> int:
     """只打印原始报告：用来核对固件家族表里的字段偏移。"""
     candidates = list_candidates()
@@ -148,6 +161,7 @@ def run_bridge(args) -> int:
         seq = 0
         reports = 0
         frames = 0
+        outputs = 0
         print(f"桥接已连接 {args.port}；等待手柄（--list 可查看候选）", flush=True)
         next_send = 0.0
         interval = 1.0 / args.max_rate if args.max_rate > 0 else 0.0
@@ -185,6 +199,9 @@ def run_bridge(args) -> int:
                         frames += 1
                         if frame_type == TYPE_FEEDBACK:
                             print_feedback(payload)
+                        elif frame_type == TYPE_OUT_REPORT:
+                            if write_output_report(device, payload, not args.no_rumble):
+                                outputs += 1
                         elif frame_type == TYPE_PING:
                             print(f"设备在线（协议 v{payload[0] if payload else 0}）", flush=True)
                     if args.logs and text:
@@ -197,7 +214,8 @@ def run_bridge(args) -> int:
                 now = time.monotonic()
                 if now - last_stat >= 5.0:
                     last_stat = now
-                    print(f"已转发 {reports} 帧报告，收到设备帧 {frames} 个", flush=True)
+                    print(f"已转发 {reports} 帧报告，收到设备帧 {frames} 个，"
+                          f"写回手柄 {outputs} 条", flush=True)
         except KeyboardInterrupt:
             print("\n退出中…")
         except OSError as exc:
@@ -224,6 +242,8 @@ def main() -> int:
                         help="--dump 的采集时长（0 表示到 Ctrl+C）")
     parser.add_argument("--max-rate", type=float, default=250.0,
                         help="转发上限帧率（0 表示不限制，默认 250）")
+    parser.add_argument("--no-rumble", action="store_true",
+                        help="不把主机的震动/玩家灯写回手柄")
     parser.add_argument("--logs", action="store_true", help="打印设备日志文本")
     args = parser.parse_args()
 
