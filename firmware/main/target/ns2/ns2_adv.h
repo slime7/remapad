@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -41,6 +42,14 @@ typedef enum {
  *  只有实机 A/B 对账时才用 NS2_ADV_RECONNECT 退回 0x00 回连形态。 */
 ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
                                    ns2_adv_mode_t steady);
+
+/** 回连/唤醒广播要携带的主机地址（纯逻辑，主机端用例钉住）：优先「最近一次
+ *  NS2 会话记录到的对端地址」——配对交换给的是主机两条只差一位（末字节 ±1）
+ *  的地址，凭证里存的那条未必是主机连接时在用的那条，连接对端地址才是；其次
+ *  取由新到旧的第一条可用凭证；两者都没有可用地址时返回 NULL，调用方据此
+ *  退化为发现广播（绝不发全零地址的唤醒广播）。 */
+const uint8_t *ns2_adv_choose_host_mac(const uint8_t *recorded,
+                                       const uint8_t *const creds[], size_t cred_count);
 
 /** L+R 组合确认的重试间隔（微秒）：主机把两只 Joy-Con 认成一对靠 L 与 R 同时
  *  按下，拿到凭证之前按这个节奏重发。 */

@@ -286,22 +286,10 @@ static ns2_adv_mode_t s_steady_adv = NS2_ADV_WAKE;
 /** JoyCon 组合的 L+R 自动注入计时：未配对期间每 3 秒重试。 */
 static ns2_adv_lr_timer_t s_lr_timer;
 
-static bool mac_all_zero(const uint8_t mac[6])
-{
-    for (size_t i = 0; i < 6; i++) {
-        if (mac[i] != 0) {
-            return false;
-        }
-    }
-    return true;
-}
-
 /** 身份的广播形态：配对流程中或当前形态还没配齐凭证 → 发现广播（新主机
  * 要能搜到它，也不能带着旧主机地址发唤醒）；已配对 → 常态形态，默认唤醒
  * 0x81——主机醒着停在任意页面也认它，这是自动回连的唯一可靠入口。
- * 地址优先取最近一次连接记录到的主机地址，其次取最近一条「非全零」凭证：
- * NVS 里存在计数虚高、尾部记录全零的历史表，直接取最近一条会写出全零地址
- * 的广播——主机既不会回连也不会被唤醒。 */
+ * 地址的挑选规则见 ns2_adv_choose_host_mac。 */
 static ns2_adv_mode_t adv_mode_for(ns2_identity_t identity, const uint8_t **out_mac)
 {
     static uint8_t s_adv_host_mac[6];
@@ -313,25 +301,30 @@ static ns2_adv_mode_t adv_mode_for(ns2_identity_t identity, const uint8_t **out_
         *out_mac = NULL;
         return ns2_adv_choose_mode(false, false, s_steady_adv);
     }
-    /* 凭证优先：记录值可能被普通 BLE 主机（PC/手机）污染，凭证只会在 NS2
-     * 配对交换里写入。 */
+    /* 记录值只在「对端命中凭证」的连接与配对交换里写入（普通 BLE 主机不写），
+     * 凭证作兜底：配好还没连过时只有凭证地址可用。挑选规则在 ns2_adv。 */
+    uint8_t recorded[NS2_CREDS_MAC_LEN];
+    const uint8_t *recorded_ptr =
+        ble_creds_host_mac(identity, recorded) ? recorded : NULL;
+    const uint8_t *creds[NS2_CREDS_MAX];
     const size_t count = ble_creds_count(identity);
+    size_t cred_count = 0;
     for (size_t i = count; i > 0; i--) {
         const ns2_cred_record_t *rec = ble_creds_get(identity, i - 1);
-        if (rec != NULL && !mac_all_zero(rec->mac)) {
-            memcpy(s_adv_host_mac, rec->mac, sizeof(s_adv_host_mac));
-            *out_mac = s_adv_host_mac;
-            return ns2_adv_choose_mode(true, false, s_steady_adv);
+        if (rec != NULL && cred_count < NS2_CREDS_MAX) {
+            creds[cred_count++] = rec->mac;
         }
     }
-    if (ble_creds_host_mac(identity, s_adv_host_mac)) {
-        *out_mac = s_adv_host_mac;
-        return ns2_adv_choose_mode(true, false, s_steady_adv);
+    const uint8_t *picked = ns2_adv_choose_host_mac(recorded_ptr, creds, cred_count);
+    if (picked == NULL) {
+        /* 形态已配齐但这一只没有可用地址：退回发现广播，绝不发全零地址的
+         * 唤醒广播（主机既不会回连也不会被唤醒）。 */
+        *out_mac = NULL;
+        return ns2_adv_choose_mode(false, false, s_steady_adv);
     }
-    /* 形态已配齐但这一只没有可用地址：退回发现广播，绝不发全零地址的
-     * 唤醒广播（主机既不会回连也不会被唤醒）。 */
-    *out_mac = NULL;
-    return ns2_adv_choose_mode(false, false, s_steady_adv);
+    memcpy(s_adv_host_mac, picked, sizeof(s_adv_host_mac));
+    *out_mac = s_adv_host_mac;
+    return ns2_adv_choose_mode(true, false, s_steady_adv);
 }
 
 static const char *adv_mode_name(ns2_adv_mode_t mode)

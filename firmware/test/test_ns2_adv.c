@@ -152,6 +152,30 @@ static void dormant_link_follows_feature_enable(void)
     CHECK(!ns2_adv_dormant_link(false, false));
 }
 
+/** 回连广播要带回的地址是主机真正在用的那一条：配对交换给的是两条只差一位的
+ *  主机地址（本设备实测末字节 0x8c / 0x8d），凭证里存的那条未必是主机连接时
+ *  在用的那条——塞错一条主机就既不回连也不醒。 */
+static void host_mac_prefers_last_connected_address(void)
+{
+    const uint8_t recorded[6] = {0x8d, 0x63, 0x27, 0x70, 0x68, 0xb8};
+    const uint8_t paired[6] = {0x8c, 0x63, 0x27, 0x70, 0x68, 0xb8};
+    const uint8_t older[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    const uint8_t zero[6] = {0};
+    const uint8_t *creds[2] = {paired, older};
+
+    CHECK(ns2_adv_choose_host_mac(recorded, creds, 2) == recorded);
+
+    /* 记录值缺失或全零：退回最新一条可用凭证。 */
+    CHECK(ns2_adv_choose_host_mac(NULL, creds, 2) == paired);
+    CHECK(ns2_adv_choose_host_mac(zero, creds, 2) == paired);
+    const uint8_t *with_zero[3] = {zero, paired, older};
+    CHECK(ns2_adv_choose_host_mac(NULL, with_zero, 3) == paired);
+
+    /* 一条可用地址都没有：调用方按 NULL 退化为发现广播。 */
+    CHECK(ns2_adv_choose_host_mac(zero, with_zero, 1) == NULL);
+    CHECK(ns2_adv_choose_host_mac(NULL, NULL, 0) == NULL);
+}
+
 HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"发现广播与真机抓包一致", discovery_matches_capture},
                 {"回连广播不带唤醒标志", reconnect_keeps_normal_status},
@@ -161,4 +185,5 @@ HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"已配对发唤醒形态、未配对发发现形态", mode_choice_follows_pairing},
                 {"未配对 JoyCon 就绪后注入 L+R 并重试", lr_injection_follows_readiness},
                 {"休眠链路按特性启用判定", dormant_link_follows_feature_enable},
+                {"回连广播用主机最近一次连接的地址", host_mac_prefers_last_connected_address},
                 {"厂商数据偏移与尾部标志", manufacturer_data_offsets});
