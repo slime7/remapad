@@ -388,8 +388,7 @@ static void handle_set_usb_role(int id, const char *cmd)
     char event[REMAPAD_EVENT_MAX];
     if (want_host) {
         snprintf(event, sizeof(event),
-                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"host\",\"active\":false,"
-                 "\"message\":\"USB host 数据面未接入，切换暂不生效\"}",
+                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"host\",\"active\":false}",
                  id);
     } else {
         snprintf(event, sizeof(event),
@@ -412,11 +411,9 @@ static void handle_start_pairing(int id)
     ns2_session_start_pairing_mode();
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
-             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"scanning\","
-             "\"message\":\"广播中，等待主机连接\"}",
-             id);
+             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"scanning\"}", id);
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing mode on (real BLE advertising)");
+    ESP_LOGI(TAG, "pairing flow on (discovery advertising, link dropped)");
 }
 
 static void handle_stop_pairing(int id)
@@ -430,8 +427,7 @@ static void handle_stop_pairing(int id)
     }
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
-             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\","
-             "\"message\":\"已退出配对模式\"}",
+             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\"}",
              id, real_pairing_state());
     reply_raw(event);
     ESP_LOGI(TAG, "pairing mode stopped (credentials untouched)");
@@ -442,8 +438,7 @@ static void handle_unpair(int id)
     ns2_session_unpair();
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
-             "{\"t\":\"unpairResult\",\"id\":%d,\"state\":\"%s\","
-             "\"message\":\"已解除配对\"}",
+             "{\"t\":\"unpairResult\",\"id\":%d,\"state\":\"%s\"}",
              id, real_pairing_state());
     reply_raw(event);
     ESP_LOGI(TAG, "unpair -> %s", real_pairing_state());

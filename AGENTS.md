@@ -72,6 +72,7 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
   - 构建期会自动提取文本字符集并在烘焙阶段生成对应插槽的点阵图集。
   - 中文等 Inter 未映射的码点由官方 `fonts.json` 回退机制解析：`ui/src/fonts.json` 把 `ui/assets/fonts/NotoSansSC-Regular.otf`（SIL OFL 1.1，许可文本同目录）声明为回退字体面，Inter/JetBrains Mono 仍负责各自槽位的拉丁字形。回退清单对所有槽位只有一份，中文粗体实际烘焙为常规字重。
   - 字符集来自构建期对源码字符串字面量、模板字符串静态块和 JSX 文本的静态扫描；只在运行时动态拼接、且从未出现在任何字面量里的字符不会被烘焙。字体未映射的码点（如 emoji）没有字形，渲染为 tofu 方框。
+  - 界面文案因此必须写在 `ui/src` 里（`utils.ts` 的 `PairingNotice` / `RoleNotice` 用联合类型钉住这条规则）：固件经 bridge 回发的文本不会被烘焙，直接上屏会显示成豆腐块。
 
 - **PocketJS 组件、归档与脚本入口**：
   - 仓库是自包含的：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定编译器、框架源码、构建资源与触摸预览用的官方 wasm 核心。

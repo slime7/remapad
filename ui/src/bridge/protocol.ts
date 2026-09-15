@@ -121,9 +121,12 @@ export type DeviceMsg =
       addresses: ControllerAddresses;
     }
   | { t: 'controllerConfigSet'; id: number; config: ControllerConfig; success: boolean }
-  | { t: 'usbRoleSet'; id: number; role: UsbRole; active: boolean; message?: string }
-  | { t: 'pairingResult'; id: number; state: PairingState; message?: string }
-  | { t: 'unpairResult'; id: number; state: PairingState; message?: string }
+  /* 这三条应答只回状态，不回可上屏的文案：屏幕文本一律取自 ui/src 里的
+   * 字面量（构建期字体字符集按源码字面量扫描烘焙），固件回发的文本直接
+   * 渲染会显示成豆腐块。 */
+  | { t: 'usbRoleSet'; id: number; role: UsbRole; active: boolean }
+  | { t: 'pairingResult'; id: number; state: PairingState }
+  | { t: 'unpairResult'; id: number; state: PairingState }
   | { t: 'pressLrAck'; id: number; success: boolean }
   | { t: 'rumbleAck'; id: number; success: boolean }
   | { t: 'debugKeySet'; id: number; key: DebugKey }

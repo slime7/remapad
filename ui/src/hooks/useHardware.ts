@@ -17,6 +17,7 @@ import type {
   PairingState,
   UsbRole,
 } from '../bridge/protocol';
+import type { PairingNotice, RoleNotice } from '../utils';
 
 export interface HardwareUiState {
   /** bridge 握手成功（原生固件或浏览器 mock）。 */
@@ -34,7 +35,7 @@ export interface HardwareUiState {
   /** 息屏状态（背光关闭），PWR 键或命令切换。 */
   screenOn: boolean;
   pairing: PairingState;
-  pairingMessage: string;
+  pairingMessage: PairingNotice;
   /** 手柄身份配置（类型 + 配色），持久化在固件 NVS。 */
   controllerConfig: ControllerConfig;
   /** 各身份对外的蓝牙地址（显示序；host 未同步时为空串）。 */
@@ -46,7 +47,7 @@ export interface HardwareUiState {
   /** 主机下发的玩家序号灯掩码（bit0-3 对应首页四格指示灯），无主机时为 0。 */
   playerLed: number;
   /** 模式页角色切换的一次性提示（如桥接禁切原因）。 */
-  roleMessage: string;
+  roleMessage: RoleNotice;
   /** 本地推算的实时开机时长。 */
   uptimeMs: number;
   /** 实测帧率（帧/秒）：只在系统页可见时采样，null = 尚无样本。 */
@@ -176,13 +177,15 @@ export function setFrameRateSampling(on: boolean): void {
   }
 }
 
+/* 三个动作的提示文案都在本文件里给出：屏幕文本必须是 ui/src 的字面量，
+ * 固件回发的文本不进界面（见 utils.ts 的 PairingNotice）。 */
 export function startPairing(): void {
   hardware.send({ t: 'startPairing' }, (msg) => {
     if (msg.t === 'pairingResult') {
       hw.pairing = msg.state;
-      hw.pairingMessage = msg.message ?? '';
+      hw.pairingMessage = '广播中，等待主机连接';
     } else if (msg.t === 'error') {
-      hw.pairingMessage = msg.message;
+      hw.pairingMessage = '配对命令未生效';
     }
   });
 }
@@ -191,7 +194,7 @@ export function stopPairing(): void {
   hardware.send({ t: 'stopPairing' }, (msg) => {
     if (msg.t === 'pairingResult') {
       hw.pairing = msg.state;
-      hw.pairingMessage = msg.message ?? '';
+      hw.pairingMessage = '已退出配对流程';
     }
   });
 }
@@ -200,7 +203,7 @@ export function unpair(): void {
   hardware.send({ t: 'unpair' }, (msg) => {
     if (msg.t === 'unpairResult') {
       hw.pairing = msg.state;
-      hw.pairingMessage = msg.message ?? '';
+      hw.pairingMessage = '已解除配对';
     }
   });
 }
@@ -222,9 +225,11 @@ export function setUsbRole(role: UsbRole): void {
     if (msg.t === 'usbRoleSet') {
       hw.usbRole = msg.role;
       hw.usbRoleActive = msg.active;
-      hw.roleMessage = msg.message ?? '';
+      /* host 角色在固件侧还没接数据面：如实提示，文案由 UI 给出。 */
+      hw.roleMessage =
+        msg.role === 'host' && !msg.active ? 'USB host 数据面未接入，切换暂不生效' : '';
     } else if (msg.t === 'error') {
-      hw.roleMessage = msg.message;
+      hw.roleMessage = 'USB 角色切换未生效';
     }
   });
 }

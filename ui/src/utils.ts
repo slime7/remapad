@@ -65,6 +65,23 @@ export function pairingLabel(state: PairingState): string {
   }
 }
 
+/**
+ * 配对页与模式页的提示文本：只允许本仓库 ui/src 里的字面量。
+ * 构建期字体字符集按源码字面量扫描烘焙，固件回发的诊断文本直接上屏会显示
+ * 成豆腐块——联合类型把这条规则钉在类型上。
+ */
+export type PairingNotice =
+  | ''
+  | '广播中，等待主机连接'
+  | '已退出配对流程'
+  | '已解除配对'
+  | '当前状态无法执行 LR 配对'
+  | '配对命令未生效'
+  | '重启中…';
+
+/** USB 角色切换提示：同 PairingNotice，必须是 ui/src 里的字面量。 */
+export type RoleNotice = '' | 'USB host 数据面未接入，切换暂不生效' | 'USB 角色切换未生效';
+
 /** 配对状态强调色。 */
 export function pairingColor(state: PairingState): string {
   switch (state) {

@@ -24,6 +24,17 @@ test('从未配过主机时，开机自动进入配对流程', async ({ app }) =
   expect(texts).not.toContain('开始');
 });
 
+test('配对键的提示文案来自界面字面量（固件回发的文本不上屏）', async ({ app }) => {
+  await app.goto();
+  await openPairing(app);
+
+  await app.tapText('停止');
+  await expect.poll(() => app.hasVisibleText('已退出配对流程')).toBe(true);
+
+  await app.tapText('开始');
+  await expect.poll(() => app.hasVisibleText('广播中，等待主机连接')).toBe(true);
+});
+
 test('按停止退出配对流程，按配对重新进入', async ({ app }) => {
   await app.goto();
   await openPairing(app);

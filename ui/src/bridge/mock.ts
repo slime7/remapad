@@ -230,9 +230,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       }
       state.usbRole = cmd.role;
       state.usbRoleActive = cmd.role !== 'host';
-      const message =
-        cmd.role === 'host' ? 'USB host 数据面未接入，切换暂不生效' : undefined;
-      reply({ t: 'usbRoleSet', id, role: cmd.role, active: state.usbRoleActive, message });
+      reply({ t: 'usbRoleSet', id, role: cmd.role, active: state.usbRoleActive });
       emit({ t: 'usbRoleChanged', role: cmd.role, active: state.usbRoleActive });
       break;
     }
@@ -272,14 +270,14 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       state.controller = null;
       setPlayerLed(0);
       startPairingFlow();
-      reply({ t: 'pairingResult', id, state: 'scanning', message: '已进入配对流程' });
+      reply({ t: 'pairingResult', id, state: 'scanning' });
       break;
 
     case 'stopPairing':
       clearMockTimers();
       /* 已配对回常态等主机回连；未配对静默（真机没配对时不广播）。 */
       setPairing(bonded[bondKey()] ? 'paired' : 'idle');
-      reply({ t: 'pairingResult', id, state: state.pairing, message: '已退出配对流程' });
+      reply({ t: 'pairingResult', id, state: state.pairing });
       break;
 
     case 'unpair':
@@ -289,7 +287,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       setPlayerLed(0);
       // 凭证清空后按「从未配过」处理：回到配对流程发发现广播。
       startPairingFlow();
-      reply({ t: 'unpairResult', id, state: 'scanning', message: '已解除配对' });
+      reply({ t: 'unpairResult', id, state: 'scanning' });
       break;
 
     case 'pressLr':
