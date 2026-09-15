@@ -4,9 +4,11 @@ set(remapad_pocketjs_requires
     esp_lcd
     esp_driver_ledc
     esp_driver_gpio
+    esp_driver_uart
     esp_driver_usb_serial_jtag
     esp_lcd_touch
     esp_lcd_touch_cst816s
+    usb
     app_update
     esp_app_format
     bt
@@ -27,6 +29,7 @@ idf_component_register(
         "bridge/js_bridge.c"
         "config/app_config.c"
         "console/cli.c"
+        "console/console_out.c"
         "drivers/panel.c"
         "drivers/backlight.c"
         "drivers/touch.c"
@@ -40,7 +43,9 @@ idf_component_register(
         "pad/layouts/ds3.c"
         "pad/layouts/ds4.c"
         "pad/layouts/ds5.c"
+        "pad/layouts/ns.c"
         "pad/pad_device.c"
+        "pad/feedback.c"
         "input/input_frame.c"
         "input/input_source.c"
         "input/input_link.c"
@@ -59,6 +64,9 @@ idf_component_register(
         "ble/ble_creds.c"
         "dp/dp_plane.c"
         "dp/dp_source.c"
+        "usb/usb_input.c"
+        "usb/usb_role.c"
+        "usb/usb_transport.c"
     INCLUDE_DIRS
         "."
         "bridge"
@@ -72,6 +80,7 @@ idf_component_register(
         "target/ns2"
         "ble"
         "dp"
+        "usb"
     REQUIRES ${remapad_pocketjs_requires}
 )
 

@@ -16,11 +16,13 @@
 #include "ble_creds.h"
 #include "ble_session.h"
 #include "dp_source.h"
+#include "feedback.h"
 #include "input_link.h"
 #include "input_source.h"
 #include "ns2_output.h"
 #include "ns2_target.h"
 #include "target.h"
+#include "usb_input.h"
 
 static const char *TAG = "remapad_dp";
 
@@ -95,8 +97,16 @@ static void refresh_target_facts(void)
     target_set_facts(&facts);
 }
 
-/** 主机反馈监听：先归一到私有反馈格式（pad_feedback_t），投递路径（USB OUT /
- *  桥接回发）在后续里程碑实现，本轮只记录日志。 */
+/** 主机反馈的最新一帧：BLE 回调只落这一帧，编码与投递由数据面任务做。 */
+static portMUX_TYPE s_feedback_mux = portMUX_INITIALIZER_UNLOCKED;
+static pad_feedback_t s_feedback;
+static volatile bool s_feedback_pending;
+
+/**
+ * 主机反馈监听：归一到私有反馈格式（pad_feedback_t），一帧新版覆盖旧帧
+ * （震动包每 20-30ms 一次，投递跟上最新值即可），随后由数据面任务按设备
+ * 布局编码并投递，绝不在 BLE 回调里碰 USB 传输。
+ */
 static void feedback_listener(ns2_feedback_type_t type, const void *payload, void *user)
 {
     (void)user;
@@ -107,26 +117,64 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
         const ns2_rumble_event_t *rumble = payload;
         feedback.rumble_on[PAD_TRIGGER_L2] = rumble->left_on;
         feedback.rumble_on[PAD_TRIGGER_R2] = rumble->right_on;
+        feedback.rumble_strength[PAD_TRIGGER_L2] =
+            rumble->left_on ? ns2_rumble_strength(rumble->raw) : 0;
+        feedback.rumble_strength[PAD_TRIGGER_R2] =
+            rumble->right_on ? ns2_rumble_strength(&rumble->raw[16]) : 0;
         memcpy(feedback.rumble_raw[PAD_TRIGGER_L2], rumble->raw, 16);
         memcpy(feedback.rumble_raw[PAD_TRIGGER_R2], &rumble->raw[16], 16);
-        ESP_LOGI(TAG, "feedback rumble: L=%u R=%u (delivery pending)",
-                 (unsigned)rumble->left_on, (unsigned)rumble->right_on);
+        ESP_LOGD(TAG, "feedback rumble: L=%u/%u R=%u/%u", (unsigned)rumble->left_on,
+                 (unsigned)feedback.rumble_strength[PAD_TRIGGER_L2], (unsigned)rumble->right_on,
+                 (unsigned)feedback.rumble_strength[PAD_TRIGGER_R2]);
         break;
     }
     case NS2_FEEDBACK_PLAYER_LED:
         feedback.player_led = *(const uint8_t *)payload;
-        ESP_LOGI(TAG, "feedback player LED 0x%x", feedback.player_led);
+        ESP_LOGD(TAG, "feedback player LED 0x%x", feedback.player_led);
         break;
     case NS2_FEEDBACK_HAPTIC_SAMPLE:
         feedback.haptic_sample_valid = true;
         feedback.haptic_sample = *(const uint8_t *)payload;
-        ESP_LOGI(TAG, "feedback haptic sample 0x%02x", feedback.haptic_sample);
+        ESP_LOGD(TAG, "feedback haptic sample 0x%02x", feedback.haptic_sample);
         break;
     default:
         break;
     }
-    /* 反向链路：主机反馈经桥接帧回发给 PC（投递到手柄在后续里程碑实现）。 */
+    /* PC 侧仍收归一化反馈帧（打印与对账用）。 */
     input_link_send_feedback(&feedback);
+    portENTER_CRITICAL(&s_feedback_mux);
+    s_feedback = feedback;
+    s_feedback_pending = true;
+    portEXIT_CRITICAL(&s_feedback_mux);
+}
+
+/**
+ * 反馈投递：按来源设备的布局把反馈编码成该设备的输出报告。USB host 直插
+ * 走 OUT 端点，桥接路径把原始输出报告交给 PC（PC 只负责写手柄）。
+ */
+static void deliver_feedback(const pad_feedback_t *feedback)
+{
+    uint16_t vid = 0;
+    uint16_t pid = 0;
+    pad_conn_t conn = PAD_CONN_UNKNOWN;
+    const bool usb = usb_input_device_ids(&vid, &pid, &conn);
+    if (!usb && !input_source_device_ids(&vid, &pid, &conn)) {
+        return;
+    }
+    uint8_t out[PAD_OUTPUT_MAX];
+    const size_t len = pad_feedback_encode(conn, vid, pid, feedback, out, sizeof(out));
+    if (len == 0) {
+        return;
+    }
+    const pad_layout_t *layout = pad_feedback_last_layout();
+    ESP_LOGD(TAG, "feedback -> %04x:%04x %u bytes (%s)", (unsigned)vid, (unsigned)pid,
+             (unsigned)len, layout != NULL ? pad_family_name(layout->family) : "-");
+    if (usb) {
+        usb_input_send_output(out, len);
+    }
+    if (input_source_attached()) {
+        input_link_send_out_report(out, len);
+    }
 }
 
 static void dp_task(void *param)
@@ -142,6 +190,14 @@ static void dp_task(void *param)
              target_name());
     for (;;) {
         dp_source_sample(&pad);
+        if (s_feedback_pending) {
+            pad_feedback_t feedback;
+            portENTER_CRITICAL(&s_feedback_mux);
+            feedback = s_feedback;
+            s_feedback_pending = false;
+            portEXIT_CRITICAL(&s_feedback_mux);
+            deliver_feedback(&feedback);
+        }
         if (pad.buttons != last_buttons) {
             const int64_t now_us = esp_timer_get_time();
             if (now_us - last_button_log_us >= DP_BUTTON_LOG_MIN_INTERVAL_US) {
@@ -179,8 +235,10 @@ esp_err_t dp_plane_start(void)
      * NS1 时在 target/ns1/ 新增实现并在这里切换。 */
     target_set(ns2_target_get());
     /* 输入源注册顺序即优先级：桥接 PC 先注册（拥有摇杆与设备字段），合成源
-     * 只补静置状态，调试注入最后叠加。 */
+     * 只补静置状态，USB host 直插与桥接现实中互斥（同一个 Type-C），调试注入
+     * 最后叠加。 */
     input_source_register();
+    usb_input_register();
     dp_source_register(&s_synthetic_source);
     ns2_output_set_sink(&s_ble_sink);
     ns2_output_set_feedback_listener(feedback_listener, NULL);

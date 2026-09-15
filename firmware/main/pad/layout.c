@@ -25,6 +25,7 @@ extern const pad_layout_module_t pad_layout_module_xbox;
 extern const pad_layout_module_t pad_layout_module_ds4;
 extern const pad_layout_module_t pad_layout_module_ds5;
 extern const pad_layout_module_t pad_layout_module_ds3;
+extern const pad_layout_module_t pad_layout_module_ns;
 
 /** 模块顺序即匹配顺序：同一组合多行时取先出现的那个（PS 系按 PID 分行，互不重叠）。 */
 static const pad_layout_module_t *const s_modules[] = {
@@ -32,6 +33,7 @@ static const pad_layout_module_t *const s_modules[] = {
     &pad_layout_module_ds4,
     &pad_layout_module_ds5,
     &pad_layout_module_ds3,
+    &pad_layout_module_ns,
 };
 
 /** 未识别型号的兜底布局：按 Xbox 有线解析。 */
@@ -67,36 +69,61 @@ static bool row_pid_match(const pad_layout_t *row, uint16_t pid)
     return false;
 }
 
+/**
+ * 行是否适用于给定的设备标识。report_id 传 -1 表示不比对报告标识（反馈
+ * 方向没有报告帧）；pid 为 0 表示报告没带型号，不做过滤。
+ */
+static bool row_match(const pad_layout_t *row, pad_family_t family, pad_conn_t conn,
+                      int report_id, uint16_t pid)
+{
+    if (row->family != family) {
+        return false;
+    }
+    if (report_id >= 0 && row->report_id != (uint8_t)report_id) {
+        return false;
+    }
+    /* 行的连接方式为空表示两种连接共用；查询的连接方式为空表示不做过滤。 */
+    if (row->conn != PAD_CONN_UNKNOWN && conn != PAD_CONN_UNKNOWN && row->conn != conn) {
+        return false;
+    }
+    return pid == 0 || row_pid_match(row, pid);
+}
+
+static const pad_layout_t *find_row(pad_family_t family, pad_conn_t conn, int report_id,
+                                    uint16_t pid)
+{
+    for (size_t m = 0; m < sizeof(s_modules) / sizeof(s_modules[0]); m++) {
+        const pad_layout_module_t *module = s_modules[m];
+        for (size_t r = 0; r < module->row_count; r++) {
+            const pad_layout_t *row = &module->rows[r];
+            if (row_match(row, family, conn, report_id, pid)) {
+                return row;
+            }
+        }
+    }
+    return NULL;
+}
+
 const pad_layout_t *pad_layout_find(const pad_report_t *report, pad_family_t *family)
 {
     *family = report->family;
     if (*family == PAD_FAMILY_UNKNOWN) {
         *family = pad_family_from_ids(report->vid, report->pid);
     }
-    for (size_t m = 0; m < sizeof(s_modules) / sizeof(s_modules[0]); m++) {
-        const pad_layout_module_t *module = s_modules[m];
-        for (size_t r = 0; r < module->row_count; r++) {
-            const pad_layout_t *row = &module->rows[r];
-            if (row->family != *family || row->report_id != report->report_id) {
-                continue;
-            }
-            /* 行的连接方式为空表示两种连接共用；报告的连接方式为空表示不做过滤。 */
-            if (row->conn != PAD_CONN_UNKNOWN && report->conn != PAD_CONN_UNKNOWN &&
-                row->conn != report->conn) {
-                continue;
-            }
-            /* 型号不匹配就继续找同一组合下的下一行；报告没带 PID 时不做过滤。 */
-            if (report->pid != 0 && !row_pid_match(row, report->pid)) {
-                continue;
-            }
-            return row;
-        }
+    return find_row(*family, report->conn, report->report_id, report->pid);
+}
+
+const pad_layout_t *pad_layout_find_by_ids(uint16_t vid, uint16_t pid, pad_conn_t conn,
+                                           pad_family_t *family)
+{
+    const pad_family_t found = pad_family_from_ids(vid, pid);
+    if (family != NULL) {
+        *family = found;
     }
-    return NULL;
+    return find_row(found, conn, -1, pid);
 }
 
 const pad_layout_t *pad_layout_fallback(void)
 {
     return &s_fallback;
 }
-

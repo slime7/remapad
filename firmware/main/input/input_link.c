@@ -29,6 +29,8 @@ static const char *TAG = "remapad_input";
 
 static input_frame_rx_t s_rx;
 static uint32_t s_frames;
+static volatile bool s_running;
+static TaskHandle_t s_task;
 
 static void on_frame(const input_frame_view_t *frame, void *user)
 {
@@ -67,16 +69,21 @@ static void input_link_task(void *param)
     (void)param;
     uint8_t buf[256];
     ESP_LOGI(TAG, "bridge link ready on USB-Serial/JTAG");
-    for (;;) {
+    while (s_running) {
         const int n = usb_serial_jtag_read_bytes(buf, sizeof(buf), pdMS_TO_TICKS(20));
         if (n > 0) {
             input_frame_rx_feed(&s_rx, buf, (size_t)n, on_frame, on_text, NULL);
         }
     }
+    s_task = NULL;
+    vTaskDelete(NULL);
 }
 
 esp_err_t input_link_start(void)
 {
+    if (s_running) {
+        return ESP_OK;
+    }
     usb_serial_jtag_driver_config_t config = {
         .tx_buffer_size = INPUT_LINK_TX_BUF,
         .rx_buffer_size = INPUT_LINK_RX_BUF,
@@ -89,11 +96,38 @@ esp_err_t input_link_start(void)
      * 与这里的接收共用同一个驱动，不再直读硬件 FIFO。 */
     usb_serial_jtag_vfs_use_driver();
     input_frame_rx_reset(&s_rx);
+    s_running = true;
     if (xTaskCreate(input_link_task, "remapad-input", INPUT_LINK_TASK_STACK, NULL,
-                    INPUT_LINK_TASK_PRIO, NULL) != pdPASS) {
+                    INPUT_LINK_TASK_PRIO, &s_task) != pdPASS) {
+        s_running = false;
+        usb_serial_jtag_driver_uninstall();
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
+}
+
+void input_link_stop(void)
+{
+    if (!s_running) {
+        return;
+    }
+    s_running = false;
+    for (int i = 0; i < 20 && s_task != NULL; i++) {
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    if (s_task != NULL) {
+        vTaskDelete(s_task);
+        s_task = NULL;
+    }
+    /* 之后 PC 再也发不进报告：清掉接入状态，避免旧设备标识被拿去查反馈表。 */
+    input_source_note_link_down();
+    usb_serial_jtag_driver_uninstall();
+    ESP_LOGI(TAG, "bridge link released usb-serial/jtag");
+}
+
+bool input_link_active(void)
+{
+    return s_running;
 }
 
 uint32_t input_link_frame_count(void)
@@ -162,4 +196,12 @@ void input_link_send_feedback(const pad_feedback_t *feedback)
     payload[4] = feedback->player_led;
     payload[5] = feedback->haptic_sample_valid ? feedback->haptic_sample : 0u;
     input_link_send_frame(INPUT_FRAME_TYPE_FEEDBACK, 0, payload, sizeof(payload));
+}
+
+void input_link_send_out_report(const uint8_t *report, size_t len)
+{
+    if (!s_running || report == NULL || len == 0 || len > PAD_RAW_MAX) {
+        return;
+    }
+    input_link_send_frame(INPUT_FRAME_TYPE_OUT_REPORT, 0, report, len);
 }

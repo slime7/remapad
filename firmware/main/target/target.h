@@ -30,10 +30,15 @@ typedef struct {
     const char *name;
     /** 目标支持的能力集合（PAD_CAP_*）：不在集合里的私有字段会被丢弃。 */
     uint32_t caps;
+    /** 目标自带的报告语言（pad_lang_t）：与输入设备的自带语言一致时，
+     *  输入走透传而不是解析重编码。 */
+    uint8_t language;
     /** 刷新目标侧事实（可每周期调用，实现需自行判断是否需要更新）。 */
     void (*set_facts)(const pad_target_facts_t *facts);
     /** 用当前私有状态发送一轮输入报告。 */
     void (*send_pad)(const pad_state_t *pad);
+    /** 同代透传：原样转发一帧设备报告体；条件不满足或目标不支持时返回 false。 */
+    bool (*send_raw)(const pad_state_t *pad);
 } pad_target_t;
 
 /** 注册当前目标；传 NULL 表示停用目标（数据面照常采样，不再发送）。 */
@@ -50,6 +55,15 @@ void target_set_facts(const pad_target_facts_t *facts);
 
 /** 发送一轮输入报告；未注册时忽略。 */
 void target_send_pad(const pad_state_t *pad);
+
+/** 当前目标的报告语言（pad_lang_t）；未注册时为 PAD_LANG_NONE。 */
+uint8_t target_language(void);
+
+/** 同代透传开关（串口 CLI 的 relay 0|1；默认打开）。 */
+void target_set_relay(bool enabled);
+
+/** 当前透传开关状态。 */
+bool target_relay_enabled(void);
 
 #ifdef __cplusplus
 }

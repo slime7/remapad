@@ -47,6 +47,10 @@ typedef enum {
     NS2_MOTION_ZERO = 0,  /**< 长度 0x28 + 全零块（默认） */
     NS2_MOTION_CAPTURE = 1, /**< 长度 0x28 + 真机抓包块（时间戳按节奏推进） */
     NS2_MOTION_NONE = 2,  /**< 长度 0x00，不带运动数据 */
+    /** 长度 0x28 + 输入设备的真实样本：按 NS1 的三份 12 字节样本风格排布。
+     *  0x09 运动块的内部结构没有公开资料，这一档只用于实机 A/B 与后续抓包
+     *  解码，默认不启用（串口 CLI 的 motion 3 打开）。 */
+    NS2_MOTION_SENSOR = 3,
 } ns2_motion_mode_t;
 
 /**
@@ -81,6 +85,11 @@ typedef struct {
     uint8_t nfc_state;
     /** 运动块填充方式（ns2_motion_mode_t）。 */
     uint8_t motion_mode;
+    /** 运动数据：输入设备带 IMU（PAD_CAP_MOTION）时才有效。板卡本身没有
+     *  IMU，0x05 的 IMU 字段与 0x09 的实验运动块都取自这里。 */
+    bool motion_valid;
+    int16_t gyro[3];
+    int16_t accel[3];
 } ns2_controller_state_t;
 
 /** 复位为静置默认：摇杆居中、无按键、无外设数据。 */
@@ -99,6 +108,13 @@ static inline void ns2_state_defaults(ns2_controller_state_t *state)
     state->rumble_enabled = false;
     state->nfc_state = 0;
     state->motion_mode = NS2_MOTION_ZERO;
+    state->motion_valid = false;
+    state->gyro[0] = 0;
+    state->gyro[1] = 0;
+    state->gyro[2] = 0;
+    state->accel[0] = 0;
+    state->accel[1] = 0;
+    state->accel[2] = 0;
 }
 
 #ifdef __cplusplus

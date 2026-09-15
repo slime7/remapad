@@ -36,6 +36,18 @@ static const pad_layout_t s_rows[] = {
         .caps = PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE,
         .invert_y = true,
         .btn_map = s_btn_map,
+        /* 输出报告 0x01（48 字节）：b2/b3 是右小马达的时长与强度、b4/b5 是左大
+         * 马达的时长与强度，时长写 0xFF 表示保持到下一条命令。偏移取自公开实现，
+         * 未实机核对；LED 控制要另走 SET_REPORT 序列，本轮不映射。 */
+        .out = {
+            .report_id = 0x01,
+            .len = 48,
+            .presets = {{2, 0xFF}, {4, 0xFF}},
+            .rumble_off = {5, 3},
+            .rumble_max = {255, 255},
+            .led_style = PAD_LED_NONE,
+            .haptic = PAD_HAPTIC_AS_RUMBLE,
+        },
     },
 };
 
@@ -44,4 +56,3 @@ const pad_layout_module_t pad_layout_module_ds3 = {
     .rows = s_rows,
     .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
 };
-

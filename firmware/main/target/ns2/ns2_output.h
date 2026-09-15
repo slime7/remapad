@@ -6,6 +6,7 @@
 
 #include "esp_err.h"
 
+#include "pad_state.h"
 #include "ns2_state.h"
 
 #ifdef __cplusplus
@@ -66,6 +67,12 @@ typedef void (*ns2_feedback_fn)(ns2_feedback_type_t type, const void *payload, v
  *  Report ID/占位前缀（33 字节）。命中返回 true，过短返回 false。 */
 bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out);
 
+/**
+ * 从 16 字节 LRA 参数包估一个 0-255 强度：取三组操作数据里最大的振幅
+ * （低频 10 位压到 8 位、高频 8 位），供无法原样吃 LRA 目标的设备使用。
+ */
+uint8_t ns2_rumble_strength(const uint8_t raw[16]);
+
 /** 注册输出通道（BLE 通知在 ble_controller 就绪后由 dp 注册）。重复注册
  *  覆盖旧通道。 */
 void ns2_output_set_sink(const ns2_output_sink_t *sink);
@@ -76,6 +83,17 @@ void ns2_output_set_feedback_listener(ns2_feedback_fn fn, void *user);
 /** 以规范化状态发送一个输入报告周期：按键 / 摇杆 / 电池 / NFC 状态一并
  *  编码进当前会话格式。内部维护两种格式的循环计数器。 */
 void ns2_output_send(const ns2_controller_state_t *state);
+
+/**
+ * 同代透传（NS2 手柄插在板卡上）：把设备原始报文体原样发给身份与报告格式
+ * 都对得上的会话，只重写由本机会话决定的状态字节（0x0B 特性标志、0x0C
+ * NFC、0x0D 耳机），按键、摇杆、电量与运动块保持设备原值——真陀螺仪与真
+ * 电量因此直达主机。没有匹配会话时返回 false，调用方按解析重编码的路径发。
+ */
+bool ns2_output_send_raw(const pad_state_t *pad);
+
+/** 会话侧事实：主机是否开启了触觉特性（0x09 状态标志字节与透传重写都用它）。 */
+void ns2_output_set_rumble_enabled(bool enabled);
 
 /** 更新随报告上发的电池信息（电平 0-9、电压毫伏、充电与外部供电）。 */
 void ns2_output_set_battery(uint8_t level, uint16_t voltage_mv, bool charging, bool external);

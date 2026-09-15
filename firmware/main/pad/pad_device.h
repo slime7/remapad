@@ -32,6 +32,9 @@ typedef struct {
 /** 按 VID/PID 判定家族；不认识返回 PAD_FAMILY_UNKNOWN。 */
 pad_family_t pad_family_from_ids(uint16_t vid, uint16_t pid);
 
+/** 家族名（日志与 CLI 展示用）。 */
+const char *pad_family_name(pad_family_t family);
+
 /**
  * 把一帧原始报告解析成私有格式：按键按家族表映射到位置语义、摇杆与扳机
  * 归一到 0-4095、套用死区、方向键帽子开关展开，能力位标注这一帧里哪些

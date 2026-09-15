@@ -54,6 +54,8 @@ static void ns2_set_facts(const pad_target_facts_t *facts)
     /* 电池随报文上发，交给输出模块统一折进 0x05 / 0x09 的电源字段。 */
     ns2_output_set_battery(facts->battery_level, facts->battery_mv, facts->charging,
                            facts->external_power);
+    /* 触觉特性开关决定 0x09 的状态标志字节，透传重写时也用它。 */
+    ns2_output_set_rumble_enabled(facts->rumble_enabled);
 }
 
 static void ns2_from_pad(const pad_state_t *pad, ns2_controller_state_t *out)
@@ -80,6 +82,12 @@ static void ns2_from_pad(const pad_state_t *pad, ns2_controller_state_t *out)
     out->external_power = s_facts.external_power;
     out->rumble_enabled = s_facts.rumble_enabled;
     out->nfc_state = s_facts.nfc_state;
+    /* 运动数据来自输入设备（板卡没有 IMU）：透传路径不经过这里。 */
+    out->motion_valid = pad->motion.present && (pad->caps & PAD_CAP_MOTION) != 0;
+    for (size_t i = 0; i < 3; i++) {
+        out->gyro[i] = pad->motion.gyro[i];
+        out->accel[i] = pad->motion.accel[i];
+    }
 }
 
 static void ns2_send_pad(const pad_state_t *pad)
@@ -97,11 +105,19 @@ static void ns2_send_pad(const pad_state_t *pad)
     }
 }
 
+/** 同代透传：NS2 手柄的报文体直接交给输出模块按会话匹配转发。 */
+static bool ns2_send_raw(const pad_state_t *pad)
+{
+    return ns2_output_send_raw(pad);
+}
+
 static const pad_target_t s_ns2_target = {
     .name = "ns2",
     .caps = NS2_TARGET_CAPS,
+    .language = PAD_LANG_NS2,
     .set_facts = ns2_set_facts,
     .send_pad = ns2_send_pad,
+    .send_raw = ns2_send_raw,
 };
 
 const pad_target_t *ns2_target_get(void)

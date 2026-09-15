@@ -27,6 +27,7 @@ static struct {
     bool external_power;
 
     uint8_t motion_mode; /* ns2_motion_mode_t：0x09 运动块占位方式 */
+    bool rumble_enabled; /* 主机开启了触觉特性 */
 
     uint8_t *amiibo;
     size_t amiibo_len;
@@ -97,9 +98,68 @@ void ns2_output_set_motion_mode(uint8_t mode)
     s_out.motion_mode = mode;
 }
 
+void ns2_output_set_rumble_enabled(bool enabled)
+{
+    s_out.rumble_enabled = enabled;
+}
+
 uint8_t ns2_output_motion_mode(void)
 {
     return s_out.motion_mode;
+}
+
+/** 设备期望身份 → 会话身份；PAD_IDENTITY_ANY 用 NS2_ID_COUNT 表示「不限」。 */
+static uint8_t session_identity_for(uint8_t identity)
+{
+    switch (identity) {
+    case PAD_IDENTITY_PRO:
+        return NS2_ID_PRO;
+    case PAD_IDENTITY_JOYCON_L:
+        return NS2_ID_JOYCON_L;
+    case PAD_IDENTITY_JOYCON_R:
+        return NS2_ID_JOYCON_R;
+    default:
+        return NS2_ID_COUNT;
+    }
+}
+
+bool ns2_output_send_raw(const pad_state_t *pad)
+{
+    if (pad == NULL || pad->raw_len == 0 || s_out.sink.session_count == NULL ||
+        s_out.sink.session_info == NULL || s_out.sink.send_report == NULL) {
+        return false;
+    }
+    const uint8_t report_id = pad->raw_report_id;
+    if (report_id != NS2_REPORT_ID_05 && report_id != NS2_REPORT_ID_09) {
+        return false;
+    }
+    const size_t body_len = report_id == NS2_REPORT_ID_09 ? NS2_INPUT_09_LEN : NS2_INPUT_05_LEN;
+    if (pad->raw_len != body_len + 1u) {
+        return false;
+    }
+    const uint8_t want_identity = session_identity_for(pad->native_identity);
+    uint8_t body[NS2_INPUT_09_LEN];
+    size_t delivered = 0;
+    const size_t sessions = s_out.sink.session_count(s_out.sink.user);
+    for (size_t i = 0; i < sessions; i++) {
+        uint8_t identity = NS2_ID_PRO;
+        uint8_t format = NS2_REPORT_ID_09;
+        if (!s_out.sink.session_info(i, &identity, &format, s_out.sink.user)) {
+            continue;
+        }
+        if (format != report_id || (want_identity != NS2_ID_COUNT && identity != want_identity)) {
+            continue;
+        }
+        memcpy(body, &pad->raw[1], body_len);
+        if (report_id == NS2_REPORT_ID_09) {
+            body[NS2_09_OFF_STATUS] = s_out.rumble_enabled ? 0x38 : 0x30;
+            body[NS2_09_OFF_NFC] = ns2_output_nfc_state();
+            body[NS2_09_OFF_HEADSET] = 0x00;
+        }
+        s_out.sink.send_report(i, report_id, body, body_len, s_out.sink.user);
+        delivered++;
+    }
+    return delivered > 0;
 }
 
 esp_err_t ns2_output_amiibo_stage(const uint8_t *data, size_t len)
@@ -176,6 +236,31 @@ bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
     out->left_on = (out->raw[0] & 0x40) != 0;
     out->right_on = (out->raw[16] & 0x40) != 0;
     return true;
+}
+
+uint8_t ns2_rumble_strength(const uint8_t raw[16])
+{
+    if (raw == NULL) {
+        return 0;
+    }
+    /* 参数包：字节 0 是状态字，其后三组各 5 字节（低频频率 9 位 + 低频振幅
+     * 10 位 + 高频频率 9 位 + 高频振幅 8 位，小端位序）。取三组里最大的振幅，
+     * 低频 10 位右移两位压到 8 位刻度，与私有的 0-255 强度对齐。 */
+    uint8_t best = 0;
+    for (size_t g = 0; g < 3; g++) {
+        const uint8_t *p = &raw[1 + g * 5];
+        uint64_t v = 0;
+        for (size_t i = 0; i < 5; i++) {
+            v |= (uint64_t)p[i] << (8 * i);
+        }
+        const uint8_t lf_amp = (uint8_t)(((v >> 9) & 0x3FFu) >> 2);
+        const uint8_t hf_amp = (uint8_t)((v >> 28) & 0xFFu);
+        const uint8_t amp = hf_amp > lf_amp ? hf_amp : lf_amp;
+        if (amp > best) {
+            best = amp;
+        }
+    }
+    return best;
 }
 
 void ns2_output_emit_player_led(uint8_t led_mask)

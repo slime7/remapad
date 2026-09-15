@@ -4,5 +4,8 @@
 # 面板使用 IDF 内置 ST7789 驱动（esp_lcd），触摸走 Registry 的 CST816S 组件。
 dependencies:
   idf: ">=6.0,<6.2"
+  # USB Host 库在 IDF 6.x 已移出核心组件，改由 Registry 的 espressif/usb 提供
+  # （头文件路径仍是 usb/usb_host.h）。手柄插板卡的 host 模式依赖它。
+  espressif/usb: "^1.0.0"
   espressif/esp_lcd_touch: "^1.2"
   espressif/esp_lcd_touch_cst816s: "^1.1"

@@ -32,6 +32,8 @@ typedef enum {
     PAD_FAMILY_XBOX,
     PAD_FAMILY_PS,
     PAD_FAMILY_STEAM,
+    /** Nintendo 系（Switch 一代与 Switch 2 手柄，含伪装成 NS 布局的第三方）。 */
+    PAD_FAMILY_NS,
     PAD_FAMILY_COUNT,
 } pad_family_t;
 
@@ -41,6 +43,29 @@ typedef enum {
     PAD_CONN_USB,
     PAD_CONN_BT,
 } pad_conn_t;
+
+/**
+ * 设备自带的报告语言：决定输入能否原样转发给同代目标。Xbox / PS / Steam
+ * 没有可复用的目标语言（各家主机协议互不相同），只能解析后重新编码；
+ * Nintendo 系的设备语言与 NS2 目标一致时走透传（真陀螺仪与真电量因此
+ * 原样到达主机）。
+ */
+typedef enum {
+    PAD_LANG_NONE = 0,
+    PAD_LANG_NS1, /**< Switch 一代手柄报告（0x30 / 0x3F）。 */
+    PAD_LANG_NS2, /**< Switch 2 手柄报告（0x05 / 0x09 报文体）。 */
+} pad_lang_t;
+
+/** 设备在目标侧对应的身份：透传时按身份挑会话（NS2 的 Pro 与 JoyCon 各半）。 */
+typedef enum {
+    PAD_IDENTITY_ANY = 0,
+    PAD_IDENTITY_PRO,
+    PAD_IDENTITY_JOYCON_L,
+    PAD_IDENTITY_JOYCON_R,
+} pad_identity_t;
+
+/** 透传载荷上限（USB HID 报告实际不超过 64 字节）。 */
+#define PAD_RAW_MAX 64
 
 /** 按键位（位置语义，键名沿用 PS）。扩展位放主机侧新增或第三方手柄的附加键。 */
 enum {
@@ -146,6 +171,14 @@ typedef struct {
     uint8_t report_id;
     uint8_t report_len;
     uint32_t seq; /**< 接收序号：丢帧统计与重复帧过滤。 */
+
+    /** 设备自带报告语言与期望身份（pad_lang_t / pad_identity_t）。 */
+    uint8_t native_lang;
+    uint8_t native_identity;
+    /** 透传载荷：原始 Report ID 与含 Report ID 的报文体；raw_len 为 0 表示不可透传。 */
+    uint8_t raw_report_id;
+    uint8_t raw_len;
+    uint8_t raw[PAD_RAW_MAX];
 } pad_state_t;
 
 /**

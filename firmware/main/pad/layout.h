@@ -18,7 +18,64 @@ extern "C" {
 typedef enum {
     PAD_STICK_U8 = 0, /**< 单字节，中心 0x80（PS、Steam 原生报告）。 */
     PAD_STICK_I16,    /**< 有符号 16 位小端，中心 0（Xbox）。 */
+    PAD_STICK_U12,    /**< 12 位紧凑打包三字节（NS2 的 0x05 / 0x09 报文体）。 */
 } pad_stick_style_t;
+
+/** 电量字节风格。 */
+typedef enum {
+    PAD_BATTERY_PS = 0, /**< 低四位是 0-10 档、bit4 表示充电中（DS3 / DS4 / DualSense）。 */
+    PAD_BATTERY_NS2,    /**< bit0 外部供电、bit1 充电中、bits2-5 电量等级 0-9。 */
+} pad_battery_style_t;
+
+/** 玩家灯映射方式。 */
+typedef enum {
+    PAD_LED_NONE = 0,    /**< 设备没有可控灯。 */
+    PAD_LED_PLAYER_MASK, /**< 主机玩家灯掩码写进候选字节。 */
+    PAD_LED_LIGHTBAR,    /**< 灯条：掩码换算成一组颜色写进 RGB 三字节。 */
+} pad_led_style_t;
+
+/** 触觉采样（NS2 的 0x0A 采样回放）在目标设备上的处理方式。 */
+typedef enum {
+    PAD_HAPTIC_IGNORE = 0,  /**< 没有等价能力，只记日志。 */
+    PAD_HAPTIC_AS_RUMBLE,   /**< 退化成一次短震动。 */
+    PAD_HAPTIC_VERBATIM,    /**< 设备自己能播采样（NS2 手柄透传，参数原样写回）。 */
+} pad_haptic_style_t;
+
+/**
+ * 运动字段描述：一次性给出取样位置、样本数与轴映射。轴映射把来源轴归一到
+ * 私有约定（X 右为正、Y 上为正、Z 朝屏幕外为正）：gyro_src / accel_src 的
+ * 第 i 项是私有三轴第 i 路取来源的第几路（PAD_OFF_NONE 表示该路缺失），
+ * 三项全零表示恒等映射。invert_mask 的 bit0-2 表示陀螺 X/Y/Z 取反、
+ * bit3-5 表示加速 X/Y/Z 取反。
+ */
+typedef struct {
+    uint8_t samples; /**< 一次报告里的样本数；0 按 1 处理。 */
+    uint8_t stride;  /**< 相邻样本的字节步长；0 按 12 处理。 */
+    uint8_t gyro_src[3];
+    uint8_t accel_src[3];
+    uint8_t invert_mask;
+} pad_motion_layout_t;
+
+/**
+ * 输出（反馈）报告描述：把主机下发的震动 / 玩家灯 / 触觉采样编码成该设备
+ * 能吃的输出报告。presets 是发送前写入的常量字节（偏移 + 值，偏移
+ * PAD_OFF_NONE 表示结束），用来点亮 DS4 的 flags 或 DualSense 的两个
+ * valid_flag。震动的两路强度按 rumble_max 缩放后写进 rumble_off；玩家灯按
+ * led_style 写掩码或 RGB。report_id 为 0 表示该设备没有可写的反馈通道。
+ */
+#define PAD_OUT_PRESET_MAX 8
+
+typedef struct {
+    uint8_t report_id;
+    uint8_t len; /**< 输出报告总长度（含 Report ID 字节）。 */
+    uint8_t presets[PAD_OUT_PRESET_MAX][2];
+    uint8_t rumble_off[PAD_TRIGGER_COUNT];
+    uint8_t rumble_max[PAD_TRIGGER_COUNT];
+    uint8_t led_mask_off;
+    uint8_t led_rgb_off;
+    uint8_t led_style; /**< pad_led_style_t。 */
+    uint8_t haptic;    /**< pad_haptic_style_t。 */
+} pad_output_layout_t;
 
 /**
  * 家族布局表的一行：按（家族, Report ID, 连接方式, PID）定位字段偏移。偏移
@@ -51,10 +108,19 @@ typedef struct {
     uint16_t touch_max_x;
     uint16_t touch_max_y;
     pad_stick_style_t stick_style;
+    /** 电量字节风格；PAD_CAP_BATTERY 未置位时不参与解析。 */
+    pad_battery_style_t battery_style;
     uint32_t caps;
     /** 设备 Y 轴向下为正时置位，解析侧翻成「上为正」。 */
     bool invert_y;
     const uint32_t *btn_map;
+    /** 运动字段描述；motion_off 为 PAD_OFF_NONE 表示该型号没有运动数据。 */
+    pad_motion_layout_t motion;
+    /** 输出（反馈）报告描述；report_id 为 0 表示没有可写的反馈通道。 */
+    pad_output_layout_t out;
+    /** 设备自带报告语言（pad_lang_t）与期望的目标身份（pad_identity_t）。 */
+    uint8_t native_lang;
+    uint8_t native_identity;
 } pad_layout_t;
 
 /** 布局模块：一个手柄系列的全部布局行（一族一个文件，见 pad/layouts/）。 */
@@ -81,10 +147,17 @@ extern const uint32_t pad_ps_btn_map[24];
  */
 const pad_layout_t *pad_layout_find(const pad_report_t *report, pad_family_t *family);
 
+/**
+ * 反馈方向查表：主机反馈到达时手上只有设备标识（没有报告帧），这里按
+ * VID/PID 与连接方式找布局行，再用行的 out 描述编码输出报告。report_id
+ * 不参与匹配（反馈不依赖输入报告格式）。family 输出判定出的家族。
+ */
+const pad_layout_t *pad_layout_find_by_ids(uint16_t vid, uint16_t pid, pad_conn_t conn,
+                                           pad_family_t *family);
+
 /** 未识别型号的兜底布局：按 Xbox 有线解析，能力位由调用方标记。 */
 const pad_layout_t *pad_layout_fallback(void);
 
 #ifdef __cplusplus
 }
 #endif
-

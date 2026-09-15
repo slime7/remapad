@@ -22,6 +22,7 @@
 #include "ns2_identity.h"
 #include "pad_state.h"
 #include "pwr_key.h"
+#include "usb_role.h"
 
 #include "pocketjs/guest.h"
 
@@ -380,29 +381,31 @@ static void handle_set_usb_role(int id, const char *cmd)
         ESP_LOGI(TAG, "usb role otg skipped (dev-time lock, no error surfaced)");
         return;
     }
+    /* 角色切换会动 USB PHY：切到 host 后 PC 上的 COM 口消失（复位回串口），
+     * 因此先把结论发出去再切。角色只对本次运行生效、不落盘。 */
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"%s\",\"active\":true}", id,
+             want_host ? "host" : "device");
+    reply_raw(event);
+    const esp_err_t err = want_host ? usb_role_enter_host() : usb_role_leave_host();
+    if (err != ESP_OK) {
+        snprintf(event, sizeof(event),
+                 "{\"t\":\"error\",\"id\":%d,\"code\":\"USB_ROLE_FAILED\","
+                 "\"message\":\"usb role switch failed\"}",
+                 id);
+        reply_raw(event);
+        ESP_LOGE(TAG, "usb role switch failed: %s", esp_err_to_name(err));
+        return;
+    }
     s_bridge.usb_role_host = want_host;
     app_config_set_usb_role(want_host ? APP_CONFIG_USB_HOST : APP_CONFIG_USB_DEVICE);
-    /* USB PHY/OTG 切换属于数据面，尚未接入：这里只记录本次运行的角色（不
-     * 落盘，重启回到串口），如实上报，不触碰 RTC_CNTL USB mux。接入后按
-     * docs/hardware.md 的机制实现。 */
-    char event[REMAPAD_EVENT_MAX];
-    if (want_host) {
-        snprintf(event, sizeof(event),
-                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"host\",\"active\":false}",
-                 id);
-    } else {
-        snprintf(event, sizeof(event),
-                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"device\",\"active\":true}",
-                 id);
-    }
-    reply_raw(event);
-
     char broadcast[REMAPAD_EVENT_MAX];
     snprintf(broadcast, sizeof(broadcast),
-             "{\"t\":\"usbRoleChanged\",\"role\":\"%s\",\"active\":%s}",
-             want_host ? "host" : "device", want_host ? "false" : "true");
+             "{\"t\":\"usbRoleChanged\",\"role\":\"%s\",\"active\":true}",
+             want_host ? "host" : "device");
     reply_raw(broadcast);
-    ESP_LOGI(TAG, "usb role request -> %s (runtime only, phy untouched)",
+    ESP_LOGI(TAG, "usb role -> %s (runtime only, reset returns to serial)",
              want_host ? "host" : "device");
 }
 

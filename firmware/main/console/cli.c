@@ -16,11 +16,18 @@
 #include "ble_controller.h"
 #include "ble_session.h"
 #include "buzzer.h"
+#include "console_out.h"
 #include "dp_source.h"
+#include "input_source.h"
+#include "layout.h"
 #include "ns2_identity.h"
 #include "ns2_output.h"
 #include "ota_session.h"
+#include "pad_device.h"
 #include "pad_state.h"
+#include "target.h"
+#include "usb_transport.h"
+#include "usb_input.h"
 
 static const char *TAG = "remapad_cli";
 
@@ -28,9 +35,9 @@ static const char *TAG = "remapad_cli";
 
 static void cli_print(const char *text)
 {
-    /* 控制台输出同样经 USJ vfs（非阻塞，未连接时丢弃，绝不阻塞调用任务）。 */
-    printf("%s\r\n", text);
-    fflush(stdout);
+    /* 输出走当前控制台通道：设备模式是 USJ 的非阻塞 vfs，host 模式是 UART0。 */
+    console_out_write(text, strlen(text));
+    console_out_write("\r\n", 2);
 }
 
 static void cli_help(void)
@@ -51,9 +58,12 @@ static void cli_help(void)
     cli_print("  wake                force a reconnect of the paired console");
     cli_print("  adv wake|reconnect  steady form while paired (default wake)");
     cli_print("  report              dump the last input report actually sent");
-    cli_print("  motion 0|1|2        0x09 motion block: zeros / stamp / none");
+    cli_print("  motion 0|1|2|3      0x09 motion block: zeros / stamp / none / sensor");
     cli_print("  ltk 0|1             LTK store form (0 reversed, 1 as-is)");
     cli_print("  drop                disconnect the current host");
+    cli_print("  pad                 recognized pad, layout row and relay state");
+    cli_print("  usb                 usb host state (role, device, counters)");
+    cli_print("  relay 0|1           same-generation passthrough (default on)");
     cli_print("  version             running image version, partition and ota state");
     cli_print("  rollback            roll back to the previous image (pending verify only)");
     cli_print("  poweroff            release power latch (battery only)");
@@ -62,11 +72,11 @@ static void cli_help(void)
 
 static void cli_status(void)
 {
-    char line[224];
+    char line[288];
     const app_config_t *cfg = app_config_get();
     snprintf(line, sizeof(line),
              "state pairing=%s role=%s backlight=%u screen=%u uptime=%llds heap=%u "
-             "batt=%umV/%u%% chg=%u fw=%s part=%s ota=%s",
+             "batt=%umV/%u%% chg=%u fw=%s part=%s ota=%s pad=%s",
              js_bridge_pairing_state(),
              cfg->usb_role == APP_CONFIG_USB_HOST ? "host" : "device",
              (unsigned)backlight_get(), (unsigned)cfg->screen_on,
@@ -75,7 +85,9 @@ static void cli_status(void)
              (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
              battery_is_charging() ? 1u : 0u,
              ota_session_running_version(), ota_session_running_partition(),
-             ota_session_state_name());
+             ota_session_state_name(),
+             input_source_attached() ? input_source_device_desc()
+                                     : (usb_input_attached() ? usb_input_device_desc() : "none"));
     cli_print(line);
 }
 
@@ -359,12 +371,12 @@ static void cli_report(void)
     }
 }
 
-/** 0x09 运动块占位切换：实机确认主机是否校验运动数据，无需重新烧录。 */
+/** 0x09 运动块内容切换：0 全零 / 1 抓包占位 / 2 不带 / 3 输入设备的真实样本。 */
 static void cli_motion(const char *arg)
 {
     const int mode = atoi(arg);
-    if (mode < NS2_MOTION_ZERO || mode > NS2_MOTION_NONE) {
-        cli_print("err motion 0|1|2");
+    if (mode < NS2_MOTION_ZERO || mode > NS2_MOTION_SENSOR) {
+        cli_print("err motion 0|1|2|3");
         return;
     }
     ns2_output_set_motion_mode((uint8_t)mode);
@@ -393,6 +405,71 @@ static void cli_drop(void)
 {
     ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
     cli_print("ok disconnect requested");
+}
+
+static const char *cli_conn_name(pad_conn_t conn)
+{
+    switch (conn) {
+    case PAD_CONN_USB:
+        return "usb";
+    case PAD_CONN_BT:
+        return "bt";
+    default:
+        return "-";
+    }
+}
+
+/** 识别结果一行：来源、家族、型号、命中的布局行、兜底与透传状态。 */
+static void cli_pad(void)
+{
+    char line[224];
+    uint16_t vid = 0;
+    uint16_t pid = 0;
+    pad_conn_t conn = PAD_CONN_UNKNOWN;
+    const char *source = "none";
+    if (input_source_device_ids(&vid, &pid, &conn)) {
+        source = "bridge";
+    } else if (usb_input_device_ids(&vid, &pid, &conn)) {
+        source = "usb";
+    }
+    if (strcmp(source, "none") == 0) {
+        cli_print("pad none");
+        return;
+    }
+    pad_family_t family = PAD_FAMILY_UNKNOWN;
+    const pad_layout_t *layout = pad_layout_find_by_ids(vid, pid, conn, &family);
+    snprintf(line, sizeof(line),
+             "pad %s %s %s %04x:%04x row=0x%02x native=%u fallback=%u relay=%u", source,
+             pad_family_name(family), cli_conn_name(conn), (unsigned)vid, (unsigned)pid,
+             layout != NULL ? (unsigned)layout->report_id : 0u,
+             layout != NULL ? (unsigned)layout->native_lang : 0u, layout == NULL ? 1u : 0u,
+             target_relay_enabled() ? 1u : 0u);
+    cli_print(line);
+}
+
+/** USB host 状态：角色、栈状态、设备与收发计数、日志出口。 */
+static void cli_usb(void)
+{
+    char line[192];
+    snprintf(line, sizeof(line), "usb role=%s stack=%u device=%s reports=%lu outputs=%lu console=%s",
+             app_config_get()->usb_role == APP_CONFIG_USB_HOST ? "host" : "device",
+             usb_host_running() ? 1u : 0u, usb_input_device_desc(),
+             (unsigned long)usb_input_report_count(), (unsigned long)usb_input_output_count(),
+             console_out_uart_active() ? "uart0" : "usj");
+    cli_print(line);
+}
+
+/** 同代透传开关：0 关、1 开（默认开）。 */
+static void cli_relay(const char *arg)
+{
+    if (arg == NULL || (arg[0] != '0' && arg[0] != '1') || arg[1] != '\0') {
+        cli_print("err relay 0|1");
+        return;
+    }
+    target_set_relay(arg[0] == '1');
+    char line[32];
+    snprintf(line, sizeof(line), "ok relay=%c", arg[0]);
+    cli_print(line);
 }
 
 static void cli_dispatch(char *line)
@@ -434,6 +511,12 @@ static void cli_dispatch(char *line)
         cli_report();
     } else if (strcmp(line, "motion") == 0) {
         cli_motion(arg);
+    } else if (strcmp(line, "pad") == 0) {
+        cli_pad();
+    } else if (strcmp(line, "usb") == 0) {
+        cli_usb();
+    } else if (strcmp(line, "relay") == 0) {
+        cli_relay(arg);
     } else if (strcmp(line, "ltk") == 0) {
         cli_ltk(arg);
     } else if (strcmp(line, "drop") == 0) {

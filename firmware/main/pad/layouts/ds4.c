@@ -28,6 +28,20 @@ static const pad_layout_t s_rows[] = {
                 PAD_CAP_RUMBLE | PAD_CAP_BATTERY | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
+        .motion = {.samples = 1, .stride = 12},
+        /* 输出报告 0x05（32 字节）：b1 是 flags（0x01 震动、0x02 灯条颜色），
+         * b4/b5 是右小马达与左大马达强度，b6-b8 是灯条 RGB。偏移取自公开实现
+         * （Linux hid-playstation.c），未实机核对。 */
+        .out = {
+            .report_id = 0x05,
+            .len = 32,
+            .presets = {{1, 0x03}},
+            .rumble_off = {5, 4},
+            .rumble_max = {255, 255},
+            .led_rgb_off = 6,
+            .led_style = PAD_LED_LIGHTBAR,
+            .haptic = PAD_HAPTIC_AS_RUMBLE,
+        },
     },
     {
         /* 蓝牙：其余偏移整体后移两位，电量在 0x20。 */
@@ -50,6 +64,19 @@ static const pad_layout_t s_rows[] = {
                 PAD_CAP_RUMBLE | PAD_CAP_BATTERY | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
+        .motion = {.samples = 1, .stride = 12},
+        /* 蓝牙形态：报告 ID 换成 0x11，字段偏移与有线一致（公开实现如此，
+         * 未实机核对）。 */
+        .out = {
+            .report_id = 0x11,
+            .len = 78,
+            .presets = {{1, 0x03}},
+            .rumble_off = {5, 4},
+            .rumble_max = {255, 255},
+            .led_rgb_off = 6,
+            .led_style = PAD_LED_LIGHTBAR,
+            .haptic = PAD_HAPTIC_AS_RUMBLE,
+        },
     },
 };
 
@@ -58,4 +85,3 @@ const pad_layout_module_t pad_layout_module_ds4 = {
     .rows = s_rows,
     .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
 };
-

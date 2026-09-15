@@ -27,6 +27,22 @@ static const pad_layout_t s_rows[] = {
         .caps = PAD_CAP_MOTION | PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
+        .motion = {.samples = 1, .stride = 12},
+        /* 输出报告 0x02（50 字节）：b1/b2 是两个 valid_flag（0x01 震动、
+         * 0x04 灯条、0x10 玩家灯），b3/b4 是右小马达与左大马达，b46 是玩家灯
+         * 掩码、b47-b49 是灯条 RGB。偏移按公开实现（Linux hid-playstation.c）
+         * 换算，未实机核对。 */
+        .out = {
+            .report_id = 0x02,
+            .len = 50,
+            .presets = {{1, 0x01}, {2, 0x14}},
+            .rumble_off = {4, 3},
+            .rumble_max = {255, 255},
+            .led_mask_off = 46,
+            .led_rgb_off = 47,
+            .led_style = PAD_LED_LIGHTBAR,
+            .haptic = PAD_HAPTIC_AS_RUMBLE,
+        },
     },
     {
         /* 蓝牙（0x31）：比 DS4 蓝牙的 0x11 整体后移一位。偏移为 DualSense Edge
@@ -49,6 +65,19 @@ static const pad_layout_t s_rows[] = {
         .caps = PAD_CAP_MOTION | PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
+        .motion = {.samples = 1, .stride = 12},
+        /* 蓝牙形态报告 0x31 比有线多一字节前缀，其余字段整体后移一位。 */
+        .out = {
+            .report_id = 0x31,
+            .len = 78,
+            .presets = {{2, 0x01}, {3, 0x14}},
+            .rumble_off = {5, 4},
+            .rumble_max = {255, 255},
+            .led_mask_off = 47,
+            .led_rgb_off = 48,
+            .led_style = PAD_LED_LIGHTBAR,
+            .haptic = PAD_HAPTIC_AS_RUMBLE,
+        },
     },
 };
 
@@ -57,4 +86,3 @@ const pad_layout_module_t pad_layout_module_ds5 = {
     .rows = s_rows,
     .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
 };
-

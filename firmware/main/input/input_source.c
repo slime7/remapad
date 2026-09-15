@@ -12,20 +12,6 @@
 
 static const char *TAG = "remapad_input_src";
 
-static const char *family_name(pad_family_t family)
-{
-    switch (family) {
-    case PAD_FAMILY_XBOX:
-        return "xbox";
-    case PAD_FAMILY_PS:
-        return "ps";
-    case PAD_FAMILY_STEAM:
-        return "steam";
-    default:
-        return "unknown";
-    }
-}
-
 static const char *conn_name(pad_conn_t conn)
 {
     switch (conn) {
@@ -67,7 +53,7 @@ static void update_desc(const pad_report_t *report, bool attached)
         return;
     }
     snprintf(s_in.desc, sizeof(s_in.desc), "%s %s %04x:%04x len=%u",
-             family_name(report->family), conn_name(report->conn), report->vid,
+             pad_family_name(report->family), conn_name(report->conn), report->vid,
              report->pid, (unsigned)report->report_id);
 }
 
@@ -134,6 +120,11 @@ void input_source_handle_frame(const input_frame_view_t *frame)
     }
 }
 
+void input_source_note_link_down(void)
+{
+    handle_detach();
+}
+
 static void bridge_sample(pad_state_t *state)
 {
     pad_report_t report;
@@ -167,6 +158,23 @@ bool input_source_attached(void)
 uint32_t input_source_report_count(void)
 {
     return s_in.reports;
+}
+
+bool input_source_device_ids(uint16_t *vid, uint16_t *pid, pad_conn_t *conn)
+{
+    if (!s_in.attached) {
+        return false;
+    }
+    if (vid != NULL) {
+        *vid = s_in.report.vid;
+    }
+    if (pid != NULL) {
+        *pid = s_in.report.pid;
+    }
+    if (conn != NULL) {
+        *conn = s_in.report.conn;
+    }
+    return true;
 }
 
 const char *input_source_device_desc(void)

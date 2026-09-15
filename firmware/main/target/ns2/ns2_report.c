@@ -158,20 +158,36 @@ void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],
      * bit2）后，长度 0 的报文会被当作不完整输入。板卡没有 IMU，按 mode 填
      * 占位；NS2_MOTION_NONE 用于实机确认主机是否真的要求运动数据。 */
     if (state->motion_mode == NS2_MOTION_NONE) {
-        out[0x0E] = 0x00;
+        out[NS2_09_OFF_MOTION_LEN] = 0x00;
         return;
     }
-    out[0x0E] = NS2_INPUT_09_MOTION_LEN;
+    out[NS2_09_OFF_MOTION_LEN] = NS2_INPUT_09_MOTION_LEN;
     if (state->motion_mode == NS2_MOTION_CAPTURE) {
-        memcpy(&out[0x0F], s_motion_capture, sizeof(s_motion_capture));
+        memcpy(&out[NS2_09_OFF_MOTION], s_motion_capture, sizeof(s_motion_capture));
         const uint32_t base = (uint32_t)counter * NS2_REPORT_INTERVAL_US;
         const uint16_t offs[2] = {NS2_MOTION_STAMP_OFFS_A, NS2_MOTION_STAMP_OFFS_B};
         for (uint8_t i = 0; i < 2; i++) {
             const uint32_t stamp = base + (uint32_t)i * (NS2_REPORT_INTERVAL_US / 2);
-            uint8_t *field = &out[0x0F + offs[i]];
+            uint8_t *field = &out[NS2_09_OFF_MOTION + offs[i]];
             field[0] = (uint8_t)(stamp & 0xFF);
             field[1] = (uint8_t)((stamp >> 8) & 0xFF);
             field[2] = (uint8_t)((stamp >> 16) & 0xFF);
+        }
+        return;
+    }
+    /* 实验模式：把输入设备的真实样本按 NS1 的 12 字节样本风格填进块首，
+     * 余下字节保持 0。块结构未公开，这一档只为实机 A/B（见 ns2_state.h）。 */
+    if (state->motion_mode == NS2_MOTION_SENSOR && state->motion_valid) {
+        for (uint8_t s = 0; s < NS2_09_MOTION_SAMPLES; s++) {
+            uint8_t *sample = &out[NS2_09_OFF_MOTION + s * NS2_09_MOTION_SAMPLE_LEN];
+            for (uint8_t axis = 0; axis < 3; axis++) {
+                const int16_t gyro = state->gyro[axis];
+                const int16_t accel = state->accel[axis];
+                sample[axis * 2] = (uint8_t)((uint16_t)gyro & 0xFF);
+                sample[axis * 2 + 1] = (uint8_t)((uint16_t)gyro >> 8);
+                sample[6 + axis * 2] = (uint8_t)((uint16_t)accel & 0xFF);
+                sample[6 + axis * 2 + 1] = (uint8_t)((uint16_t)accel >> 8);
+            }
         }
     }
 }
@@ -194,11 +210,31 @@ void ns2_encode_input_05(uint8_t out[NS2_INPUT_05_LEN],
     buttons_05(state, &out[0x04]);
     ns2_pack_stick(state->stick_lx, state->stick_ly, &out[0x0A]);
     ns2_pack_stick(state->stick_rx, state->stick_ry, &out[0x0D]);
-    /* 鼠标、磁力计、电池电流、IMU 依附的特性位均未启用，保持 0。 */
+    /* 鼠标、磁力计与电池电流依附的特性位均未启用，保持 0。 */
     out[0x1F] = (uint8_t)(state->battery_mv & 0xFF);
     out[0x20] = (uint8_t)((state->battery_mv >> 8) & 0xFF);
     out[0x21] = charge_byte(state);
     out[0x29] = 0x01;
+    /* IMU 字段（0x2A，18 字节）：时间戳 + 温度 + 加速 XYZ + 陀螺 XYZ。
+     * 输入设备带 IMU 时填真值，否则整段保持 0。 */
+    if (state->motion_valid) {
+        const uint32_t stamp = counter * NS2_REPORT_INTERVAL_US;
+        uint8_t *imu = &out[NS2_05_OFF_IMU];
+        imu[0] = (uint8_t)(stamp & 0xFF);
+        imu[1] = (uint8_t)((stamp >> 8) & 0xFF);
+        imu[2] = (uint8_t)((stamp >> 16) & 0xFF);
+        imu[3] = (uint8_t)((stamp >> 24) & 0xFF);
+        imu[4] = (uint8_t)(NS2_05_IMU_TEMP & 0xFF);
+        imu[5] = (uint8_t)(NS2_05_IMU_TEMP >> 8);
+        for (uint8_t axis = 0; axis < 3; axis++) {
+            const uint16_t accel = (uint16_t)state->accel[axis];
+            const uint16_t gyro = (uint16_t)state->gyro[axis];
+            imu[6 + axis * 2] = (uint8_t)(accel & 0xFF);
+            imu[6 + axis * 2 + 1] = (uint8_t)(accel >> 8);
+            imu[12 + axis * 2] = (uint8_t)(gyro & 0xFF);
+            imu[12 + axis * 2 + 1] = (uint8_t)(gyro >> 8);
+        }
+    }
 }
 
 void ns2_encode_input_05_usb(uint8_t out[NS2_INPUT_05_LEN + 1],

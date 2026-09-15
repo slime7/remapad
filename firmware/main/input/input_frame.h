@@ -37,6 +37,8 @@ typedef enum {
     INPUT_FRAME_TYPE_ATTACH = 0x01,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_DETACH = 0x02,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_REPORT = 0x10,   /**< 载荷 = 设备标识 + 原始报告。 */
+    /** 设备 → PC：要写回手柄的输出报告（原始字节，首字节是 Report ID）。 */
+    INPUT_FRAME_TYPE_OUT_REPORT = 0x11,
     INPUT_FRAME_TYPE_FEEDBACK = 0x20, /**< 载荷 = 反馈（设备 → PC）。 */
     INPUT_FRAME_TYPE_OTA_BEGIN = 0x30, /**< 载荷 = 镜像大小声明（设备 ← PC）。 */
     INPUT_FRAME_TYPE_OTA_DATA = 0x31,  /**< 载荷 = 块序号 + 镜像数据（设备 ← PC）。 */
