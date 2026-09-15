@@ -19,6 +19,7 @@
 #include "backlight.h"
 #include "boot_splash.h"
 #include "bridge/js_bridge.h"
+#include "dp_ui.h"
 #include "ota_session.h"
 #include "panel.h"
 #include "render_accel.h"
@@ -264,7 +265,10 @@ static esp_err_t install_native_bridge_surface(JSContext *ctx, void *user_data)
 static esp_err_t sample_input(pocketjs_ui_input_t *input, void *user_data)
 {
     (void)user_data;
-    input->buttons = 0;
+    /* 手柄操控模式（组合键捕获）期间，数据面把十字键与圆圈键映射成
+     * PocketJS 的按键位，UI 的方向键焦点移动与圆圈键确认由此驱动
+     * （见 dp/dp_ui.h）；不在模式里恒为 0，触摸输入不受影响。 */
+    input->buttons = dp_ui_buttons();
     input->analog_x = 0;
     input->analog_y = 0;
     input->touches = NULL;

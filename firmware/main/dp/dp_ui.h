@@ -1,0 +1,86 @@
+#pragma once
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "pad_state.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * 手柄操控 UI：按住组合键把主机手柄临时变成屏幕遥控器。
+ *
+ * 组合键命中后板子捕获输入——捕获期间只向主机续发全松开的中性帧，玩家的按键
+ * 不再上行，改为把手柄的十字键与圆圈键交给 PocketJS 的按键输入（方向键移动
+ * 焦点、圆圈键等价于屏幕点按）；再按一次同样的组合键退出，恢复向主机转发。
+ * 组合键表达为私有按键位（L1 + R1 + L3 + R3），因此每一种家族布局都能命中，
+ * 不需要逐布局登记；四键同时按住再加一段保持时长，避免正常游戏里的误触。
+ *
+ * 角色分工：数据面任务（dp_task）每周期调 dp_ui_frame 推进状态并发布按键，
+ * PocketJS owner task 在自己的 sample_input 里读 dp_ui_buttons。
+ */
+
+/** 组合键：L1 + R1 + L3 + R3（私有按键位，四键同时按住才算命中）。 */
+#define DP_UI_COMBO_MASK (PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_L3 | PAD_BTN_R3)
+
+/** 组合键需持续按住多久才翻转模式（毫秒）。 */
+#define DP_UI_COMBO_HOLD_MS 300U
+
+/** 私有按键位 → PocketJS 按键位（contracts/spec/spec.ts 的 BTN）。 */
+enum {
+    DP_UI_BTN_UP = 0x0010,
+    DP_UI_BTN_RIGHT = 0x0020,
+    DP_UI_BTN_DOWN = 0x0040,
+    DP_UI_BTN_LEFT = 0x0080,
+    DP_UI_BTN_CIRCLE = 0x2000,
+};
+
+/** 模式翻转结果。 */
+typedef enum {
+    DP_UI_EVENT_NONE = 0,
+    DP_UI_EVENT_ENTERED,
+    DP_UI_EVENT_EXITED,
+} dp_ui_event_t;
+
+/** 纯逻辑状态：翻转判定只看组合键的按下沿与保持时长。 */
+typedef struct {
+    bool active;
+    /** 上一次推进时组合键是否全按下；用于识别按下沿。 */
+    bool captured;
+    /** 本次按住已累计的时长（毫秒）。 */
+    uint32_t held_ms;
+    /** 本次按住是否已经翻转过了；松开后才允许再次翻转。 */
+    bool fired;
+} dp_ui_state_t;
+
+/** 复位为「模式关闭、组合键未按下」。 */
+void dp_ui_state_reset(dp_ui_state_t *state);
+
+/** 组合键是否全部按下（纯函数）。 */
+bool dp_ui_captured(uint32_t pad_buttons);
+
+/** 私有按键位 → UI 按键位（纯函数）：十字键 + 圆圈键。 */
+uint32_t dp_ui_map_buttons(uint32_t pad_buttons);
+
+/** 推进组合键判定（纯逻辑）：按住超过 DP_UI_COMBO_HOLD_MS 翻转一次模式。 */
+dp_ui_event_t dp_ui_update(dp_ui_state_t *state, uint32_t pad_buttons, uint32_t dt_ms);
+
+/* ---- 运行时：数据面任务写、PocketJS owner task 与 CLI 读 ---- */
+
+/** 数据面每周期调用：推进模式并把映射后的按键发布给 UI。 */
+dp_ui_event_t dp_ui_frame(uint32_t pad_buttons, uint32_t dt_ms);
+
+/** 手柄操控模式是否生效。 */
+bool dp_ui_active(void);
+
+/** 当前给 PocketJS 的按键位（不在模式里恒为 0）。 */
+uint32_t dp_ui_buttons(void);
+
+/** 直接开关模式（串口 CLI 的 ui on|off）；返回是否发生变化。 */
+bool dp_ui_set_active(bool on);
+
+#ifdef __cplusplus
+}
+#endif

@@ -19,6 +19,7 @@
 #include "ble_controller.h"
 #include "ble_session.h"
 #include "dp_plane.h"
+#include "dp_ui.h"
 #include "ns2_identity.h"
 #include "pad_state.h"
 #include "pwr_key.h"
@@ -68,6 +69,8 @@ static struct {
     const char *last_pairing_state; /* 字面量常量指针，用于变化检测。 */
     /** 上次上报给 UI 的玩家灯掩码；-1 表示尚未上报（0 是有效值：四格全灭）。 */
     int last_player_led;
+    /** 上次上报给 UI 的手柄操控模式（两侧开机都视为关闭，变化才广播）。 */
+    bool last_pad_ui_mode;
     bool usb_role_host; /* UI 请求的角色；host 数据面未接入，仅记录。 */
     int64_t reboot_at_us;
     bool reboot_pending;
@@ -230,6 +233,7 @@ static void handle_get_system_status(int id)
              "\"mode\":\"ble\","
              "\"pairing\":\"%s\",\"controller\":%s,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
              "\"playerLed\":%u,"
+             "\"padUiMode\":%s,"
              "\"uptimeMs\":%lld,"
              "\"heapFree\":%u,\"heapSize\":%u,\"psramFree\":%u}",
              id, (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
@@ -241,6 +245,7 @@ static void handle_get_system_status(int id)
              s_bridge.usb_role_host ? "host" : "device",
              s_bridge.usb_role_host ? "false" : "true",
              (unsigned)ns2_session_player_leds(),
+             dp_ui_active() ? "true" : "false",
              (long long)(esp_timer_get_time() / 1000LL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
@@ -485,7 +490,7 @@ static void handle_reboot(int id)
 }
 
 /** 调试页按键注入：a/home 单次 250ms；lr 同时按下 L 和 R 保持 1s，
- *  对应主机 Grip/顺序界面的配对确认动作。 */
+ *  对应主机 Grip/顺序界面的配对确认动作；ui 是手柄操控 UI 的组合键。 */
 static void handle_debug_key(int id, const char *cmd)
 {
     size_t key_len = 0;
@@ -503,6 +508,11 @@ static void handle_debug_key(int id, const char *cmd)
     } else if (key != NULL && key_len == 2 && strncmp(key, "lr", 2) == 0) {
         mask = PAD_BTN_L1 | PAD_BTN_R1;
         hold_ms = 1000;
+    } else if (key != NULL && key_len == 2 && strncmp(key, "ui", 2) == 0) {
+        /* 手柄操控 UI 的组合键：保持时长盖过 dp_ui 的翻转阈值（300ms），
+         * 面板上点一次就等于按下再松开组合键。 */
+        mask = DP_UI_COMBO_MASK;
+        hold_ms = 500;
     }
     if (mask == 0) {
         char event[REMAPAD_EVENT_MAX];
@@ -646,6 +656,22 @@ const char *js_bridge_pairing_state(void)
     return real_pairing_state();
 }
 
+/** 每帧轮询手柄操控模式：变化即广播 padUiModeChanged，屏幕据此显示提示条
+ *  （组合键由数据面判定，面板只负责转达结论）。 */
+static void pad_ui_mode_poll(void)
+{
+    const bool on = dp_ui_active();
+    if (s_bridge.last_pad_ui_mode == on) {
+        return;
+    }
+    s_bridge.last_pad_ui_mode = on;
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event), "{\"t\":\"padUiModeChanged\",\"on\":%s}",
+             on ? "true" : "false");
+    reply_raw(event);
+    ESP_LOGI(TAG, "pad ui mode -> %s", on ? "on" : "off");
+}
+
 /** 每帧轮询主机下发的玩家序号灯掩码（Command 0x09）：变化即广播
  *  playerLedChanged，首页四格指示灯据此更新；断开连接后掩码回落到 0。 */
 static void player_led_poll(void)
@@ -665,6 +691,7 @@ void js_bridge_service(void)
 {
     pairing_state_poll();
     player_led_poll();
+    pad_ui_mode_poll();
 
     /* 关机两阶段：先释放电源锁存，再确认是否真的断电。电池供电时第一步
      * 之后系统已经断电、不回到这里；能走到第二步说明外部供电旁路了锁存。 */

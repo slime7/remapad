@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "dp_source.h"
+#include "dp_ui.h"
 #include "pad_state.h"
 
 static void primary_source(pad_state_t *state)
@@ -240,6 +241,11 @@ static void debug_key_lookup(void)
     CHECK_EQ(mask, PAD_BTN_L4);
     CHECK(dp_source_key_lookup("home", 4, &mask, &hold_ms));
     CHECK_EQ(mask, PAD_BTN_HOME);
+    /* 手柄操控 UI 的组合键：一次注入就是「按下组合键并松开」，保持时长必须
+     * 盖过 dp_ui 的翻转阈值，否则注入了但模式不切。 */
+    CHECK(dp_source_key_lookup("ui", 2, &mask, &hold_ms));
+    CHECK_EQ(mask, (uint32_t)DP_UI_COMBO_MASK);
+    CHECK(hold_ms > DP_UI_COMBO_HOLD_MS);
 
     /* 未命中：未知名字、空名字、前缀都不能改写输出。 */
     mask = 0;

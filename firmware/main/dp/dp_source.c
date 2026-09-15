@@ -8,6 +8,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 
+#include "dp_ui.h"
+
 #define DP_SOURCE_MAX 4
 #define DP_TICK_MS 5
 
@@ -60,6 +62,9 @@ static const debug_key_t s_debug_keys[] = {
     {"gl", PAD_BTN_L4, 250},
     {"gr", PAD_BTN_R4, 250},
     {"lr", PAD_BTN_L1 | PAD_BTN_R1, 1000},
+    /* 手柄操控 UI 的组合键：保持时长要盖过 dp_ui 的翻转阈值（300ms），
+     * 注入一次就等价于按下组合键并松开，不插手柄也能验证整条 UI 操控链路。 */
+    {"ui", DP_UI_COMBO_MASK, 500},
 };
 
 void dp_source_register(const dp_source_t *source)

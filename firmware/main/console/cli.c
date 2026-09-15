@@ -18,6 +18,7 @@
 #include "buzzer.h"
 #include "console_out.h"
 #include "dp_source.h"
+#include "dp_ui.h"
 #include "input_source.h"
 #include "layout.h"
 #include "ns2_identity.h"
@@ -46,9 +47,10 @@ static void cli_help(void)
     cli_print("  status              system status one-liner");
     cli_print("  key <name> [ms]     inject debug key (key release clears)");
     cli_print("                      a b x y plus minus home capture c l r zl zr");
-    cli_print("                      ls rs up down left right gl gr lr");
+    cli_print("                      ls rs up down left right gl gr lr ui");
     cli_print("  stick l|r <x> <y>   set stick level (0-4095, center)");
     cli_print("  stick reset         center both sticks");
+    cli_print("  ui [on|off]         pad-captured screen control (no arg = state)");
     cli_print("  link                per-identity BLE link status");
     cli_print("  backlight 0-100     set + persist backlight");
     cli_print("  screen on|off       screen power");
@@ -76,7 +78,7 @@ static void cli_status(void)
     const app_config_t *cfg = app_config_get();
     snprintf(line, sizeof(line),
              "state pairing=%s role=%s backlight=%u screen=%u uptime=%llds heap=%u "
-             "batt=%umV/%u%% chg=%u fw=%s part=%s ota=%s pad=%s",
+             "batt=%umV/%u%% chg=%u fw=%s part=%s ota=%s ui=%s pad=%s",
              js_bridge_pairing_state(),
              cfg->usb_role == APP_CONFIG_USB_HOST ? "host" : "device",
              (unsigned)backlight_get(), (unsigned)cfg->screen_on,
@@ -86,6 +88,7 @@ static void cli_status(void)
              battery_is_charging() ? 1u : 0u,
              ota_session_running_version(), ota_session_running_partition(),
              ota_session_state_name(),
+             dp_ui_active() ? "on" : "off",
              input_source_attached() ? input_source_device_desc()
                                      : (usb_input_attached() ? usb_input_device_desc() : "none"));
     cli_print(line);
@@ -140,6 +143,25 @@ static void cli_key(const char *arg)
     const uint32_t hold = fields >= 2 && hold_ms > 0 ? (uint32_t)hold_ms : default_hold_ms;
     dp_source_inject(mask, hold);
     cli_print("ok key injected");
+}
+
+/** 手柄操控 UI 模式：面板组合键之外的直接开关，实机上用它验证捕获与恢复。 */
+static void cli_ui(const char *arg)
+{
+    if (arg[0] == '\0') {
+        cli_print(dp_ui_active() ? "pad ui mode on (dpad moves, circle confirms)"
+                                 : "pad ui mode off");
+        return;
+    }
+    if (strcmp(arg, "on") == 0) {
+        dp_ui_set_active(true);
+        cli_print("ok pad ui mode on");
+    } else if (strcmp(arg, "off") == 0) {
+        dp_ui_set_active(false);
+        cli_print("ok pad ui mode off");
+    } else {
+        cli_print("err usage: ui [on|off]");
+    }
 }
 
 /** 摇杆轴取值：0-4095 整数，或 center / c 表示中位。 */
@@ -491,6 +513,8 @@ static void cli_dispatch(char *line)
         cli_key(arg);
     } else if (strcmp(line, "stick") == 0) {
         cli_stick(arg);
+    } else if (strcmp(line, "ui") == 0) {
+        cli_ui(arg);
     } else if (strcmp(line, "link") == 0) {
         cli_link();
     } else if (strcmp(line, "backlight") == 0) {

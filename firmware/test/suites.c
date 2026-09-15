@@ -11,6 +11,7 @@ extern const host_test_suite_t suite_ns2_frames;
 extern const host_test_suite_t suite_ns2_identity;
 extern const host_test_suite_t suite_render_accel;
 extern const host_test_suite_t suite_dp_source;
+extern const host_test_suite_t suite_dp_ui;
 extern const host_test_suite_t suite_pad_device;
 extern const host_test_suite_t suite_pad_ns;
 extern const host_test_suite_t suite_pad_feedback;
@@ -28,6 +29,7 @@ static const host_test_suite_t *const s_suites[] = {
     &suite_ns2_identity,
     &suite_render_accel,
     &suite_dp_source,
+    &suite_dp_ui,
     &suite_pad_device,
     &suite_pad_ns,
     &suite_pad_feedback,

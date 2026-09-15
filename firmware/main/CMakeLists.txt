@@ -64,6 +64,7 @@ idf_component_register(
         "ble/ble_creds.c"
         "dp/dp_plane.c"
         "dp/dp_source.c"
+        "dp/dp_ui.c"
         "usb/usb_input.c"
         "usb/usb_role.c"
         "usb/usb_transport.c"

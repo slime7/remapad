@@ -16,6 +16,7 @@
 #include "ble_creds.h"
 #include "ble_session.h"
 #include "dp_source.h"
+#include "dp_ui.h"
 #include "feedback.h"
 #include "input_link.h"
 #include "input_source.h"
@@ -177,6 +178,29 @@ static void deliver_feedback(const pad_feedback_t *feedback)
     }
 }
 
+/**
+ * 一帧「全部松开」的中性报文：捕获组合键的那一刻补发一份（主机的按键状态是
+ * 最后一份报文的内容，正按着的键不会自己弹起来），捕获期间再按上报节奏持续
+ * 续发——主机靠稳定不跳号的上报流判断链路健康，整段停发会让它把手柄判成
+ * 离线。同代透传载荷一并清掉：原样转发的报文体里带着被捕获的那几个键，
+ * 中性帧就成了白发。
+ */
+static void send_neutral_report(const pad_state_t *pad)
+{
+    pad_state_t neutral = *pad;
+    neutral.buttons = 0;
+    for (size_t axis = 0; axis < PAD_AXIS_COUNT; axis++) {
+        neutral.axis[axis] = PAD_AXIS_CENTER;
+    }
+    for (size_t trigger = 0; trigger < PAD_TRIGGER_COUNT; trigger++) {
+        neutral.trigger[trigger] = 0;
+    }
+    neutral.motion.present = false;
+    neutral.raw_len = 0;
+    neutral.native_lang = PAD_LANG_NONE;
+    target_send_pad(&neutral);
+}
+
 static void dp_task(void *param)
 {
     (void)param;
@@ -185,6 +209,7 @@ static void dp_task(void *param)
     uint32_t last_buttons = 0;
     int64_t last_button_log_us = 0;
     uint32_t send_div = 0;
+    bool output_paused = false;
 
     ESP_LOGI(TAG, "data plane task running, tick=%dms, target=%s", DP_TICK_MS,
              target_name());
@@ -207,10 +232,32 @@ static void dp_task(void *param)
             }
             last_buttons = pad.buttons;
         }
+        const dp_ui_event_t ui_event = dp_ui_frame(pad.buttons, DP_TICK_MS);
+        /* 捕获期间不上行玩家输入：组合键一按下就切换（不必等翻转），退出模式
+         * 后若组合键还按着也保持到松开为止（见 dp_ui.h）。 */
+        const bool paused = dp_ui_captured(pad.buttons) || dp_ui_active();
+        if (paused != output_paused) {
+            output_paused = paused;
+            if (paused) {
+                /* 切换的那一刻就补一帧全松开，不等下个上报节拍：被捕获时正按着
+                 * 的键会一直按在主机那头。 */
+                send_neutral_report(&pad);
+            }
+            ESP_LOGI(TAG, "pad output %s", paused ? "paused" : "resumed");
+        }
+        if (ui_event == DP_UI_EVENT_ENTERED) {
+            ESP_LOGI(TAG, "pad captures the screen: dpad moves focus, circle confirms");
+        }
         refresh_target_facts();
         if (++send_div >= DP_SEND_DIV) {
             send_div = 0;
-            target_send_pad(&pad);
+            if (paused) {
+                /* 捕获期间续发中性帧：主机按「稳定不跳号的上报流」判断链路
+                 * 健康，整段停发会让它把手柄判成离线；玩家输入一点不上行。 */
+                send_neutral_report(&pad);
+            } else {
+                target_send_pad(&pad);
+            }
         }
         /* vTaskDelayUntil 内部自行推进 wake；再手动累加会把实际周期翻倍。 */
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(DP_TICK_MS));

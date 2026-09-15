@@ -41,6 +41,7 @@ const FIRMWARE_SOURCES = [
   'firmware/main/target/ns2/ns2_target.c',
   'firmware/main/render_accel.c',
   'firmware/main/dp/dp_source.c',
+  'firmware/main/dp/dp_ui.c',
   'firmware/main/drivers/battery_curve.c',
 ];
 
@@ -57,6 +58,7 @@ const TEST_SOURCES = [
   'firmware/test/test_ns2_identity.c',
   'firmware/test/test_render_accel.c',
   'firmware/test/test_dp_source.c',
+  'firmware/test/test_dp_ui.c',
   'firmware/test/test_pad_device.c',
   'firmware/test/test_pad_ns.c',
   'firmware/test/test_pad_feedback.c',
