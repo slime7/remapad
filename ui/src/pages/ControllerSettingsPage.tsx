@@ -13,6 +13,7 @@ import { COLOR, STYLE } from '../theme';
 import { hw, setControllerConfig } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import type { ControllerType } from '../bridge/protocol';
+import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 
 /** 滚动列顶部内边距与块间距，与内容高度公式共用（pt-[34] + gap-2）。 */
 const TOP_PAD = 34;
@@ -81,9 +82,12 @@ function TypeCard(props: {
   onSelect: () => void;
   /** 页面在画面上时才参与焦点遍历（见 App.tsx 的 interactive）。 */
   interactive: () => boolean;
+  /** 类型卡的节点回调：手柄操控时要靠它把被聚焦的卡滚进可视带。 */
+  rowRef: (node: NodeMirror | null) => void;
 }) {
   return (
     <View
+      nodeRef={props.rowRef}
       focusable={props.interactive()}
       onPress={props.onSelect}
       class={props.selected ? STYLE.optionCardSel : STYLE.optionCard}
@@ -151,17 +155,30 @@ export function ControllerSettingsPage(props: {
     slot >= 2 && !isJoycon() ? 'hidden' : INFO_ROW_CLASS;
   const infoText = (slot: InfoSlot): string => `${infoLabel(slot)} ${infoValue(slot)}`;
 
-  const contentRef = usePageScroll(props.active, true, () => contentHeight(isJoycon()) + BOTTOM_PAD_H);
+  /* 可聚焦行的位置：两张类型卡就在滚动列顶部，卡高 53、块间距 8。手柄操控
+   * 时页面靠它把被聚焦的卡滚进可视带，也才谈得上「一直按上回到页顶」。 */
+  const rowNodes: Array<NodeMirror | null> = [];
+  const focusRows = () => [
+    { node: rowNodes[0] ?? null, y: TOP_PAD, h: CARD_H },
+    { node: rowNodes[1] ?? null, y: TOP_PAD + CARD_H + GAP, h: CARD_H },
+  ];
+  const contentRef = usePageScroll(
+    props.active,
+    true,
+    () => contentHeight(isJoycon()) + BOTTOM_PAD_H,
+    focusRows,
+  );
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
-        {TYPE_OPTIONS.map((option) => (
+        {TYPE_OPTIONS.map((option, index) => (
           <TypeCard
             option={option}
             selected={config().type === option.type}
             onSelect={() => setControllerConfig({ ...config(), type: option.type })}
             interactive={props.interactive}
+            rowRef={(node: NodeMirror | null) => (rowNodes[index] = node)}
           />
         ))}
 

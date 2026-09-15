@@ -6,10 +6,12 @@
  * frame 契约，所以「按得对、画得出」与真机是同一条聚焦与激活通路。
  */
 import { test, expect, NAV_BAR, type RemapadApp } from './fixtures';
-import { openSettings } from './pages';
+import { openControllerSettings, openSettings, openSystem } from './pages';
 
 /** 底栏右侧「设置」键（left/right/bottom 各 8，键宽 64）：取整块，环画在边界上。 */
 const SETTINGS_KEY = { x: 168, y: 208, width: 64, height: 64 };
+/** 底栏左侧「状态」键（撑满余下宽度的宽键）：取整块，环画在边界上。 */
+const STATUS_KEY = { x: 8, y: 208, width: 152, height: 64 };
 
 /** 焦点环专用亮度阈值：界面文字最亮的通道是 217（onSurface #d9e6ff），环是纯白。 */
 const RING_LEVEL = 240;
@@ -44,8 +46,8 @@ async function ringBands(app: RemapadApp, y0: number, y1: number): Promise<numbe
 
 /** 首页左侧状态圆（56 见方，行内居中，pt-[38]）：USB 链路。 */
 const USB_CIRCLE = { x: 60, y: 38, width: 56, height: 56 };
-/** 页面内容区（避开每秒刷新的状态栏与底栏）。 */
-const CONTENT = { x: 0, y: 40, width: 240, height: 160 };
+/** 首页右侧状态圆：蓝牙 / 配对（行内间距 8，两圆一起居中）。 */
+const BT_CIRCLE = { x: 124, y: 38, width: 56, height: 56 };
 test('方向键把焦点环画到第一处可点控件上', async ({ app }) => {
   await app.goto();
   // 没有手柄输入时不留焦点：第一处控件上没有环。
@@ -79,26 +81,24 @@ test('WASD 与空格跟方向键、回车等价', async ({ app }) => {
   await expect.poll(() => app.hasVisibleText('串口')).toBe(true);
 });
 
-test('连按方向键不会走进隐藏页面：回车只落在看得见的控件上', async ({ app }) => {
+test('连按向下不会走进隐藏页面：环停在首页第二枚圆上', async ({ app }) => {
   await app.goto();
-  const home = await app.regionSignature(CONTENT);
-
-  // 首页只有两枚状态圆，再往后是底栏：第三次右移应当落在底栏「状态」上。
-  // 若按整棵节点树遍历（首帧就把七个页面挂满、切页只翻 hidden），第三下会
-  // 落到隐藏的设置页首行，回车就会切到操纵台看不见的那一页去。
-  await app.pad.pressTimes('ArrowRight', 3);
+  // 首页只有两枚状态圆：第三次下移没有下一项，环留在第二枚圆上，不会落到
+  // 隐藏页的控件（首帧就把七个页面挂满、切页只翻 hidden）。回车进的是第二
+  // 枚圆自己的配对页，而不是隐藏页首行的「手柄设置」。
+  await app.pad.pressTimes('ArrowDown', 3);
+  expect(await app.brightShare(BT_CIRCLE, RING_LEVEL)).toBeGreaterThan(0.004);
+  expect(await app.brightShare(NAV_BAR)).toBeLessThan(0.004);
   await app.pad.press('Enter');
-
   await expect.poll(() => app.hasVisibleText('Pro 手柄')).toBe(false);
-  await expect.poll(() => app.regionSignature(CONTENT)).toBe(home);
-  // 焦点落在底栏，环画在底栏里。
-  expect(await app.brightShare(NAV_BAR)).toBeGreaterThan(0.008);
+  await expect.poll(() => app.hasVisibleText('配对')).toBe(true);
 });
 
 test('方向键能停在底栏最右侧的按钮上，回车切到设置页', async ({ app }) => {
   await app.goto();
-  // 首页两枚状态圆之后是底栏两键：第四次右移应当落在「设置」上。
-  await app.pad.pressTimes('ArrowRight', 4);
+  // 第一次按键由框架的默认顺序落点（首页首枚状态圆），第二次右移就进底栏：
+  // 左右只在底栏两项之间走，不会先绕去第二枚圆。
+  await app.pad.pressTimes('ArrowRight', 2);
   expect(await app.brightShare(SETTINGS_KEY, RING_LEVEL)).toBeGreaterThan(0.004);
   await app.pad.press('Enter');
   await expect.poll(() => app.hasVisibleText('手柄配对')).toBe(true);
@@ -114,4 +114,78 @@ test('方向键移到列表下方时内容跟着滚动，焦点不被底栏挡�
   // 环必须出现在底栏之上的内容区里；被底栏盖住时这里一条带都测不到。跟随
   // 滚动是 140 ms 的补间，等它落位再判。
   await expect.poll(async () => (await ringBands(app, 34, 206)).length).toBeGreaterThan(0);
+});
+
+test('左右只在底栏两项之间走，不落进页面内容', async ({ app }) => {
+  await app.goto();
+  await openSettings(app);
+  // 第一次按键进内容第一行，右移一次就进底栏右端的「设置」键。
+  await app.pad.press('ArrowDown');
+  await app.pad.press('ArrowRight');
+  expect(await app.brightShare(SETTINGS_KEY, RING_LEVEL)).toBeGreaterThan(0.004);
+  expect(await ringBands(app, 34, 206)).toHaveLength(0);
+  // 左移：环走到「状态」；到头再按左仍夹在底栏里，不会退进页面内容。
+  await app.pad.press('ArrowLeft');
+  expect(await app.brightShare(STATUS_KEY, RING_LEVEL)).toBeGreaterThan(0.004);
+  await app.pad.press('ArrowLeft');
+  expect(await app.brightShare(STATUS_KEY, RING_LEVEL)).toBeGreaterThan(0.004);
+  expect(await ringBands(app, 34, 206)).toHaveLength(0);
+});
+
+test('上下只在页面内容里走，连按到底也不会停到底栏上', async ({ app }) => {
+  await app.goto();
+  await openSettings(app);
+  // 设置页五行：连按六次下移，多按的那一次已经没有下一项。
+  await app.pad.pressTimes('ArrowDown', 6);
+  expect(await app.brightShare(NAV_BAR)).toBeLessThan(0.004);
+  await expect.poll(async () => (await ringBands(app, 34, 206)).length).toBeGreaterThan(0);
+});
+
+test('环停在底栏时按上回到页面内容', async ({ app }) => {
+  await app.goto();
+  await openSettings(app);
+  await app.pad.press('ArrowDown');
+  await app.pad.press('ArrowRight');
+  expect(await app.brightShare(SETTINGS_KEY, RING_LEVEL)).toBeGreaterThan(0.004);
+  await app.pad.press('ArrowUp');
+  expect(await app.brightShare(NAV_BAR)).toBeLessThan(0.004);
+  await expect.poll(async () => (await ringBands(app, 34, 206)).length).toBeGreaterThan(0);
+});
+
+test('焦点停在最后一项后继续按下，页面还能一直滚到页底', async ({ app }) => {
+  await app.goto();
+  await openSystem(app);
+  const content = await app.findVisibleByClass('px-4 pt-[34]');
+  expect(content, '没找到系统页滚动列').toBeDefined();
+  // 系统页四个可聚焦行：连按四下停在最后一行「关机」上，跟随滚动已经把它送进
+  // 可视带，但下面的设备信息卡还看不见。
+  await app.pad.pressTimes('ArrowDown', 4);
+  await app.waitSettled();
+  const before = await app.scrollOffset(content!.i);
+  expect(before, '系统页应当已经跟着焦点滚过一段').not.toBeNull();
+  // 再按下：焦点没有下一项可去，页面自己继续往下走，一直走到页底。内容高
+  // 34 + 56 + 16×3 + 44×2 + 170 + 80 = 476，视口 280，页底就是 196。
+  await app.pad.pressTimes('ArrowDown', 8);
+  await app.waitSettled();
+  const after = await app.scrollOffset(content!.i);
+  expect(after, '系统页应当能滚到页底').not.toBeNull();
+  expect(after!).toBeGreaterThan(before!);
+  expect(after!).toBe(196);
+});
+
+test('手柄设置页一直按下滚到页底，一直按上回到页顶', async ({ app }) => {
+  await app.goto();
+  await openControllerSettings(app);
+  const content = await app.findVisibleByClass('px-4 pt-[34]');
+  expect(content, '没找到手柄设置页滚动列').toBeDefined();
+  // 页面上只有两张类型卡可聚焦：按住下走完两张卡之后，焦点留在末项，页面
+  // 自己继续往下走。内容高 34 + 53×2 + 54（信息卡）+ 74（颜色卡）+ 8×4
+  // = 300，加末尾垫高 80 得 380，视口 280，页底就是 100。
+  await app.pad.pressTimes('ArrowDown', 8);
+  await app.waitSettled();
+  await expect.poll(async () => app.scrollOffset(content!.i), { message: '一直按下应当滚到页底' }).toBe(100);
+  // 一直按上：焦点回到首张卡，页面跟着回到顶部（位移夹在 0）。
+  await app.pad.pressTimes('ArrowUp', 4);
+  await app.waitSettled();
+  await expect.poll(async () => app.scrollOffset(content!.i), { message: '一直按上应当回到页顶' }).toBe(0);
 });

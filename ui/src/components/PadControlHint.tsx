@@ -1,6 +1,6 @@
 /**
  * 手柄操控模式的提示条：组合键把输入收给屏幕后，浮在底栏上方几秒，说明
- * 方向键在移动焦点、圆圈键等于点按、怎么退出。提示只挂一次节点（切换模式
+ * 上下在移动焦点、左右在切底栏、圆圈键等于点按、怎么退出。提示只挂一次节点（切换模式
  * 时翻 hidden，见 docs/ABSTRACTIONS.md 的页面组织），运行期不建树。
  *
  * 提示只在实机上出现：固件经 bridge 广播 padUiModeChanged，浏览器预览里
@@ -40,7 +40,10 @@ export function PadControlHint(props: { active: () => boolean }) {
         手柄操控中
       </Text>
       <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
-        方向键移动焦点，○ 确认
+        上下移动焦点，○ 确认
+      </Text>
+      <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
+        左右 / L1 R1 切底栏
       </Text>
       <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
         再按组合键退出

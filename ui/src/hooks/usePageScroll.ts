@@ -43,10 +43,15 @@ const REVEAL_BOTTOM = 200;
 /** 跟随滚动的时长：短到不拖沓，长到看得出方向。 */
 const REVEAL_MS = 140;
 
+/** 焦点停在内容最后一项后再按一次下，页面自己往下走的距离（约一行）。 */
+const PAD_SCROLL_STEP = 40;
+
 interface Entry {
   active: () => boolean;
   scroller: Scroller;
   release: (velocity: number) => void;
+  /** 手柄操控：焦点已经在最后一项时再按下，页面继续往下走一段。 */
+  padScroll: () => void;
 }
 
 let handle: GestureHandle | null = null;
@@ -84,6 +89,15 @@ function gesture(): GestureHandle {
     });
   }
   return handle;
+}
+
+/** 手势之外的第二条滚动入口：手柄操控时焦点停在内容末尾，再按下就让页面继续
+ *  往下走（见 usePadControl 的方向分工）。当前接管手势的那一页就是它作用的对象；
+ *  页面不可滚动时（owner 为 null）什么也不做。 */
+export function padScrollPage(): void {
+  if (owner !== null) {
+    owner.padScroll();
+  }
 }
 
 /**
@@ -134,7 +148,33 @@ export function usePageScroll(
     scroller.scrollTo(bound, { durMs });
   };
 
-  const entry: Entry = { active, scroller, release };
+  /** 上一次请求的跟随滚动目标：目标不变就不重复下指令（跟随滚动与手柄操控的
+   *  额外下移共用同一个目标值）。 */
+  let revealTarget = Number.NaN;
+  /** 被「额外下移」推出可视带的焦点行：位移是用户自己按下去的，跟随滚动不再
+   *  把它拉回来，直到焦点换人或离开这一页。 */
+  let padScrolled: NodeMirror | null = null;
+
+  /**
+   * 焦点已经在内容最后一项时再按下：页面自己往下走一段，一次一行的量，一直
+   * 走到页底。此时焦点行会移出可视带，靠 padScrolled 让跟随滚动先让位。
+   */
+  const padScroll = () => {
+    if (!scrollable || dragging === entry) {
+      return;
+    }
+    const max = maxOffset();
+    const current = scroller.offset();
+    const target = Math.min(current + PAD_SCROLL_STEP, max);
+    if (target <= current) {
+      return;
+    }
+    padScrolled = getFocused();
+    revealTarget = target;
+    scroller.scrollTo(target, { durMs: REVEAL_MS });
+  };
+
+  const entry: Entry = { active, scroller, release, padScroll };
   gesture();
 
   /* 内容节点与已经写过的位移：节点换人就标成未知，下一帧重新写一次。 */
@@ -144,9 +184,6 @@ export function usePageScroll(
     content = node;
     painted = Number.NaN;
   };
-
-  /** 上一次请求的跟随滚动目标：目标不变就不重复下指令。 */
-  let revealTarget = Number.NaN;
 
   /**
    * 手柄操控时把被聚焦的行滚进可视带：方向键移动焦点不产生触摸事件，页面
@@ -161,6 +198,10 @@ export function usePageScroll(
     if (focused === null) {
       return;
     }
+    if (padScrolled === focused) {
+      return; // 这一行是用户按下的额外下移推出视野的，跟随滚动让位
+    }
+    padScrolled = null;
     const row = focusRows().find((candidate) => candidate.node === focused);
     if (row === undefined) {
       return;

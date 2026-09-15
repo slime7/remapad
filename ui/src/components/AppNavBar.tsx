@@ -13,10 +13,13 @@
  * 滚动页在滚动列末尾放 BottomPlaceholder 垫高，避免最后一段被菜单遮挡。
  * 底栏任何时候都可切页：配对流程可能长期挂着等主机，不该锁住导航。
  *
+ * 手柄操控的左右键只在这两枚键之间走（见 hooks/usePadControl.ts）：底栏拿到
+ * 焦点环时按圆圈键切页，与点屏幕走同一条 onPress。
  * 注意 Vue Vapor 响应性：条件必须以函数调用形式出现在 JSX 里（读取发生在
  * 渲染作用内才会被跟踪），setup 期赋值的常量不会随 props 更新。
  */
 import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
+import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { COLOR } from '../theme';
 
@@ -52,11 +55,16 @@ export function AppNavBar(props: {
   onChange: (tab: TabKey) => void;
   /** 没有弹窗盖住底栏时才为真（弹窗期间焦点该留在弹窗里，见 App.tsx）。 */
   enabled: () => boolean;
+  /** 底栏根节点：手柄操控的左右键绑定在这棵子树上（见 App.tsx）。 */
+  rootRef: (node: NodeMirror | null) => void;
 }) {
   const statusActive = () => props.tab === 'home';
   const settingsActive = () => props.tab === 'settings';
   return (
-    <View class="absolute left-[8] right-[8] bottom-[8] h-[64] flex-row gap-2 z-40">
+    <View
+      nodeRef={props.rootRef}
+      class="absolute left-[8] right-[8] bottom-[8] h-[64] flex-row gap-2 z-40"
+    >
       <View class="grow h-[64] flex-col items-center justify-center">
         <Image
           class="absolute left-0 top-0 w-[64] h-[64]"

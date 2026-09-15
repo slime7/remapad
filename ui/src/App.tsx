@@ -10,8 +10,11 @@
  * 手柄操控模式（hooks/usePadControl.ts）下，页面与底栏的可聚焦性跟着「自己是
  * 当前页、且没有弹窗盖住」走：框架的焦点遍历清单因此只含画面上的控件，隐藏页
  * 与弹窗背后的按钮都不会被圆圈键按到。
+ * 两棵子树还要各交一个节点引用给这个钩子：上下键绑在页面容器上、左右键绑在
+ * 底栏上，方向键从此各走各的一摊（见 ADR 0028）。
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
+import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 import { AppStatusBar } from './components/AppStatusBar';
 import { AppNavBar, type TabKey } from './components/AppNavBar';
 import { ConfirmDialog } from './components/ConfirmDialog';
@@ -42,8 +45,23 @@ export default function App() {
    * 弹窗打开时页面仍然可见，但焦点该留在弹窗里，所以一并关掉。 */
   const interactive = (key: TabKey) => () => tab.value === key && !dialogOpen();
 
-  /* 手柄操控的焦点窗口与「非操控状态不留焦点环」由这个钩子承担。 */
-  usePadControl({ firmwareMode: () => hw.padUiMode });
+  /* 手柄操控的两个轴各绑一棵子树：页面容器归上下键、底栏归左右键。节点在挂载
+   * 时才到位，这里先留变量，钩子按帧取（见 usePadControl）。 */
+  let pageRoot: NodeMirror | null = null;
+  let navRoot: NodeMirror | null = null;
+  const padPageRef = (node: NodeMirror | null) => {
+    pageRoot = node;
+  };
+  const padNavRef = (node: NodeMirror | null) => {
+    navRoot = node;
+  };
+
+  /* 手柄操控的焦点窗口与「非操控状态不留焦点环」也由这个钩子承担。 */
+  usePadControl({
+    firmwareMode: () => hw.padUiMode,
+    pageRoot: () => pageRoot,
+    navRoot: () => navRoot,
+  });
 
   /** 切页：所有页面已挂载，只翻转 hidden。 */
   const goToTab = (next: TabKey) => {
@@ -63,7 +81,7 @@ export default function App() {
   return (
     <View class={STYLE.appRoot}>
       <AppStatusBar />
-      <View class="w-full h-full overflow-hidden">
+      <View nodeRef={padPageRef} class="w-full h-full overflow-hidden">
         {/* 每个页面自己带 hidden 切换，省掉一层纯容器节点（每个节点约 50 ms）。 */}
         <HomePage
           active={() => tab.value === 'home'}
@@ -95,7 +113,12 @@ export default function App() {
         />
         <DebugPage active={() => tab.value === 'debug'} interactive={interactive('debug')} />
       </View>
-      <AppNavBar tab={tab.value} onChange={goToTab} enabled={() => !dialogOpen()} />
+      <AppNavBar
+        tab={tab.value}
+        onChange={goToTab}
+        enabled={() => !dialogOpen()}
+        rootRef={padNavRef}
+      />
       <PadControlHint active={() => hw.padUiMode} />
 
       {rebootAsk.value ? (
