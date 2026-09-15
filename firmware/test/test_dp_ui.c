@@ -100,10 +100,48 @@ static void map_covers_dpad_and_circle_only(void)
     CHECK_EQ(dp_ui_map_buttons(PAD_BTN_DPAD_LEFT), (uint32_t)DP_UI_BTN_LEFT);
     CHECK_EQ(dp_ui_map_buttons(PAD_BTN_DPAD_RIGHT), (uint32_t)DP_UI_BTN_RIGHT);
     CHECK_EQ(dp_ui_map_buttons(PAD_BTN_CIRCLE), (uint32_t)DP_UI_BTN_CIRCLE);
-    /* 十字键与圆圈之外的键不进 UI：摇杆按下、肩键、组合键本身都不该移动焦点。 */
+    /* 这一支只管十字键与圆圈：L1 / R1 走 dp_ui_map_nav，其余按键（L3 / R3、
+     * 面键、组合键本身）都不该移动焦点。 */
     const uint32_t others = DP_UI_COMBO_MASK | PAD_BTN_CROSS | PAD_BTN_OPT | PAD_BTN_HOME |
                             PAD_BTN_TRIANGLE | PAD_BTN_SQUARE;
     CHECK_EQ(dp_ui_map_buttons(others), 0U);
+}
+
+static void shoulder_buttons_act_as_left_right(void)
+{
+    /* 模式里按住 L1 / R1 等价于按左 / 右：切底栏不必把拇指挪回十字键。 */
+    CHECK_EQ(dp_ui_map_nav(PAD_BTN_L1), (uint32_t)DP_UI_BTN_LEFT);
+    CHECK_EQ(dp_ui_map_nav(PAD_BTN_R1), (uint32_t)DP_UI_BTN_RIGHT);
+    /* 同一个肩键与十字键一起按着：肩键这一路仍然算一次方向。 */
+    CHECK_EQ(dp_ui_map_nav(PAD_BTN_L1 | PAD_BTN_DPAD_DOWN), (uint32_t)DP_UI_BTN_LEFT);
+}
+
+static void combo_hold_emits_no_direction(void)
+{
+    /* 组合键以 L1 + R1 起手：进出模式的那一刻不能顺带发一次左右，否则进出
+     * 模式都会把底栏的选中项挪走一格。 */
+    CHECK_EQ(dp_ui_map_nav(DP_UI_COMBO_MASK), 0U);
+    CHECK_EQ(dp_ui_map_nav(DP_UI_COMBO_MASK | PAD_BTN_DPAD_RIGHT), 0U);
+    /* 两肩键同按是组合键的前半段（等着补上 L3 / R3），同样不发方向。 */
+    CHECK_EQ(dp_ui_map_nav(PAD_BTN_L1 | PAD_BTN_R1), 0U);
+    /* 其余按键不参与：单按 L3 / R3 或面键都不发方向。 */
+    CHECK_EQ(dp_ui_map_nav(PAD_BTN_L3), 0U);
+    CHECK_EQ(dp_ui_map_nav(PAD_BTN_R3), 0U);
+    CHECK_EQ(dp_ui_map_nav(PAD_BTN_CROSS), 0U);
+    CHECK_EQ(dp_ui_map_nav(0), 0U);
+}
+
+static void runtime_publishes_shoulder_direction_in_mode(void)
+{
+    /* 运行时发布：模式里肩键进按键位，退出那一周期立刻归零。 */
+    CHECK(dp_ui_set_active(true));
+    dp_ui_frame(PAD_BTN_L1, 5);
+    CHECK_EQ(dp_ui_buttons(), (uint32_t)DP_UI_BTN_LEFT);
+    dp_ui_frame(PAD_BTN_R1 | PAD_BTN_CIRCLE, 5);
+    CHECK_EQ(dp_ui_buttons(), (uint32_t)(DP_UI_BTN_RIGHT | DP_UI_BTN_CIRCLE));
+    dp_ui_frame(DP_UI_COMBO_MASK, DP_UI_COMBO_HOLD_MS);
+    CHECK(!dp_ui_active());
+    CHECK_EQ(dp_ui_buttons(), 0U);
 }
 
 static void runtime_publishes_buttons_only_in_mode(void)
@@ -131,4 +169,7 @@ HOST_TEST_SUITE(suite_dp_ui, "dp_ui 手柄操控 UI",
                 {"组合键短按不翻转，抖动不攒时间", short_press_does_not_toggle},
                 {"组合键按住翻转一次，松开后才能再翻转", hold_toggles_once_until_released},
                 {"只有十字键与圆圈键进 UI 按键位", map_covers_dpad_and_circle_only},
+                {"按住 L1 / R1 与按左 / 右等价", shoulder_buttons_act_as_left_right},
+                {"组合键与两肩键同按都不发方向", combo_hold_emits_no_direction},
+                {"模式里肩键发布左右按键位，退出即归零", runtime_publishes_shoulder_direction_in_mode},
                 {"模式外不发布 UI 按键，退出即归零", runtime_publishes_buttons_only_in_mode});

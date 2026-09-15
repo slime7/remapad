@@ -51,6 +51,21 @@ uint32_t dp_ui_map_buttons(uint32_t pad_buttons)
     return buttons;
 }
 
+uint32_t dp_ui_map_nav(uint32_t pad_buttons)
+{
+    /* 组合键以 L1 + R1 起手：四键同按（进出模式的那一刻）与两肩键同按
+     * （组合键的前半段）都不发方向，其余时候按住 L1 / R1 就是左 / 右。 */
+    if (dp_ui_captured(pad_buttons)) {
+        return 0;
+    }
+    const bool l1 = (pad_buttons & PAD_BTN_L1) != 0;
+    const bool r1 = (pad_buttons & PAD_BTN_R1) != 0;
+    if (l1 == r1) {
+        return 0;
+    }
+    return l1 ? DP_UI_BTN_LEFT : DP_UI_BTN_RIGHT;
+}
+
 dp_ui_event_t dp_ui_update(dp_ui_state_t *state, uint32_t pad_buttons, uint32_t dt_ms)
 {
     if (state == NULL) {
@@ -86,7 +101,9 @@ dp_ui_event_t dp_ui_frame(uint32_t pad_buttons, uint32_t dt_ms)
     portENTER_CRITICAL(&s_ui_mux);
     event = dp_ui_update(&s_ui_state, pad_buttons, dt_ms);
     /* 不在模式里恒发 0：UI 的按键只在捕获期间由手柄提供。 */
-    s_ui_buttons = s_ui_state.active ? dp_ui_map_buttons(pad_buttons) : 0;
+    s_ui_buttons = s_ui_state.active
+                       ? (dp_ui_map_buttons(pad_buttons) | dp_ui_map_nav(pad_buttons))
+                       : 0;
     portEXIT_CRITICAL(&s_ui_mux);
     if (event != DP_UI_EVENT_NONE) {
         ESP_LOGI(TAG, "pad ui mode %s", event == DP_UI_EVENT_ENTERED ? "on" : "off");
