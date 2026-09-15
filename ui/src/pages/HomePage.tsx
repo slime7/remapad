@@ -14,9 +14,15 @@ import { BottomPlaceholder } from '../components/BottomPlaceholder';
 import { usbLinkState } from '../utils';
 import type { TabKey } from '../components/AppNavBar';
 
-function StateCircle(props: { glyph: string; iconColor: string; onPress: () => void }) {
+function StateCircle(props: {
+  glyph: string;
+  iconColor: string;
+  onPress: () => void;
+  /** 页面在画面上时才参与焦点遍历（见 App.tsx 的 interactive）。 */
+  interactive: () => boolean;
+}) {
   return (
-    <View focusable onPress={props.onPress} class={STYLE.circle}>
+    <View focusable={props.interactive()} onPress={props.onPress} class={STYLE.circle}>
       <Icon glyph={props.glyph} class="shrink-0 text-2xl" color={props.iconColor} />
     </View>
   );
@@ -43,6 +49,8 @@ function PlayerLedRow(props: { mask: number }) {
 export function HomePage(props: {
   active: () => boolean;
   onGo: (tab: TabKey) => void;
+  /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
+  interactive: () => boolean;
 }) {
   const usbState = () => usbLinkState(hw.usbRole, hw.usbRoleActive);
   const usbGlyph = () =>
@@ -58,11 +66,17 @@ export function HomePage(props: {
         class="w-full flex-col items-center px-4 pt-[38]"
       >
         <View class="flex-row gap-2 shrink-0">
-          <StateCircle glyph={usbGlyph()} iconColor={usbColor()} onPress={() => props.onGo('mode')} />
+          <StateCircle
+            glyph={usbGlyph()}
+            iconColor={usbColor()}
+            onPress={() => props.onGo('mode')}
+            interactive={props.interactive}
+          />
           <StateCircle
             glyph={btConnected() ? ICON.bluetoothConnected : ICON.bluetoothDisabled}
             iconColor={btConnected() ? COLOR.primary : COLOR.outline}
             onPress={() => props.onGo('pairing')}
+            interactive={props.interactive}
           />
         </View>
         <PlayerLedRow mask={hw.playerLed} />

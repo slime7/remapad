@@ -149,13 +149,39 @@ export class TouchDriver {
   }
 }
 
+/**
+ * 手柄按键驱动：预览页把键盘当成设备按键位（方向键 / WASD 类比十字键，
+ * 回车 / 空格类比圆圈键，见 ui/preview/index.html），真机上产生这些位的是
+ * 手柄本身。按键至少要跨过一次采样帧，应用才看得到这次按下。
+ */
+export class PadDriver {
+  constructor(private readonly app: RemapadApp) {}
+
+  /** 按一次键（跨帧按住再松开）。 */
+  async press(key: string, options: { holdFrames?: number } = {}): Promise<void> {
+    await this.app.page.keyboard.down(key);
+    await this.app.waitFrames(options.holdFrames ?? 2);
+    await this.app.page.keyboard.up(key);
+    await this.app.waitFrames(2);
+  }
+
+  /** 连按 n 次（每次都是独立的下沿：框架按帧做边沿检测）。 */
+  async pressTimes(key: string, times: number): Promise<void> {
+    for (let index = 0; index < times; index += 1) {
+      await this.press(key);
+    }
+  }
+}
+
 export class RemapadApp {
   readonly touch: TouchDriver;
+  readonly pad: PadDriver;
   /** 预览页的 console 日志（应用异常也会写进屏幕日志区）。 */
   readonly consoleLines: string[] = [];
 
   constructor(readonly page: Page) {
     this.touch = new TouchDriver(this);
+    this.pad = new PadDriver(this);
     page.on('console', (message) => {
       this.consoleLines.push(`[${message.type()}] ${message.text()}`);
     });
@@ -329,6 +355,7 @@ export class RemapadApp {
     touch: string;
     touchFrames: string;
     hit: string;
+    keys: string;
     log: string;
   }> {
     return {
@@ -337,6 +364,7 @@ export class RemapadApp {
       touch: (await this.page.locator('#stat-touch').textContent()) ?? '',
       touchFrames: (await this.page.locator('#stat-frames').textContent()) ?? '',
       hit: (await this.page.locator('#stat-hit').textContent()) ?? '',
+      keys: (await this.page.locator('#stat-keys').textContent()) ?? '',
       log: (await this.page.locator('#log').textContent()) ?? '',
     };
   }
@@ -399,6 +427,28 @@ export class RemapadApp {
         return hits / total;
       },
       { area: rect, target: color, tol: tolerance },
+    );
+  }
+
+  /**
+   * 区域内「亮到发白」的像素占比：焦点环是 2px 白色描边，圆角与斜边上的
+   * 像素经过抗锯齿后落在 200 上下，按精确色判会漏掉大半，判亮度更稳。
+   */
+  async brightShare(rect: Rect, threshold = 200): Promise<number> {
+    return this.page.evaluate(
+      ({ area, level }) => {
+        const canvas = document.getElementById('screen') as HTMLCanvasElement;
+        const context = canvas.getContext('2d')!;
+        const data = context.getImageData(area.x, area.y, area.width, area.height).data;
+        let hits = 0;
+        for (let index = 0; index < data.length; index += 4) {
+          if (data[index] >= level && data[index + 1] >= level && data[index + 2] >= level) {
+            hits += 1;
+          }
+        }
+        return hits / (data.length / 4);
+      },
+      { area: rect, level: threshold },
     );
   }
 

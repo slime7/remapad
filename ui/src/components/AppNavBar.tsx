@@ -40,15 +40,24 @@ const HOME_BG = {
 };
 const SET_BG = { on: 'nav-set-on.svg', off: 'nav-set-off.svg' };
 
+/**
+ * 焦点层：贴图铺满整块按钮，画在按钮自身上的 focus 边框会被它盖住（边框在
+ * 节点自己的绘制层，子节点后画），所以环落在这一层透明的焦点层上。它是按钮
+ * 的最上层，命中判定（含触摸）取到的就是它，点按与手柄确认走同一个 onPress。
+ */
+const FOCUS_LAYER = 'absolute inset-0 focus:border-2 focus:border-[#ffffff] focus:rounded-[8]';
+
 export function AppNavBar(props: {
   tab: TabKey;
   onChange: (tab: TabKey) => void;
+  /** 没有弹窗盖住底栏时才为真（弹窗期间焦点该留在弹窗里，见 App.tsx）。 */
+  enabled: () => boolean;
 }) {
   const statusActive = () => props.tab === 'home';
   const settingsActive = () => props.tab === 'settings';
   return (
     <View class="absolute left-[8] right-[8] bottom-[8] h-[64] flex-row gap-2 z-40">
-      <View focusable onPress={() => props.onChange('home')} class="grow h-[64] flex-col items-center justify-center">
+      <View class="grow h-[64] flex-col items-center justify-center">
         <Image
           class="absolute left-0 top-0 w-[64] h-[64]"
           src={statusActive() ? HOME_BG.onL : HOME_BG.offL}
@@ -74,8 +83,9 @@ export function AppNavBar(props: {
         >
           状态
         </Text>
+        <View focusable={props.enabled()} onPress={() => props.onChange('home')} class={FOCUS_LAYER} />
       </View>
-      <View focusable onPress={() => props.onChange('settings')} class="w-[64] h-[64] shrink-0 flex-col items-center justify-center">
+      <View class="w-[64] h-[64] shrink-0 flex-col items-center justify-center">
         <Image
           class="absolute left-0 top-0 w-[64] h-[64]"
           src={settingsActive() ? SET_BG.on : SET_BG.off}
@@ -93,6 +103,7 @@ export function AppNavBar(props: {
         >
           设置
         </Text>
+        <View focusable={props.enabled()} onPress={() => props.onChange('settings')} class={FOCUS_LAYER} />
       </View>
     </View>
   );

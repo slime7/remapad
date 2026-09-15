@@ -17,7 +17,11 @@ import { hw, pressLr, sendDebugKey, startPairing, stopPairing } from '../hooks/u
 import { SPINNER_FRAMES } from '../spinner';
 import { pairingColor, pairingLabel } from '../utils';
 
-export function PairingPage(props: { active: () => boolean }) {
+export function PairingPage(props: {
+  active: () => boolean;
+  /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
+  interactive: () => boolean;
+}) {
   const spinnerSrc = createSpriteAnimation(SPINNER_FRAMES, { frameStep: 3 });
   // Vue Vapor：条件以函数形式在 JSX 内调用才会被渲染作用跟踪。
   const isBusy = () => hw.pairing === 'scanning' || hw.pairing === 'pairing';
@@ -42,7 +46,7 @@ export function PairingPage(props: { active: () => boolean }) {
 
         <View class="flex-row items-center gap-2 mt-3 shrink-0">
           <View
-            focusable
+            focusable={props.interactive()}
             onPress={isBusy() ? stopPairing : startPairing}
             class={isBusy() ? STYLE.pairMainStop : STYLE.pairMain}
           >
@@ -61,7 +65,7 @@ export function PairingPage(props: { active: () => boolean }) {
           </View>
           {isBusy() ? (
             <View
-              focusable
+              focusable={props.interactive()}
               onPress={() =>
                 hw.controllerConfig.type === 'joycon' ? pressLr() : sendDebugKey('lr')
               }

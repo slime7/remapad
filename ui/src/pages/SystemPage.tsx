@@ -6,6 +6,7 @@ import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR, STYLE } from '../theme';
 import { hw, setBacklight, setFrameRateSampling } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
+import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 import { formatMb, formatUptime } from '../utils';
 
 const BACKLIGHT_STEP = 20;
@@ -16,6 +17,11 @@ const TRACK_W = 48;
 const BACKLIGHT_LEVELS = 5;
 /** 设备信息卡高度：py-2 上下 16 + 七行 22。 */
 const INFO_H = 16 + 22 * 7;
+/** 内容高度公式与焦点行位置共用：顶部留白、背光行高、块间距与操作行高。 */
+const TOP_PAD = 34;
+const BACKLIGHT_H = 56;
+const GAP = 16;
+const ACTION_H = 44;
 
 /** 信息行：标签在左、值在右，用 justify-between 顶开（省掉一个占位节点）。 */
 function InfoRow(props: { label: string; value: string }) {
@@ -35,6 +41,8 @@ export function SystemPage(props: {
   active: () => boolean;
   onAskReboot: () => void;
   onAskPowerOff: () => void;
+  /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
+  interactive: () => boolean;
 }) {
   const changeBacklight = (delta: number) => {
     // 不提供 0 档：最低保持一步，避免误触后屏幕全黑看不到画面。
@@ -48,17 +56,31 @@ export function SystemPage(props: {
     setFrameRateSampling(props.active());
   });
 
+  /* 可聚焦行的位置：背光 −/+ 同处一行，下面是重启与关机两行。 */
+  const rowNodes: Array<NodeMirror | null> = [];
+  const focusRows = () => [
+    { node: rowNodes[0] ?? null, y: TOP_PAD, h: BACKLIGHT_H },
+    { node: rowNodes[1] ?? null, y: TOP_PAD, h: BACKLIGHT_H },
+    { node: rowNodes[2] ?? null, y: TOP_PAD + BACKLIGHT_H + GAP, h: ACTION_H },
+    { node: rowNodes[3] ?? null, y: TOP_PAD + BACKLIGHT_H + GAP * 2 + ACTION_H, h: ACTION_H },
+  ];
   const contentRef = usePageScroll(
     props.active,
     true,
-    () => 34 + 56 + 16 + 44 + 16 + 44 + 16 + INFO_H + BOTTOM_PAD_H,
+    () => TOP_PAD + BACKLIGHT_H + GAP * 3 + ACTION_H * 2 + INFO_H + BOTTOM_PAD_H,
+    focusRows,
   );
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-4">
         <View class={STYLE.backlightRow}>
             <Icon glyph={ICON.brightnessHigh} class="shrink-0 text-base" color={COLOR.primary} />
-            <View focusable onPress={() => changeBacklight(-BACKLIGHT_STEP)} class={STYLE.surfaceBtn}>
+            <View
+              nodeRef={(node: NodeMirror | null) => (rowNodes[0] = node)}
+              focusable={props.interactive()}
+              onPress={() => changeBacklight(-BACKLIGHT_STEP)}
+              class={STYLE.surfaceBtn}
+            >
               <Text class="text-lg" style={{ textColor: COLOR.onSurfaceVariant }}>
                 −
               </Text>
@@ -72,21 +94,36 @@ export function SystemPage(props: {
             <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
               {`${backlightLevel()}`}
             </Text>
-            <View focusable onPress={() => changeBacklight(BACKLIGHT_STEP)} class={STYLE.surfaceBtn}>
+            <View
+              nodeRef={(node: NodeMirror | null) => (rowNodes[1] = node)}
+              focusable={props.interactive()}
+              onPress={() => changeBacklight(BACKLIGHT_STEP)}
+              class={STYLE.surfaceBtn}
+            >
               <Text class="text-lg" style={{ textColor: COLOR.onSurfaceVariant }}>
                 +
               </Text>
             </View>
         </View>
 
-        <View focusable onPress={props.onAskReboot} class={STYLE.dangerRow}>
+        <View
+          nodeRef={(node: NodeMirror | null) => (rowNodes[2] = node)}
+          focusable={props.interactive()}
+          onPress={props.onAskReboot}
+          class={STYLE.dangerRow}
+        >
             <Icon glyph={ICON.power} class="shrink-0 text-base" color={COLOR.onErrorContainer} />
             <Text class="text-sm font-bold" style={{ textColor: COLOR.onErrorContainer }}>
               重启设备
             </Text>
         </View>
 
-        <View focusable onPress={props.onAskPowerOff} class={STYLE.dangerRow}>
+        <View
+          nodeRef={(node: NodeMirror | null) => (rowNodes[3] = node)}
+          focusable={props.interactive()}
+          onPress={props.onAskPowerOff}
+          class={STYLE.dangerRow}
+        >
             <Icon glyph={ICON.power} class="shrink-0 text-base" color={COLOR.onErrorContainer} />
             <Text class="text-sm font-bold" style={{ textColor: COLOR.onErrorContainer }}>
               关机

@@ -28,10 +28,12 @@ function RoleCard(props: {
   selected: boolean;
   onSelect: () => void;
   glyph: string;
+  /** 页面在画面上时才参与焦点遍历（见 App.tsx 的 interactive）。 */
+  interactive: () => boolean;
 }) {
   return (
     <View
-      focusable
+      focusable={props.interactive()}
       onPress={props.onSelect}
       class={props.selected ? STYLE.optionCardSel : STYLE.optionCard}
     >
@@ -60,7 +62,11 @@ function RoleCard(props: {
   );
 }
 
-export function ModePage(props: { active: () => boolean }) {
+export function ModePage(props: {
+  active: () => boolean;
+  /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
+  interactive: () => boolean;
+}) {
   const contentRef = usePageScroll(props.active, true, () => CONTENT_H + BOTTOM_PAD_H);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
@@ -72,6 +78,7 @@ export function ModePage(props: { active: () => boolean }) {
           lines={['烧录 / 日志']}
           glyph={ICON.adb}
           onSelect={() => setUsbRole('device')}
+          interactive={props.interactive}
         />
         <RoleCard
           role="host"
@@ -80,6 +87,7 @@ export function ModePage(props: { active: () => boolean }) {
           lines={['手柄输入 → NS2']}
           glyph={ICON.gamepad}
           onSelect={() => setUsbRole('host')}
+          interactive={props.interactive}
         />
         <Text
           class={hw.roleMessage ? 'text-xs text-center shrink-0' : 'hidden'}

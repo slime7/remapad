@@ -35,8 +35,9 @@ export interface ControllerAddresses {
   right: string;
 }
 
-/** 调试注入的按键（调试页按键指令区）；lr 表示同时按下 L 和 R。 */
-export type DebugKey = 'a' | 'home' | 'lr';
+/** 调试注入的按键（调试页按键指令区）；lr 表示同时按下 L 和 R，
+ *  ui 是手柄操控屏幕的组合键（L1+R1+L3+R3）。 */
+export type DebugKey = 'a' | 'home' | 'lr' | 'ui';
 
 /** 电池状态数据包。 */
 export interface BatteryInfo {
@@ -103,6 +104,8 @@ export type DeviceMsg =
       /** 主机下发的玩家序号灯掩码（Command 0x09）：bit0-3 对应四格指示灯，
        *  未连接主机时为 0。 */
       playerLed: number;
+      /** 手柄操控模式：组合键把输入收给屏幕，期间不向主机输出（见 dp/dp_ui.h）。 */
+      padUiMode: boolean;
       uptimeMs: number;
       /** 内部堆内存：可用 / 总量（字节）。 */
       heapFree: number;
@@ -137,6 +140,7 @@ export type DeviceMsg =
   | { t: 'usbRoleChanged'; role: UsbRole; active: boolean }
   | { t: 'pairingStateChanged'; state: PairingState }
   | { t: 'playerLedChanged'; led: number }
+  | { t: 'padUiModeChanged'; on: boolean }
   | { t: 'buttonEvent'; buttons: ControllerButtons }
   /** 关机被外部供电拦下（USB 供电时电源锁存被旁路，系统仍在运行）。 */
   | { t: 'powerOffBlocked' }

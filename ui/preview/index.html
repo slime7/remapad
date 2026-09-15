@@ -88,14 +88,18 @@
     }
     .device-foot {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      justify-content: center;
+      gap: 8px 12px;
       width: 100%;
     }
     .hint {
+      /* 独占一行，落在两个按钮的下方居中。 */
+      flex-basis: 100%;
       color: #64748b;
       font-size: 12px;
+      text-align: center;
     }
     button {
       padding: 6px 14px;
@@ -193,7 +197,7 @@
       <div class="device-foot">
         <button id="reload" type="button">重新加载应用</button>
         <button id="devtools" type="button">DevTools 面板</button>
-        <span class="hint">单击或拖动屏幕</span>
+        <span class="hint">触摸屏；键盘方向键 / WASD 移动焦点，回车 / 空格确认</span>
       </div>
     </div>
 
@@ -203,6 +207,7 @@
       <div class="row"><span>触点</span><strong id="stat-touch">0</strong></div>
       <div class="row"><span>触摸帧</span><strong id="stat-frames">0</strong></div>
       <div class="row"><span>命中节点</span><strong id="stat-hit">--</strong></div>
+      <div class="row"><span>按键</span><strong id="stat-keys">0000</strong></div>
       <div class="row"><span>屏幕规格</span><strong>240 × 280 · RGB565</strong></div>
       <div class="row">
         <span>屏幕尺寸</span>
@@ -228,7 +233,28 @@
     const STEP_MS = 1000 / SIM_HZ;
     const MAX_CATCHUP_STEPS = 4;
     const MAX_DT_MS = 250;
-    /** 触摸屏没有实体按键，每帧的按键与模拟量输入恒为「无输入」与「居中」。 */
+    /** PocketJS 按键位（contracts/spec/spec.ts 的 BTN）：键盘按这里的位打包。 */
+    const BTN = {
+      UP: 0x0010,
+      RIGHT: 0x0020,
+      DOWN: 0x0040,
+      LEFT: 0x0080,
+      CIRCLE: 0x2000,
+    };
+    /** 键盘 → 设备按键位：方向键与 WASD 类比十字键，回车与空格类比圆圈键
+     *  （真机上圆圈键是「确认」，见 docs/adr/0028）。 */
+    const KEY_BUTTONS = {
+      ArrowUp: BTN.UP,
+      ArrowDown: BTN.DOWN,
+      ArrowLeft: BTN.LEFT,
+      ArrowRight: BTN.RIGHT,
+      KeyW: BTN.UP,
+      KeyS: BTN.DOWN,
+      KeyA: BTN.LEFT,
+      KeyD: BTN.RIGHT,
+      Enter: BTN.CIRCLE,
+      Space: BTN.CIRCLE,
+    };
     const BUTTONS_NONE = 0;
     const ANALOG_CENTER = 0x8080;
     const MAX_CONTACTS = 8;
@@ -242,6 +268,7 @@
     const fpsEl = document.getElementById('stat-fps');
     const touchEl = document.getElementById('stat-touch');
     const hitEl = document.getElementById('stat-hit');
+    const keysEl = document.getElementById('stat-keys');
     const touchFramesEl = document.getElementById('stat-frames');
     const logEl = document.getElementById('log');
 
@@ -479,6 +506,54 @@
       hitEl.textContent = lastHit === undefined ? '--' : String(lastHit);
     }
 
+    /** 键盘按下集合：真机上手柄按键的等价物，每帧随触摸一起送进 frame()。
+     *  面板按 4 位十六进制显示当前的按键位，便于对照真机读数。 */
+    const heldKeys = new Set();
+    let buttonsDown = BUTTONS_NONE;
+
+    function refreshButtons() {
+      let mask = BUTTONS_NONE;
+      for (const code of heldKeys) {
+        mask |= KEY_BUTTONS[code];
+      }
+      buttonsDown = mask;
+      keysEl.textContent = mask.toString(16).padStart(4, '0');
+    }
+
+    /** 方向键与空格默认会滚动页面：命中按键表就吃掉默认行为。 */
+    function onKeyDown(event) {
+      if (KEY_BUTTONS[event.code] === undefined) {
+        return;
+      }
+      event.preventDefault();
+      if (event.repeat || heldKeys.has(event.code)) {
+        return;
+      }
+      heldKeys.add(event.code);
+      refreshButtons();
+    }
+
+    function onKeyUp(event) {
+      if (KEY_BUTTONS[event.code] === undefined) {
+        return;
+      }
+      event.preventDefault();
+      heldKeys.delete(event.code);
+      refreshButtons();
+    }
+
+    /** 失焦时清空按键：否则切回来会留下一个一直按住的虚按键。 */
+    function releaseKeys() {
+      if (heldKeys.size === 0) {
+        return;
+      }
+      heldKeys.clear();
+      refreshButtons();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+
     function onPointerDown(event) {
       if (!wasm) {
         return;
@@ -537,6 +612,7 @@
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
     window.addEventListener('blur', releaseAll);
+    window.addEventListener('blur', releaseKeys);
 
     /** 本帧的触点快照：触点打包数组，以及与之对应的命中事实数组。抬起事件在下一次采样时
      * 已生效，因此这里把刚抬起的触点一并送出，避免快速点击落在两帧之间而被漏掉。 */
@@ -562,7 +638,7 @@
           touchFrameCount += 1;
           touchFramesEl.textContent = String(touchFrameCount);
         }
-        frameCb(BUTTONS_NONE, ANALOG_CENTER, packed, hits, undefined);
+        frameCb(buttonsDown, ANALOG_CENTER, packed, hits, undefined);
         wasm.tick();
       } catch (error) {
         frameCb = null;
@@ -628,6 +704,7 @@
     async function loadApp() {
       stop();
       releaseAll();
+      releaseKeys();
       frameCb = null;
       setStatus('加载中…');
       // 每次加载都重置核心，避免上一轮的资源与节点残留。

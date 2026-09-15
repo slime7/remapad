@@ -16,11 +16,32 @@ import { jump } from '@pocketjs/framework/vue-vapor/animation';
 import { attachGesture, type GestureHandle } from '@pocketjs/framework/vue-vapor/gesture';
 import { createScroller, type Scroller } from '@pocketjs/framework/vue-vapor/kinetics';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
+import { getFocused } from '@pocketjs/framework/vue-vapor/input';
 import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 
 /** 页面视口：状态栏是覆盖层，页面在整屏 240 × 280 内滚动。 */
 const PAGE_REGION = { x: 0, y: 0, w: 240, h: 280 };
 const PAGE_VIEW_H = PAGE_REGION.h;
+
+/**
+ * 焦点行：可聚焦控件在内容坐标里的位置。手柄操控时页面靠它把被聚焦的行滚进
+ * 可视带——方向键移动焦点不产生任何触摸事件，页面不跟着走的话焦点环会停在
+ * 底栏底下甚至屏幕外，用户看不到自己选中了哪一项。
+ */
+export interface FocusRow {
+  /** 该行的焦点节点（框架聚焦的就是它）。 */
+  node: NodeMirror | null;
+  /** 行顶部在内容坐标里的 y。 */
+  y: number;
+  /** 行高。 */
+  h: number;
+}
+
+/** 焦点行要落进的可视带：状态栏覆盖层之下、底栏之上各留一点余量。 */
+const REVEAL_TOP = 34;
+const REVEAL_BOTTOM = 200;
+/** 跟随滚动的时长：短到不拖沓，长到看得出方向。 */
+const REVEAL_MS = 140;
 
 interface Entry {
   active: () => boolean;
@@ -69,12 +90,15 @@ function gesture(): GestureHandle {
  * @param active 页面是否可见
  * @param scrollable 页面能不能滚动：由调用方一次定死，不再从内容高度推导
  * @param contentH 内容高度（含末尾垫高）：可滚动页必传，用于夹住滚动范围
+ * @param focusRows 可聚焦行的位置表（手柄操控时用来把焦点滚进可视带；
+ *                  页面里全是静态等高行时给一份，控件位置不固定可不传）
  * @returns 内容列的 nodeRef 回调：页面把它挂在滚动列的根节点上
  */
 export function usePageScroll(
   active: () => boolean,
   scrollable: boolean,
   contentH?: () => number,
+  focusRows?: () => FocusRow[],
 ): (node: NodeMirror | null) => void {
   const maxOffset = () =>
     scrollable && contentH !== undefined ? Math.max(0, contentH() - PAGE_VIEW_H) : 0;
@@ -121,6 +145,45 @@ export function usePageScroll(
     painted = Number.NaN;
   };
 
+  /** 上一次请求的跟随滚动目标：目标不变就不重复下指令。 */
+  let revealTarget = Number.NaN;
+
+  /**
+   * 手柄操控时把被聚焦的行滚进可视带：方向键移动焦点不产生触摸事件，页面
+   * 不跟着走的话焦点环会停在底栏底下甚至屏幕外，用户看不到自己选中了哪一项。
+   * 拖动期间不抢滚动；行已经在带里就不动，滚的是「刚好够」的距离。
+   */
+  const reveal = () => {
+    if (focusRows === undefined || dragging === entry) {
+      return;
+    }
+    const focused = getFocused();
+    if (focused === null) {
+      return;
+    }
+    const row = focusRows().find((candidate) => candidate.node === focused);
+    if (row === undefined) {
+      return;
+    }
+    const current = scroller.offset();
+    let target = current;
+    if (row.y + row.h - current > REVEAL_BOTTOM) {
+      target = row.y + row.h - REVEAL_BOTTOM;
+    }
+    if (row.y - target < REVEAL_TOP) {
+      target = row.y - REVEAL_TOP;
+    }
+    target = Math.min(Math.max(target, 0), maxOffset());
+    if (target === current) {
+      revealTarget = Number.NaN;
+      return;
+    }
+    if (target !== revealTarget) {
+      revealTarget = target;
+      scroller.scrollTo(target, { durMs: REVEAL_MS });
+    }
+  };
+
   // 可见性变化只切换接管权；可滚动性由调用方一次定死。
   watchEffect(() => {
     if (active() && scrollable) {
@@ -140,6 +203,7 @@ export function usePageScroll(
 
   onFrame(() => {
     scroller.step();
+    reveal();
     if (content === null) {
       return;
     }

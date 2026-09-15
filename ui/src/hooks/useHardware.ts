@@ -46,6 +46,8 @@ export interface HardwareUiState {
   usbRoleActive: boolean;
   /** 主机下发的玩家序号灯掩码（bit0-3 对应首页四格指示灯），无主机时为 0。 */
   playerLed: number;
+  /** 手柄操控模式：组合键把输入收给屏幕，期间屏幕由手柄按键操作。 */
+  padUiMode: boolean;
   /** 模式页角色切换的一次性提示（如桥接禁切原因）。 */
   roleMessage: RoleNotice;
   /** 本地推算的实时开机时长。 */
@@ -92,6 +94,7 @@ export const hw = reactive<HardwareUiState>({
   usbRole: 'device',
   usbRoleActive: true,
   playerLed: 0,
+  padUiMode: false,
   roleMessage: '',
   uptimeMs: 0,
   fps: null,
@@ -122,6 +125,7 @@ function applySystemStatus(msg: Extract<DeviceMsg, { t: 'systemStatus' }>): void
   hw.usbRole = msg.usbRole;
   hw.usbRoleActive = msg.usbRoleActive;
   hw.playerLed = msg.playerLed;
+  hw.padUiMode = msg.padUiMode;
   hw.uptimeMs = msg.uptimeMs;
   hw.heapFree = msg.heapFree;
   hw.heapSize = msg.heapSize;
@@ -330,6 +334,9 @@ export function useHardware(): void {
         break;
       case 'playerLedChanged':
         hw.playerLed = msg.led;
+        break;
+      case 'padUiModeChanged':
+        hw.padUiMode = msg.on;
         break;
       case 'batteryChanged':
         hw.battery = msg.battery;

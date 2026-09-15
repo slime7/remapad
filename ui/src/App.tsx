@@ -6,12 +6,18 @@
  * 数秒的建树期，期间每帧被阻塞、切页与滚动都在等建树。首屏因此推迟到全部页面
  * 就绪之后，这段等待由固件侧启动画面覆盖（见 docs/adr/0016）。切页只翻转
  * hidden（display:none），建好的页面不再重建；页面根节点自己负责 hidden 切换。
+ *
+ * 手柄操控模式（hooks/usePadControl.ts）下，页面与底栏的可聚焦性跟着「自己是
+ * 当前页、且没有弹窗盖住」走：框架的焦点遍历清单因此只含画面上的控件，隐藏页
+ * 与弹窗背后的按钮都不会被圆圈键按到。
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { AppStatusBar } from './components/AppStatusBar';
 import { AppNavBar, type TabKey } from './components/AppNavBar';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { PadControlHint } from './components/PadControlHint';
 import { useHardware, hw, powerOffDevice, rebootDevice } from './hooks/useHardware';
+import { usePadControl } from './hooks/usePadControl';
 import { ref } from 'vue';
 import { HomePage } from './pages/HomePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -30,6 +36,14 @@ export default function App() {
   const tab = ref<TabKey>('home');
   const rebootAsk = ref(false);
   const powerOffAsk = ref(false);
+
+  const dialogOpen = () => rebootAsk.value || powerOffAsk.value;
+  /* 页面与底栏的「可交互」：自己是当前页（底栏恒为真）、且没有弹窗盖住。
+   * 弹窗打开时页面仍然可见，但焦点该留在弹窗里，所以一并关掉。 */
+  const interactive = (key: TabKey) => () => tab.value === key && !dialogOpen();
+
+  /* 手柄操控的焦点窗口与「非操控状态不留焦点环」由这个钩子承担。 */
+  usePadControl({ firmwareMode: () => hw.padUiMode });
 
   /** 切页：所有页面已挂载，只翻转 hidden。 */
   const goToTab = (next: TabKey) => {
@@ -51,19 +65,38 @@ export default function App() {
       <AppStatusBar />
       <View class="w-full h-full overflow-hidden">
         {/* 每个页面自己带 hidden 切换，省掉一层纯容器节点（每个节点约 50 ms）。 */}
-        <HomePage active={() => tab.value === 'home'} onGo={goToTab} />
-        <SettingsPage active={() => tab.value === 'settings'} onGo={goToTab} />
-        <ControllerSettingsPage active={() => tab.value === 'controller'} />
-        <PairingPage active={() => tab.value === 'pairing'} />
-        <ModePage active={() => tab.value === 'mode'} />
+        <HomePage
+          active={() => tab.value === 'home'}
+          interactive={interactive('home')}
+          onGo={goToTab}
+        />
+        <SettingsPage
+          active={() => tab.value === 'settings'}
+          interactive={interactive('settings')}
+          onGo={goToTab}
+        />
+        <ControllerSettingsPage
+          active={() => tab.value === 'controller'}
+          interactive={interactive('controller')}
+        />
+        <PairingPage
+          active={() => tab.value === 'pairing'}
+          interactive={interactive('pairing')}
+        />
+        <ModePage
+          active={() => tab.value === 'mode'}
+          interactive={interactive('mode')}
+        />
         <SystemPage
           active={() => tab.value === 'system'}
+          interactive={interactive('system')}
           onAskReboot={() => (rebootAsk.value = true)}
           onAskPowerOff={() => (powerOffAsk.value = true)}
         />
-        <DebugPage active={() => tab.value === 'debug'} />
+        <DebugPage active={() => tab.value === 'debug'} interactive={interactive('debug')} />
       </View>
-      <AppNavBar tab={tab.value} onChange={goToTab} />
+      <AppNavBar tab={tab.value} onChange={goToTab} enabled={() => !dialogOpen()} />
+      <PadControlHint active={() => hw.padUiMode} />
 
       {rebootAsk.value ? (
         <ConfirmDialog

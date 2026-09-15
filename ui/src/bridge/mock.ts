@@ -179,6 +179,8 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         usbRole: state.usbRole,
         usbRoleActive: state.usbRoleActive,
         playerLed: state.playerLed,
+        /* 浏览器预览没有数据面：手柄操控模式恒关，键盘随时可用。 */
+        padUiMode: false,
         uptimeMs: Date.now() - state.bootAt,
         heapFree: state.heapFree,
         heapSize: state.heapSize,

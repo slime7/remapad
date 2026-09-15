@@ -5,6 +5,7 @@
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
+import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 import { COLOR, STYLE } from '../theme';
 import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import type { TabKey } from '../components/AppNavBar';
@@ -28,17 +29,31 @@ const ITEMS: SettingsItem[] = [
   { key: 'debug', title: '调试', glyph: ICON.bug },
 ];
 
-export function SettingsPage(props: { active: () => boolean; onGo: (tab: TabKey) => void }) {
+export function SettingsPage(props: {
+  active: () => boolean;
+  onGo: (tab: TabKey) => void;
+  /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
+  interactive: () => boolean;
+}) {
   const contentH = () =>
     TOP_PAD + ITEMS.length * ITEM_H + (ITEMS.length - 1) * ITEM_GAP + BOTTOM_PAD_H;
-  const contentRef = usePageScroll(props.active, true, contentH);
+  /* 行节点与位置：手柄操控时滚动跟随按这张表把焦点行滚进可视带。 */
+  const rowNodes: Array<NodeMirror | null> = [];
+  const focusRows = () =>
+    ITEMS.map((item, index) => ({
+      node: rowNodes[index] ?? null,
+      y: TOP_PAD + index * (ITEM_H + ITEM_GAP),
+      h: ITEM_H,
+    }));
+  const contentRef = usePageScroll(props.active, true, contentH, focusRows);
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
-        {ITEMS.map((item) => (
+        {ITEMS.map((item, index) => (
           <View
             key={item.key}
-            focusable
+            nodeRef={(node: NodeMirror | null) => (rowNodes[index] = node)}
+            focusable={props.interactive()}
             onPress={() => props.onGo(item.key)}
             class={STYLE.rowCard}
           >

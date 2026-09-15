@@ -79,10 +79,12 @@ function TypeCard(props: {
   option: TypeOption;
   selected: boolean;
   onSelect: () => void;
+  /** 页面在画面上时才参与焦点遍历（见 App.tsx 的 interactive）。 */
+  interactive: () => boolean;
 }) {
   return (
     <View
-      focusable
+      focusable={props.interactive()}
       onPress={props.onSelect}
       class={props.selected ? STYLE.optionCardSel : STYLE.optionCard}
     >
@@ -101,7 +103,11 @@ function TypeCard(props: {
   );
 }
 
-export function ControllerSettingsPage(props: { active: () => boolean }) {
+export function ControllerSettingsPage(props: {
+  active: () => boolean;
+  /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
+  interactive: () => boolean;
+}) {
   const config = () => hw.controllerConfig;
   const isJoycon = () => config().type === 'joycon';
   /**
@@ -155,6 +161,7 @@ export function ControllerSettingsPage(props: { active: () => boolean }) {
             option={option}
             selected={config().type === option.type}
             onSelect={() => setControllerConfig({ ...config(), type: option.type })}
+            interactive={props.interactive}
           />
         ))}
 

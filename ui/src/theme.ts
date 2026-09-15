@@ -53,6 +53,13 @@ export const COLOR = {
 /**
  * 表面样式常量：每条都是完整 class 字面量（构建期整体注册），供页面按
  * 语义复用；带 active: 前缀的按压色同样收在此处。
+ *
+ * 可点表面一律带 focus: 白环：手柄操控模式下方向键移动焦点，原生核心直接
+ * 套用 focus 变体，不需要每帧 JS 介入（见 docs/adr/0028）。环画在节点自身的
+ * 边框层、又是 inset 的，所以只在子节点没铺满整块表面时才看得见——底栏按钮
+ * 的贴图铺满整块，那里另加一层透明的焦点层（见 AppNavBar.tsx）。
+ * 环写进每条 class 字面量而不是拼一个共用常量：构建期按字符串字面量登记样式，
+ * 运行时拼出来的组合不在表里（设备上是抛错的未知 class）。
  */
 export const STYLE = {
   /** 应用根容器与覆盖层。 */
@@ -63,40 +70,47 @@ export const STYLE = {
 
   /** 模态对话框（240×280 本应用自绘）。 */
   modalBox: 'w-[204] rounded-[16] bg-[#102035] p-3 flex-col items-center',
-  modalCancelBtn: 'w-[84] h-[40] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
-  modalDangerBtn: 'w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150',
+  modalCancelBtn: 'w-[84] h-[40] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  modalDangerBtn: 'w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
   /** 列表行与信息卡。 */
-  rowCard: 'w-full h-[44] shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 active:bg-[#14263e] transition-colors duration-150',
+  rowCard: 'w-full h-[44] shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 active:bg-[#14263e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
   infoCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2',
   /** 信息行卡：每行一个文本节点，行距由 gap 给出。 */
   infoCardRows: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2 gap-2',
   actionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-3',
 
   /** 小型表面按钮：背光步进、调试按键（含触发高亮的选中形态）。 */
-  surfaceBtn: 'w-[40] h-[40] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
-  keyBtn: 'w-[64] h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
-  keyBtnGrow: 'grow h-[44] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
-  keyBtnFull: 'w-full h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center mt-2 active:bg-[#1c3350] transition-colors duration-150',
-  keyBtnOn: 'w-[64] h-[44] shrink-0 rounded-[12] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150',
-  keyBtnGrowOn: 'grow h-[44] rounded-[12] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150',
-  keyBtnFullOn: 'w-full h-[44] shrink-0 rounded-[12] bg-[#9ecefe] flex-row items-center justify-center mt-2 active:bg-[#b8dbff] transition-colors duration-150',
+  surfaceBtn: 'w-[40] h-[40] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  keyBtn: 'w-[64] h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  keyBtnGrow: 'grow h-[44] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  keyBtnFull: 'w-full h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center mt-2 active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  keyBtnOn: 'w-[64] h-[44] shrink-0 rounded-[12] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  keyBtnGrowOn: 'grow h-[44] rounded-[12] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  keyBtnFullOn: 'w-full h-[44] shrink-0 rounded-[12] bg-[#9ecefe] flex-row items-center justify-center mt-2 active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
   /** 背光滑轨与危险操作行。 */
   backlightRow: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-2 gap-2',
   track: 'grow h-[8] rounded-[4] bg-[#14263e] overflow-hidden',
   trackFill: 'h-[8] rounded-[4] bg-[#9ecefe]',
-  dangerRow: 'w-full h-[44] shrink-0 rounded-[16] bg-[#8a1a1e] flex-row items-center justify-center gap-2 active:bg-[#a02a2e] transition-colors duration-150',
+  dangerRow: 'w-full h-[44] shrink-0 rounded-[16] bg-[#8a1a1e] flex-row items-center justify-center gap-2 active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
   /** 首页状态圆与配对页大按钮。 */
-  circle: 'w-[56] h-[56] rounded-full bg-[#14263e] flex-col items-center justify-center active:bg-[#1c3350] transition-colors duration-150',
-  pairMain: 'w-[76] h-[76] rounded-full bg-[#9ecefe] flex-col items-center justify-center shrink-0 active:bg-[#b8dbff] transition-colors duration-150',
-  pairMainStop: 'w-[76] h-[76] rounded-full bg-[#8a1a1e] flex-col items-center justify-center shrink-0 active:bg-[#a02a2e] transition-colors duration-150',
-  pairAux: 'w-[76] h-[76] rounded-full bg-[#14263e] flex-col items-center justify-center shrink-0 active:bg-[#1c3350] transition-colors duration-150',
+  circle: 'w-[56] h-[56] rounded-full bg-[#14263e] flex-col items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  pairMain: 'w-[76] h-[76] rounded-full bg-[#9ecefe] flex-col items-center justify-center shrink-0 active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  pairMainStop: 'w-[76] h-[76] rounded-full bg-[#8a1a1e] flex-col items-center justify-center shrink-0 active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  pairAux: 'w-[76] h-[76] rounded-full bg-[#14263e] flex-col items-center justify-center shrink-0 active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
   /** 首页玩家序号四格指示灯（对齐 NS2 手柄的绿色序号灯）：点亮 / 未点亮。 */
   playerLedOn: 'w-[16] h-[16] rounded-[4] shrink-0 bg-[#4ade80]',
   playerLedOff: 'w-[16] h-[16] rounded-[4] shrink-0 bg-[#14432a]',
+
+  /**
+   * 手柄操控模式的提示条：抬起手柄、屏幕接管输入后浮在底栏上方，几秒后
+   * 收起（见 components/PadControlHint.tsx）。深底加白边，压在任何页面内容
+   * 上都读得清。
+   */
+  padHint: 'absolute left-[8] right-[8] bottom-[80] z-40 rounded-[12] bg-[#060f1bee] border border-[#657692] flex-col items-center px-3 py-2 gap-1',
 
   /**
    * 模式页/手柄设置页的选项卡（未选中 / 选中）。
@@ -104,8 +118,8 @@ export const STYLE = {
    * （150 ms），每帧重画两张卡片（约 2.2 万像素，实机上每帧 11–14 ms），
    * 点下去像慢半拍。
    */
-  optionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-3 gap-3 active:bg-[#14263e]',
-  optionCardSel: 'w-full shrink-0 rounded-[16] bg-[#9ecefe] flex-row items-center px-3 py-3 gap-3 active:bg-[#b8dbff]',
+  optionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-3 gap-3 active:bg-[#14263e] focus:border-2 focus:border-[#ffffff]',
+  optionCardSel: 'w-full shrink-0 rounded-[16] bg-[#9ecefe] flex-row items-center px-3 py-3 gap-3 active:bg-[#b8dbff] focus:border-2 focus:border-[#ffffff]',
 } as const;
 
 /**
