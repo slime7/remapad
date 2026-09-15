@@ -1,7 +1,8 @@
 /**
- * NS2 广播载荷（ns2_adv.c）：厂商数据里的状态位是主机唯一的唤醒判据。
- * 回连形态若带了唤醒标志，休眠中的主机会被每一次回连广播立刻唤醒——这
- * 正是「NS2 自动待机后马上亮起」的成因，因此三种形态的字节在这里钉死。
+ * NS2 广播载荷与广播策略（ns2_adv.c）：厂商数据里的状态位是主机唯一的唤醒
+ * 判据。三种形态的字节在这里钉死——状态位或主机地址写错一位，主机就认不出
+ * 这台手柄；策略部分——未配对与配对流程发发现广播、已配对默认发唤醒形态、
+ * JoyCon 组合的 L+R 自动注入节奏——同样在这里定死。
  *
  * 期望值取自真机 Pro Controller 2 抓包（ndeadly/switch2_controller_research
  * 的 reconnect / wake 录制）：回连状态位 0x00，唤醒状态位 0x81，两者都
@@ -87,36 +88,43 @@ static void pid_follows_identity(void)
     CHECK_EQ(out[13], 0x20);
 }
 
-/** 唤醒窗口有界：开机与「唤醒 HOME」靠它叫醒主机，窗口一旦没关上，休眠中
- *  的主机会被每一次广播反复叫醒（用户可见的「一待机就亮屏」）。 */
-static void wake_window_is_bounded(void)
-{
-    ns2_adv_wake_window_t win = {0};
-    CHECK(!ns2_adv_wake_window_active(&win, 0));
-    CHECK(!ns2_adv_wake_window_active(&win, 1234567));
-
-    ns2_adv_wake_window_open(&win, 1000, 2000000);
-    CHECK(ns2_adv_wake_window_active(&win, 1000));
-    CHECK(ns2_adv_wake_window_active(&win, 1000 + 1999999));
-    CHECK(!ns2_adv_wake_window_active(&win, 1000 + 2000000));
-
-    /* 再次请求是顺延：连续按键唤醒不该缩短已经开启的窗口。 */
-    ns2_adv_wake_window_open(&win, 1500000, 2000000);
-    CHECK(ns2_adv_wake_window_active(&win, 3000000));
-    CHECK(!ns2_adv_wake_window_active(&win, 3500000));
-
-    /* 主机连上后立即关窗：后继广播回到 0x00 的回连形态。 */
-    ns2_adv_wake_window_close(&win);
-    CHECK(!ns2_adv_wake_window_active(&win, 1500001));
-}
-
-/** 广播形态决策：未配对身份绝不允许发唤醒广播（不能把主机从休眠里叫醒）。 */
+/** 广播形态决策：未配对与配对流程恒发发现广播（不能把主机从休眠里叫醒，
+ *  也不该带着旧主机地址等新主机）；已配对默认发唤醒形态——主机醒着停在
+ *  任意页面也只认 0x81；诊断开关才退回 0x00 回连形态。 */
 static void mode_choice_follows_pairing(void)
 {
-    CHECK_EQ(ns2_adv_choose_mode(false, false), NS2_ADV_DISCOVERY);
-    CHECK_EQ(ns2_adv_choose_mode(false, true), NS2_ADV_DISCOVERY);
-    CHECK_EQ(ns2_adv_choose_mode(true, false), NS2_ADV_RECONNECT);
-    CHECK_EQ(ns2_adv_choose_mode(true, true), NS2_ADV_WAKE);
+    CHECK_EQ(ns2_adv_choose_mode(false, false, NS2_ADV_WAKE), NS2_ADV_DISCOVERY);
+    CHECK_EQ(ns2_adv_choose_mode(false, true, NS2_ADV_WAKE), NS2_ADV_DISCOVERY);
+    CHECK_EQ(ns2_adv_choose_mode(true, true, NS2_ADV_WAKE), NS2_ADV_DISCOVERY);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, NS2_ADV_WAKE), NS2_ADV_WAKE);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, NS2_ADV_RECONNECT), NS2_ADV_RECONNECT);
+    /* 误传发现形态时按唤醒处理：已配对身份不会因为参数错而静默。 */
+    CHECK_EQ(ns2_adv_choose_mode(true, false, NS2_ADV_DISCOVERY), NS2_ADV_WAKE);
+}
+
+/** JoyCon 组合确认：两只都就绪（收到 0x0c/0x04、输入被采用）后立即注入
+ *  L+R，拿齐凭证之前每 3 秒重试；已配对或未就绪时不注入。 */
+static void lr_injection_follows_readiness(void)
+{
+    ns2_adv_lr_timer_t timer = {0};
+    const int64_t t0 = 1000000;
+
+    /* 就绪即注入，间隔内不重复。 */
+    CHECK(ns2_adv_lr_step(&timer, false, true, t0));
+    CHECK(!ns2_adv_lr_step(&timer, false, true, t0));
+    CHECK(!ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US - 1));
+    CHECK(ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US));
+
+    /* 已配对之后不再注入：真机此时不需要 L+R 组合确认。 */
+    CHECK(!ns2_adv_lr_step(&timer, true, true, t0 + NS2_ADV_LR_RETRY_US * 2));
+
+    /* 只有一只在线（或未启用特性）时不注入，也不消耗计时。 */
+    CHECK(!ns2_adv_lr_step(&timer, false, false, t0 + NS2_ADV_LR_RETRY_US * 3));
+    CHECK(ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US * 3));
+
+    /* 切换身份 / 重进配对流程后复位：下一次就绪立刻注入。 */
+    ns2_adv_lr_reset(&timer);
+    CHECK(ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US * 4));
 }
 
 static void manufacturer_data_offsets(void)
@@ -150,7 +158,7 @@ HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"唤醒广播带 0x81 状态位", wake_sets_wake_status},
                 {"缺少主机地址时退化为发现形态", missing_host_mac_degrades_to_discovery},
                 {"型号 ID 随身份变化", pid_follows_identity},
-                {"唤醒窗口有界且连接后立即关上", wake_window_is_bounded},
-                {"未配对身份不发唤醒广播", mode_choice_follows_pairing},
+                {"已配对发唤醒形态、未配对发发现形态", mode_choice_follows_pairing},
+                {"未配对 JoyCon 就绪后注入 L+R 并重试", lr_injection_follows_readiness},
                 {"休眠链路按特性启用判定", dormant_link_follows_feature_enable},
                 {"厂商数据偏移与尾部标志", manufacturer_data_offsets});

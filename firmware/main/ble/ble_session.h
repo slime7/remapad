@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ns2_adv.h"
 #include "ns2_state.h"
 
 #ifdef __cplusplus
@@ -56,19 +57,27 @@ void ns2_session_on_fw_upgrade(const uint8_t *data, size_t len);
 /** 特性掩码 bit5（触觉震动）是否在任一活跃会话开启，影响 0x09 状态标志字节。 */
 bool ns2_session_rumble_enabled(void);
 
-/** UI 手动配对：切换到标准发现广播（Pro 单身份 / JoyCon 双身份）。 */
+/** 配对键（配对页「配对」、串口 pairing start）：断开当前主机后发标准发现
+ *  广播（Pro 单身份 / JoyCon 双身份），等新主机搜索配对。 */
 void ns2_session_start_pairing_mode(void);
 
-/** 结束手动配对：按凭证状态恢复回连或发现广播。 */
+/** 结束配对流程：已配对回到常态唤醒广播；未配对停止广播（真机没配对时
+ *  不广播，等下一次配对请求）。 */
 void ns2_session_stop_pairing_mode(void);
 
 /** 手动配对模式是否开启（供控制面推导 UI 六态）。 */
 bool ns2_session_pairing_mode_active(void);
 
-/** 唤醒突发：已配对但未连接时以 0x81 状态位广播约 2 秒（真机按键唤醒形态），
- *  到时自动回到 0x00 的回连广播；正在手动配对或已连接时忽略。回连广播
- *  恒用 0x00——把它写成 0x81 会让休眠中的主机被每一次回连广播立刻唤醒。 */
+/** 唤醒请求（调试页「唤醒 HOME」、串口 wake）：常态广播本身已是唤醒形态，
+ *  这里的动作是把链路重新走一遍——已连接就断开，让主机按唤醒广播重连
+ *  （握把/顺序页连上来的会话不采用输入报文）；未连接就重发一次广播。
+ *  配对流程进行时忽略。 */
 void ns2_session_wake_request(void);
+
+/** 已配对身份的常态广播形态（默认 NS2_ADV_WAKE，可切 NS2_ADV_RECONNECT）。
+ *  只有串口 `adv` 诊断命令用它做实机 A/B 对账，见 ADR 0024。 */
+void ns2_session_set_steady_adv(ns2_adv_mode_t mode);
+ns2_adv_mode_t ns2_session_steady_adv(void);
 
 /** LTK 注入形态（0 = 反转后写入，1 = 原样写入）。主机连上但链路未加密时
  *  用它做现场 A/B；改动在下次连接时生效。 */
@@ -132,6 +141,7 @@ typedef struct {
     uint16_t conn_itvl;    /* 当前连接间隔（1.25ms 单位，4 = 5ms）；未连接为 0 */
     uint8_t creds;         /* 该身份的配对凭证条数 */
     bool advertising;      /* 该身份的广播实例在发 */
+    uint8_t adv_mode;      /* ns2_adv_mode_t：在发（或恢复时会发）的广播形态 */
     bool mac_valid;
     uint8_t mac[6];
 } ns2_session_status_t;

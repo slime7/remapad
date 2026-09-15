@@ -47,8 +47,9 @@ static void cli_help(void)
     cli_print("  screen on|off       screen power");
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
     cli_print("  mode device|host    usb connection mode");
-    cli_print("  pairing start|stop  pairing advertising");
-    cli_print("  wake                wake the paired console (0x81 burst, ~10s)");
+    cli_print("  pairing start|stop  sync key: drop link + discovery advertising");
+    cli_print("  wake                force a reconnect of the paired console");
+    cli_print("  adv wake|reconnect  steady form while paired (default wake)");
     cli_print("  report              dump the last input report actually sent");
     cli_print("  motion 0|1|2        0x09 motion block: zeros / stamp / none");
     cli_print("  ltk 0|1             LTK store form (0 reversed, 1 as-is)");
@@ -182,6 +183,22 @@ static const char *link_state_name(uint8_t state)
     }
 }
 
+/** 广播形态短名：未在广播（已连接或未配对静默）时报 off。 */
+static const char *link_adv_name(const ns2_session_status_t *status)
+{
+    if (!status->advertising) {
+        return "off";
+    }
+    switch ((ns2_adv_mode_t)status->adv_mode) {
+    case NS2_ADV_WAKE:
+        return "wake";
+    case NS2_ADV_RECONNECT:
+        return "reconnect";
+    default:
+        return "discovery";
+    }
+}
+
 /** BLE 链路观测：当前形态每个身份一行，含对外地址与上报计数。 */
 static void cli_link(void)
 {
@@ -215,13 +232,13 @@ static void cli_link(void)
                      status.notify_05 ? "05" : "-", status.notify_09 ? "09" : "-",
                      status.features_enabled ? 1u : 0u,
                      (unsigned long)status.reports, (unsigned long)tx_fail, tx_rc,
-                     (unsigned)status.creds,
-                     status.advertising ? "on" : "off", addr, ns2_output_motion_mode(),
+                     (unsigned)status.creds, link_adv_name(&status), addr,
+                     ns2_output_motion_mode(),
                      ns2_session_ltk_form());
         } else {
             snprintf(line, sizeof(line), "  %-4s %s creds=%u adv=%s addr=%s",
                      ns2_identity_name(status.identity), link_state_name(status.state),
-                     (unsigned)status.creds, status.advertising ? "on" : "off", addr);
+                     (unsigned)status.creds, link_adv_name(&status), addr);
         }
         cli_print(line);
     }
@@ -291,13 +308,27 @@ static void cli_pairing(const char *arg)
     }
 }
 
-/** 唤醒突发：主机休眠时只有 0x81 状态的广播能把它叫醒；未连接且已配对时
- *  以唤醒形态广播约 10 秒（主机扫描窗口远长于真机的 2 秒突发），之后自动
- *  回到回连形态。 */
+/** 唤醒请求：已配对设备常态就发唤醒形态（0x81），这里的动作是把链路重新
+ *  走一遍——已连接就断开让主机按唤醒广播重连，未连接就重发一次广播。 */
 static void cli_wake(void)
 {
     ns2_session_wake_request();
-    cli_print("ok wake burst requested");
+    cli_print("ok reconnect requested");
+}
+
+/** 常态广播形态 A/B：实机对比唤醒（0x81，默认）与回连（0x00）两种形态。 */
+static void cli_adv(const char *arg)
+{
+    if (strcmp(arg, "wake") == 0 || strcmp(arg, "reconnect") == 0) {
+        ns2_session_set_steady_adv(arg[0] == 'w' ? NS2_ADV_WAKE : NS2_ADV_RECONNECT);
+        cli_print("ok steady advertising updated");
+    } else if (arg[0] == '\0') {
+        cli_print(ns2_session_steady_adv() == NS2_ADV_WAKE
+                      ? "steady advertising: wake (0x81)"
+                      : "steady advertising: reconnect (0x00)");
+    } else {
+        cli_print("err usage: adv wake|reconnect");
+    }
 }
 
 /** 抓线上输入报文：主机「已连接、已订阅但没有输入」时，用它确认设备真正
@@ -397,6 +428,8 @@ static void cli_dispatch(char *line)
         cli_pairing(arg);
     } else if (strcmp(line, "wake") == 0) {
         cli_wake();
+    } else if (strcmp(line, "adv") == 0) {
+        cli_adv(arg);
     } else if (strcmp(line, "report") == 0) {
         cli_report();
     } else if (strcmp(line, "motion") == 0) {

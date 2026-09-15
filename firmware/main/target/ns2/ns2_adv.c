@@ -2,27 +2,30 @@
 
 #include <string.h>
 
-void ns2_adv_wake_window_open(ns2_adv_wake_window_t *win, int64_t now_us, int64_t length_us)
+ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
+                                   ns2_adv_mode_t steady)
 {
-    win->until_us = now_us + length_us;
-}
-
-void ns2_adv_wake_window_close(ns2_adv_wake_window_t *win)
-{
-    win->until_us = 0;
-}
-
-bool ns2_adv_wake_window_active(const ns2_adv_wake_window_t *win, int64_t now_us)
-{
-    return win->until_us != 0 && now_us < win->until_us;
-}
-
-ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool in_wake_window)
-{
-    if (!paired) {
+    if (pairing_requested || !paired) {
         return NS2_ADV_DISCOVERY;
     }
-    return in_wake_window ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
+    /* 常态形态二选一（唤醒为默认）；发现形态只由未配对/配对流程触发，
+     * 传进来也按唤醒处理，避免把已配对身份静默掉。 */
+    return steady == NS2_ADV_RECONNECT ? NS2_ADV_RECONNECT : NS2_ADV_WAKE;
+}
+
+bool ns2_adv_lr_step(ns2_adv_lr_timer_t *timer, bool paired, bool both_ready,
+                     int64_t now_us)
+{
+    if (paired || !both_ready || now_us < timer->next_us) {
+        return false;
+    }
+    timer->next_us = now_us + NS2_ADV_LR_RETRY_US;
+    return true;
+}
+
+void ns2_adv_lr_reset(ns2_adv_lr_timer_t *timer)
+{
+    timer->next_us = 0;
 }
 
 bool ns2_adv_dormant_link(bool subscribed, bool features_enabled)
