@@ -147,7 +147,10 @@ export function SystemPage(props: {
           />
           <InfoRow
             label="电池"
-            value={`${hw.battery.percentage}% · ${(hw.battery.voltageMv / 1000).toFixed(2)}V${hw.battery.charging ? ' · 充电中' : ''}`}
+            value={
+              `${hw.battery.percentage}% · ${(hw.battery.voltageMv / 1000).toFixed(2)}V` +
+              (hw.battery.charging ? ' · 充电中' : '')
+            }
           />
           <InfoRow label="运行时长" value={formatUptime(hw.uptimeMs)} />
           <InfoRow label="FPS" value={hw.fps === null ? '--' : hw.fps.toFixed(1)} />

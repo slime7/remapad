@@ -39,7 +39,8 @@ pnpm exec playwright test -g 滚动     # 只跑匹配的用例（在 ui/ 目录
 断言越靠前越稳：
 
 1. **组件树**（`app.nodes()` / `app.visibleTexts()`）——官方节点树镜像，含文本、class 与 hidden 传播结果。只改样式、不改行为时不会误报。
-2. **屏幕像素**（`app.colorAt()` / `app.regionSignature()` / `app.colorShare()` / `app.brightShare(rect, threshold)`）——视觉与位移类事实。区域指纹只回答「这块画面变没变、变回去了没有」，不把整幅截图当基线；`brightShare` 数区域内「亮到发白」的像素占比，用来判 2px 焦点环这类抗锯齿描边（按精确色判会漏掉大半）。
+2. **屏幕像素**：`app.colorAt()` / `app.regionSignature()` / `app.colorShare()` / `app.brightShare(rect, threshold)`。
+  这一层看视觉与位移类事实。区域指纹只回答「这块画面变没变、变回去了没有」，不把整幅截图当基线；`brightShare` 数区域内「亮到发白」的像素占比，用来判 2px 焦点环这类抗锯齿描边（按精确色判会漏掉大半）。
 3. **预览页读数**（`app.readout()`）——上屏状态、帧率、触点与命中节点，用来确认宿主侧链路本身正常。
 
 坐标一律使用**设备逻辑像素**（240 × 280 视口）：`app.touch` 按画布实际显示尺寸换算，预览页的缩放开关不影响用例。
@@ -50,11 +51,14 @@ pnpm exec playwright test -g 滚动     # 只跑匹配的用例（在 ui/ 目录
 - `app.touch.drag(from, to, { steps, dwellMs })`：逐帧跟随的慢速拖动，松手速度接近 0，用于精确落点。
 - `app.touch.flick(from, to)`：整段位移在一两帧内走完并立刻抬手，用于触发惯性滚动。**抬手必须紧跟最后一次移动**：中间等帧会把触点速度采样成 0，手势层只会停在手指位置，不产生甩动。
 - `app.tapText('开始')`：按文本定位并点击。定位用官方边界命中（与触摸按下同一条判定）扫描「节点自己 → 最近的祖先 → 后代」，所以「定位到」就等于「点得到」，且不受增量重绘影响。
-- `app.pad.press('ArrowLeft')` / `app.pad.pressTimes('ArrowLeft', 3)`：手柄按键驱动。预览页把方向键 / WASD 当十字键位、回车 / 空格当圆圈键位（与真机同一份按键位契约，见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)），每次按下至少跨一帧应用才看得到，连按是逐次独立的下沿。
+- `app.pad.press('ArrowLeft')` / `app.pad.pressTimes('ArrowLeft', 3)`：手柄按键驱动。
+  预览页把方向键 / WASD 当十字键位、回车 / 空格当圆圈键位（与真机同一份按键位契约，见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)）。
+  每次按下至少跨一帧应用才看得到，连按是逐次独立的下沿。
 
 ### 三个已知坑
 
-1. **官方 `inspect` 会给整幅画面加调试着色**（像素整体变亮，`inspect(0)` 之前不消失）。`app.inspectRect()` 读完矩形会立刻清掉并等两帧重绘；连续采样请用 `app.sampleScroll()`。
+1. **官方 `inspect` 会给整幅画面加调试着色**（像素整体变亮，`inspect(0)` 之前不消失）。`app.inspectRect()` 读完矩形会立刻清掉并等两帧重绘；
+   连续采样请用 `app.sampleScroll()`。
 2. **`inspect` 只在节点被重绘的那一帧拿得到矩形**，静止且无重绘时它会超时返回 `null`。需要位置时优先用 `app.tapText()` 的边界命中。
 3. **状态栏每秒更新一次运行时长**：像素指纹的区域要避开顶部 26 px，用例里统一从 y=34 起采样。
 
@@ -73,7 +77,8 @@ pnpm exec playwright test -g 滚动     # 只跑匹配的用例（在 ui/ 目录
 
 ### 为什么在开发机上跑
 
-ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也要等一次烧录；而这批逻辑缺陷（编码位错、校验位算错、像素合成差一档）与硬件无关，编译成开发机上的可执行文件几秒钟就能跑完，可以放进每次改动的必跑清单。真机仍然是必要的验收环节，但不再是第一道关。
+ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也要等一次烧录；而这批逻辑缺陷（编码位错、校验位算错、像素合成差一档）与硬件无关，编译成开发机上的可执行文件几秒钟就能跑完，可以放进每次改动的必跑清单。
+真机仍然是必要的验收环节，但不再是第一道关。
 
 ### 被测范围
 
@@ -103,7 +108,9 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 | `firmware/test/support/stubs/` | 只在主机编译时生效的 ESP-IDF 最小替身 |
 | `firmware/test/test_*.c` | 用例 |
 
-用例编译的是**固件里的真源码**，不是副本；替身只补 `esp_err.h`、`esp_log.h`、FreeRTOS 临界区宏这类环境头文件，`app_config` 的取值入口，以及主机上没有的 `heap_caps_*` 分配接口（NS2 输出封装因此能整段进测试）。被替换的都是硬件相关实现，编码与像素逻辑一行都没有复制。
+用例编译的是**固件里的真源码**，不是副本；
+替身只补 `esp_err.h`、`esp_log.h`、FreeRTOS 临界区宏这类环境头文件，`app_config` 的取值入口，以及主机上没有的 `heap_caps_*` 分配接口（NS2 输出封装因此能整段进测试）。
+被替换的都是硬件相关实现，编码与像素逻辑一行都没有复制。
 
 ### 运行
 
@@ -111,7 +118,8 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 pnpm run test:firmware
 ```
 
-编译器按 `CC` 环境变量、MSVC（自动探测 `vcvars64.bat`）、`clang`、`gcc` 的顺序探测，`CC=clang` 可以强制指定。构建产物写在 `firmware/build/host-tests/`（已被 Git 忽略）；失败时按文件:行号给出断言位置与实际值。
+编译器按 `CC` 环境变量、MSVC（自动探测 `vcvars64.bat`）、`clang`、`gcc` 的顺序探测，`CC=clang` 可以强制指定。
+构建产物写在 `firmware/build/host-tests/`（已被 Git 忽略）；失败时按文件:行号给出断言位置与实际值。
 
 ### 新增用例
 

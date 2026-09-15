@@ -54,9 +54,15 @@ export function HomePage(props: {
 }) {
   const usbState = () => usbLinkState(hw.usbRole, hw.usbRoleActive);
   const usbGlyph = () =>
-    usbState() === 'gamepad' ? ICON.gamepad : usbState() === 'computer' ? ICON.computer : usbState() === 'adb' ? ICON.adb : ICON.usbOff;
+    usbState() === 'gamepad' ? ICON.gamepad
+      : usbState() === 'computer' ? ICON.computer
+        : usbState() === 'adb' ? ICON.adb
+          : ICON.usbOff;
   const usbColor = () =>
-    usbState() === 'gamepad' ? COLOR.tertiary : usbState() === 'computer' ? COLOR.primary : usbState() === 'adb' ? COLOR.secondary : COLOR.outline;
+    usbState() === 'gamepad' ? COLOR.tertiary
+      : usbState() === 'computer' ? COLOR.primary
+        : usbState() === 'adb' ? COLOR.secondary
+          : COLOR.outline;
   const btConnected = () => hw.pairing === 'connected';
 
   // 首页内容固定一屏，不参与滚动，也就不需要注册滚动。

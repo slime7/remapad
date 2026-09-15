@@ -165,7 +165,8 @@ function warnIfGeneratedStylesMissing(root) {
   if (existsSync(resolve(root, GENERATED_STYLES))) {
     return;
   }
-  console.error('[Remapad] ' + root + ' 缺少 ' + GENERATED_STYLES + '，请从 git 恢复该文件，或在该 checkout 里执行官方 bun tools/build.ts 后重新执行 pnpm install');
+  const hint = '，请从 git 恢复该文件，或在该 checkout 里执行官方 bun tools/build.ts 后重新执行 pnpm install';
+  console.error('[Remapad] ' + root + ' 缺少 ' + GENERATED_STYLES + hint);
 }
 
 /** 监听 UI 源码，变更后重新编译并让预览页加载新产物。 */

@@ -2,7 +2,9 @@
 
 ## 项目概述
 
-Remapad 是一个面向 **微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）** 的嵌入式控制器与 UI 系统，板卡规格见 [hardware.md](hardware.md)。最终产品从 USB 接收输入，将其转换为 NS2 手柄报告，再通过 Bluetooth LE 对外提供手柄服务，同时在本机屏幕上显示连接、配对和设备状态。UI 使用 Vue Vapor + Tailwind，运行时使用 PocketJS 官方 ESP-IDF host 组件；控制器协议、广播、GATT 和配对范围记录在 [controller.md](controller.md)。
+Remapad 是一个面向 **微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）** 的嵌入式控制器与 UI 系统，板卡规格见 [hardware.md](hardware.md)。
+最终产品从 USB 接收输入，将其转换为 NS2 手柄报告，再通过 Bluetooth LE 对外提供手柄服务，同时在本机屏幕上显示连接、配对和设备状态。
+UI 使用 Vue Vapor + Tailwind，运行时使用 PocketJS 官方 ESP-IDF host 组件；控制器协议、广播、GATT 和配对范围记录在 [controller.md](controller.md)。
 
 ## 要解决的核心痛点
 
@@ -13,7 +15,8 @@ Remapad 是一个面向 **微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）** 的�
 
 Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技术路径，从根本上解决上述痛点。
 
-在控制器数据面，项目还需要解决 USB 输入设备格式不统一、NS2 报告编码复杂、BLE 广播/连接状态多，以及配对凭证持久化等问题。该数据面与 PocketJS UI runtime 解耦：高频输入和报告转发由 ESP-IDF 原生任务处理，UI 只观察状态并发送低频控制命令。
+在控制器数据面，项目还需要解决 USB 输入设备格式不统一、NS2 报告编码复杂、BLE 广播/连接状态多，以及配对凭证持久化等问题。该数据面与 PocketJS UI runtime 解耦：
+高频输入和报告转发由 ESP-IDF 原生任务处理，UI 只观察状态并发送低频控制命令。
 
 ## 目标用户群体
 
@@ -26,8 +29,10 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
 
 1. **零刷机实时热重载**：在 PC 浏览器中通过 WebAssembly 提供与真机像素级一致的 60 FPS 实时仿真，保存代码后亚秒级刷新，UI 调试无需依赖硬件板卡。
 2. **现代化的组件与样式体系**：支持 Vue Vapor 的 `ref` / `watchEffect` 响应式系统，全面支持 Tailwind 工具类，消除繁琐内联样式配置。
-3. **固件构建链路清晰可复现**：前端通过官方 PocketJS CLI 和 ESP32-S3 host profile 生成 `.pocket`，ESP-IDF 通过官方组件嵌入该包；16 MB Flash / 8 MB Octal PSRAM 内存配置和 240×280 视口由设备 profile 统一描述。
-4. **USB 到 NS2 BLE 的可靠转发**：稳定接收 USB HID/原始报告，规范化输入状态，生成 NS2 手柄报告，完成 BLE 广播、连接、通知、配对和重连；协议细节以 [controller.md](controller.md) 为设计依据并以实机验证为准。
+3. **固件构建链路清晰可复现**：前端通过官方 PocketJS CLI 和 ESP32-S3 host profile 生成 `.pocket`，ESP-IDF 通过官方组件嵌入该包；
+   16 MB Flash / 8 MB Octal PSRAM 内存配置和 240×280 视口由设备 profile 统一描述。
+4. **USB 到 NS2 BLE 的可靠转发**：稳定接收 USB HID/原始报告，规范化输入状态，生成 NS2 手柄报告，完成 BLE 广播、连接、通知、配对和重连；
+   协议细节以 [controller.md](controller.md) 为设计依据并以实机验证为准。
 5. **极致轻量与高帧率**：在无硬件 2D 加速器（PPA）的 ESP32-S3 上，通过编译期静态光栅化实现高帧率流畅运行。
 
 ## 非目标与系统边界
@@ -48,9 +53,11 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
 
 - **当前阶段 (Phase 1 - 官方 host 链路已接入)**：
   - 完成双工作区工程架构、ESP32-S3R8 硬件预设和 ESP32-S3 host profile。
-  - 使用 PocketJS 官方 ESP-IDF 组件完成 package、guest、UI binding、RGB565 renderer 和产品 owner task 的生命周期接入；组件与 ESP32-S3 原生归档固定在仓库内，克隆后即可构建固件。
+  - 使用 PocketJS 官方 ESP-IDF 组件完成 package、guest、UI binding、RGB565 renderer 和产品 owner task 的生命周期接入；
+    组件与 ESP32-S3 原生归档固定在仓库内，克隆后即可构建固件。
   - 在浏览器中以 240×280 画布预览同一份 UI 代码，输入按触摸屏处理：预览页把指针事件转换为官方触摸帧契约，不使用实体按键模拟。
-  - 固件已通过产品 BSP 点亮真实屏幕：ST7789V2 面板提交、背光 PWM 与 CST816T 触摸采样接入 owner task，宿主 profile 声明 `input.touch`；USB 接收、NS2 报告转换、BLE 广播/配对和电池、IMU、RTC 等其余外设仍需产品数据面/BSP 实现。
+  - 固件已通过产品 BSP 点亮真实屏幕：ST7789V2 面板提交、背光 PWM 与 CST816T 触摸采样接入 owner task，宿主 profile 声明 `input.touch`；
+    USB 接收、NS2 报告转换、BLE 广播/配对和电池、IMU、RTC 等其余外设仍需产品数据面/BSP 实现。
 - **近期演进规划 (Phase 2)**：
   - 丰富常用嵌入式基础组件库（列表滚动组件、开关 Switch、进度条 Progress、表单项）。
   - 按实际板卡补充 ESP-IDF 产品 BSP 的其余部分，实现 USB host 接收和 GPIO 等外设接入（面板提交与触摸采样已在 Phase 1 完成）。

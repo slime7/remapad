@@ -1,6 +1,8 @@
 # Remapad Agent 开发与维护指南
 
-Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统，最终目标是“USB 输入 → NS2 手柄报告 → BLE 手柄”，并配套 PocketJS 屏幕 UI。工程采用“PocketJS 前端 (Vue Vapor + Tailwind) + ESP-IDF 固件”双工作区架构；NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格见 [docs/hardware.md](docs/hardware.md)。
+Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统，最终目标是“USB 输入 → NS2 手柄报告 → BLE 手柄”，并配套 PocketJS 屏幕 UI。
+工程采用“PocketJS 前端 (Vue Vapor + Tailwind) + ESP-IDF 固件”双工作区架构；
+NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格见 [docs/hardware.md](docs/hardware.md)。
 
 ## 开始任务前必读
 
@@ -23,13 +25,38 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法构建。
   - 样式使用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
   - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，编译器与框架来源为仓库内的 `ui/vendor/pocketjs` 快照。
-  - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部七个页面，建树等待期由固件启动画面覆盖，因此首屏出现时各页节点都已建好、切页与点击不会有空白期（见 [ADR 0016](docs/adr/0016-mount-all-pages-before-first-frame.md)）；切页只翻转各页根节点的 `hidden`，App 没有待挂队列，新增页面直接写进 JSX，由页面根节点自己翻转 `hidden`。
+  - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部七个页面，建树等待期由固件启动画面覆盖。
+    因此首屏出现时各页节点都已建好、切页与点击不会有空白期（见 [ADR 0016](docs/adr/0016-mount-all-pages-before-first-frame.md)）；
+    切页只翻转各页根节点的 `hidden`，App 没有待挂队列，新增页面直接写进 JSX，由页面根节点自己翻转 `hidden`。
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言编写。
-  - 硬件绑定微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏）；规格与引脚见 [docs/hardware.md](docs/hardware.md)。
-  - QuickJS guest 的创建、mount、eval 与逐帧 UI turn 必须由同一个任务承载，且该任务栈要大于 guest 的 `stack_limit`；当前由 `firmware/main/pocketjs_host.c` 的 `remapad-pjs` owner task 承担（栈在 PSRAM）。改动调度或栈预算前先读 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的“为什么由产品 task 承载 guest 生命周期”。
-  - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；六个组件与 ESP32-S3 原生归档固定在 `firmware/components/`，由 ESP-IDF 默认发现，构建不依赖 PocketJS checkout，也不要把它改回外部路径。产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
-- `main/` 下的 `bridge/`（控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入）、`config/`（NVS 用户设置持久化：setter 只置内存表脏标记，提交任务每 1 分钟检查一次，确有改动才写一次 NVS）、`console/`（串口 CLI 与控制台出口切换：切到 USB host 后日志与 CLI 走 UART0）、`dp/`（数据面任务、输入源抽象与手柄操控屏幕的组合键捕获 `dp_ui.c`）、`input/`（输入通路接收段：桥接帧协议、USB-Serial/JTAG 唯一读取者、桥接输入源）、`usb/`（USB host 直插：枚举与 HID 收发、输入源、运行时角色切换）、`ota/`（升级会话：非运行分区回写、窗口流控与回滚健康门槛）、`pad/`（处理段：私有格式 `pad_state_t`、解析与归一、按布局行编码的反馈；家族布局表按系列拆在 `pad/layouts/`，契约与注册表是 `pad/layout.h` / `pad/layout.c`）、`target/`（转换段：目标编码接口 `pad_target_t`，`target/ns2/` 为 NS2 编码、序列号命名规则与输出封装）、`ble/`（NimBLE 手柄外设、双身份会话与分槽凭证）、`drivers/`（panel/touch/backlight/pwr_key/buzzer/battery）、顶层 `boot_splash.c`（UI 就绪前的启动画面，随面板启动点亮背光）与 `render_accel.c`（S3 上接管渲染器填充/掩码混合/直拷回调的本机整数实现）都已编译进固件；输入通路的三段边界见 [docs/adr/0021](docs/adr/0021-input-path-three-stage-layering.md)（部分取代 0011 的目录划分，数据面汇合约定仍见 [docs/adr/0011](docs/adr/0011-controller-dataplane-module-boundary.md)），显示通路的条带划分与整幅刷新取值见 [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md)，PC 桥接已落地（PC 侧程序在 `pc/`，见 [pc/README.md](pc/README.md)），OTA 升级见 [docs/adr/0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)，USB host 直插也已落地（方案与实机核对清单见 [docs/usb-input-plan.md](docs/usb-input-plan.md)，取舍见 [docs/adr/0027](docs/adr/0027-runtime-usb-role-switch.md)），同代透传规则见 [docs/adr/0026](docs/adr/0026-same-generation-input-passthrough.md)，手柄组合键捕获屏幕见 [docs/adr/0028](docs/adr/0028-pad-combo-captures-screen.md)，新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
+  - 硬件绑定微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏）；
+    规格与引脚见 [docs/hardware.md](docs/hardware.md)。
+  - QuickJS guest 的创建、mount、eval 与逐帧 UI turn 必须由同一个任务承载，且该任务栈要大于 guest 的 `stack_limit`；
+    当前由 `firmware/main/pocketjs_host.c` 的 `remapad-pjs` owner task 承担（栈在 PSRAM）。
+    改动调度或栈预算前先读 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的“为什么由产品 task 承载 guest 生命周期”。
+  - 通过官方 `pocketjs_*` ESP-IDF 组件嵌入或编译 `.pocket` 包；
+    六个组件与 ESP32-S3 原生归档固定在 `firmware/components/`，由 ESP-IDF 默认发现，构建不依赖 PocketJS checkout，也不要把它改回外部路径。
+    产品固件还负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
+- `main/` 下的 `bridge/`（控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入）、
+  `config/`（NVS 用户设置持久化：setter 只置内存表脏标记，提交任务每 1 分钟检查一次，确有改动才写一次 NVS）、
+  `console/`（串口 CLI 与控制台出口切换：切到 USB host 后日志与 CLI 走 UART0）、`dp/`（数据面任务、输入源抽象与手柄操控屏幕的组合键捕获 `dp_ui.c`）、
+  `input/`（输入通路接收段：桥接帧协议、USB-Serial/JTAG 唯一读取者、桥接输入源）、`usb/`（USB host 直插：枚举与 HID 收发、输入源、运行时角色切换）、
+  `ota/`（升级会话：非运行分区回写、窗口流控与回滚健康门槛）、
+  `pad/`（处理段：私有格式 `pad_state_t`、解析与归一、按布局行编码的反馈；家族布局表按系列拆在 `pad/layouts/`，契约与注册表是 `pad/layout.h` / `pad/layout.c`）、
+  `target/`（转换段：目标编码接口 `pad_target_t`，`target/ns2/` 为 NS2 编码、序列号命名规则与输出封装）、`ble/`（NimBLE 手柄外设、双身份会话与分槽凭证）、
+  `drivers/`（panel/touch/backlight/pwr_key/buzzer/battery）、
+  顶层 `boot_splash.c`（UI 就绪前的启动画面，随面板启动点亮背光）与 `render_accel.c`（S3 上接管渲染器填充/掩码混合/直拷回调的本机整数实现）都已编译进固件；
+  输入通路的三段边界见 [docs/adr/0021](docs/adr/0021-input-path-three-stage-layering.md)，它部分取代 0011 的目录划分。
+  数据面汇合约定仍见 [docs/adr/0011](docs/adr/0011-controller-dataplane-module-boundary.md)。
+  显示通路的条带划分与整幅刷新取值见 [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md)。
+  PC 桥接已落地，PC 侧程序在 `pc/`，见 [pc/README.md](pc/README.md)。
+  OTA 升级见 [docs/adr/0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)。
+  USB host 直插也已落地，方案与实机核对清单见 [docs/usb-input-plan.md](docs/usb-input-plan.md)。
+  取舍见 [docs/adr/0027](docs/adr/0027-runtime-usb-role-switch.md)。
+  同代透传规则见 [docs/adr/0026](docs/adr/0026-same-generation-input-passthrough.md)。
+  手柄组合键捕获屏幕见 [docs/adr/0028](docs/adr/0028-pad-combo-captures-screen.md)。
+  新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
 
 ## 项目核心操作命令
 
@@ -53,7 +80,10 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 | **PC 手柄桥接** | `cd pc ; uv run python bridge.py -p COMx` | 读 PC 端手柄的原始报告并按桥接帧转发给设备（依赖由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移） |
 | **串口 CLI** | `cd pc ; uv run python uartctl.py -p COMx status` | 行命令控制台（免复位打开、`log` 只读日志、`link` 看连接间隔、上报计数与广播形态、`wake` 强制重连主机、`adv` 切常态广播形态、`key ui` 与 `ui on/off` 进出屏幕操控模式、`version` 看镜像版本与升级状态、`rollback` 回滚待验证镜像） |
 
-固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行（`firmware/build/CMakeCache.txt` 记录了解释器路径，`rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可查）。同一台机器上并存多套 IDF 环境时，切到不是配置工程的那套，`idf.py` 只打印几行环境提示就返回、不编译（退出码 0、产物时间戳不变），判据与排错见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) 的「6. 编译 ESP-IDF 固件」。
+固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行。
+配置工程时用的解释器记录在 `firmware/build/CMakeCache.txt`，用 `rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可以查到。
+同一台机器上并存多套 IDF 环境时，切到不是配置工程的那套，`idf.py` 只打印几行环境提示就返回、不编译（退出码 0、产物时间戳不变）。
+判据与排错见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) 的「6. 编译 ESP-IDF 固件」。
 
 ## 产物与生成文件约定
 
@@ -65,22 +95,39 @@ Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）�
 
 ## 项目特有约束
 
-- **缺陷修复先写用例**：改 UI 的 bug 之前，先在 `ui/tests/e2e/` 加一条能复现的用例（此时必须是红的），改完 `ui/src` 后用例转绿才算修完；固件里与硬件无关的逻辑缺陷同样先补 `firmware/test/` 的主机端用例。用例标题写用户看到的现象，不要把断言放宽来迁就实现，详细规则见 [docs/TESTING.md](docs/TESTING.md)。
-- **测试只用真源码**：端到端测试跑的是 `ui/dist` 的真实产物与官方 wasm 渲染核心，固件测试编译 `firmware/main/` 下的源码；`firmware/test/support/stubs/` 里的替身只用于补齐主机缺失的 ESP-IDF 头文件与硬件取值入口，不得把被测逻辑复制一份进测试。
-- **手柄操控屏幕模式**：手柄按 L1+R1+L3+R3（按住 300 ms）会捕获输入，此后只向主机续发全松开的中性帧、玩家的按键不再上行（整段停发会让主机把手柄判成离线），转为方向键移动焦点、圆圈键确认（[ADR 0028](docs/adr/0028-pad-combo-captures-screen.md)）；Web 触摸预览页不需要组合键，方向键 / WASD 与 Enter / 空格直接驱动同一套按键位（[ui/preview/index.html](ui/preview/index.html)），实机可用 `key ui` 或 `ui on|off` 进出。新增可点控件要带上 `focus:` 环（写在 `ui/src/theme.ts` 的 className 字面量里，构建期按字面量登记样式），并把 `focusable` 绑到 App 传下来的 `interactive()`（「是当前页且没有弹窗」）——框架遍历对 `hidden` 无感知，静态 `focusable` 会让隐藏页的控件留在名单里；可滚动页新增可聚焦行时把行位置加进 [ui/src/hooks/usePageScroll.ts](ui/src/hooks/usePageScroll.ts) 的 `focusRows`，手柄操控时才会跟着滚。
+- **缺陷修复先写用例**：改 UI 的 bug 之前，先在 `ui/tests/e2e/` 加一条能复现的用例（此时必须是红的），改完 `ui/src` 后用例转绿才算修完；
+  固件里与硬件无关的逻辑缺陷同样先补 `firmware/test/` 的主机端用例。用例标题写用户看到的现象，不要把断言放宽来迁就实现，详细规则见 [docs/TESTING.md](docs/TESTING.md)。
+- **测试只用真源码**：端到端测试跑的是 `ui/dist` 的真实产物与官方 wasm 渲染核心，固件测试编译 `firmware/main/` 下的源码；
+  `firmware/test/support/stubs/` 里的替身只用于补齐主机缺失的 ESP-IDF 头文件与硬件取值入口，不得把被测逻辑复制一份进测试。
+- **手柄操控屏幕模式**：手柄按 L1+R1+L3+R3（按住 300 ms）会捕获输入，此后只向主机续发全松开的中性帧、玩家的按键不再上行（整段停发会让主机把手柄判成离线）。
+  转为方向键移动焦点、圆圈键确认（[ADR 0028](docs/adr/0028-pad-combo-captures-screen.md)）；
+  Web 触摸预览页不需要组合键，方向键 / WASD 与 Enter / 空格直接驱动同一套按键位（[ui/preview/index.html](ui/preview/index.html)）。
+  实机可用 `key ui` 或 `ui on|off` 进出。新增可点控件要带上 `focus:` 环（写在 `ui/src/theme.ts` 的 className 字面量里，构建期按字面量登记样式）。
+  `focusable` 要绑到 App 传下来的 `interactive()`（「是当前页且没有弹窗」）——框架遍历对 `hidden` 无感知，静态 `focusable` 会让隐藏页的控件留在名单里；
+  可滚动页新增可聚焦行时把行位置加进 [ui/src/hooks/usePageScroll.ts](ui/src/hooks/usePageScroll.ts) 的 `focusRows`，手柄操控时才会跟着滚。
 - **字体烘焙规则**：
   - PocketJS 不依赖宿主操作系统字体，新增文本的字号应使用 Tailwind 支持的标准插槽（如 `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`）。
   - 构建期会自动提取文本字符集并在烘焙阶段生成对应插槽的点阵图集。
-  - 中文等 Inter 未映射的码点由官方 `fonts.json` 回退机制解析：`ui/src/fonts.json` 把 `ui/assets/fonts/NotoSansSC-Regular.otf`（SIL OFL 1.1，许可文本同目录）声明为回退字体面，Inter/JetBrains Mono 仍负责各自槽位的拉丁字形。回退清单对所有槽位只有一份，中文粗体实际烘焙为常规字重。
+  - 中文等 Inter 未映射的码点由官方 `fonts.json` 回退机制解析：
+    `ui/src/fonts.json` 把 `ui/assets/fonts/NotoSansSC-Regular.otf`（SIL OFL 1.1，许可文本同目录）声明为回退字体面。
+    Inter/JetBrains Mono 仍负责各自槽位的拉丁字形。回退清单对所有槽位只有一份，中文粗体实际烘焙为常规字重。
   - 字符集来自构建期对源码字符串字面量、模板字符串静态块和 JSX 文本的静态扫描；只在运行时动态拼接、且从未出现在任何字面量里的字符不会被烘焙。字体未映射的码点（如 emoji）没有字形，渲染为 tofu 方框。
   - 界面文案因此必须写在 `ui/src` 里（`utils.ts` 的 `PairingNotice` / `RoleNotice` 用联合类型钉住这条规则）：固件经 bridge 回发的文本不会被烘焙，直接上屏会显示成豆腐块。
 
 - **PocketJS 组件、归档与脚本入口**：
   - 仓库是自包含的：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定编译器、框架源码、构建资源与触摸预览用的官方 wasm 核心。
-  - `ui/vendor/pocketjs/framework/src/styles.generated.ts` 是编译器生成的样式镜像，但必须随快照提交：官方类型检查跑在编译器写入它之前，且 `pnpm install` 之后新增的快照文件不会进入依赖副本。它按 `ui/src` 重新生成，出现差异时直接提交。
+  - `ui/vendor/pocketjs/framework/src/styles.generated.ts` 是编译器生成的样式镜像，但必须随快照提交：
+    官方类型检查跑在编译器写入它之前，且 `pnpm install` 之后新增的快照文件不会进入依赖副本。它按 `ui/src` 重新生成，出现差异时直接提交。
   - `POCKETJS_ROOT` 是可选的对照路径，只在重新生成快照（`scripts/vendor-pocketjs.mjs`）或重建原生归档时使用；不要把本项目的产物写进该目录。
-  - 硬件屏幕是触摸屏：`ui/preview/` 是项目自己的预览页，把浏览器触摸事件转换为 PocketJS 触摸帧契约（`frame(buttons, analog, touches, hits)`），由 `scripts/preview-server.mjs` 提供静态服务；不要再退回官方 playground 的 PSP 按键界面。预览页按官方 `engine.js` 的设备协议接入快照内携带的官方 DevTools 服务器（`hosts/web/serve.ts`，面板 + WebSocket hub）；官方 playground 没有触摸输入，不要用它替代触摸预览页。
+  - 硬件屏幕是触摸屏：`ui/preview/` 是项目自己的预览页，把浏览器触摸事件转换为 PocketJS 触摸帧契约（`frame(buttons, analog, touches, hits)`）。
+    由 `scripts/preview-server.mjs` 提供静态服务；不要再退回官方 playground 的 PSP 按键界面。
+    预览页按官方 `engine.js` 的设备协议接入快照内携带的官方 DevTools 服务器（`hosts/web/serve.ts`，面板 + WebSocket hub）；
+    官方 playground 没有触摸输入，不要用它替代触摸预览页。
   - 升级 `firmware/components/` 后必须重新生成原生归档并核对 QuickJS 校验值，见 [patches/README.md](patches/README.md)。
+- **单行不超过 120 字符**：`.editorconfig` 的 `max_line_length = 120` 是仓库级约定，代码、脚本与文档都按它断行。
+  Markdown 正文按句子断行，一句一行；整句仍然过长时改写成更短的句子。
+  不跟这条约定的文件在 `.editorconfig` 里逐类写清楚：上游快照（`ui/vendor/pocketjs/`、`firmware/components/`）、`patches/*.patch`、锁文件与单行 SVG。
+  GFM 表格行（单元格不能折行）与必须整行粘贴执行的命令是两类例外，保持原样。
 
 ## 文档维护触发映射
 

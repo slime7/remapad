@@ -7,3 +7,28 @@ indent_style = space
 indent_size = 2
 insert_final_newline = true
 trim_trailing_whitespace = true
+max_line_length = 120
+
+# 上游快照、生成文件与单行矢量资源按各自来源维护，不跟随本仓库行宽约定：
+#   ui/vendor/pocketjs/  官方编译器与框架快照，由 scripts/vendor-pocketjs.mjs 覆盖
+#   firmware/components/ 官方 ESP-IDF 组件、原生归档与 build-receipt.json
+#   patches/*.patch      上游 QuickJS 源码的补丁记录
+#   锁文件               由 pnpm / uv 生成
+#   *.svg                构建期光栅化的单行矢量资源，路径数据不折行
+[ui/vendor/pocketjs/**]
+max_line_length = off
+
+[firmware/components/**]
+max_line_length = off
+
+[patches/*.patch]
+max_line_length = off
+
+[*-lock.yaml]
+max_line_length = off
+
+[*.lock]
+max_line_length = off
+
+[*.svg]
+max_line_length = off

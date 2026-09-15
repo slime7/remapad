@@ -84,8 +84,11 @@ turn 不会延迟，`pocketjs_guest_interrupt` 的终止语义原样保留。CMa
 
    ```powershell
    $zip = "$env:TEMP/quickjs-ng-0.14.0.zip"
-   Invoke-WebRequest 'https://components-file.espressif.com/components/espressif/quickjs-ng/0.14.0/espressif__quickjs-ng-v0.14.0.zip' -OutFile $zip
-   python -c "import zipfile,sys,hashlib; z=zipfile.ZipFile(sys.argv[1]); [print(n, hashlib.sha256(z.read(n)).hexdigest()) for n in z.namelist() if n.endswith('quickjs.c')]" $zip
+   $base = 'https://components-file.espressif.com/components/espressif/quickjs-ng/0.14.0'
+   Invoke-WebRequest "$base/espressif__quickjs-ng-v0.14.0.zip" -OutFile $zip
+   $code = 'import zipfile,sys,hashlib; z=zipfile.ZipFile(sys.argv[1]); ' +
+     '[print(n, hashlib.sha256(z.read(n)).hexdigest()) for n in z.namelist() if n.endswith(''quickjs.c'')]'
+   python -c $code $zip
    ```
 
 4. 确认不可变 ArrayBuffer 补丁仍然适用：把源码哈希临时替换为实测值后运行 `prepare_quickjs.py` 的

@@ -6,6 +6,8 @@
  * - 文字颜色经 style.textColor 引用 COLOR token（运行时取值，随状态切换）；
  * - 带背景色的表面（卡片、按钮、导航等）以完整 class 字面量收进 STYLE，
  *   颜色只在本文件出现，页面按语义引用，不再散落 hex。
+ * 样式按整条字面量注册，STYLE 里的长 class 字符串因此不折行，其中数条超过
+ * .editorconfig 里的 120 字符行宽约定。
  */
 
 /** MD3 深色主题 token（用户提供），键名与 MD3 token 对应。 */

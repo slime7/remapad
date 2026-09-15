@@ -1,14 +1,20 @@
 # Switch 2 手柄通信协议与数据交互技术规范
 
-本规范整理自开源逆向工程项目与协议分析资料，详细记录任天堂 Switch 2 官方手柄（包括 Joy-Con 2、Pro Controller 2 及 NSO GameCube 手柄）在无线（Bluetooth LE）与有线（USB）模式下的信号发送、接收数据结构、自定义配对算法、GATT 属性表、HID 报告格式、指令集架构及存储布局，作为基于 ESP32-S3 的 Remapad 控制器数据面实现参考。
+本规范整理自开源逆向工程项目与协议分析资料。
+详细记录任天堂 Switch 2 官方手柄（包括 Joy-Con 2、Pro Controller 2 及 NSO GameCube 手柄）在无线（Bluetooth LE）与有线（USB）模式下的信号发送、接收数据结构、自定义配对算法、
+GATT 属性表、HID 报告格式、指令集架构及存储布局，作为基于 ESP32-S3 的 Remapad 控制器数据面实现参考。
 
-Remapad 的最终目标是接收 USB 输入，转换为 NS2 手柄报告，并通过 BLE 向主机提供手柄服务；广播、GATT、输入/输出报告、配对、回连和唤醒均属于固件产品数据面，不属于 PocketJS UI runtime。当前固件的 USB 接收、NS2 编码、BLE 服务和配对状态机按 [ROADMAP.md](ROADMAP.md) 里程碑逐步接入（BLE 链路先行，USB 输入殿后），进度以该文件为准；实现这些功能时必须结合真实设备抓包与互操作测试验证本文的逆向结论。系统架构见 [ARCHITECTURE.md](ARCHITECTURE.md)，PocketJS UI bridge 只承载低频状态和控制消息。
+Remapad 的最终目标是接收 USB 输入，转换为 NS2 手柄报告，并通过 BLE 向主机提供手柄服务；广播、GATT、输入/输出报告、配对、回连和唤醒均属于固件产品数据面，不属于 PocketJS UI runtime。
+当前固件的 USB 接收、NS2 编码、BLE 服务和配对状态机按 [ROADMAP.md](ROADMAP.md) 里程碑逐步接入（BLE 链路先行，USB 输入殿后），进度以该文件为准；
+实现这些功能时必须结合真实设备抓包与互操作测试验证本文的逆向结论。系统架构见 [ARCHITECTURE.md](ARCHITECTURE.md)，PocketJS UI bridge 只承载低频状态和控制消息。
 
 ---
 
 ## 1. 协议体系与硬件架构总览
 
-Switch 2 手柄放弃了前代 Switch 1 使用的经典蓝牙（Bluetooth BR/EDR）协议，全面转向低功耗蓝牙（Bluetooth LE 5.x）。在通信架构上，任天堂未采用行业标准的 HID over GATT Profile (HOGP) 或 Security Manager Protocol (SMP) 安全配对，而是实现了一套运行于自定义 GATT 属性和 HID 命令帧之上的私有通信协议。
+Switch 2 手柄放弃了前代 Switch 1 使用的经典蓝牙（Bluetooth BR/EDR）协议，全面转向低功耗蓝牙（Bluetooth LE 5.x）。
+在通信架构上，任天堂未采用行业标准的 HID over GATT Profile (HOGP) 或 Security Manager Protocol (SMP) 安全配对。
+它改用一套运行于自定义 GATT 属性和 HID 命令帧之上的私有通信协议。
 
 ### 核心特性
 
@@ -35,7 +41,12 @@ Switch 2 手柄放弃了前代 Switch 1 使用的经典蓝牙（Bluetooth BR/EDR
 
 Switch 2 主机在底层芯片层面启用了广播过滤机制，仅接收符合格式的任天堂广播帧。广播数据总长为 31 字节，包含两部分：BLE 广播标志（Flags）与厂商自定义数据（Manufacturer Specific Data）。
 
-广播方地址（AdvA）与间隔（实机抓包，ndeadly/switch2_controller_research）：真实 Pro Controller 2 以 **public 地址**发送全部广播，地址前缀为 Nintendo OUI `98:E2:55`（2024 年注册的 Switch 2 手柄专用前缀，抓包 1124 个广播包均同址）；广播事件间隔实测约 40 ms（即 0.625 ms × 0x40）。**勘误（22.5.0 实测）**：主机并不校验广播地址 OUI——使用 Nintendo `78:81:8C` OUI（已验证同行实现所选）的模拟手柄可正常被搜索、配对与回连；OUI 伪装仅为与已验证实现对齐，非协议要求。广播 PDU 实测为 legacy `ADV_IND`（可连接可扫描，附空 SCAN_RSP）；扩展 PDU（legacy_pdu=0）无法同时置可连接与可扫描位，模拟实现需按 legacy PDU 配置（可另开扩展 PDU 实例并行广播以兼容不同扫描方）。
+广播方地址（AdvA）与间隔（实机抓包，ndeadly/switch2_controller_research）：
+真实 Pro Controller 2 以 **public 地址**发送全部广播，地址前缀为 Nintendo OUI `98:E2:55`（2024 年注册的 Switch 2 手柄专用前缀，抓包 1124 个广播包均同址）；
+广播事件间隔实测约 40 ms（即 0.625 ms × 0x40）。**勘误（22.5.0 实测）**：
+主机并不校验广播地址 OUI——使用 Nintendo `78:81:8C` OUI（已验证同行实现所选）的模拟手柄可正常被搜索、配对与回连；OUI 伪装仅为与已验证实现对齐，非协议要求。
+广播 PDU 实测为 legacy `ADV_IND`（可连接可扫描，附空 SCAN_RSP）；
+扩展 PDU（legacy_pdu=0）无法同时置可连接与可扫描位，模拟实现需按 legacy PDU 配置（可另开扩展 PDU 实例并行广播以兼容不同扫描方）。
 
 #### 手柄发往主机的广播包类型
 
@@ -94,7 +105,10 @@ Switch 2 手柄插入底座或线连时通过 USB 2.0 全速/高速通信。设�
 
 ## 3. 自定义安全配对与密钥协商协议
 
-Switch 2 手柄与主机之间的密钥协商在自定义命令通道（Command 0x15）中通过 4 个步骤的挑战-应答完成。**勘误（22.5.0 实测）**：链路层**同时运行标准 BLE SMP**（Just Works 形态：IO 能力 `NO_IO`、 bonding 置位、无 MITM、不用 LE Secure Connections、仅分发 ENC 密钥；配对不绑定，绑定键由 0x15 协商结果注入本端 store），主机在 MTU 交换后先走 SMP 再发指令；模拟实现若拒绝 SMP，主机在 MTU 交换后即停滞。
+Switch 2 手柄与主机之间的密钥协商在自定义命令通道（Command 0x15）中通过 4 个步骤的挑战-应答完成。**勘误（22.5.0 实测）**：
+链路层**同时运行标准 BLE SMP**，形态是 Just Works：IO 能力 `NO_IO`、bonding 置位、无 MITM、不用 LE Secure Connections、仅分发 ENC 密钥。
+配对不绑定，绑定键由 0x15 协商结果注入本端 store；主机在 MTU 交换后先走 SMP 再发指令。
+模拟实现若拒绝 SMP，主机在 MTU 交换后即停滞。
 
 ### 3.1 配对流程阶段分解
 
@@ -139,12 +153,15 @@ sequenceDiagram
 - **公钥常量**：官方手柄返回的手柄公钥 B1 在目前固件中表现为固定常量：
   `5C F6 EE 79 2C DF 05 E1 BA 2B 63 25 C4 1A 5F 10`
 - **长期密钥派生**（22.5.0 实测）：
-  应答 B2 所用密钥 `LTK = reverse(A1) XOR reverse(B1)`（A1/B1 均为线上传输的反序字节）；注入本端 BLE store 供标准 SMP 链路加密的 LTK 即该值按存储序写入（NimBLE 为小端，等价于对线序异或结果再反转）。
+  应答 B2 所用密钥 `LTK = reverse(A1) XOR reverse(B1)`（A1/B1 均为线上传输的反序字节）；
+  注入本端 BLE store 供标准 SMP 链路加密的 LTK 即该值按存储序写入（NimBLE 为小端，等价于对线序异或结果再反转）。
 - **认证加密计算**（22.5.0 实测）：
   应答码 B2 = 标准 AES-128 在 ECB 模式下以 `reverse(A1) XOR reverse(B1)` 为密钥、加密 `reverse(A2)` 的**原始输出**，线上不再反转：
   `B2 = AES128_ECB(Key=reverse(A1) XOR reverse(B1), Data=reverse(A2))`
 
-实现见 `firmware/main/ble/ble_session.c` 的 0x15 处理分支（密钥派生与挑战应答）与 `firmware/main/target/ns2/ns2_frames.c` 的 `ns2_pair_pubkey_b1`（固定公钥常量）：字节反转由 `reverse_bytes()` 统一处理，AES-128-ECB 走 PSA Crypto。
+实现见 `firmware/main/ble/ble_session.c` 的 0x15 处理分支，密钥派生与挑战应答都在那里。
+固定公钥常量 `ns2_pair_pubkey_b1` 在 `firmware/main/target/ns2/ns2_frames.c`：
+字节反转由 `reverse_bytes()` 统一处理，AES-128-ECB 走 PSA Crypto。
 
 ---
 
@@ -318,7 +335,10 @@ sequenceDiagram
 
 #### Command 0x02 - SPI Flash 存储器访问
 
-**勘误（22.5.0 实测）**：`0x04` 通用读取的应答体并非"长度+地址+数据"布局，而是**回显请求体 magic 后接数据**：应答体 = 请求体 [8:16] 的 8 字节原样回显（仅将其中第 1 字节清零）+ `N` 字节读取数据；地址字段实测为 3 字节小端 + 1 字节保留。对未初始化区域（如用户校准区 `0x1FC040`）必须以全 `0xFF` 数据应答——返回空应答体会令主机中止初始化（不再订阅输入通道，表现为手柄"已连接但按键无反应"）。主机回连初始化实测会读取 `0x13000`、`0x13080`、`0x130C0`、`0x1FC040`、`0x13040` 五个地址（首次配对流程不读 `0x1FC040` 与 `0x13040`）。
+**勘误（22.5.0 实测）**：`0x04` 通用读取的应答体并非"长度+地址+数据"布局，而是**回显请求体 magic 后接数据**：
+应答体 = 请求体 [8:16] 的 8 字节原样回显（仅将其中第 1 字节清零）+ `N` 字节读取数据；地址字段实测为 3 字节小端 + 1 字节保留。
+对未初始化区域（如用户校准区 `0x1FC040`）必须以全 `0xFF` 数据应答——返回空应答体会令主机中止初始化（不再订阅输入通道，表现为手柄"已连接但按键无反应"）。
+主机回连初始化实测会读取 `0x13000`、`0x13080`、`0x130C0`、`0x1FC040`、`0x13040` 五个地址（首次配对流程不读 `0x1FC040` 与 `0x13040`）。
 
 | 子命令 (Subcmd) | 功能名称 | 请求数据体格式 | 响应数据体格式 |
 | :--- | :--- | :--- | :--- |
@@ -437,9 +457,16 @@ sequenceDiagram
 | `0x130A8` | 9 | `B3 67 83 2E 66 5E 3A 06 5F` | **主模拟摇杆（左摇杆）9 字节出厂校准值** |
 | `0x130E8` | 9 | `2C 08 84 D1 65 63 2A 26 62` | **副模拟摇杆（右摇杆）9 字节出厂校准值** |
 
-**序列号地区编码**（switch2brew 社区考证，14 位 ASCII = 3 字母前缀 + 11 位数字）：首字母 `H` 为 Switch 2 代际；次字母为硬件型号（`A` 主机、`B` Joy-Con 2 (L)、`C` Joy-Con 2 (R)、`E` Pro Controller 2）；第三字母为销售地区（`J` 日本、`W` 美洲、`E` 欧洲、`C` 中国、`K` 韩国、`M` 马来西亚）；末位为校验位（前 10 位奇位和 + 偶位和 ×3 后对 10 取补）。`HEJ` 开头即日版 Pro Controller 2，示例 `HEJ71001121247` 与 `HEJ71001123456` 校验位均自洽。固件按此规则生成（`ns2_serial_build`，校验位 = (10 − (偶位和 + 3×奇位和) mod 10) mod 10，0 基），当前固定值：Pro `HEJ71001123456`、左 `HBW10067012342`、右 `HCW10068012341`。
+**序列号地区编码**（switch2brew 社区考证，14 位 ASCII = 3 字母前缀 + 11 位数字）：首字母 `H` 为 Switch 2 代际；
+次字母为硬件型号（`A` 主机、`B` Joy-Con 2 (L)、`C` Joy-Con 2 (R)、`E` Pro Controller 2）；
+第三字母为销售地区（`J` 日本、`W` 美洲、`E` 欧洲、`C` 中国、`K` 韩国、`M` 马来西亚）；末位为校验位（前 10 位奇位和 + 偶位和 ×3 后对 10 取补）。
+`HEJ` 开头即日版 Pro Controller 2，示例 `HEJ71001121247` 与 `HEJ71001123456` 校验位均自洽。
+固件按此规则生成（`ns2_serial_build`，校验位 = (10 − (偶位和 + 3×奇位和) mod 10) mod 10，0 基），当前固定值：
+Pro `HEJ71001123456`、左 `HBW10067012342`、右 `HCW10068012341`。
 
-**主机实测读取的其他区块**：`0x13040`（16 字节固定内容 `3B E0 D3 41 C6 60 6A BC 4D D7 A2 BB 71 1E DD 37`）、`0x13060`（空区，`0xFF`）、`0x13100`（24 字节，前 12 字节为 0）；`0x1FC000`/`0x1FC040`/`0x1FC060`（运动/主副摇杆用户自定义校准区）未经用户校准即保持全 `0xFF`。
+**主机实测读取的其他区块**：
+`0x13040`（16 字节固定内容 `3B E0 D3 41 C6 60 6A BC 4D D7 A2 BB 71 1E DD 37`）、`0x13060`（空区，`0xFF`）、`0x13100`（24 字节，前 12 字节为 0）；
+`0x1FC000`/`0x1FC040`/`0x1FC060`（运动/主副摇杆用户自定义校准区）未经用户校准即保持全 `0xFF`。
 
 ---
 
@@ -475,7 +502,8 @@ sequenceDiagram
 
 ## 8. NFC 与 Amiibo 数据交互协议规范
 
-Switch 2 手柄（Joy-Con 2 右手柄及 Pro Controller 2）内置了 NXP PN7160 / PN7161 系列 NFC 控制器芯片，用于读取和写入 NFC 标签（如基于 NXP NTAG215 芯片的 amiibo 手办与卡片）。Joy-Con 2 (L) 不包含 NFC 硬件。
+Switch 2 手柄（Joy-Con 2 右手柄及 Pro Controller 2）内置了 NXP PN7160 / PN7161 系列 NFC 控制器芯片。
+用于读取和写入 NFC 标签（如基于 NXP NTAG215 芯片的 amiibo 手办与卡片）。Joy-Con 2 (L) 不包含 NFC 硬件。
 
 ### 8.1 NFC 状态监控机制
 
@@ -505,9 +533,11 @@ Switch 2 手柄（Joy-Con 2 右手柄及 Pro Controller 2）内置了 NXP PN7160
 
 ### 8.3 Amiibo 读写完整交互时序
 
-主机侧的四段时序（本节是协议参考，本工程未实现）：0x01/0x03 开射频场轮询 → 卡入场后输入报告的 NFC 状态位变化、0x01/0x05 取 7B UID 与卡片类型 → 0x01/0x06 读卡、0x01/0x15 按 70 字节分块取回 540 字节镜像 → 需要回写时 0x01/0x14 装载写缓冲、0x01/0x08 写卡 → 0x01/0x04 关射频场。
+主机侧的四段时序（本节是协议参考，本工程未实现）：0x01/0x03 开射频场轮询 → 卡入场后输入报告的 NFC 状态位变化、0x01/0x05 取 7B UID 与卡片类型 → 0x01/0x06 读卡、
+0x01/0x15 按 70 字节分块取回 540 字节镜像 → 需要回写时 0x01/0x14 装载写缓冲、0x01/0x08 写卡 → 0x01/0x04 关射频场。
 
-板卡没有 NFC 前端，模拟读卡器要额外硬件，因此 NFC 与 amiibo 镜像暂存按 [ROADMAP.md](ROADMAP.md) 的「本阶段明确不做」处理；固件只保留 `ns2_output_amiibo_stage()` 的预置入口与报告里的 NFC 状态字节。
+板卡没有 NFC 前端，模拟读卡器要额外硬件，因此 NFC 与 amiibo 镜像暂存按 [ROADMAP.md](ROADMAP.md) 的「本阶段明确不做」处理；
+固件只保留 `ns2_output_amiibo_stage()` 的预置入口与报告里的 NFC 状态字节。
 
 ---
 
@@ -569,12 +599,24 @@ stateDiagram-v2
     ConnectedState --> IdleState : 蓝牙断开
 ```
 
-参考实现里还有「无活动超时进休眠、按键唤醒后发 2 秒 0x81 突发」的分支，本设备不采用：待机主机只认唤醒形态，常驻比定时突发可靠；突发形态保留为诊断开关（串口 `adv reconnect`），见 §12 与 [ADR 0024](adr/0024-ns2-steady-wake-adv-and-pairing-key.md)。
+参考实现里还有「无活动超时进休眠、按键唤醒后发 2 秒 0x81 突发」的分支，本设备不采用：待机主机只认唤醒形态，常驻比定时突发可靠；
+突发形态保留为诊断开关（串口 `adv reconnect`），见 §12 与 [ADR 0024](adr/0024-ns2-steady-wake-adv-and-pairing-key.md)。
 
-**JoyCon 组合双连接形态（本工程实现）**：手柄类型选 JoyCon 组合时，设备以左右两只身份同时在线——两个广播实例各携带独立静态随机 AdvA，各自的序列号（HBW/HCW 前缀）、PID（0x2067/0x2066）与出厂块按连接身份提供，配对凭证按身份分槽持久化；输入报告按身份切分（左：L/ZL/减号/截屏/十字键/左摇杆，右：A/B/X/Y/C/R/ZR/Home/右摇杆，NFC 状态只在右手柄保留），配对页「按下 LR」触发双身份广播并注入 L+R 按键。Pro 模式保持单连接双 PDU（扩展 + legacy）广播。
+**JoyCon 组合双连接形态（本工程实现）**：
+手柄类型选 JoyCon 组合时，设备以左右两只身份同时在线——两个广播实例各携带独立静态随机 AdvA，各自的序列号（HBW/HCW 前缀）、PID（0x2067/0x2066）与出厂块按连接身份提供，配对凭证按身份分槽持久化；
+输入报告按身份切分（左：L/ZL/减号/截屏/十字键/左摇杆，右：A/B/X/Y/C/R/ZR/Home/右摇杆，NFC 状态只在右手柄保留），配对页「按下 LR」触发双身份广播并注入 L+R 按键。
+Pro 模式保持单连接双 PDU（扩展 + legacy）广播。
 
-**两路同时输出的可行边界**：同时模拟一只 Pro 或一对 JoyCon 在 ESP32-S3 上成立，约束有三条——连接数 `CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2`（左右各一条 ACL）；广播实例上限等于 `CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES + 1`（当前配置 1，即实例 0/1 可用，JoyCon 各占一个，无须改配置）；控制器活动预算 `CONFIG_BT_CTRL_BLE_MAX_ACT=6`，本场景 2 广播 + 2 连接共占 4。**唯一硬限制是地址类型**：NimBLE 每个广播实例的地址只接受 RANDOM（`ble_gap_ext_adv_set_addr` 要求 `addr->type == BLE_ADDR_RANDOM`），真机手柄用的是 public 地址，因此两只 JoyCon 的 AdvA 由本机公共伪装地址派生：先按身份用各自的固定盐做 32 位扩散（Pro 与两只 JoyCon 的地址互不共用字节序列——只翻最高位、或左右只差最低位这类近似地址会让主机把同一台设备的不同形态认成同一台，或把两只认成一只），再置成静态随机形态：最高字节 bit7/bit6 置一，最低位右置一、左清零（芯片地址最低位奇偶不定，必须显式清零）。派生规则见 `firmware/main/target/ns2/ns2_identity.c`，同一芯片上结果稳定可重复。主机能否接受这种地址形态、以及两条连接是否都能用各自的 LTK 完成加密，属实机验证项。
-- 配对流程对用户是自动的：设备开机即按有无凭证选择回连或发现广播，主机的配对记录在首次连接握手时完成，屏幕上无需任何操作；屏幕配对页用于观察状态、手动进出配对模式与解除配对，主机的 Grip / 手柄顺序界面只用于调整顺序与确认 JoyCon 已配对。JoyCon 组合保持左右两条独立连接、两条独立凭证，不合并为单个设备。
+**两路同时输出的可行边界**：同时模拟一只 Pro 或一对 JoyCon 在 ESP32-S3 上成立，约束有三条——连接数 `CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2`（左右各一条 ACL）；
+广播实例上限等于 `CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES + 1`（当前配置 1，即实例 0/1 可用，JoyCon 各占一个，无须改配置）；
+控制器活动预算 `CONFIG_BT_CTRL_BLE_MAX_ACT=6`，本场景 2 广播 + 2 连接共占 4。**唯一硬限制是地址类型**：
+NimBLE 每个广播实例的地址只接受 RANDOM（`ble_gap_ext_adv_set_addr` 要求 `addr->type == BLE_ADDR_RANDOM`）。
+真机手柄用的是 public 地址，因此两只 JoyCon 的 AdvA 由本机公共伪装地址派生：
+先按身份用各自的固定盐做 32 位扩散（Pro 与两只 JoyCon 的地址互不共用字节序列——只翻最高位、或左右只差最低位这类近似地址会让主机把同一台设备的不同形态认成同一台，或把两只认成一只），再置成静态随机形态：
+最高字节 bit7/bit6 置一，最低位右置一、左清零（芯片地址最低位奇偶不定，必须显式清零）。派生规则见 `firmware/main/target/ns2/ns2_identity.c`，同一芯片上结果稳定可重复。
+主机能否接受这种地址形态、以及两条连接是否都能用各自的 LTK 完成加密，属实机验证项。
+- 配对流程对用户是自动的：设备开机即按有无凭证选择回连或发现广播，主机的配对记录在首次连接握手时完成，屏幕上无需任何操作；
+  屏幕配对页用于观察状态、手动进出配对模式与解除配对，主机的 Grip / 手柄顺序界面只用于调整顺序与确认 JoyCon 已配对。JoyCon 组合保持左右两条独立连接、两条独立凭证，不合并为单个设备。
 
 ---
 
@@ -649,7 +691,8 @@ sequenceDiagram
 
 ## 11. 常见问题排查与注意事项
 
-- **连接间隔**：由主机下发（实测 4 单位即 5 ms，低于规范下限），固件只观测不请求——外设侧主动协商会被主机按规范拒绝，见 §12 与 [ADR 0023](adr/0023-ns2-sub-spec-conn-interval-and-wake-burst.md)。
+- **连接间隔**：由主机下发（实测 4 单位即 5 ms，低于规范下限），固件只观测不请求——外设侧主动协商会被主机按规范拒绝。
+  见 §12 与 [ADR 0023](adr/0023-ns2-sub-spec-conn-interval-and-wake-burst.md)。
 - **MAC 地址一致性**：广播地址必须与配对存储区里的主机地址对应，否则主机不采纳这条广播。
 - **字节序反转**：配对数据（MAC、AES 挑战码、LTK）与广播里的主机 MAC 字段一律用**反向字节序**。
 - **GATT 特征值写类型**：Output Report 与 Command 写入都采用 `WRITE_WITHOUT_RESPONSE`，不需要 ATT 应答。
@@ -662,35 +705,59 @@ sequenceDiagram
 
 以下条目来自对真实 Pro Controller 2 的空中抓包解析（ndeadly captures/nrf52840），与前文基于早期资料整理的描述存在出入，**以本节为准**：
 
-- **出厂块读取地址**：主机初始化时经 0x02/0x04 读取的是 **0x7E00 区**（首个块基址 0x7E40，含 6B 头 + 14B 序列号 + 2B 保留 + 4B VID/PID + 3B 版本 + 12B 机身配色），而非 §7.2 描述的 0x13000；0x7E00–0x7E3F 的用途未验证。
+- **出厂块读取地址**：
+  主机初始化时经 0x02/0x04 读取的是 **0x7E00 区**（首个块基址 0x7E40，含 6B 头 + 14B 序列号 + 2B 保留 + 4B VID/PID + 3B 版本 + 12B 机身配色）。
+  它不是 §7.2 描述的 0x13000；0x7E00–0x7E3F 的用途未验证。
 - **指令应答通道**：应答从 **0x001E（第二个应答特征值）** Notify 发出，主机在初始化时写 **0x001F**（其 CCCD）开启通知；0x001A/0x001B 通道未被主机使用。
 - **复合输出填充**：Switch 2 主机经 0x0016 下发的命令帧带 **33 字节 0x00 前缀**（帧体紧随其后）；Switch 1 的「0x00 + 2×16B 震动 + 命令」布局未被观测到。
 - **应答载荷填充**：0x001E 的通知载荷 = **14 字节 0x00 前缀** + 8B 帧头 + 应答体。
 - **0x02 读取应答体**：**4B 小端地址 + 数据**，无长度前缀字段（§6.2 描述的「1B 长度 + 3B 保留」不适用）。
 - **报告率描述符可写**：主机开启输入上报前会向 0x0010（0x000E 的描述符）写入 2 字节配置，描述符须接受写入。
-- **广播时机语义**：与真实手柄一致——未配对设备**上电不广播**，仅配对触发（Joy-Con 2 的 L+R / Pro 2 的 Sync 键，对应本设备配对页的「开始」，即配对键语义）后发送标准发现广播；已配对设备上电发送回连广播等待主机；退出配对模式或断开后按凭证状态恢复（未配对即静默）。
-- **广播状态位（厂商数据偏移 0x0B）分两种取值**：真机抓包里 **回连广播恒为 0x00**、只有按键唤醒时的短暂突发才置 **0x81**，两种形态都携带主机地址；把 0x81 写进回连广播会让休眠中的主机被每一次回连广播**立刻唤醒**（实测现象：主机一进待机就亮回锁屏）。
-- **回连入口是唤醒形态而非回连形态（本设备实测与参考实现对齐）**：主机醒着但停在非配对页面时**不采纳 0x00 回连广播**，只有带主机地址的 **0x81 唤醒形态**能把它拉回来——这正是「只有主机停在配对页面才连得上」的成因。设备侧因此把唤醒形态当作已配对身份的常态广播（未连接期间常驻），配对流程与未配对身份才发发现广播、流程之外静默，取舍见 [ADR 0024](adr/0024-ns2-steady-wake-adv-and-pairing-key.md)；真机「回连恒 0x00、唤醒只突发 2 秒」的形态保留为诊断开关（串口 `adv reconnect`），仅用于实机 A/B 对账。
-- **连接间隔由主机下发，固件只观测**：主机把连接压到 4 单位（**5 ms**，低于 BLE 规范的 7.5 ms 下限）；ESP32-S3 控制器由 `CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE` 允许亚规范间隔（最低 3.75 ms，见 sdkconfig.defaults），固件不主动请求连接参数（NimBLE 主机侧按规范拒绝 itvl < 6 的请求），只在 `link` 里以 `itvl` 观测。
-- **输入报文被采用的门槛是 0x0C/0x04（启用特性），不是连接间隔**：主机在启用特性之前的输入通知一律不采用——实测 itvl=4（5 ms）但未收到 0x0C/0x04 的链路按键同样无效（握把/顺序页的「快捷回连」连接正是这个形态：跳过完整握手、反复重发 0x0C/0x02、永不启用）；已验证实现把整个上报流押在这条命令上（DEV_READY 门槛）。设备侧对齐：输入通知只在收到 0x0C/0x04 后发送，已订阅却迟迟不启用的会话由休眠看门狗断开重连（15 秒未启用，每次上电至多 3 次）。
-- **上报节奏约 15 ms（约 67 Hz），不是逐连接事件打满 200 Hz**：已验证实现按 `HID_REPORT_INTERVAL=15ms` 上报并被主机正常采用；以 5 ms 间隔从任务侧灌 63B 通知会打爆 NimBLE 发送队列——实测近半数通知因 mbuf 耗尽被丢、报文计数器跳号，主机不采用残缺流。15 ms 节奏下实测零发送失败、按键立即可见。
-- **0x12 的 BLE 形态写入是 32 字节**：主机在 0x0012 上按「左 16B + 右 16B」的 LRA 参数包下发（不带 Report ID）——§5.4 表里的 42 字节是 USB 形态；把长度判成 33 字节会把每一包震动都丢掉，并每 20–30 ms 刷一条告警。
+- **广播时机语义**：与真实手柄一致——未配对设备**上电不广播**，仅配对触发（Joy-Con 2 的 L+R / Pro 2 的 Sync 键，对应本设备配对页的「开始」，即配对键语义）后发送标准发现广播；
+  已配对设备上电发送回连广播等待主机；退出配对模式或断开后按凭证状态恢复（未配对即静默）。
+- **广播状态位（厂商数据偏移 0x0B）分两种取值**：真机抓包里 **回连广播恒为 0x00**、只有按键唤醒时的短暂突发才置 **0x81**，两种形态都携带主机地址；
+  把 0x81 写进回连广播会让休眠中的主机被每一次回连广播**立刻唤醒**（实测现象：主机一进待机就亮回锁屏）。
+- **回连入口是唤醒形态而非回连形态（本设备实测与参考实现对齐）**：主机醒着但停在非配对页面时**不采纳 0x00 回连广播**，只有带主机地址的 **0x81 唤醒形态**能把它拉回来——这正是「只有主机停在配对页面才连得上」的成因。
+  设备侧因此把唤醒形态当作已配对身份的常态广播（未连接期间常驻），配对流程与未配对身份才发发现广播、流程之外静默。
+  取舍见 [ADR 0024](adr/0024-ns2-steady-wake-adv-and-pairing-key.md)；
+  真机「回连恒 0x00、唤醒只突发 2 秒」的形态保留为诊断开关（串口 `adv reconnect`），仅用于实机 A/B 对账。
+- **连接间隔由主机下发，固件只观测**：主机把连接压到 4 单位（**5 ms**，低于 BLE 规范的 7.5 ms 下限）；
+  ESP32-S3 控制器由 `CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE` 允许亚规范间隔（最低 3.75 ms，见 sdkconfig.defaults）。
+  固件不主动请求连接参数（NimBLE 主机侧按规范拒绝 itvl < 6 的请求），只在 `link` 里以 `itvl` 观测。
+- **输入报文被采用的门槛是 0x0C/0x04（启用特性），不是连接间隔**：
+  主机在启用特性之前的输入通知一律不采用——实测 itvl=4（5 ms）但未收到 0x0C/0x04 的链路按键同样无效（握把/顺序页的「快捷回连」连接正是这个形态：跳过完整握手、反复重发 0x0C/0x02、永不启用）；
+  已验证实现把整个上报流押在这条命令上（DEV_READY 门槛）。设备侧对齐：输入通知只在收到 0x0C/0x04 后发送，已订阅却迟迟不启用的会话由休眠看门狗断开重连（15 秒未启用，每次上电至多 3 次）。
+- **上报节奏约 15 ms（约 67 Hz），不是逐连接事件打满 200 Hz**：已验证实现按 `HID_REPORT_INTERVAL=15ms` 上报并被主机正常采用；
+  以 5 ms 间隔从任务侧灌 63B 通知会打爆 NimBLE 发送队列——实测近半数通知因 mbuf 耗尽被丢、报文计数器跳号，主机不采用残缺流。15 ms 节奏下实测零发送失败、按键立即可见。
+- **0x12 的 BLE 形态写入是 32 字节**：主机在 0x0012 上按「左 16B + 右 16B」的 LRA 参数包下发（不带 Report ID）——§5.4 表里的 42 字节是 USB 形态；
+  把长度判成 33 字节会把每一包震动都丢掉，并每 20–30 ms 刷一条告警。
 - **0x09 报文的运动数据长度必须非零**：主机开启 IMU 特性位（0x0C 掩码含 bit2）后，`0x0E` 为 0 的报文同样不被采用；设备侧固定填 0x28（40 字节）并以全零占位（板卡无 IMU），与已验证实现一致。
 - **0x11 命令**：初始化序列中主机发送 0x11/0x03，手柄应答 0x1C 字节传感器块（样例值见实现）；此前文档未记录该命令。
-- **0x7E40 块已提供**：本设备按上述布局提供 0x7E40 块（6B 头内容未验证，取 `01 00` 前缀填零）；版本字段与 0x13000 块、0x10 版本查询统一来自持久化配置（默认 1.6.1）。早期固件未提供该块，主机读不到版本可能正是持续弹出固件更新的诱因。
-- **固件更新伪装**：主机的手柄固件更新推送无公开协议文档（系统更新 21.0.0 附带过手柄固件），本设备按「接受并假装升级」处理——0x0018（固件升级数据块）写入被计数接收、不回错；写入静默 10 秒视为传输完成，上报版本递增（修订位进位）并持久化，主机随后的版本查询即视为已升级。若主机在传输中期待特定应答，伪装会失效，需抓包后对齐流程。
+- **0x7E40 块已提供**：本设备按上述布局提供 0x7E40 块（6B 头内容未验证，取 `01 00` 前缀填零）；版本字段与 0x13000 块、0x10 版本查询统一来自持久化配置（默认 1.6.1）。
+  早期固件未提供该块，主机读不到版本可能正是持续弹出固件更新的诱因。
+- **固件更新伪装**：主机的手柄固件更新推送无公开协议文档（系统更新 21.0.0 附带过手柄固件），本设备按「接受并假装升级」处理——0x0018（固件升级数据块）写入被计数接收、不回错；
+  写入静默 10 秒视为传输完成，上报版本递增（修订位进位）并持久化，主机随后的版本查询即视为已升级。若主机在传输中期待特定应答，伪装会失效，需抓包后对齐流程。
 
-- **0x09 运动块仍未解析**：公开研究把它标注为未解析的打包格式，本设备默认填 40 字节全零占位；接入 USB 手柄输入后新增 `motion 3` 实验档——把来源设备的真实样本按 NS1 的三份 12 字节（陀螺 XYZ + 加速 XYZ，16 位小端）风格填进块首、余下 4 字节补零，默认关闭，只用于实机 A/B 与后续抓包解码。真 Switch 2 手柄插在板卡上时走同代透传，运动块原样到达主机（[ADR 0026](adr/0026-same-generation-input-passthrough.md)），这是目前唯一能让主机收到真实 IMU 的路径。
-- **输出报告 0x02 的 USB 形态是 42 字节**：把主机震动写回实体手柄时按「Report ID `0x02` + 左 LRA 16B + 右 LRA 16B + 9 字节保留」原样转发，不重新编码参数包（NS2 手柄透传）；其余家族按各自布局行的输出描述编码。0x05 报表的 IMU 字段（偏移 `0x2A`：时间戳 4B + 温度 2B + 加速 XYZ + 陀螺 XYZ）在输入设备带 IMU 时填真值，没有数据时整段保持 0。
+- **0x09 运动块仍未解析**：公开研究把它标注为未解析的打包格式，本设备默认填 40 字节全零占位；
+  接入 USB 手柄输入后新增 `motion 3` 实验档——把来源设备的真实样本按 NS1 的三份 12 字节（陀螺 XYZ + 加速 XYZ，16 位小端）风格填进块首、余下 4 字节补零。
+  默认关闭，只用于实机 A/B 与后续抓包解码。
+  真 Switch 2 手柄插在板卡上时走同代透传，运动块原样到达主机（[ADR 0026](adr/0026-same-generation-input-passthrough.md)），这是目前唯一能让主机收到真实 IMU 的路径。
+- **输出报告 0x02 的 USB 形态是 42 字节**：把主机震动写回实体手柄时按「Report ID `0x02` + 左 LRA 16B + 右 LRA 16B + 9 字节保留」原样转发，不重新编码参数包（NS2 手柄透传）；
+  其余家族按各自布局行的输出描述编码。0x05 报表的 IMU 字段（偏移 `0x2A`：时间戳 4B + 温度 2B + 加速 XYZ + 陀螺 XYZ）在输入设备带 IMU 时填真值，没有数据时整段保持 0。
 
 ## 13. 资料来源与参考项目（References）
 
 本规范基于开源社区与安全研究人员对 Switch 2 硬件及通信协议的逆向分析成果整理而成，主要参考以下项目与研究资料：
 
-- [ndeadly/switch2_controller_research](https://github.com/ndeadly/switch2_controller_research)：Switch 2 手柄蓝牙接口规范、GATT 属性表、HID 报告定义、命令集架构（包括 Command 0x01 NFC 及 Command 0x15 配对）、安全模式及 2MB Flash 存储布局的权威公开资料。
-- [alexvnesta/switch2controller](https://github.com/alexvnesta/switch2controller)：Switch 2 休眠唤醒广播包（31 字节）逆向工程、ESP32 唤醒发射端实现、广播包第 16 字节状态标志位验证及 BlueRetro 桥接研究。
+- [ndeadly/switch2_controller_research](https://github.com/ndeadly/switch2_controller_research)：
+  Switch 2 手柄蓝牙接口规范、GATT 属性表、HID 报告定义、命令集架构（包括 Command 0x01 NFC 及 Command 0x15 配对）、安全模式及 2MB Flash 存储布局的权威公开资料。
+- [alexvnesta/switch2controller](https://github.com/alexvnesta/switch2controller)：
+  Switch 2 休眠唤醒广播包（31 字节）逆向工程、ESP32 唤醒发射端实现、广播包第 16 字节状态标志位验证及 BlueRetro 桥接研究。
 - [tv/switch2-wake-up](https://github.com/tv/switch2-wake-up)：Switch 2 蓝牙低功耗（BLE）唤醒信标的首个开源 ESP32 与 Flipper Zero 实现。
-- [Minkelxy/xiaoai_switch2_wake_up](https://github.com/Minkelxy/xiaoai_switch2_wake_up)：基于 ESP32 与巴法云实现的小爱同学语音唤醒 Switch 2 开源实现。
+- [Minkelxy/xiaoai_switch2_wake_up](https://github.com/Minkelxy/xiaoai_switch2_wake_up)：
+  基于 ESP32 与巴法云实现的小爱同学语音唤醒 Switch 2 开源实现。
 - [darthcloud/BlueRetro](https://github.com/darthcloud/BlueRetro)：多平台经典蓝牙与 BLE 控制器蓝牙协议栈及手柄模拟核心架构。
-- [mfro/switch-controller-testing](https://github.com/mfro/switch-controller-testing)：任天堂 Switch 手柄 HID 仿真与 SPI Flash 固件逆向反汇编分析。
-- [dekuNukem/Nintendo_Switch_Reverse_Engineering](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering)：初代 Switch 手柄 HID 协议与基础硬件接口逆向分析。
+- [mfro/switch-controller-testing](https://github.com/mfro/switch-controller-testing)：
+  任天堂 Switch 手柄 HID 仿真与 SPI Flash 固件逆向反汇编分析。
+- [dekuNukem/Nintendo_Switch_Reverse_Engineering](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering)：
+  初代 Switch 手柄 HID 协议与基础硬件接口逆向分析。
