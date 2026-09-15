@@ -1263,17 +1263,38 @@ static bool joycon_pair_ready(void)
     return left && right;
 }
 
+/** 配对流程是否已经完成：当前形态的每个身份都「有凭证且已进入注册会话」。
+ *  判据不能只看凭证——已配对设备本来就带着凭证，一按配对键就会被判成完成、
+ *  一秒内退回「已配对」（配对键看起来毫无作用）；也不能只看连接——JoyCon
+ *  组合会在只连上一只时提前收工，另一只再也配不上。 */
+static bool pairing_flow_done(void)
+{
+    ns2_identity_t ids[2];
+    const size_t n = mode_identities(ids);
+    for (size_t i = 0; i < n; i++) {
+        if (ble_creds_count(ids[i]) == 0) {
+            return false;
+        }
+        const session_slot_t *slot = session_by_identity(ids[i]);
+        if (slot == NULL || slot->state != SESSION_NORMAL) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void ns2_session_tick(void)
 {
     if (s_fwupd.active && esp_timer_get_time() - s_fwupd.last_us > FWUPD_IDLE_TIMEOUT_US) {
         fwupd_finish();
     }
 
-    /* 配对流程收尾：凭证拿齐（JoyCon 组合要求左右都拿到）即自动退出，回到
-     * 常态唤醒广播等主机回连——真机配完就处于已连接状态，不需要用户再按。 */
-    if (s_ses.pairing_mode && ns2_session_paired()) {
+    /* 配对流程收尾：主机真的配好并连上（当前形态每个身份都凭证在手、会话
+     * 注册完成）才自动退出，回到常态唤醒广播——真机配完就处于已连接状态，
+     * 不需要用户再按；没有主机来配就一直挂着发现广播。 */
+    if (s_ses.pairing_mode && pairing_flow_done()) {
         s_ses.pairing_mode = false;
-        ESP_LOGI(TAG, "pairing flow finished (credentials saved)");
+        ESP_LOGI(TAG, "pairing flow finished (host registered)");
         if (!ble_controller_connected()) {
             resume_advertising();
         }
