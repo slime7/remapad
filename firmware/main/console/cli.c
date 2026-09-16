@@ -25,6 +25,7 @@
 #include "layout.h"
 #include "ns2_identity.h"
 #include "ns2_output.h"
+#include "ns2_report.h"
 #include "ota_session.h"
 #include "pad_device.h"
 #include "pad_state.h"
@@ -60,14 +61,16 @@ static void cli_help(void)
     cli_print("  backlight [0-100]   set + persist backlight (no arg = current)");
     cli_print("  screen [on|off]     screen power (no arg = current)");
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
-    cli_print("  ctrl [pro|joycon [body button grip]]");
-    cli_print("                      controller type + 0xRRGGBB colors, persisted (no arg = current)");
+    cli_print("  ctrl [body button accent grip]");
+    cli_print("                      controller colors 0xRRGGBB, persisted (no arg = current)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  connect             connection key: advertising window (PWR long press)");
     cli_print("  pairing start|stop  pair a new host: drop link + discovery advertising");
     cli_print("  wake                open the wake window (drop link if connected)");
     cli_print("  adv auto|wake|reconnect");
     cli_print("                      form inside the advertising window (default auto)");
+    cli_print("  advaddr [auto|public|random]  advertising address form");
+    cli_print("  advpdu [auto|legacy|extended]  advertising PDU form");
     cli_print("  report              dump the last input report actually sent");
     cli_print("  motion [0|1|2|3]    0x09 motion block (no arg = current)");
     cli_print("                      0 zeros / 1 stamp / 2 none / 3 sensor");
@@ -270,8 +273,7 @@ static void cli_link(void)
     uint8_t ids[2] = {0};
     const size_t count = ns2_session_mode_identities(ids);
     char line[176];
-    snprintf(line, sizeof(line), "mode=%s identities=%u",
-             count == 1 ? "pro" : "joycon", (unsigned)count);
+    snprintf(line, sizeof(line), "mode=pro identities=%u", (unsigned)count);
     cli_print(line);
     for (size_t i = 0; i < count; i++) {
         ns2_session_status_t status;
@@ -288,13 +290,19 @@ static void cli_link(void)
             int tx_rc = 0;
             bool enc = false;
             ble_controller_conn_stats(status.conn_handle, NULL, &mtu, &tx_fail, &tx_rc, &enc);
+            /* notify：05 = 通用输入通道、P = 专用输入通道（0x07 / 0x08 / 0x09 之一）；
+             * ih 是主机本次订的专用通道句柄——凭它确认主机选了哪种型号的通道。 */
+            char notify[8] = "--";
+            if (status.notify_05 || status.notify_priv) {
+                snprintf(notify, sizeof(notify), "%s%s", status.notify_05 ? "05" : "",
+                         status.notify_priv ? "P" : "");
+            }
             snprintf(line, sizeof(line),
-                     "  %-4s %s conn=%u itvl=%u mtu=%u enc=%u fmt=0x%02x notify=%s%s "
+                     "  %-4s %s conn=%u itvl=%u mtu=%u enc=%u fmt=0x%02x notify=%s ih=0x%04x "
                      "feat=%u reports=%lu txf=%lu/rc%d creds=%u adv=%s addr=%s motion=%u ltk=%u",
                      ns2_identity_name(status.identity), link_state_name(status.state),
                      status.conn_handle, status.conn_itvl, (unsigned)mtu, enc ? 1u : 0u,
-                     status.report_format,
-                     status.notify_05 ? "05" : "-", status.notify_09 ? "09" : "-",
+                     status.report_format, notify, status.notify_priv_handle,
                      status.features_enabled ? 1u : 0u,
                      (unsigned long)status.reports, (unsigned long)tx_fail, tx_rc,
                      (unsigned)status.creds, link_adv_name(&status), addr,
@@ -344,41 +352,33 @@ static void cli_screen(const char *arg)
 }
 
 /**
- * 手柄身份配置（与 UI 手柄设置页同一条持久化路径）：无参回读当前形态与
- * 三处配色；带形态名则改形态（配色沿用现值），再带 0xRRGGBB 三元组则一并
- * 改配色。写 NVS 由提交任务按周期落盘，BLE 侧经 ns2_session_set_identity
- * 即时生效（下次广播/握手带新出厂块）。
+ * 手柄配色配置（与 UI 手柄设置页同一条持久化路径）：无参回读四段配色，
+ * 带 0xRRGGBB 四元组则改配色（可只给前几项，其余沿用现值）。写 NVS 由
+ * 提交任务按周期落盘，BLE 侧经 ns2_session_set_colors 即时生效（下次广播/
+ * 握手带新出厂块）。
  */
 static void cli_ctrl(const char *arg)
 {
     const app_config_t *cfg = app_config_get();
     if (arg[0] == '\0') {
         char line[128];
-        snprintf(line, sizeof(line), "ctrl type=%s body=0x%06x button=0x%06x grip=0x%06x",
-                 cfg->ctrl_type == APP_CONFIG_CTRL_JOYCON ? "joycon" : "pro",
+        snprintf(line, sizeof(line),
+                 "ctrl body=0x%06x button=0x%06x accent=0x%06x grip=0x%06x",
                  (unsigned)cfg->body_color, (unsigned)cfg->button_color,
-                 (unsigned)cfg->grip_color);
+                 (unsigned)cfg->accent_color, (unsigned)cfg->grip_color);
         cli_print(line);
         return;
     }
-    char type[16] = {0};
     char body_text[16] = {0};
     char button_text[16] = {0};
+    char accent_text[16] = {0};
     char grip_text[16] = {0};
-    const int fields = sscanf(arg, "%15s %15s %15s %15s", type, body_text, button_text,
-                              grip_text);
-    bool joycon;
-    if (strcmp(type, "joycon") == 0) {
-        joycon = true;
-    } else if (strcmp(type, "pro") == 0) {
-        joycon = false;
-    } else {
-        cli_print("err usage: ctrl [pro|joycon [body button grip 0xRRGGBB]]");
-        return;
-    }
-    uint32_t colors[3] = {cfg->body_color, cfg->button_color, cfg->grip_color};
-    const char *color_text[3] = {body_text, button_text, grip_text};
-    for (int i = 0; i < fields - 1; i++) {
+    const int fields = sscanf(arg, "%15s %15s %15s %15s", body_text, button_text,
+                              accent_text, grip_text);
+    uint32_t colors[4] = {cfg->body_color, cfg->button_color, cfg->accent_color,
+                          cfg->grip_color};
+    const char *color_text[4] = {body_text, button_text, accent_text, grip_text};
+    for (int i = 0; i < fields; i++) {
         char *end = NULL;
         const unsigned long value = strtoul(color_text[i], &end, 0);
         if (end == color_text[i] || *end != '\0' || value > 0xFFFFFFu) {
@@ -387,13 +387,13 @@ static void cli_ctrl(const char *arg)
         }
         colors[i] = (uint32_t)value;
     }
-    app_config_set_controller(joycon ? APP_CONFIG_CTRL_JOYCON : APP_CONFIG_CTRL_PRO,
-                              colors[0], colors[1], colors[2]);
-    ns2_session_set_identity(joycon, colors[0], colors[1], colors[2]);
+    app_config_set_controller_colors(colors[0], colors[1], colors[2], colors[3]);
+    ns2_session_set_colors(colors[0], colors[1], colors[2], colors[3]);
     char line[96];
-    snprintf(line, sizeof(line), "ok ctrl type=%s body=0x%06x button=0x%06x grip=0x%06x",
-             joycon ? "joycon" : "pro", (unsigned)colors[0], (unsigned)colors[1],
-             (unsigned)colors[2]);
+    snprintf(line, sizeof(line),
+             "ok ctrl body=0x%06x button=0x%06x accent=0x%06x grip=0x%06x",
+             (unsigned)colors[0], (unsigned)colors[1], (unsigned)colors[2],
+             (unsigned)colors[3]);
     cli_print(line);
 }
 
@@ -483,6 +483,66 @@ static void cli_adv(const char *arg)
     }
 }
 
+/** 广播地址形态 A/B：auto 与 public 都是公共伪装地址（真机手柄的形态），
+ *  random 强制用派生静态随机地址做对照——主机只接受 public 地址的广播，
+ *  这条开关用来复现「随机地址在主机侧完全看不见」。不落盘，未连接时改完
+ *  立即按新形态重发。 */
+static void cli_advaddr(const char *arg)
+{
+    char line[128];
+    if (arg[0] == '\0') {
+        snprintf(line, sizeof(line), "adv addr form: %s",
+                 ns2_adv_addr_form_name(ns2_session_adv_addr_form()));
+        cli_print(line);
+        return;
+    }
+    uint8_t value = 0xFF;
+    if (strcmp(arg, "auto") == 0) {
+        value = NS2_ADV_ADDR_AUTO;
+    } else if (strcmp(arg, "public") == 0) {
+        value = NS2_ADV_ADDR_PUBLIC;
+    } else if (strcmp(arg, "random") == 0) {
+        value = NS2_ADV_ADDR_RANDOM;
+    }
+    if (value == 0xFF) {
+        cli_print("err usage: advaddr [auto|public|random]");
+        return;
+    }
+    if (!ns2_session_set_adv_addr_form(value)) {
+        cli_print("err advaddr rejected");
+        return;
+    }
+    snprintf(line, sizeof(line), "ok adv addr form -> %s", arg);
+    cli_print(line);
+}
+
+/** 广播 PDU 形态 A/B：auto 按实例默认，legacy / extended 强制一种。 */
+static void cli_advpdu(const char *arg)
+{
+    char line[64];
+    if (arg[0] == '\0') {
+        snprintf(line, sizeof(line), "adv pdu form: %s",
+                 ble_controller_adv_pdu_form_name(ble_controller_adv_pdu_form()));
+        cli_print(line);
+        return;
+    }
+    uint8_t value = 0xFF;
+    if (strcmp(arg, "auto") == 0) {
+        value = BLE_CTL_ADV_PDU_AUTO;
+    } else if (strcmp(arg, "legacy") == 0) {
+        value = BLE_CTL_ADV_PDU_LEGACY;
+    } else if (strcmp(arg, "extended") == 0) {
+        value = BLE_CTL_ADV_PDU_EXTENDED;
+    }
+    if (value == 0xFF) {
+        cli_print("err usage: advpdu [auto|legacy|extended]");
+        return;
+    }
+    ns2_session_set_adv_pdu_form(value);
+    snprintf(line, sizeof(line), "ok adv pdu form -> %s", arg);
+    cli_print(line);
+}
+
 /** 抓线上输入报文：主机「已连接、已订阅但没有输入」时，用它确认设备真正
  *  发出去的字节（计数器是否递增、0x0E 运动长度、按键位、状态字节）。 */
 static void cli_report(void)
@@ -496,7 +556,9 @@ static void cli_report(void)
             continue;
         }
         uint8_t body[63];
-        const uint8_t fmt = status.report_format == 5 ? 5 : 9;
+        /* 专用通道（0x09）共用一份快照，取用 9 作「非 0x05」的标记。 */
+        const uint8_t fmt = status.report_format == NS2_REPORT_ID_05 ? NS2_REPORT_ID_05
+                                                                     : NS2_REPORT_ID_09;
         if (!ble_controller_last_input(status.conn_handle, fmt, body)) {
             cli_print("err no report sent yet");
             printed = true;
@@ -506,9 +568,9 @@ static void cli_report(void)
         snprintf(line, sizeof(line),
                  "  %-4s fmt=0x%02x cnt=%u pow=0x%02x btn=%02x%02x%02x L=%02x%02x%02x "
                  "R=%02x%02x%02x st=0x%02x nfc=0x%02x motion=0x%02x",
-                 ns2_identity_name(status.identity), fmt, body[0], body[1], body[2], body[3],
-                 body[4], body[5], body[6], body[7], body[8], body[9], body[10], body[0x0B],
-                 body[0x0C], body[0x0E]);
+                 ns2_identity_name(status.identity), status.report_format, body[0], body[1],
+                 body[2], body[3], body[4], body[5], body[6], body[7], body[8], body[9],
+                 body[10], body[0x0B], body[0x0C], body[0x0E]);
         cli_print(line);
         printed = true;
     }
@@ -962,6 +1024,10 @@ static void cli_dispatch(char *line)
         cli_wake();
     } else if (strcmp(line, "adv") == 0) {
         cli_adv(arg);
+    } else if (strcmp(line, "advaddr") == 0) {
+        cli_advaddr(arg);
+    } else if (strcmp(line, "advpdu") == 0) {
+        cli_advpdu(arg);
     } else if (strcmp(line, "report") == 0) {
         cli_report();
     } else if (strcmp(line, "motion") == 0) {

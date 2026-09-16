@@ -68,7 +68,7 @@ static void version_body(void)
 
     uint8_t body[NS2_VERSION_BODY_LEN];
 
-    ns2_body_version(body, NS2_ID_PRO);
+    ns2_body_version(body);
     CHECK_EQ(body[0], 1);
     CHECK_EQ(body[1], 6);
     CHECK_EQ(body[2], 1);
@@ -82,16 +82,10 @@ static void version_body(void)
     CHECK_EQ(body[10], 0xFF);
     CHECK_EQ(body[11], 0xFF);
 
-    /* 身份码：0x00 JoyCon 左 / 0x01 JoyCon 右 / 0x02 Pro。 */
-    ns2_body_version(body, NS2_ID_JOYCON_L);
-    CHECK_EQ(body[3], 0x00);
-    ns2_body_version(body, NS2_ID_JOYCON_R);
-    CHECK_EQ(body[3], 0x01);
-
     /* 版本取自持久化配置，假升级改动它以后应答要跟着变。 */
     config.fw_version[1] = 7;
     host_test_set_app_config(&config);
-    ns2_body_version(body, NS2_ID_PRO);
+    ns2_body_version(body);
     CHECK_EQ(body[1], 7);
 }
 

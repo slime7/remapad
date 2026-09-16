@@ -90,7 +90,7 @@ test('连按向下不会走进隐藏页面：环停在首页第二枚圆上', as
   expect(await app.brightShare(BT_CIRCLE, RING_LEVEL)).toBeGreaterThan(0.004);
   expect(await app.brightShare(NAV_BAR)).toBeLessThan(0.004);
   await app.pad.press('Enter');
-  await expect.poll(() => app.hasVisibleText('Pro 手柄')).toBe(false);
+  await expect.poll(() => app.hasVisibleText('序列号 HEJ71001123456')).toBe(false);
   await expect.poll(() => app.hasVisibleText('配对')).toBe(true);
 });
 
@@ -173,19 +173,17 @@ test('焦点停在最后一项后继续按下，页面还能一直滚到页底',
   expect(after!).toBe(196);
 });
 
-test('手柄设置页一直按下滚到页底，一直按上回到页顶', async ({ app }) => {
+test('手柄设置页内容单屏放得下：按住下也不会滚动', async ({ app }) => {
   await app.goto();
   await openControllerSettings(app);
   const content = await app.findVisibleByClass('px-4 pt-[34]');
   expect(content, '没找到手柄设置页滚动列').toBeDefined();
-  // 页面上只有两张类型卡可聚焦：按住下走完两张卡之后，焦点留在末项，页面
-  // 自己继续往下走。内容高 34 + 53×2 + 54（信息卡）+ 74（颜色卡）+ 8×4
-  // = 300，加末尾垫高 80 得 380，视口 280，页底就是 100。
+  // 页面上只有信息卡与一行四个配色按钮：内容高 34 + 54（信息卡）+
+  // 48（配色行）+ 8×2 = 152，加末尾垫高 80 得 232，视口 280——单屏放得下，
+  // 焦点在四个色块之间移动时位移恒为 0。
   await app.pad.pressTimes('ArrowDown', 8);
   await app.waitSettled();
-  await expect.poll(async () => app.scrollOffset(content!.i), { message: '一直按下应当滚到页底' }).toBe(100);
-  // 一直按上：焦点回到首张卡，页面跟着回到顶部（位移夹在 0）。
-  await app.pad.pressTimes('ArrowUp', 4);
-  await app.waitSettled();
-  await expect.poll(async () => app.scrollOffset(content!.i), { message: '一直按上应当回到页顶' }).toBe(0);
+  await expect
+    .poll(async () => app.scrollOffset(content!.i), { message: '内容单屏放得下，位移应当保持 0' })
+    .toBe(0);
 });

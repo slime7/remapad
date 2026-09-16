@@ -53,13 +53,16 @@ void app_main(void)
 
     /* 广播地址伪装必须在蓝牙控制器初始化前完成：public 广播的空中地址
      * 由 controller 的 BD_ADDR 决定，host 侧改不动。实测主机不校验地址
-     * OUI（配对与回连均成功），但为与已验证实现保持一致，沿用任天堂
-     * 78:81:8C OUI；蓝牙地址（base+2）随之派生，后缀沿用 eFuse，上电稳定。 */
+     * OUI（99:E2:55 与 00:11:22 都能被搜索、配对，见 controller.md §12）。
+     * 这里换成一个主机没见过的 OUI：主机按地址存配对记录，旧地址上那份
+     * 记录（以及随之作废的 LTK）会让回连停在加密失败上，换地址等于让它把
+     * 本设备当新设备重配一次。蓝牙地址（base+2）随之派生，后缀沿用 eFuse，
+     * 上电稳定。 */
     uint8_t base[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     esp_read_mac(base, ESP_MAC_WIFI_STA);
-    base[0] = 0x78;
-    base[1] = 0x81;
-    base[2] = 0x8C;
+    base[0] = 0x9C;
+    base[1] = 0xE6;
+    base[2] = 0x35;
     ESP_ERROR_CHECK(esp_base_mac_addr_set(base));
 
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);

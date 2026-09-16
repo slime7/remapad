@@ -16,9 +16,9 @@ extern "C" {
  * 协议语义（广播内容、指令应答、会话状态）由 ble_session 决策，本模块只负责收发。
  * GATT 表按 controller.md §4 的句柄布局注册（含占位描述符对齐，见源内注释）。
  *
- * 连接最多并发 2 条：JoyCon 组合模式下左右两只同时在线（各自广播实例、
- * 身份与通知状态）；Pro 模式单连接。广播实例 0/1 可分别携带独立地址
- * （静态随机，JoyCon 双身份）或共用公共伪装地址（Pro 单身份双 PDU）。
+ * 设备对外只有一台 Pro Controller 2：单身份、单条链路。广播实例 0/1 可分别
+ * 携带独立地址（advaddr 对账开关的派生形态），默认 legacy PDU
+ * （见 ble_controller_adv_start）。
  */
 
 /** 初始化 NimBLE 并启动 host 任务；成功后栈在同步回调里触发发现广播。 */
@@ -41,8 +41,13 @@ void ble_controller_disconnect(uint8_t hci_reason);
 /** 读取对端主机蓝牙地址（NimBLE 存储序，即显示序反转，与配对线格式一致）。 */
 bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6]);
 
-/** 指定连接上输入报告格式（0x05 / 0x09）的 CCCD 是否已由主机开启。 */
+/** 指定连接上输入报告通道（0x05 通用，或 0x09 专用）的 CCCD 是否已由主机开启。 */
 bool ble_controller_input_notify_ready(uint16_t conn_handle, uint8_t report_format);
+
+/** 主机在指定连接上订阅的专用输入通道句柄（0 = 未订阅）。真机在 0x000E
+ *  句柄上按型号换 UUID，本设备按 Pro 的规格注册；串口 link 用它确认主机
+ *  订的是哪一条通道。 */
+bool ble_controller_input_priv_handle(uint16_t conn_handle, uint16_t *out_handle);
 
 /** 指定连接的当前连接间隔（1.25ms 单位，4 = 5ms）。NS2 主机要求约 5ms
  * （约 200Hz 上报），间隔偏大时主机会连接、订阅但忽略输入报文；该值由
@@ -59,9 +64,14 @@ bool ble_controller_conn_stats(uint16_t conn_handle, uint16_t *out_itvl, uint16_
 /** 最近一次真正投递的输入报文（63B，不含 Report ID），供 CLI 抓取线上内容。 */
 bool ble_controller_last_input(uint16_t conn_handle, uint8_t report_format, uint8_t *out);
 
-/** 发送 Input Report 0x05 / 0x09 通知到指定连接（未订阅时静默丢弃，同时刷新 READ 缓存）。 */
+/** 发送输入报告通知到指定连接（0x05 走通用通道；0x09 走主机订阅的那个专用
+ *  通道句柄），未订阅时静默丢弃，同时刷新 READ 缓存。 */
 void ble_controller_notify_input_05(uint16_t conn_handle, const uint8_t report[63]);
 void ble_controller_notify_input_09(uint16_t conn_handle, const uint8_t report[63]);
+
+/** 只刷新 READ 缓存、不发通知（特性未启用的链路上也要保持快照新鲜）。 */
+void ble_controller_store_input(uint16_t conn_handle, uint8_t report_format,
+                                const uint8_t report[63]);
 
 /** 发送指令应答帧（0x001E，需该主机已开 0x001F CCCD）到指定连接。 */
 void ble_controller_notify_answer(uint16_t conn_handle, const uint8_t *frame, size_t len);
@@ -69,19 +79,35 @@ void ble_controller_notify_answer(uint16_t conn_handle, const uint8_t *frame, si
 /** 停止全部广播实例（设备静默时不留可发现广播，与真实手柄一致）。 */
 void ble_controller_adv_stop(void);
 
-/** 停止指定身份在发的广播实例（Pro 两实例同址，一并停止）：JoyCon 组合下
- *  只停静默的那一只，另一只的连接与广播不受影响。 */
+/** 停止指定身份在发的广播实例（Pro 两实例同址，一并停止）。 */
 void ble_controller_adv_stop_identity(uint8_t identity);
 
 /**
- * 以 31 字节原始载荷启动一个广播实例。addr 为 NULL 时用公共伪装地址
- * （Pro 单身份，实例 0 走扩展 PDU、实例 1 走 legacy PDU 的既有形态）；
- * 非 NULL 时以该静态随机地址广播（JoyCon 双身份各占一个实例，legacy PDU）。
+ * 以 31 字节原始载荷启动一个广播实例。addr 为 NULL 时用公共伪装地址，
+ * 非 NULL 时以该静态随机地址广播（`advaddr` 对账开关的派生形态）。默认
+ * legacy PDU（可连接 + 可扫描，与真机发现广播一致），见 advpdu 开关。
  * instance 取 0/1；identity 由会话层显式给出（ns2_identity_t），传输层不再
  * 从地址反推——左右两只的地址最低位来自芯片，反推会认错身份。
  */
 void ble_controller_adv_start(uint8_t instance, uint8_t identity,
                               const uint8_t payload[31], const uint8_t addr[6]);
+
+/** 广播 PDU 形态（实机对账开关，不落盘）：auto 与 legacy 都是 legacy PDU
+ *  （可连接 + 可扫描，主机只认这种，2026-09-16 实机对账）；extended 换成
+ *  扩展 PDU 做反向验证——扩展实例在主机侧完全看不见。 */
+typedef enum {
+    BLE_CTL_ADV_PDU_AUTO = 0,
+    BLE_CTL_ADV_PDU_LEGACY = 1,
+    BLE_CTL_ADV_PDU_EXTENDED = 2,
+} ble_ctl_adv_pdu_form_t;
+
+void ble_controller_set_adv_pdu_form(uint8_t form);
+
+/** 当前 PDU 形态（串口 `advpdu` 无参回显用）。 */
+uint8_t ble_controller_adv_pdu_form(void);
+
+/** 形态短名（串口回显）：auto / legacy / extended。 */
+const char *ble_controller_adv_pdu_form_name(uint8_t form);
 
 /** 指定身份的广播实例是否在发（诊断用；Pro 两个实例任一在发即为真）。 */
 bool ble_controller_adv_running(uint8_t identity);

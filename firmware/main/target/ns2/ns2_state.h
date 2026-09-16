@@ -63,15 +63,15 @@ typedef enum {
 } ns2_motion_mode_t;
 
 /**
- * 手柄身份：单连接 Pro（NS2_ID_PRO）或 JoyCon 组合的左右两只（L/R 双连接，
- * 各自独立的序列号、PID、广播地址与配对凭证）。凭证存储与广播/会话层都
- * 按此枚举分槽。
+ * 手柄身份：本设备只模拟 Pro Controller 2。真主机给一只 Joy-Con 配对要一个
+ * 独立的公共蓝牙地址，而一台控制器的芯片只有一个 public 地址（主机也只接受
+ * public 地址的广播，见 controller.md §12），左右两只无法各自寻址，Joy-Con
+ * 形态在本硬件上不可行。枚举因此只有一个取值；凭证表与出厂块仍按身份分槽，
+ * 将来真要再加型号时不用改存储与广播层的分槽方式。
  */
 typedef enum {
     NS2_ID_PRO = 0,
-    NS2_ID_JOYCON_L = 1,
-    NS2_ID_JOYCON_R = 2,
-    NS2_ID_COUNT = 3,
+    NS2_ID_COUNT = 1,
 } ns2_identity_t;
 
 typedef struct {

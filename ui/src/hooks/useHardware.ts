@@ -37,9 +37,9 @@ export interface HardwareUiState {
   screenOn: boolean;
   pairing: PairingState;
   pairingMessage: PairingNotice;
-  /** 手柄身份配置（类型 + 配色），持久化在固件 NVS。 */
+  /** 手柄配色，持久化在固件 NVS。 */
   controllerConfig: ControllerConfig;
-  /** 各身份对外的蓝牙地址（显示序；host 未同步时为空串）。 */
+  /** 手柄对外的蓝牙地址（显示序；host 未同步时为空串）。 */
   controllerAddresses: ControllerAddresses;
   controller: string | null;
   usbRole: UsbRole;
@@ -61,19 +61,17 @@ export interface HardwareUiState {
   poweringOff: boolean;
 }
 
-/** 手柄配置默认值：Pro + 深灰配色（与固件出厂块占位一致）。 */
+/** 手柄配置默认值：标准黑的四段配色（与固件出厂块占位一致）。 */
 const DEFAULT_CONTROLLER_CONFIG: ControllerConfig = {
-  type: 'pro',
   bodyColor: 0x232323,
-  buttonColor: 0x3c3c3c,
-  gripColor: 0x2e2e2e,
+  buttonColor: 0xa0a0a0,
+  accentColor: 0xe6e6e6,
+  gripColor: 0x323232,
 };
 
 /** 地址就绪前的占位值（固件在 host 同步前给空串）。 */
 const DEFAULT_CONTROLLER_ADDRESSES: ControllerAddresses = {
   pro: '',
-  left: '',
-  right: '',
 };
 
 export const hw = reactive<HardwareUiState>({
@@ -247,18 +245,6 @@ export function unpair(): void {
     if (msg.t === 'unpairResult') {
       hw.pairing = msg.state;
       hw.pairingMessage = '已解除配对';
-    }
-  });
-}
-
-/**
- * 配对页「按下 LR」：Pro 手柄向主机注入 L+R 按键（部分界面用它确认注册）；
- * JoyCon 组合触发固件的左右双机配对（两台身份同时广播/确认）。
- */
-export function pressLr(): void {
-  hardware.send({ t: 'pressLr' }, (msg) => {
-    if (msg.t === 'pressLrAck' && !msg.success) {
-      hw.pairingMessage = '当前状态无法执行 LR 配对';
     }
   });
 }

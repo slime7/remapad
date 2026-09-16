@@ -22,7 +22,7 @@ esp_err_t dp_plane_start(void);
 /**
  * 调试注入：在数据面当前输入状态上叠加一次按键按下，保持 hold_ms 后自动
  * 释放。这是控制面进入数据面的唯一低频通道，供调试页手动验证 BLE 上报
- * 链路（含主机 Grip 界面的 L+R 配对确认）；高频采样与编码仍由数据面任务
+ * 链路（主机 Grip / 顺序页此时能看到按键变化）；高频采样与编码仍由数据面任务
  * 独立完成。
  */
 void dp_plane_debug_key(uint32_t buttons_mask, uint32_t hold_ms);

@@ -37,18 +37,16 @@ size_t ns2_frame_response(uint8_t *out, size_t cap, uint8_t cmd, uint8_t transpo
     return NS2_FRAME_HEADER_LEN + body_len;
 }
 
-void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN], uint8_t identity)
+void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN])
 {
     /* 固件版本取持久化值（出厂值固化在 app_config.h 的 CONFIG_DEFAULT_FW_VERSION_*）；
-     * 手柄类型按当前会话身份（0x00 JC L / 0x01 JC R / 0x02 Pro）；
-     * BT 栈补丁 0.0.12，音频 DSP 固件未实现，按参考实现填 0xFF。 */
+     * 手柄类型固定 0x02（Pro）；BT 栈补丁 0.0.12，音频 DSP 固件未实现，
+     * 按参考实现填 0xFF。 */
     const uint8_t *ver = app_config_get()->fw_version;
     out[0] = ver[0];
     out[1] = ver[1];
     out[2] = ver[2];
-    out[3] = identity == NS2_ID_JOYCON_L ? 0x00u
-             : identity == NS2_ID_JOYCON_R ? 0x01u
-                                           : 0x02u;
+    out[3] = 0x02;
     out[4] = 0x0C;
     out[5] = 0x00;
     out[6] = 0x00;

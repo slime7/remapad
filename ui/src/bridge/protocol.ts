@@ -25,25 +25,21 @@ export type PairingState =
   | 'connected'
   | 'error';
 
-/** 手柄设备型号。 */
-export type ControllerModel = 'pro-controller-2' | 'joycon-l' | 'joycon-r';
+/** 手柄设备型号：设备对外只有一台 Pro Controller 2。 */
+export type ControllerModel = 'pro-controller-2';
 
-/** 手柄形态：Pro 手柄（默认）或 JoyCon 组合（左 + 右）。 */
-export type ControllerType = 'pro' | 'joycon';
-
-/** 手柄身份配置：类型 + 机身配色（0xRRGGBB）。颜色选择 UI 预留，字段先随配置持久化。 */
+/** 手柄配色（0xRRGGBB）：机身 / 按键 / 高光 / 握把四段，与出厂块布局一一对应。
+ *  0 表示未配置（固件沿用出厂占位）。 */
 export interface ControllerConfig {
-  type: ControllerType;
   bodyColor: number;
   buttonColor: number;
+  accentColor: number;
   gripColor: number;
 }
 
-/** 各手柄身份对外的蓝牙地址（显示序大写十六进制；host 未同步时为空串）。 */
+/** 手柄对外的蓝牙地址（显示序大写十六进制；host 未同步时为空串）。 */
 export interface ControllerAddresses {
   pro: string;
-  left: string;
-  right: string;
 }
 
 /** 调试注入的按键（调试页按键指令区）：home 就是实体手柄的 HOME——注入按下后
@@ -92,7 +88,6 @@ export type DeviceCmd =
   | { t: 'disconnect'; id: number }
   | { t: 'startPairing'; id: number }
   | { t: 'unpair'; id: number }
-  | { t: 'pressLr'; id: number }
   | { t: 'triggerRumble'; id: number; frequencyHz: number; amplitude: number; durationMs: number }
   | { t: 'debugKey'; id: number; key: DebugKey }
   | { t: 'calibrateSensors'; id: number }
@@ -133,7 +128,7 @@ export type DeviceMsg =
       t: 'controllerConfig';
       id: number;
       config: ControllerConfig;
-      /** 身份信息卡展示的对外地址：Pro 公共伪装地址，JoyCon 左右各自派生。 */
+      /** 身份信息卡展示的对外地址（公共伪装地址）。 */
       addresses: ControllerAddresses;
     }
   | { t: 'controllerConfigSet'; id: number; config: ControllerConfig; success: boolean }
@@ -144,7 +139,6 @@ export type DeviceMsg =
   /** connect / disconnect / startPairing 的应答：只回状态，文案由 UI 给出。 */
   | { t: 'pairingResult'; id: number; state: PairingState }
   | { t: 'unpairResult'; id: number; state: PairingState }
-  | { t: 'pressLrAck'; id: number; success: boolean }
   | { t: 'rumbleAck'; id: number; success: boolean }
   | { t: 'debugKeySet'; id: number; key: DebugKey }
   | { t: 'powerOffAck'; id: number }

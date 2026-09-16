@@ -1,56 +1,37 @@
 /**
- * 手柄设置页：手柄类型（Pro 默认 / JoyCon 组合）、身份信息行与机身颜色
- * 预留。类型选择经 bridge 持久化到固件 NVS 并应用于 NS2 出厂块（序列号 /
- * PID / 配色）；颜色选择 UI 预留，色块暂不可点，字段随配置先持久化。
- * JoyCon 组合是左右两只各自独立连接（主机的 Grip/顺序界面只用于排序与
- * 确认），序列号按 HBW10067 / HCW10068 前缀各显一条，MAC 取固件给出的
- * 对外广播地址（Pro 公共伪装地址，JoyCon 各自派生）。
+ * 手柄设置页：身份信息行与配色选择。
+ * 设备对外只呈现 Pro Controller 2（单地址、单连接）：信息行显示序列号与对外
+ * 广播地址；一行四个配色按钮，点一下就把该款式的四段颜色（机身 / 按键 /
+ * 高光 / 握把，对应固件出厂块 0x13019 起的布局）整体写给固件——固件落盘、
+ * 重建出厂块并打开连接窗口，主机自己连回来读到的就是新颜色（配色是主机连上
+ * 时读的，所以换配色必须重新连一次）。
  */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
-import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR, STYLE } from '../theme';
 import { hw, setControllerConfig } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
-import type { ControllerType } from '../bridge/protocol';
-import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 
 /** 滚动列顶部内边距与块间距，与内容高度公式共用（pt-[34] + gap-2）。 */
 const TOP_PAD = 34;
 const GAP = 8;
-/** 类型卡高度：py-3 上下 24 + 图标行 29（text-2xl 槽位 cell 高）。 */
-const CARD_H = 24 + 29;
 /** 信息行行高（text-xs 单行）。 */
 const ROW_H = 15;
-/** 信息行卡高度：py-2 上下 16 + 行高 15 × 行数 + 行距 8 ×（行数 − 1）。 */
-const INFO_CARD_H_PRO = 16 + ROW_H * 2 + GAP;
-const INFO_CARD_H_JOYCON = 16 + ROW_H * 4 + GAP * 3;
-/** 颜色卡高度：py-3 上下 24 + 标题行 18 + mt-2 8 + 色块 24。 */
-const COLOR_CARD_H = 24 + 18 + 8 + 24;
+/** 信息行卡高度：py-2 上下 16 + 行高 15 × 2 行 + 行距 8。 */
+const INFO_CARD_H = 16 + ROW_H * 2 + GAP;
+/** 配色行高度：48 尺寸圆钮一行，无外框。 */
+const SWATCH_ROW_H = 48;
 
 /**
- * 内容高度按当前形态算：JoyCon 的信息行卡多两行，其余与 Pro 相同。
- * 框架不回读布局，max 由 scroller 每帧读取，切换形态后滚动范围随之更新。
+ * 内容高度：信息卡与配色行两块。框架不回读布局，max 由 scroller 每帧读取。
  */
-const contentHeight = (joycon: boolean) =>
-  TOP_PAD +
-  CARD_H * 2 +
-  (joycon ? INFO_CARD_H_JOYCON : INFO_CARD_H_PRO) +
-  COLOR_CARD_H +
-  GAP * 4;
+const contentHeight = () => TOP_PAD + INFO_CARD_H + SWATCH_ROW_H + GAP * 2;
 
-interface TypeOption {
-  type: ControllerType;
-  title: string;
-}
-
-/** 信息行槽位：0/1 = Pro 或 JoyCon 左（序列号 / MAC），2/3 = JoyCon 右。 */
-type InfoSlot = 0 | 1 | 2 | 3;
+/** 信息行槽位：0 = 序列号、1 = 对外广播地址。 */
+type InfoSlot = 0 | 1;
 
 /** 序列号占位值与固件 ns2_serial 产出同规则：前缀 + 10 位数字 + 校验位。 */
 const PRO_SERIAL = 'HEJ71001123456';
-const JOYCON_SERIAL_LEFT = 'HBW10067012342';
-const JOYCON_SERIAL_RIGHT = 'HCW10068012341';
 
 /** 地址就绪前的占位（固件在 host 同步前给空串）。 */
 const ADDRESS_PLACEHOLDER = '--';
@@ -58,53 +39,45 @@ const ADDRESS_PLACEHOLDER = '--';
 /** 信息行文本样式：text-xs 单行常驻节点。 */
 const INFO_ROW_CLASS = 'text-xs shrink-0';
 
-const TYPE_OPTIONS: TypeOption[] = [
-  { type: 'pro', title: 'Pro 手柄' },
-  { type: 'joycon', title: 'JoyCon 组合' },
-];
+/** 固件未配置时的四段配色（与 ns2 出厂块占位一致，见 firmware 的 factory_init）。 */
+const DEFAULT_COLORS = { body: 0x232323, button: 0xa0a0a0, accent: 0xe6e6e6, grip: 0x323232 };
 
-/** 预留色卡（机身配色候选，0xRRGGBB）；选择功能实装前不可点。 */
-const COLOR_PRESETS: Array<{ label: string; rgb: number }> = [
-  { label: '灰', rgb: 0x232323 },
-  { label: '红', rgb: 0x8a1a1e },
-  { label: '蓝', rgb: 0x154e77 },
-  { label: '黄', rgb: 0xb8a038 },
-];
-
-function rgbLabel(rgb: number): string {
-  const hex = rgb.toString(16).padStart(6, '0').toUpperCase();
-  return `#${hex}`;
+/**
+ * 配色款式：一组四段颜色。取值参照已发售的 Pro Controller 2——标准黑（随主机
+ * 发售，也是出厂默认）、Resident Evil Requiem 限定版的枪灰黑；银灰取标准款浅灰
+ * 上盖 / 肩键的搭配；墨绿金来自已公布未发售的塞尔达 40 周年限定，做参考。
+ */
+interface Colorway {
+  id: string;
+  body: number;
+  button: number;
+  accent: number;
+  grip: number;
 }
 
-function TypeCard(props: {
-  option: TypeOption;
-  selected: boolean;
-  onSelect: () => void;
-  /** 页面在画面上时才参与焦点遍历（见 App.tsx 的 interactive）。 */
-  interactive: () => boolean;
-  /** 类型卡的节点回调：手柄操控时要靠它把被聚焦的卡滚进可视带。 */
-  rowRef: (node: NodeMirror | null) => void;
-}) {
-  return (
-    <View
-      nodeRef={props.rowRef}
-      focusable={props.interactive()}
-      onPress={props.onSelect}
-      class={props.selected ? STYLE.optionCardSel : STYLE.optionCard}
-    >
-      <Icon
-        glyph={ICON.gamepad}
-        class="shrink-0 text-2xl"
-        color={props.selected ? COLOR.onPrimaryContainer : COLOR.primary}
-      />
-      <Text
-        class="text-sm font-bold"
-        style={{ textColor: props.selected ? COLOR.onPrimaryContainer : COLOR.onSurface }}
-      >
-        {props.option.title}
-      </Text>
-    </View>
-  );
+const COLORWAYS: Colorway[] = [
+  { id: 'standard', body: 0x232323, button: 0xa0a0a0, accent: 0xe6e6e6, grip: 0x323232 },
+  { id: 'gunmetal', body: 0x3a4045, button: 0x9aa3ab, accent: 0xc8cdd2, grip: 0x2b2f33 },
+  { id: 'silver', body: 0xb9bec4, button: 0x6e757c, accent: 0xe6e6e6, grip: 0x8a9096 },
+  { id: 'zelda', body: 0x1e3b2a, button: 0xc8a24a, accent: 0xc8a24a, grip: 0x16301f },
+];
+
+/** 0xRRGGBB → `#rrggbb`（框架的样式值只接受 CSS 颜色串）。 */
+function cssColor(rgb: number): string {
+  return `#${rgb.toString(16).padStart(6, '0')}`;
+}
+
+/** 机身色的相对亮度（0-1）：决定选中环压在机身上时取浅色还是深色。 */
+function luminance(rgb: number): number {
+  const r = ((rgb >> 16) & 0xff) / 255;
+  const g = ((rgb >> 8) & 0xff) / 255;
+  const b = (rgb & 0xff) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** 固件用 0 表示「未配置」：与款式比对时按出厂默认折算，页面上始终有一项选中。 */
+function effective(value: number, fallback: number): number {
+  return value === 0 ? fallback : value;
 }
 
 export function ControllerSettingsPage(props: {
@@ -113,113 +86,87 @@ export function ControllerSettingsPage(props: {
   interactive: () => boolean;
 }) {
   const config = () => hw.controllerConfig;
-  const isJoycon = () => config().type === 'joycon';
   /**
-   * 信息行：Pro 两行（序列号、MAC），JoyCon 组合四行（左序列号、左 MAC、
-   * 右序列号、右 MAC）。四个文本节点常驻，切换形态只重写文本与 hidden
-   * （hidden 是 display:none，右只两行收起后不占行高）。槽位写死为四个
-   * 节点而不写成列表：列表只要在构造时读到响应式状态，状态一变整段就会重挂。
+   * 信息行：序列号与对外广播地址各一行。两个文本节点常驻，值随固件应答更新
+   * （地址在 host 同步前为空串）。槽位写死为两个节点而不写成列表：列表只要在
+   * 构造时读到响应式状态，状态一变整段就会重挂。
    */
-  const infoLabel = (slot: InfoSlot): string => {
-    if (slot === 2) {
-      return '右序列号';
-    }
-    if (slot === 3) {
-      return '右 MAC';
-    }
-    if (isJoycon()) {
-      return slot === 0 ? '左序列号' : '左 MAC';
-    }
-    return slot === 0 ? '序列号' : 'MAC';
-  };
-  /**
-   * 取值按当前形态算。序列号规则：前缀 + 10 位数字 + 校验位（S = 偶位和 +
-   * 3×奇位和，校验位 = (10 − S mod 10) mod 10），与固件 ns2_serial 一致；
-   * 地址来自固件的 controllerConfig 应答。
-   */
+  const infoLabel = (slot: InfoSlot): string => (slot === 0 ? '序列号' : 'MAC');
   const infoValue = (slot: InfoSlot): string => {
-    const addresses = hw.controllerAddresses;
-    if (slot === 2) {
-      return JOYCON_SERIAL_RIGHT;
+    if (slot === 0) {
+      return PRO_SERIAL;
     }
-    if (slot === 3) {
-      return addresses.right || ADDRESS_PLACEHOLDER;
-    }
-    if (isJoycon()) {
-      return slot === 0 ? JOYCON_SERIAL_LEFT : addresses.left || ADDRESS_PLACEHOLDER;
-    }
-    return slot === 0 ? PRO_SERIAL : addresses.pro || ADDRESS_PLACEHOLDER;
+    return hw.controllerAddresses.pro || ADDRESS_PLACEHOLDER;
   };
-  /** 右只两行只在 JoyCon 组合下出现；hidden 是 display:none，不占行距。 */
-  const infoRowClass = (slot: InfoSlot): string =>
-    slot >= 2 && !isJoycon() ? 'hidden' : INFO_ROW_CLASS;
   const infoText = (slot: InfoSlot): string => `${infoLabel(slot)} ${infoValue(slot)}`;
 
-  /* 可聚焦行的位置：两张类型卡就在滚动列顶部，卡高 53、块间距 8。手柄操控
-   * 时页面靠它把被聚焦的卡滚进可视带，也才谈得上「一直按上回到页顶」。 */
-  const rowNodes: Array<NodeMirror | null> = [];
-  const focusRows = () => [
-    { node: rowNodes[0] ?? null, y: TOP_PAD, h: CARD_H },
-    { node: rowNodes[1] ?? null, y: TOP_PAD + CARD_H + GAP, h: CARD_H },
-  ];
+  /** 当前配色与某款式一致即为选中项（四段全比）。 */
+  const isSelected = (colorway: Colorway): boolean => {
+    const cfg = config();
+    return (
+      effective(cfg.bodyColor, DEFAULT_COLORS.body) === colorway.body &&
+      effective(cfg.buttonColor, DEFAULT_COLORS.button) === colorway.button &&
+      effective(cfg.accentColor, DEFAULT_COLORS.accent) === colorway.accent &&
+      effective(cfg.gripColor, DEFAULT_COLORS.grip) === colorway.grip
+    );
+  };
+
+  /** 点配色按钮：整组四段颜色下发给固件（持久化 + 重建出厂块）。 */
+  const applyColorway = (colorway: Colorway): void => {
+    setControllerConfig({
+      bodyColor: colorway.body,
+      buttonColor: colorway.button,
+      accentColor: colorway.accent,
+      gripColor: colorway.grip,
+    });
+  };
+
+  /**
+   * 选中环颜色：未选中时与机身同色（等于不画环），选中时取和机身对比的一侧
+   * ——深机身用浅色环，浅机身（银灰这类）用深色环，否则浅底上的浅环看不见。
+   */
+  const ringColor = (colorway: Colorway): string => {
+    if (!isSelected(colorway)) {
+      return cssColor(colorway.body);
+    }
+    return luminance(colorway.body) > 0.5 ? COLOR.background : COLOR.onSurface;
+  };
+
   const contentRef = usePageScroll(
     props.active,
     true,
-    () => contentHeight(isJoycon()) + BOTTOM_PAD_H,
-    focusRows,
+    () => contentHeight() + BOTTOM_PAD_H,
+    () => [],
   );
 
   return (
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
-        {TYPE_OPTIONS.map((option, index) => (
-          <TypeCard
-            option={option}
-            selected={config().type === option.type}
-            onSelect={() => setControllerConfig({ ...config(), type: option.type })}
-            interactive={props.interactive}
-            rowRef={(node: NodeMirror | null) => (rowNodes[index] = node)}
-          />
-        ))}
-
         <View class={STYLE.infoCardRows}>
-          <Text class={infoRowClass(0)} style={{ textColor: COLOR.onSurface }}>
+          <Text class={INFO_ROW_CLASS} style={{ textColor: COLOR.onSurface }}>
             {infoText(0)}
           </Text>
-          <Text class={infoRowClass(1)} style={{ textColor: COLOR.onSurface }}>
+          <Text class={INFO_ROW_CLASS} style={{ textColor: COLOR.onSurface }}>
             {infoText(1)}
-          </Text>
-          <Text class={infoRowClass(2)} style={{ textColor: COLOR.onSurface }}>
-            {infoText(2)}
-          </Text>
-          <Text class={infoRowClass(3)} style={{ textColor: COLOR.onSurface }}>
-            {infoText(3)}
           </Text>
         </View>
 
-        <View class={STYLE.actionCard}>
-          <View class="w-full h-[18] flex-row items-center shrink-0">
-            <Text class="text-sm font-bold grow" style={{ textColor: COLOR.onSurface }}>
-              机身颜色
-            </Text>
-            <Text class="text-xs" style={{ textColor: COLOR.onSurfaceVariant }}>
-              {rgbLabel(config().bodyColor)} · 即将支持
-            </Text>
-          </View>
-          <View class="flex-row gap-2 mt-2 shrink-0">
-            {COLOR_PRESETS.map((preset) => (
+        {/* 配色按钮：一行四个 48 尺寸圆钮，等距铺满列宽（外框已去掉，给圆钮留宽度）。 */}
+        <View class="w-full flex-row items-center justify-between shrink-0">
+          {COLORWAYS.map((colorway) => (
+            <View
+              key={colorway.id}
+              focusable={props.interactive()}
+              onPress={() => applyColorway(colorway)}
+              class={STYLE.colorSwatch}
+              style={{ bgColor: cssColor(colorway.body) }}
+            >
               <View
-                key={preset.label}
-                class="w-[24] h-[24] rounded-full shrink-0"
-                style={{
-                  bgColor: `#${preset.rgb.toString(16).padStart(6, '0')}`,
-                  borderColor:
-                    preset.rgb === config().bodyColor ? COLOR.primary : COLOR.outlineVariant,
-                  borderWidth: 1,
-                }}
+                class={STYLE.colorSwatchRing}
+                style={{ borderColor: ringColor(colorway) }}
               />
-            ))}
-          </View>
+            </View>
+          ))}
         </View>
 
         <BottomPlaceholder />

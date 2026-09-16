@@ -90,10 +90,8 @@ esp_err_t js_bridge_init(void)
     }
     /* USB 角色与手柄身份从持久化配置恢复（桥接角色永不落盘）。 */
     s_bridge.usb_role_host = app_config_get()->usb_role == APP_CONFIG_USB_HOST;
-    ns2_session_set_identity(app_config_get()->ctrl_type == APP_CONFIG_CTRL_JOYCON,
-                             app_config_get()->body_color,
-                             app_config_get()->button_color,
-                             app_config_get()->grip_color);
+    ns2_session_set_colors(app_config_get()->body_color, app_config_get()->button_color,
+                           app_config_get()->accent_color, app_config_get()->grip_color);
     return ESP_OK;
 }
 
@@ -474,20 +472,6 @@ static void handle_unpair(int id)
     ESP_LOGI(TAG, "unpair -> %s", real_pairing_state());
 }
 
-/** 配对页「按下 LR」：Pro 走调试注入（部分注册界面用它确认）；JoyCon 组合
- * 交给会话层——确保左右双广播在发并注入 L+R（组合确认动作）。 */
-static void handle_press_lr(int id)
-{
-    if (app_config_get()->ctrl_type == APP_CONFIG_CTRL_JOYCON) {
-        ns2_session_press_lr();
-    } else {
-        dp_plane_debug_key(NS2_BTN_L | NS2_BTN_R, 1000);
-    }
-    char event[REMAPAD_EVENT_MAX];
-    snprintf(event, sizeof(event), "{\"t\":\"pressLrAck\",\"id\":%d,\"success\":true}", id);
-    reply_raw(event);
-}
-
 /** 关机：电池供电下释放锁存即断电（之后的代码不会执行）；USB 供电下身
  *  下继续运行，由 js_bridge_service 的下一阶段确认并回报。 */
 static void handle_power_off(int id)
@@ -551,64 +535,46 @@ static void handle_debug_key(int id, const char *cmd)
 static void handle_get_controller_config(int id)
 {
     const app_config_t *cfg = app_config_get();
-    /* 手柄设置页展示的对外地址：Pro 公共伪装地址，JoyCon 各自派生地址。
-     * host 尚未同步时留空，UI 显示占位符。 */
+    /* 手柄设置页展示的对外地址（公共伪装地址）；host 尚未同步时留空，
+     * UI 显示占位符。 */
     uint8_t mac[6];
     char pro_mac[18] = "";
-    char left_mac[18] = "";
-    char right_mac[18] = "";
     if (ns2_session_identity_mac(NS2_ID_PRO, mac)) {
         ns2_mac_to_string(mac, pro_mac);
     }
-    if (ns2_session_identity_mac(NS2_ID_JOYCON_L, mac)) {
-        ns2_mac_to_string(mac, left_mac);
-    }
-    if (ns2_session_identity_mac(NS2_ID_JOYCON_R, mac)) {
-        ns2_mac_to_string(mac, right_mac);
-    }
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
-             "{\"t\":\"controllerConfig\",\"id\":%d,\"config\":{\"type\":\"%s\","
-             "\"bodyColor\":%lu,\"buttonColor\":%lu,\"gripColor\":%lu},"
-             "\"addresses\":{\"pro\":\"%s\",\"left\":\"%s\",\"right\":\"%s\"}}",
-             id, cfg->ctrl_type == APP_CONFIG_CTRL_JOYCON ? "joycon" : "pro",
-             (unsigned long)cfg->body_color, (unsigned long)cfg->button_color,
-             (unsigned long)cfg->grip_color, pro_mac, left_mac, right_mac);
+             "{\"t\":\"controllerConfig\",\"id\":%d,\"config\":{"
+             "\"bodyColor\":%lu,\"buttonColor\":%lu,\"accentColor\":%lu,"
+             "\"gripColor\":%lu},"
+             "\"addresses\":{\"pro\":\"%s\"}}",
+             id, (unsigned long)cfg->body_color, (unsigned long)cfg->button_color,
+             (unsigned long)cfg->accent_color, (unsigned long)cfg->grip_color, pro_mac);
     reply_raw(event);
 }
 
-/** 手柄身份配置：类型 + 配色持久化并即时下发 BLE 会话（出厂块随下次
- *  广播/握手生效）。颜色选择 UI 预留，字段先全链路贯通。 */
+/** 手柄配色配置（四段）：持久化并即时下发 BLE 会话（出厂块随下次广播/握手
+ *  生效）。UI 的配色按钮把选中款式的一组颜色整体下发，缺项按 0 处理（沿用
+ *  出厂默认）。 */
 static void handle_set_controller_config(int id, const char *cmd)
 {
-    size_t type_len = 0;
-    const char *type = cmd_string(cmd, "type", &type_len);
-    const bool joycon = type != NULL && type_len == 6 && strncmp(type, "joycon", 6) == 0;
-    const bool pro = type != NULL && type_len == 3 && strncmp(type, "pro", 3) == 0;
-    if (!joycon && !pro) {
-        char event[REMAPAD_EVENT_MAX];
-        snprintf(event, sizeof(event),
-                 "{\"t\":\"error\",\"id\":%d,\"code\":\"BAD_REQUEST\","
-                 "\"message\":\"unknown controller type\"}",
-                 id);
-        reply_raw(event);
-        return;
-    }
     const uint32_t body = (uint32_t)cmd_number(cmd, "bodyColor") & 0xFFFFFFu;
     const uint32_t button = (uint32_t)cmd_number(cmd, "buttonColor") & 0xFFFFFFu;
+    const uint32_t accent = (uint32_t)cmd_number(cmd, "accentColor") & 0xFFFFFFu;
     const uint32_t grip = (uint32_t)cmd_number(cmd, "gripColor") & 0xFFFFFFu;
-    app_config_set_controller(joycon ? APP_CONFIG_CTRL_JOYCON : APP_CONFIG_CTRL_PRO,
-                              body, button, grip);
-    ns2_session_set_identity(joycon, body, button, grip);
+    app_config_set_controller_colors(body, button, accent, grip);
+    ns2_session_set_colors(body, button, accent, grip);
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"controllerConfigSet\",\"id\":%d,\"success\":true,"
-             "\"config\":{\"type\":\"%s\",\"bodyColor\":%lu,\"buttonColor\":%lu,"
+             "\"config\":{\"bodyColor\":%lu,\"buttonColor\":%lu,\"accentColor\":%lu,"
              "\"gripColor\":%lu}}",
-             id, joycon ? "joycon" : "pro", (unsigned long)body,
-             (unsigned long)button, (unsigned long)grip);
+             id, (unsigned long)body, (unsigned long)button, (unsigned long)accent,
+             (unsigned long)grip);
     reply_raw(event);
-    ESP_LOGI(TAG, "controller config -> %s (persisted)", joycon ? "joycon" : "pro");
+    ESP_LOGI(TAG, "controller colors -> %06lx/%06lx/%06lx/%06lx (persisted)",
+             (unsigned long)body, (unsigned long)button, (unsigned long)accent,
+             (unsigned long)grip);
 }
 
 static void handle_cmd(const char *cmd)
@@ -636,8 +602,6 @@ static void handle_cmd(const char *cmd)
         handle_disconnect(id);
     } else if (cmd_has(cmd, "\"t\":\"unpair\"")) {
         handle_unpair(id);
-    } else if (cmd_has(cmd, "\"t\":\"pressLr\"")) {
-        handle_press_lr(id);
     } else if (cmd_has(cmd, "\"t\":\"debugKey\"")) {
         handle_debug_key(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"powerOff\"")) {

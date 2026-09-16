@@ -57,7 +57,8 @@ screen / relay / motion / ltk / rumble / lamp / haptic），数据全部由固�
 key a 200        注入按键（a b x y plus minus home capture c l r zl zr ls rs
                  up down left right gl gr ui），key release 全部松开
 stick l 2048 2048  设摇杆电平 0-4095（stick reset 回中）
-ctrl joycon      手柄形态与配色（ctrl pro 0x2d2d2d 0x8b0000 0x2d2d2d），持久化
+ctrl             手柄配色（ctrl 0x232323 0xa0a0a0 0xe6e6e6 0x323232，四段依次是
+                 机身 按键 高光 握把，0xRRGGBB，持久化；无参回读）
 connect          连接键：开连接窗口等主机连上来（未配对身份进配对流程）
 pairing start    配新主机：断链 + 发现广播；pairing stop 停止广播并断链
 wake             打开唤醒窗口；adv auto|wake|reconnect 钉窗口内形态

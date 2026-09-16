@@ -180,14 +180,16 @@ static void relay_keeps_device_payload_and_rewrites_status(void)
     CHECK_EQ(s_sent[NS2_09_OFF_STATUS], 0x30);
 }
 
-static void relay_requires_matching_identity_and_format(void)
+static void relay_requires_matching_format(void)
 {
     pad_state_t pad = relay_pad_state();
 
-    /* 会话身份对不上（主机连的是 JoyCon 组合）→ 不转发。 */
-    reset_sink(1, NS2_ID_JOYCON_L, NS2_REPORT_ID_09);
+    /* 设备自带的是 0x07 报文体（JoyCon 2）：目标会话只承载 0x09，不转发。 */
+    pad.raw_report_id = 0x07;
+    reset_sink(1, NS2_ID_PRO, NS2_REPORT_ID_09);
     CHECK(!ns2_output_send_raw(&pad));
     CHECK_EQ(s_sent_count, 0);
+    pad.raw_report_id = NS2_REPORT_ID_09;
 
     /* 报告格式对不上（主机要 0x05）→ 不转发。 */
     reset_sink(1, NS2_ID_PRO, NS2_REPORT_ID_05);
@@ -268,7 +270,8 @@ HOST_TEST_SUITE(suite_ns2_relay, "ns2_relay",
                 {"实验运动块按样本填 0x09 的运动区", motion_sensor_mode_fills_09_block},
                 {"透传保留设备载荷并重写状态字节",
                  relay_keeps_device_payload_and_rewrites_status},
-                {"透传要求身份与报告格式都对上", relay_requires_matching_identity_and_format},
+                {"透传要求报告格式对上（0x07 载荷不投给 0x09 会话）",
+                 relay_requires_matching_format},
                 {"目标优先透传，关闭后回到解析重编码", target_prefers_relay_until_turned_off},
                 {"透传路径的耳机状态与编码路径同源",
                  relay_reports_headset_state_from_same_source});

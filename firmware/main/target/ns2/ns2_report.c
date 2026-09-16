@@ -25,34 +25,6 @@ static uint8_t btn_bit(uint32_t buttons, uint32_t mask, uint8_t shift)
     return (uint8_t)(((buttons & mask) != 0) << shift);
 }
 
-void ns2_state_for_identity(ns2_controller_state_t *out,
-                            const ns2_controller_state_t *in, uint8_t identity)
-{
-    *out = *in;
-    if (identity == NS2_ID_PRO) {
-        return;
-    }
-    /* JoyCon 组合按左右分摊同一份规范化状态：左半保留 L 侧按键、十字键与
-     * 左摇杆，右半保留 A/B/X/Y、C 键与右摇杆；GL/GR 近似对应导轨 SL/SR。
-     * NFC 硬件只在右手柄上（controller.md §8），左半状态字节清零；
-     * 电池/震动特性两半一致。 */
-    if (identity == NS2_ID_JOYCON_L) {
-        out->buttons &= NS2_BTN_L | NS2_BTN_ZL | NS2_BTN_MINUS | NS2_BTN_CAPTURE |
-                        NS2_BTN_LSTICK | NS2_BTN_GL |
-                        NS2_BTN_DPAD_UP | NS2_BTN_DPAD_DOWN |
-                        NS2_BTN_DPAD_LEFT | NS2_BTN_DPAD_RIGHT;
-        out->stick_rx = NS2_STICK_CENTER;
-        out->stick_ry = NS2_STICK_CENTER;
-        out->nfc_state = 0;
-    } else {
-        out->buttons &= NS2_BTN_R | NS2_BTN_ZR | NS2_BTN_PLUS | NS2_BTN_HOME |
-                        NS2_BTN_A | NS2_BTN_B | NS2_BTN_X | NS2_BTN_Y |
-                        NS2_BTN_RSTICK | NS2_BTN_GR | NS2_BTN_C;
-        out->stick_lx = NS2_STICK_CENTER;
-        out->stick_ly = NS2_STICK_CENTER;
-    }
-}
-
 /** Report 0x09 电源状态：bit0 外部供电、bit1 充电中、bits2-5 电量等级。 */
 static uint8_t power_byte(const ns2_controller_state_t *state)
 {
@@ -140,6 +112,50 @@ static void buttons_05(const ns2_controller_state_t *state, uint8_t out[4])
                        btn_bit(b, NS2_BTN_GR, 0));
 }
 
+/** 运动块填充（0x09 报文体；0x05 的 IMU 字段另在 ns2_encode_input_05 里写）。
+ *  len_out 是长度字节、data_out 是块首，cap 为块首之后可用字节数（抓包占位块
+ *  带 8 字节尾段，空间不够时只填块本体，取用方传 48）。主机开启 IMU 特性位后
+ *  长度 0 的报文会被当作不完整输入，因此除 NS2_MOTION_NONE 外用的一档一律填满长度。 */
+static void motion_block(uint8_t *len_out, uint8_t *data_out, size_t cap,
+                         const ns2_controller_state_t *state, uint8_t counter)
+{
+    if (state->motion_mode == NS2_MOTION_NONE) {
+        *len_out = 0x00;
+        return;
+    }
+    *len_out = NS2_INPUT_09_MOTION_LEN;
+    if (state->motion_mode == NS2_MOTION_CAPTURE) {
+        const size_t n = cap >= sizeof(s_motion_capture) ? sizeof(s_motion_capture)
+                                                         : NS2_INPUT_09_MOTION_LEN;
+        memcpy(data_out, s_motion_capture, n);
+        const uint32_t base = (uint32_t)counter * NS2_REPORT_INTERVAL_US;
+        const uint16_t offs[2] = {NS2_MOTION_STAMP_OFFS_A, NS2_MOTION_STAMP_OFFS_B};
+        for (uint8_t i = 0; i < 2; i++) {
+            const uint32_t stamp = base + (uint32_t)i * (NS2_REPORT_INTERVAL_US / 2);
+            uint8_t *field = &data_out[offs[i]];
+            field[0] = (uint8_t)(stamp & 0xFF);
+            field[1] = (uint8_t)((stamp >> 8) & 0xFF);
+            field[2] = (uint8_t)((stamp >> 16) & 0xFF);
+        }
+        return;
+    }
+    /* 实验模式：把输入设备的真实样本按 NS1 的 12 字节样本风格填进块首，
+     * 余下字节保持 0。块结构未公开，这一档只为实机 A/B（见 ns2_state.h）。 */
+    if (state->motion_mode == NS2_MOTION_SENSOR && state->motion_valid) {
+        for (uint8_t s = 0; s < NS2_09_MOTION_SAMPLES; s++) {
+            uint8_t *sample = &data_out[s * NS2_09_MOTION_SAMPLE_LEN];
+            for (uint8_t axis = 0; axis < 3; axis++) {
+                const int16_t gyro = state->gyro[axis];
+                const int16_t accel = state->accel[axis];
+                sample[axis * 2] = (uint8_t)((uint16_t)gyro & 0xFF);
+                sample[axis * 2 + 1] = (uint8_t)((uint16_t)gyro >> 8);
+                sample[6 + axis * 2] = (uint8_t)((uint16_t)accel & 0xFF);
+                sample[6 + axis * 2 + 1] = (uint8_t)((uint16_t)accel >> 8);
+            }
+        }
+    }
+}
+
 void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],
                          const ns2_controller_state_t *state, uint8_t counter)
 {
@@ -156,42 +172,8 @@ void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],
     out[0x0B] = state->rumble_enabled ? 0x38 : 0x30;
     out[0x0C] = state->nfc_state;
     out[NS2_09_OFF_HEADSET] = state->headset_state;
-    /* 运动块（0x0E 长度 + 0x0F 起 40 字节）：主机开启 IMU 特性位（掩码
-     * bit2）后，长度 0 的报文会被当作不完整输入。板卡没有 IMU，按 mode 填
-     * 占位；NS2_MOTION_NONE 用于实机确认主机是否真的要求运动数据。 */
-    if (state->motion_mode == NS2_MOTION_NONE) {
-        out[NS2_09_OFF_MOTION_LEN] = 0x00;
-        return;
-    }
-    out[NS2_09_OFF_MOTION_LEN] = NS2_INPUT_09_MOTION_LEN;
-    if (state->motion_mode == NS2_MOTION_CAPTURE) {
-        memcpy(&out[NS2_09_OFF_MOTION], s_motion_capture, sizeof(s_motion_capture));
-        const uint32_t base = (uint32_t)counter * NS2_REPORT_INTERVAL_US;
-        const uint16_t offs[2] = {NS2_MOTION_STAMP_OFFS_A, NS2_MOTION_STAMP_OFFS_B};
-        for (uint8_t i = 0; i < 2; i++) {
-            const uint32_t stamp = base + (uint32_t)i * (NS2_REPORT_INTERVAL_US / 2);
-            uint8_t *field = &out[NS2_09_OFF_MOTION + offs[i]];
-            field[0] = (uint8_t)(stamp & 0xFF);
-            field[1] = (uint8_t)((stamp >> 8) & 0xFF);
-            field[2] = (uint8_t)((stamp >> 16) & 0xFF);
-        }
-        return;
-    }
-    /* 实验模式：把输入设备的真实样本按 NS1 的 12 字节样本风格填进块首，
-     * 余下字节保持 0。块结构未公开，这一档只为实机 A/B（见 ns2_state.h）。 */
-    if (state->motion_mode == NS2_MOTION_SENSOR && state->motion_valid) {
-        for (uint8_t s = 0; s < NS2_09_MOTION_SAMPLES; s++) {
-            uint8_t *sample = &out[NS2_09_OFF_MOTION + s * NS2_09_MOTION_SAMPLE_LEN];
-            for (uint8_t axis = 0; axis < 3; axis++) {
-                const int16_t gyro = state->gyro[axis];
-                const int16_t accel = state->accel[axis];
-                sample[axis * 2] = (uint8_t)((uint16_t)gyro & 0xFF);
-                sample[axis * 2 + 1] = (uint8_t)((uint16_t)gyro >> 8);
-                sample[6 + axis * 2] = (uint8_t)((uint16_t)accel & 0xFF);
-                sample[6 + axis * 2 + 1] = (uint8_t)((uint16_t)accel >> 8);
-            }
-        }
-    }
+    motion_block(&out[NS2_09_OFF_MOTION_LEN], &out[NS2_09_OFF_MOTION],
+                 NS2_INPUT_09_LEN - NS2_09_OFF_MOTION, state, counter);
 }
 
 void ns2_encode_input_09_usb(uint8_t out[NS2_INPUT_09_LEN + 1],

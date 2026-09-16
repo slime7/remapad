@@ -276,8 +276,8 @@ static void debug_key_lookup(void)
     CHECK_EQ(mask, 0);
     CHECK(!dp_source_key_lookup("", 0, &mask, &hold_ms));
     CHECK(!dp_source_key_lookup("aa", 2, &mask, &hold_ms));
-    /* 配对 L+R 不再是调试键：主机 Grip 页不再是配对入口，JoyCon 组合未配对
-     * 期间由固件自动注入（见 ns2_adv_lr_step），面板上不再需要手动兜底。 */
+    /* 配对 L+R 不再是调试键：主机 Grip 页不再是配对入口，面板上不再需要
+     * 手动兜底。 */
     CHECK(!dp_source_key_lookup("lr", 2, &mask, &hold_ms));
     CHECK_EQ(mask, 0);
 }

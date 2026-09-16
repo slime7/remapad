@@ -58,7 +58,7 @@ export async function openSettingsItem(app: RemapadApp, item: SettingsItem): Pro
 /** 打开手柄设置页（设置列表首行）。 */
 export async function openControllerSettings(app: RemapadApp): Promise<void> {
   await openSettingsItem(app, '手柄设置');
-  await expect.poll(() => app.hasVisibleText('Pro 手柄')).toBe(true);
+  await expect.poll(() => app.hasVisibleText('序列号 HEJ71001123456')).toBe(true);
   await app.refreshTree();
 }
 

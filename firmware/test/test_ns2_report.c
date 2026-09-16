@@ -135,51 +135,6 @@ static void stick_packing(void)
     CHECK_EQ(packed[2], 0x12);
 }
 
-static void identity_split(void)
-{
-    ns2_controller_state_t all;
-    ns2_state_defaults(&all);
-    all.buttons = 0xFFFFFFFFu;
-    all.stick_lx = 0x111;
-    all.stick_ly = 0x222;
-    all.stick_rx = 0x333;
-    all.stick_ry = 0x444;
-    all.nfc_state = 0x03;
-
-    ns2_controller_state_t out;
-
-    /* Pro：原样拷贝，NFC 状态保留。 */
-    ns2_state_for_identity(&out, &all, NS2_ID_PRO);
-    CHECK_EQ(out.buttons, all.buttons);
-    CHECK_EQ(out.stick_lx, all.stick_lx);
-    CHECK_EQ(out.stick_rx, all.stick_rx);
-    CHECK_EQ(out.nfc_state, all.nfc_state);
-
-    /* JoyCon 左：只留 L 侧按键与左摇杆，右摇杆归中，C 键不出现，NFC 清零
-     * （NFC 硬件只在右手柄上）。 */
-    ns2_state_for_identity(&out, &all, NS2_ID_JOYCON_L);
-    CHECK_EQ(out.buttons, (uint32_t)(NS2_BTN_L | NS2_BTN_ZL | NS2_BTN_MINUS |
-                                    NS2_BTN_CAPTURE | NS2_BTN_LSTICK | NS2_BTN_GL |
-                                    NS2_BTN_DPAD_UP | NS2_BTN_DPAD_DOWN |
-                                    NS2_BTN_DPAD_LEFT | NS2_BTN_DPAD_RIGHT));
-    CHECK_EQ(out.buttons & NS2_BTN_C, 0);
-    CHECK_EQ(out.stick_lx, 0x111);
-    CHECK_EQ(out.stick_ly, 0x222);
-    CHECK_EQ(out.stick_rx, NS2_STICK_CENTER);
-    CHECK_EQ(out.stick_ry, NS2_STICK_CENTER);
-    CHECK_EQ(out.nfc_state, 0);
-
-    /* JoyCon 右：只留 R 侧按键（含 C 键）与右摇杆，左摇杆归中，NFC 保留。 */
-    ns2_state_for_identity(&out, &all, NS2_ID_JOYCON_R);
-    CHECK_EQ(out.buttons, (uint32_t)(NS2_BTN_R | NS2_BTN_ZR | NS2_BTN_PLUS | NS2_BTN_HOME |
-                                    NS2_BTN_A | NS2_BTN_B | NS2_BTN_X | NS2_BTN_Y |
-                                    NS2_BTN_RSTICK | NS2_BTN_GR | NS2_BTN_C));
-    CHECK_EQ(out.stick_lx, NS2_STICK_CENTER);
-    CHECK_EQ(out.stick_ly, NS2_STICK_CENTER);
-    CHECK_EQ(out.stick_rx, 0x333);
-    CHECK_EQ(out.stick_ry, 0x444);
-    CHECK_EQ(out.nfc_state, 0x03);
-}
 
 static void power_and_charge_bytes(void)
 {
@@ -364,12 +319,12 @@ static void motion_capture_mode_is_monotonic(void)
     CHECK_EQ(first[0x06], 0x08);
 }
 
+
 HOST_TEST_SUITE(suite_ns2_report, "ns2_report",
                 {"静置状态 0x09 整包逐字节", idle_report_09},
                 {"0x09 按键位表", button_bits_09},
                 {"0x05 按键位表", button_bits_05},
                 {"摇杆 12 位打包可逆与布局", stick_packing},
-                {"Pro / JoyCon 左右身份切分", identity_split},
                 {"电源与充电状态字节", power_and_charge_bytes},
                 {"特性位与 NFC 字段", feature_flag_and_nfc},
                 {"运动数据长度非零且块内全零占位", motion_block_is_zero_filled_placeholder},

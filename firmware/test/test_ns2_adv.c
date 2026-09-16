@@ -3,8 +3,7 @@
  * 判据。三种形态的字节在这里钉死——状态位或主机地址写错一位，主机就认不出
  * 这台手柄；策略部分——没有被请求连接就静默（上电与主机睡下都不发信号）、
  * 配对流程发发现广播、连接窗口内已配对发回连形态、唤醒窗口内已配对发唤醒
- * 形态、调试页 HOME 按键按主机是否在线分流、JoyCon 组合的 L+R 自动注入
- * 节奏——同样在这里定死。
+ * 形态、调试页 HOME 按键按主机是否在线分流、主机注册证据的判定——同样在这里定死。
  *
  * 期望值取自真机 Pro Controller 2 抓包（ndeadly/switch2_controller_research
  * 的 reconnect / wake 录制）：回连状态位 0x00，唤醒状态位 0x81，两者都
@@ -126,31 +125,6 @@ static void mode_choice_follows_window(void)
              NS2_ADV_OFF);
 }
 
-/** JoyCon 组合确认：两只都就绪（收到 0x0c/0x04、输入被采用）后立即注入
- *  L+R，拿齐凭证之前每 3 秒重试；已配对或未就绪时不注入。 */
-static void lr_injection_follows_readiness(void)
-{
-    ns2_adv_lr_timer_t timer = {0};
-    const int64_t t0 = 1000000;
-
-    /* 就绪即注入，间隔内不重复。 */
-    CHECK(ns2_adv_lr_step(&timer, false, true, t0));
-    CHECK(!ns2_adv_lr_step(&timer, false, true, t0));
-    CHECK(!ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US - 1));
-    CHECK(ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US));
-
-    /* 已配对之后不再注入：真机此时不需要 L+R 组合确认。 */
-    CHECK(!ns2_adv_lr_step(&timer, true, true, t0 + NS2_ADV_LR_RETRY_US * 2));
-
-    /* 只有一只在线（或未启用特性）时不注入，也不消耗计时。 */
-    CHECK(!ns2_adv_lr_step(&timer, false, false, t0 + NS2_ADV_LR_RETRY_US * 3));
-    CHECK(ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US * 3));
-
-    /* 切换身份 / 重进配对流程后复位：下一次就绪立刻注入。 */
-    ns2_adv_lr_reset(&timer);
-    CHECK(ns2_adv_lr_step(&timer, false, true, t0 + NS2_ADV_LR_RETRY_US * 4));
-}
-
 static void manufacturer_data_offsets(void)
 {
     uint8_t out[NS2_ADV_PAYLOAD_LEN];
@@ -174,6 +148,19 @@ static void dormant_link_follows_feature_enable(void)
     CHECK(!ns2_adv_dormant_link(true, true));
     /* 未订阅（初始化未走完）不算休眠。 */
     CHECK(!ns2_adv_dormant_link(false, false));
+}
+
+/** 主机注册证据：地址命中凭证、私有配对握手走完、主机在链路上启用特性
+ *  （0x0c/0x04）三条任一条成立即算注册。第三条覆盖两个实机现场——主机换了
+ *  随机地址、主机已存有本机凭证而不再重跑 0x15：只看地址会把在用的链路一直
+ *  留在等待态，屏幕停在「配对中…」，配新主机的流程也退不出来。
+ *  「已订阅但没启用特性」（握把页快捷回连）不算注册：主机此刻还没认这只手柄。 */
+static void host_registration_follows_evidence(void)
+{
+    CHECK(ns2_adv_host_registered(true, false, false));
+    CHECK(ns2_adv_host_registered(false, true, false));
+    CHECK(ns2_adv_host_registered(false, false, true));
+    CHECK(!ns2_adv_host_registered(false, false, false));
 }
 
 /** 回连广播要带回的地址是主机真正在用的那一条：配对交换给的是两条只差一位的
@@ -266,8 +253,8 @@ HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"缺少主机地址时退化为发现形态", missing_host_mac_degrades_to_discovery},
                 {"型号 ID 随身份变化", pid_follows_identity},
                 {"没被请求连接就静默，窗口内才发对应形态", mode_choice_follows_window},
-                {"未配对 JoyCon 就绪后注入 L+R 并重试", lr_injection_follows_readiness},
                 {"休眠链路按特性启用判定", dormant_link_follows_feature_enable},
+                {"主机注册按地址、配对握手或特性启用判定", host_registration_follows_evidence},
                 {"回连广播用主机最近一次连接的地址", host_mac_prefers_last_connected_address},
                 {"连接窗口与唤醒窗口各按自己的时长收窗", window_lifetime_follows_request},
                 {"HOME 按键按主机在线与否分流", home_key_follows_link_state},

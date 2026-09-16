@@ -17,11 +17,22 @@ static const char *TAG = "remapad_blcred";
 #define CREDS_KEY_HOST "pairing.host"
 
 /** v2 序列化格式：每个身份一段（1B 条数 + 最多 NS2_CREDS_MAX 条记录，
- * 每条 6B MAC + 16B LTK），三段顺排。v1 为单表（1B 条数 + 记录），仅读入
+ * 每条 6B MAC + 16B LTK），各段顺排。v1 为单表（1B 条数 + 记录），仅读入
  * 迁移到 Pro 槽。 */
 #define CREDS_SLOT_LEN (1 + NS2_CREDS_MAX * (NS2_CREDS_MAC_LEN + NS2_CREDS_LTK_LEN))
-#define CREDS_BLOB_LEN (NS2_ID_COUNT * CREDS_SLOT_LEN)
-#define CREDS_HOST_LEN (NS2_ID_COUNT * NS2_CREDS_MAC_LEN)
+/** 落盘固定写满历史最长格式（三个身份段）：本设备只用第 0 段（Pro），余下补零。
+ * 长度不变，新旧固件互相读回都不会把整张表当成损坏（读回按实际长度解析）。 */
+#define CREDS_SLOTS_STORED 3
+#define CREDS_BLOB_LEN (CREDS_SLOTS_STORED * CREDS_SLOT_LEN)
+#define CREDS_HOST_LEN (CREDS_SLOTS_STORED * NS2_CREDS_MAC_LEN)
+/** v1 单表的长度上限（1B 条数 + 最多 NS2_CREDS_MAX 条记录）。 */
+#define CREDS_V1_LEN_MAX (1 + NS2_CREDS_MAX * (NS2_CREDS_MAC_LEN + NS2_CREDS_LTK_LEN))
+/** 读旧记录用的缓冲区上限：v2 与 v1 单表取大者。缓冲区必须够大，否则
+ * nvs_get_blob 会因「缓冲不足」直接失败、已配对的凭证被当成没有
+ * （2026-09-16 实机踩到：读回缓冲区按当前长度开、比盘上的短，整张表读不进来，
+ * 会话回落去读 v1 老表，拿到的是过期记录）。 */
+#define CREDS_BLOB_LEN_MAX \
+    (CREDS_BLOB_LEN > CREDS_V1_LEN_MAX ? CREDS_BLOB_LEN : CREDS_V1_LEN_MAX)
 #define CREDS_COMMIT_QUEUE_LEN 4
 
 /** 落盘任务的消息：凭证表与主机地址表共用一条队列。 */
@@ -70,9 +81,7 @@ static void commit_task(void *param)
         if (set != ESP_OK) {
             ESP_LOGE(TAG, "commit failed: %s", esp_err_to_name(set));
         } else if (msg.kind == CREDS_COMMIT_CREDS) {
-            ESP_LOGI(TAG, "committed creds (pro=%u l=%u r=%u)",
-                     msg.payload[0], msg.payload[CREDS_SLOT_LEN],
-                     msg.payload[2 * CREDS_SLOT_LEN]);
+            ESP_LOGI(TAG, "committed creds (pro=%u)", msg.payload[0]);
         } else {
             ESP_LOGI(TAG, "committed host address %02x:%02x:%02x:%02x:%02x:%02x",
                      msg.payload[0], msg.payload[1], msg.payload[2], msg.payload[3],
@@ -164,23 +173,20 @@ esp_err_t ble_creds_init(void)
     if (err != ESP_OK) {
         return err;
     }
-    uint8_t blob[CREDS_BLOB_LEN];
+    /* 缓冲区按历史最长格式开，读回时按实际长度只解析第一段（Pro 槽）。 */
+    uint8_t blob[CREDS_BLOB_LEN_MAX];
     size_t len = sizeof(blob);
     const esp_err_t get = nvs_get_blob(handle, CREDS_KEY_V2, blob, &len);
-    if (get == ESP_OK && len >= CREDS_BLOB_LEN) {
-        for (size_t id = 0; id < NS2_ID_COUNT; id++) {
-            load_slot_locked((ns2_identity_t)id, &blob[id * CREDS_SLOT_LEN]);
-        }
-        ESP_LOGI(TAG, "loaded creds (pro=%u l=%u r=%u)",
-                 (unsigned)s_creds.count[NS2_ID_PRO],
-                 (unsigned)s_creds.count[NS2_ID_JOYCON_L],
-                 (unsigned)s_creds.count[NS2_ID_JOYCON_R]);
+    if (get == ESP_OK && len >= CREDS_SLOT_LEN) {
+        load_slot_locked(NS2_ID_PRO, blob);
+        ESP_LOGI(TAG, "loaded creds (pro=%u, blob %uB)",
+                 (unsigned)s_creds.count[NS2_ID_PRO], (unsigned)len);
     } else {
         if (get == ESP_OK) {
             ESP_LOGW(TAG, "corrupted creds blob (%u), ignored", (unsigned)len);
         }
         /* v2 不存在或损坏：读 v1 单表迁移到 Pro 槽（保留既有配对）。 */
-        len = CREDS_BLOB_LEN;
+        len = sizeof(blob);
         const esp_err_t get_v1 = nvs_get_blob(handle, CREDS_KEY_V1, blob, &len);
         if (get_v1 == ESP_OK && len >= 1 &&
             (len - 1) % (NS2_CREDS_MAC_LEN + NS2_CREDS_LTK_LEN) == 0) {
@@ -200,11 +206,11 @@ esp_err_t ble_creds_init(void)
     /* 连接时记录的主机地址优先于凭证推断值：它一定是主机当前在用的地址。 */
     uint8_t host[CREDS_HOST_LEN];
     len = sizeof(host);
-    if (nvs_get_blob(handle, CREDS_KEY_HOST, host, &len) == ESP_OK && len >= CREDS_HOST_LEN) {
-        for (size_t id = 0; id < NS2_ID_COUNT; id++) {
-            memcpy(s_creds.host_mac[id], &host[id * NS2_CREDS_MAC_LEN], NS2_CREDS_MAC_LEN);
-            s_creds.host_valid[id] = true;
-        }
+    /* 长度下限只按第一条记录算：盘上可能是历史上的短格式，前 6 字节总是 Pro 的。 */
+    if (nvs_get_blob(handle, CREDS_KEY_HOST, host, &len) == ESP_OK &&
+        len >= NS2_CREDS_MAC_LEN) {
+        memcpy(s_creds.host_mac[NS2_ID_PRO], host, NS2_CREDS_MAC_LEN);
+        s_creds.host_valid[NS2_ID_PRO] = true;
         ESP_LOGI(TAG, "loaded host address %02x:%02x:%02x:%02x:%02x:%02x",
                  host[0], host[1], host[2], host[3], host[4], host[5]);
     }
@@ -309,7 +315,9 @@ void ble_creds_note_host_mac(ns2_identity_t identity, const uint8_t mac[NS2_CRED
         memcpy(s_creds.host_mac[identity], mac, NS2_CREDS_MAC_LEN);
         s_creds.host_valid[identity] = true;
         uint8_t host[CREDS_HOST_LEN];
-        memcpy(host, s_creds.host_mac, sizeof(host));
+        /* 盘上按历史长度（三身份段）写；本设备只有第 0 段有效，其余补零。 */
+        memset(host, 0, sizeof(host));
+        memcpy(host, s_creds.host_mac[identity], NS2_CREDS_MAC_LEN);
         xSemaphoreGive(s_lock);
         ESP_LOGI(TAG, "host address noted (id=%u %02x:%02x:%02x:%02x:%02x:%02x)",
                  (unsigned)identity, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);

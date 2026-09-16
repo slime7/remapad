@@ -30,8 +30,8 @@ extern "C" {
  */
 
 /** 输出通道：把编码后的报告体发往 NS2 主机链路（BLE 现役，USB 预留）。
- * 通道可承载多个并发的输出会话（BLE 连接；JoyCon 组合为左右两条），
- * ns2_output_send 按会话身份切分状态后逐会话编码发送。 */
+ * 通道可承载多个并发的输出会话（一条 BLE 连接一个），ns2_output_send 逐
+ * 会话按报告格式编码发送。 */
 typedef struct {
     /** 当前活跃会话数。 */
     size_t (*session_count)(void *user);

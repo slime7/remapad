@@ -46,7 +46,8 @@ static void serialize_locked(uint8_t blob[CONFIG_BLOB_LEN])
     blob[2] = s_appcfg.cfg.screen_on ? 1u : 0u;
     /* [3] 曾是 USB 角色：该字段不落盘（重启恒为串口），保留字节写 0。 */
     blob[3] = 0;
-    blob[4] = s_appcfg.cfg.ctrl_type;
+    /* [4] 曾是手柄形态（Pro / JoyCon）：设备只模拟 Pro Controller 2，保留字节写 0。 */
+    blob[4] = 0;
     blob[5] = (uint8_t)(s_appcfg.cfg.body_color >> 16);
     blob[6] = (uint8_t)(s_appcfg.cfg.body_color >> 8);
     blob[7] = (uint8_t)(s_appcfg.cfg.body_color);
@@ -59,6 +60,10 @@ static void serialize_locked(uint8_t blob[CONFIG_BLOB_LEN])
     blob[16] = s_appcfg.cfg.fw_version[0];
     blob[17] = s_appcfg.cfg.fw_version[1];
     blob[18] = s_appcfg.cfg.fw_version[2];
+    /* [19..21] 高光配色：后加字段，旧记录（同长度、该段为零）读出即「未配置」。 */
+    blob[19] = (uint8_t)(s_appcfg.cfg.accent_color >> 16);
+    blob[20] = (uint8_t)(s_appcfg.cfg.accent_color >> 8);
+    blob[21] = (uint8_t)(s_appcfg.cfg.accent_color);
 }
 
 /** 置脏标记：改动只落在内存表，落盘由提交任务的周期检查统一完成。 */
@@ -127,9 +132,9 @@ esp_err_t app_config_init(void)
     s_appcfg.cfg.brightness = CONFIG_DEFAULT_BRIGHTNESS;
     s_appcfg.cfg.screen_on = true;
     s_appcfg.cfg.usb_role = APP_CONFIG_USB_DEVICE;
-    s_appcfg.cfg.ctrl_type = APP_CONFIG_CTRL_PRO;
     s_appcfg.cfg.body_color = 0;
     s_appcfg.cfg.button_color = 0;
+    s_appcfg.cfg.accent_color = 0;
     s_appcfg.cfg.grip_color = 0;
     /* 上报固件版本：出厂值固化在 app_config.h 的 CONFIG_DEFAULT_FW_VERSION_*。 */
     s_appcfg.cfg.fw_version[0] = CONFIG_DEFAULT_FW_VERSION_MAJOR;
@@ -164,8 +169,6 @@ esp_err_t app_config_init(void)
     s_appcfg.cfg.screen_on = true;
     /* USB 角色不跨重启保留：开机恒为串口（device），旧记录里的角色一并忽略。 */
     s_appcfg.cfg.usb_role = APP_CONFIG_USB_DEVICE;
-    s_appcfg.cfg.ctrl_type = blob[4] == APP_CONFIG_CTRL_JOYCON ? APP_CONFIG_CTRL_JOYCON
-                                                               : APP_CONFIG_CTRL_PRO;
     s_appcfg.cfg.body_color = ((uint32_t)blob[5] << 16) | ((uint32_t)blob[6] << 8) | blob[7];
     s_appcfg.cfg.button_color = ((uint32_t)blob[8] << 16) | ((uint32_t)blob[9] << 8) | blob[10];
     s_appcfg.cfg.grip_color = ((uint32_t)blob[11] << 16) | ((uint32_t)blob[12] << 8) | blob[13];
@@ -173,10 +176,12 @@ esp_err_t app_config_init(void)
         s_appcfg.cfg.fw_version[0] = blob[16];
         s_appcfg.cfg.fw_version[1] = blob[17];
         s_appcfg.cfg.fw_version[2] = blob[18];
+        s_appcfg.cfg.accent_color =
+            ((uint32_t)blob[19] << 16) | ((uint32_t)blob[20] << 8) | blob[21];
     }
-    ESP_LOGI(TAG, "loaded config: brightness=%u screen=%u role=%u type=%u",
+    ESP_LOGI(TAG, "loaded config: brightness=%u screen=%u role=%u",
              s_appcfg.cfg.brightness, (unsigned)s_appcfg.cfg.screen_on,
-             (unsigned)s_appcfg.cfg.usb_role, (unsigned)s_appcfg.cfg.ctrl_type);
+             (unsigned)s_appcfg.cfg.usb_role);
     return ESP_OK;
 }
 
@@ -215,14 +220,13 @@ void app_config_set_usb_role(app_config_usb_role_t role)
     }
 }
 
-void app_config_set_controller(app_config_ctrl_type_t type,
-                               uint32_t body_rgb, uint32_t button_rgb, uint32_t grip_rgb)
+void app_config_set_controller_colors(uint32_t body_rgb, uint32_t button_rgb,
+                                      uint32_t accent_rgb, uint32_t grip_rgb)
 {
     if (s_appcfg.lock != NULL && xSemaphoreTake(s_appcfg.lock, portMAX_DELAY) == pdTRUE) {
-        s_appcfg.cfg.ctrl_type = type == APP_CONFIG_CTRL_JOYCON ? APP_CONFIG_CTRL_JOYCON
-                                                                : APP_CONFIG_CTRL_PRO;
         s_appcfg.cfg.body_color = body_rgb;
         s_appcfg.cfg.button_color = button_rgb;
+        s_appcfg.cfg.accent_color = accent_rgb;
         s_appcfg.cfg.grip_color = grip_rgb;
         xSemaphoreGive(s_appcfg.lock);
     }

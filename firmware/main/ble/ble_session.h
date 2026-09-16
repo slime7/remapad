@@ -14,8 +14,7 @@ extern "C" {
 /**
  * BLE 手柄会话：广播策略、连接初始化时序与指令分发（controller.md §6/§10.2）。
  * 传输细节（NimBLE、GATT 表、notify）由 ble_controller 承载，本模块只面对协议。
- * 会话按连接分槽（最多 2 条）：Pro 单会话；JoyCon 组合左右两只各一个会话，
- * 各自独立的身份、报告格式、配对状态与凭证（凭证按身份分槽持久化）。
+ * 设备对外只有一台 Pro Controller 2：单身份、单报告格式（0x09）、单条会话。
  *
  * 广播与真机一样只由用户动作打开：上电静默、主机睡下（断连）后静默，连接键
  * （屏幕「连接」、PWR 长按）开连接窗口，HOME 键在未连接时开唤醒窗口；窗口
@@ -80,7 +79,7 @@ bool ns2_session_fw_restart_armed(void);
 bool ns2_session_rumble_enabled(void);
 
 /** 配对新主机（配对页「新主机配对」、串口 pairing start）：断开当前主机后发
- *  标准发现广播（Pro 单身份 / JoyCon 双身份），等新主机搜索配对；流程一直
+ *  标准发现广播（Pro 单身份），等新主机搜索配对；流程一直
  *  挂着，直到新主机配上或用户停止广播。 */
 void ns2_session_start_pairing_mode(void);
 
@@ -117,12 +116,23 @@ typedef enum {
 void ns2_session_set_window_form(ns2_window_form_t form);
 ns2_window_form_t ns2_session_window_form(void);
 
+/** 广播地址形态的实机对账开关（ns2_adv_addr_form_t，串口 `advaddr`）：
+ *  auto 与 public 都是公共伪装地址（真机手柄的形态，主机也只接受这种），
+ *  random 换成派生静态随机地址做对照。不落盘；没连接又在广播时改完立即
+ *  按新形态重发，已连接的链路要断开重连才换地址。 */
+bool ns2_session_set_adv_addr_form(uint8_t form);
+uint8_t ns2_session_adv_addr_form(void);
+
+/** 广播 PDU 形态的实机对账开关（ble_ctl_adv_pdu_form_t，串口 `advpdu`）：
+ *  分辨主机按 legacy 还是扩展 PDU 过滤；同样在未连接时立即重发广播。 */
+void ns2_session_set_adv_pdu_form(uint8_t form);
+
 /** LTK 注入形态（0 = 反转后写入，1 = 原样写入）。主机连上但链路未加密时
  *  用它做现场 A/B；改动在下次连接时生效。 */
 void ns2_session_set_ltk_form(uint8_t form);
 uint8_t ns2_session_ltk_form(void);
 
-/** 当前模式下配对是否完成：Pro 看单身份凭证；JoyCon 组合要求左右都配对。 */
+/** 配对是否完成：Pro 身份有配对凭证即为真。 */
 bool ns2_session_paired(void);
 
 /** 任一活跃连接的主机是否已注册：凭证匹配回连，或本会话内完成 0x15 握手。 */
@@ -135,14 +145,10 @@ bool ns2_session_waiting_pair(void);
  * 重走 0x15。仅供控制面显式触发，「停止配对」不经过本函数。 */
 void ns2_session_unpair(void);
 
-/** 配对页「按下 LR」（JoyCon 组合）：确保双身份发现广播在发，并向数据面
- * 注入 L+R 按键（主机 Grip 界面的组合确认动作）。 */
-void ns2_session_press_lr(void);
-
-/** 下发手柄身份（Pro 或 JoyCon 组合 + 配色）：重建出厂块序列号 / PID /
- * 配色与广播拓扑；host 已同步时立即生效。 */
-void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
-                              uint32_t button_rgb, uint32_t grip_rgb);
+/** 下发四段配色（机身 / 按键 / 高光 / 握把）：重建出厂块配色；host 已同步时
+ *  立即生效（断开现有链路，用户按连接键后新配色随握手生效）。 */
+void ns2_session_set_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent_rgb,
+                            uint32_t grip_rgb);
 
 /** 上报固件版本改动后重建出厂块（0x7E40 / 0x13000 的版本字段来自工厂数据）；
  *  0x10 版本查询直接读配置，无需重建。 */
@@ -175,9 +181,10 @@ typedef struct {
     uint8_t state;         /* ns2_link_state_t */
     bool connected;
     uint16_t conn_handle;
-    uint8_t report_format; /* 0x05 / 0x09；未连接为 0 */
+    uint8_t report_format; /* 0x05 / 0x07 / 0x08 / 0x09；未连接为 0 */
     bool notify_05;        /* 主机已订阅 0x05 输入报告通道 */
-    bool notify_09;
+    bool notify_priv;      /* 主机已订阅专用输入通道（0x07 / 0x08 / 0x09 之一） */
+    uint16_t notify_priv_handle; /* 订的那个通道句柄（0 = 未订阅） */
     bool features_enabled; /* 主机已发 0x0c/0x04 启用特性（输入被采用的门槛） */
     uint32_t reports;      /* 已投递的输入报告数（订阅后计数） */
     uint16_t conn_itvl;    /* 当前连接间隔（1.25ms 单位，4 = 5ms）；未连接为 0 */
@@ -188,18 +195,18 @@ typedef struct {
     uint8_t mac[6];
 } ns2_session_status_t;
 
-/** 当前形态的身份列表（Pro 1 个；JoyCon 组合 2 个），返回写入个数。 */
+/** 当前身份列表（只有 Pro 一个），返回写入个数。 */
 size_t ns2_session_mode_identities(uint8_t out[2]);
 
 /** 指定身份的链路快照；身份不属于当前形态时返回 false。 */
 bool ns2_session_status(uint8_t identity, ns2_session_status_t *out);
 
-/** 指定身份对外广播地址（Pro 为公共伪装地址，JoyCon 为派生静态随机地址）；
+/** 指定身份对外广播地址（公共伪装地址，或 advaddr random 的派生形态）；
  * host 尚未同步时地址未确定，返回 false。 */
 bool ns2_session_identity_mac(uint8_t identity, uint8_t out[6]);
 
 /** 主机下发的玩家序号灯掩码（Command 0x09，bit0-3 对应 LED1-4）：取活跃会话的
- * 并集（JoyCon 组合左右各自成会话，主机通常下发同一掩码），无连接时为 0。
+ * 并集，无连接时为 0。
  * 控制面据此在首页显示四格序号指示灯。 */
 uint8_t ns2_session_player_leds(void);
 

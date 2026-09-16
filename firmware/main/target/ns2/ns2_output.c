@@ -77,18 +77,15 @@ void ns2_output_send(const ns2_controller_state_t *state)
         if (!s_out.sink.session_info(i, &identity, &format, s_out.sink.user)) {
             continue;
         }
-        /* JoyCon 组合按会话身份切分按键与摇杆（各会上报半边状态）。 */
-        ns2_controller_state_t split;
-        ns2_state_for_identity(&split, &merged, identity);
+        /* 通用报告（0x05，USB 模式）与专用报告（0x09，蓝牙）两种报文体，
+         * 长度都是 63 字节，按会话格式选编码器。 */
+        uint8_t report[NS2_INPUT_09_LEN];
         if (format == NS2_REPORT_ID_05) {
-            uint8_t report[NS2_INPUT_05_LEN];
-            ns2_encode_input_05(report, &split, s_out.counter05++);
-            s_out.sink.send_report(i, format, report, sizeof(report), s_out.sink.user);
+            ns2_encode_input_05(report, &merged, s_out.counter05++);
         } else {
-            uint8_t report[NS2_INPUT_09_LEN];
-            ns2_encode_input_09(report, &split, s_out.counter09++);
-            s_out.sink.send_report(i, format, report, sizeof(report), s_out.sink.user);
+            ns2_encode_input_09(report, &merged, s_out.counter09++);
         }
+        s_out.sink.send_report(i, format, report, sizeof(report), s_out.sink.user);
     }
 }
 
@@ -144,21 +141,6 @@ uint8_t ns2_output_headset_byte(void)
     return s_out.headset_override_on ? s_out.headset_override : s_out.headset_derived;
 }
 
-/** 设备期望身份 → 会话身份；PAD_IDENTITY_ANY 用 NS2_ID_COUNT 表示「不限」。 */
-static uint8_t session_identity_for(uint8_t identity)
-{
-    switch (identity) {
-    case PAD_IDENTITY_PRO:
-        return NS2_ID_PRO;
-    case PAD_IDENTITY_JOYCON_L:
-        return NS2_ID_JOYCON_L;
-    case PAD_IDENTITY_JOYCON_R:
-        return NS2_ID_JOYCON_R;
-    default:
-        return NS2_ID_COUNT;
-    }
-}
-
 bool ns2_output_send_raw(const pad_state_t *pad)
 {
     if (pad == NULL || pad->raw_len == 0 || s_out.sink.session_count == NULL ||
@@ -173,7 +155,6 @@ bool ns2_output_send_raw(const pad_state_t *pad)
     if (pad->raw_len != body_len + 1u) {
         return false;
     }
-    const uint8_t want_identity = session_identity_for(pad->native_identity);
     uint8_t body[NS2_INPUT_09_LEN];
     size_t delivered = 0;
     const size_t sessions = s_out.sink.session_count(s_out.sink.user);
@@ -183,7 +164,9 @@ bool ns2_output_send_raw(const pad_state_t *pad)
         if (!s_out.sink.session_info(i, &identity, &format, s_out.sink.user)) {
             continue;
         }
-        if (format != report_id || (want_identity != NS2_ID_COUNT && identity != want_identity)) {
+        /* 会话身份只有 Pro 一种，透传只按报告格式对账：同代手柄的报文体与目标
+         * 语言一致时原样转发（ADR 0026），格式对不上就回落解析重编码。 */
+        if (format != report_id) {
             continue;
         }
         memcpy(body, &pad->raw[1], body_len);

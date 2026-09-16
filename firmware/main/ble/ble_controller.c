@@ -40,7 +40,6 @@ static const char *TAG = "remapad_blctl";
 #define CHR_EXT2C 15
 #define CHR_EXT2E 16
 #define CHR_EXT32 17
-
 static const ble_uuid128_t uuid_svc_vendor =
     BLE_UUID128_INIT(0x80, 0xd2, 0x6b, 0xf9, 0x56, 0x19, 0x51, 0x8f,
                      0x30, 0x4e, 0x64, 0x19, 0x5d, 0xaf, 0xc5, 0x00);
@@ -114,11 +113,11 @@ static struct {
     uint16_t answer2;
 } s_h;
 
-/** 并发连接槽：JoyCon 组合模式下左右两只同时在线。 */
+/** 并发连接槽：一台主机一条链路；第二槽给主机换地址重连等过渡情形留余量。 */
 #define BLE_CTL_CONN_MAX 2
 
-/** 广播实例：0 走 BLE5 扩展 PDU、1 走 legacy PDU（Pro 单身份双形态兼容
- * 新旧主机）；JoyCon 双身份各占一个实例（均 legacy PDU，静态随机地址）。 */
+/** 广播实例：设备只发一台 Pro 的广播（默认 legacy PDU，见
+ *  ble_controller_adv_start）；两个实例是历史遗留的接法余量。 */
 #define ADV_INSTANCE_EXT 0
 #define ADV_INSTANCE_LEGACY 1
 #define ADV_INSTANCE_MAX 2
@@ -128,7 +127,11 @@ typedef struct {
     uint16_t conn_handle;
     uint8_t identity; /* ns2_identity_t */
     bool input05_notify;
-    bool input09_notify;
+    /** 专用输入通道（0x07 / 0x08 / 0x09）的订阅状态与句柄：真机在同一个
+     *  0x000E 句柄上按型号换 UUID，本设备把三种都注册出来，主机订哪一个
+     *  就往哪一个发通知。 */
+    bool input_priv_notify;
+    uint16_t input_priv_handle;
     bool answer_notify;
     bool answer2_notify;
     uint16_t conn_itvl; /* 1.25ms 单位 */
@@ -136,17 +139,49 @@ typedef struct {
     uint32_t tx_fail;   /* 通知投递失败计数（订阅成功但主机收不到输入的判据） */
     int tx_rc;          /* 最近一次失败的返回码 */
     uint8_t last_input05[63];
-    uint8_t last_input09[63];
+    /** 专用输入通道的快照（按会话格式是 0x07 / 0x08 / 0x09 之一）：主机不订阅
+     *  而改用 READ 轮询时读到的就是这份值。 */
+    uint8_t last_input_priv[63];
+    bool input_read_logged; /* 主机是否 READ 过输入通道（只留首次一条日志） */
 } conn_slot_t;
 
 static conn_slot_t s_conn[BLE_CTL_CONN_MAX];
 
-/** 每实例广播身份与地址：接收连接时按本机地址反查身份；JoyCon 双身份
- * 各占一个实例（静态随机地址），Pro 单身份两实例共用公共伪装地址。 */
+/** 每实例广播身份与地址：接收连接时按本机地址反查身份；Pro 单身份两实例
+ *  共用公共伪装地址。 */
 static uint8_t s_adv_identity[ADV_INSTANCE_MAX];
 static uint8_t s_adv_addr[ADV_INSTANCE_MAX][6];
 static bool s_adv_addr_valid[ADV_INSTANCE_MAX];
 static uint8_t s_own_public[6];
+
+/** 广播 PDU 形态（实机对账开关，默认按实例默认）：见 ble_ctl_adv_pdu_form_t。 */
+static uint8_t s_adv_pdu_form;
+
+const char *ble_controller_adv_pdu_form_name(uint8_t form)
+{
+    switch (form) {
+    case BLE_CTL_ADV_PDU_LEGACY:
+        return "legacy";
+    case BLE_CTL_ADV_PDU_EXTENDED:
+        return "extended";
+    default:
+        return "auto";
+    }
+}
+
+void ble_controller_set_adv_pdu_form(uint8_t form)
+{
+    if (form > BLE_CTL_ADV_PDU_EXTENDED) {
+        return;
+    }
+    s_adv_pdu_form = form;
+    ESP_LOGW(TAG, "adv pdu form -> %s", ble_controller_adv_pdu_form_name(form));
+}
+
+uint8_t ble_controller_adv_pdu_form(void)
+{
+    return s_adv_pdu_form;
+}
 
 void ble_store_config_init(void);
 
@@ -273,6 +308,12 @@ static conn_slot_t *conn_slot(uint16_t conn_handle)
     return NULL;
 }
 
+/** 是否为输入通道（0x05 通用 / 0x09 专用）。 */
+static bool is_input_chr(uintptr_t tag)
+{
+    return tag == CHR_INPUT05 || tag == CHR_INPUT09;
+}
+
 static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
                       struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
@@ -285,14 +326,19 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
         /* 输入通道之外的特征值读取（含未实现特征值）留痕：主机在升级等流程
          * 里若读某个状态位，日志里能看出它期待什么。 */
-        if (tag != CHR_INPUT05 && tag != CHR_INPUT09) {
+        if (!is_input_chr(tag)) {
             ESP_LOGI(TAG, "chr read tag=%u (handle=0x%04x)", (unsigned)tag, attr_handle);
+        } else if (slot != NULL && !slot->input_read_logged) {
+            /* 主机没订阅输入通道、改用 READ 轮询取输入时的现场证据。 */
+            slot->input_read_logged = true;
+            ESP_LOGI(TAG, "input poll read (handle=0x%04x, tag=%u)", attr_handle,
+                     (unsigned)tag);
         }
         switch (tag) {
         case CHR_INPUT05:
             return read_flat(ctxt, slot ? slot->last_input05 : (uint8_t[63]){0}, 63);
         case CHR_INPUT09:
-            return read_flat(ctxt, slot ? slot->last_input09 : (uint8_t[63]){0}, 63);
+            return read_flat(ctxt, slot ? slot->last_input_priv : (uint8_t[63]){0}, 63);
         case CHR_BASE_STATUS: {
             /* 真机读值（已验证实现基线）。 */
             static const uint8_t base_status[7] = {0x04, 0x00, 0x05, 0x00, 0x01, 0x01, 0x00};
@@ -407,8 +453,7 @@ static int adv_instance_by_addr(const uint8_t addr[6])
     return -1;
 }
 
-/** 接收连接的实例是否需要继续广播：JoyCon 双身份下另一只还在等回连，
- * 只停接收实例；Pro 单身份停全部。 */
+/** 接收连接的实例是否需要继续广播：Pro 单身份（含同址的另一实例）一并停止。 */
 static void stop_advertising_for(uint8_t identity)
 {
     for (size_t i = 0; i < ADV_INSTANCE_MAX; i++) {
@@ -447,7 +492,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
                 identity = s_adv_identity[inst];
                 stop_advertising_for(identity);
             } else {
-                /* 双实例同址（Pro）：任一连接后都无需继续广播。 */
+                /* 地址对不上任何实例（如实例已停）：整条链路都不必再广播。 */
                 ble_controller_adv_stop();
             }
         }
@@ -517,7 +562,10 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
             if (event->subscribe.attr_handle == s_h.input05) {
                 slot->input05_notify = event->subscribe.cur_notify != 0;
             } else if (event->subscribe.attr_handle == s_h.input09) {
-                slot->input09_notify = event->subscribe.cur_notify != 0;
+                /* 专用输入通道：记下主机订的句柄，通知就往它发。 */
+                slot->input_priv_notify = event->subscribe.cur_notify != 0;
+                slot->input_priv_handle =
+                    slot->input_priv_notify ? event->subscribe.attr_handle : 0;
             } else if (event->subscribe.attr_handle == s_h.answer) {
                 slot->answer_notify = event->subscribe.cur_notify != 0;
             } else if (event->subscribe.attr_handle == s_h.answer2) {
@@ -541,7 +589,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
     return 0;
 }
 
-/** 启动一个广播实例。addr 非 NULL 时以静态随机地址广播（JoyCon 双身份）。 */
+/** 启动一个广播实例。addr 非 NULL 时以该静态随机地址广播（advaddr 对账）。 */
 static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t payload[31],
                                const uint8_t addr[6])
 {
@@ -552,9 +600,9 @@ static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t p
         ble_gap_ext_adv_stop(instance);
     }
     struct ble_gap_ext_adv_params params = {0};
-    /* NS2 主机的芯片层过滤只认经扩展广播 HCI 路径下发的广播：已验证可被
-     * 发现的开源实现与真机抓包均为 30ms 间隔。扩展 PDU 按规范不可同时
-     * connectable 与 scannable，扩展实例只做可连接广播。 */
+    /* legacy PDU 才是主机看得见、也认得住的形式（controller.md §2.2：真机
+     * ADV_IND 可连接可扫描、附空 SCAN_RSP，广播间隔 30 ms）；扩展 PDU 按
+     * 规范不可同时置可连接与可扫描，主机侧实测完全看不见。 */
     params.legacy_pdu = legacy_pdu;
     params.connectable = 1;
     params.scannable = legacy_pdu;
@@ -624,12 +672,16 @@ void ble_controller_adv_start(uint8_t instance, uint8_t identity,
     if (instance >= ADV_INSTANCE_MAX) {
         return;
     }
-    /* 实例身份由会话层显式给出：Pro 单身份（双实例同址），JoyCon 双身份
-     * 各占一实例。addr 为 NULL 时沿用公共伪装地址。 */
+    /* 实例身份由会话层显式给出（只有 Pro，双实例同址）。addr 为 NULL 时
+     * 沿用公共伪装地址。 */
     s_adv_identity[instance] = identity;
     ESP_LOG_BUFFER_HEX(TAG, payload, 31);
-    adv_start_instance(instance, addr != NULL ? 1 : (instance == ADV_INSTANCE_LEGACY),
-                       payload, addr);
+    /* 默认形态是 legacy PDU（controller.md §2.2：真机发现广播是可连接 + 可
+     * 扫描的 ADV_IND）：实机对账（2026-09-16）里扩展 PDU 的实例在主机侧完全
+     * 看不见——同一份载荷、同一个 public 地址，切成 legacy PDU 后主机立刻
+     * 连接并跑完 0x15 配对。对账开关可强制扩展形态做反向验证。 */
+    const int legacy_pdu = s_adv_pdu_form == BLE_CTL_ADV_PDU_EXTENDED ? 0 : 1;
+    adv_start_instance(instance, legacy_pdu, payload, addr);
 }
 
 bool ble_controller_adv_running(uint8_t identity)
@@ -717,14 +769,32 @@ void ble_controller_notify_input_05(uint16_t conn_handle, const uint8_t report[6
     notify(conn_handle, s_h.input05, slot->input05_notify, report, 63);
 }
 
+/** 只刷新输入快照、不发通知：主机用 READ 轮询输入通道时读到的是这份值，
+ *  特性未启用的链路上也必须跟着数据面更新（否则读到的是全零）。 */
+void ble_controller_store_input(uint16_t conn_handle, uint8_t report_format,
+                                const uint8_t report[63])
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL) {
+        return;
+    }
+    uint8_t *dst = report_format == 5 ? slot->last_input05 : slot->last_input_priv;
+    memcpy(dst, report, 63);
+}
+
+/** 专用输入通道通知（0x09 报文体）：往主机本次订阅的那个句柄发；未订阅时
+ *  退回本通道句柄，只刷新 READ 快照。 */
 void ble_controller_notify_input_09(uint16_t conn_handle, const uint8_t report[63])
 {
     conn_slot_t *slot = conn_slot(conn_handle);
     if (slot == NULL) {
         return;
     }
-    memcpy(slot->last_input09, report, 63);
-    notify(conn_handle, s_h.input09, slot->input09_notify, report, 63);
+    memcpy(slot->last_input_priv, report, 63);
+    const uint16_t handle = slot->input_priv_handle != 0
+                                ? slot->input_priv_handle
+                                : s_h.input09;
+    notify(conn_handle, handle, slot->input_priv_notify, report, 63);
 }
 
 void ble_controller_notify_answer(uint16_t conn_handle, const uint8_t *frame, size_t len)
@@ -782,7 +852,7 @@ bool ble_controller_input_notify_ready(uint16_t conn_handle, uint8_t report_form
     if (slot == NULL) {
         return false;
     }
-    return report_format == 5 ? slot->input05_notify : slot->input09_notify;
+    return report_format == 5 ? slot->input05_notify : slot->input_priv_notify;
 }
 
 bool ble_controller_conn_itvl(uint16_t conn_handle, uint16_t *out_itvl)
@@ -827,7 +897,18 @@ bool ble_controller_last_input(uint16_t conn_handle, uint8_t report_format, uint
     if (slot == NULL || out == NULL) {
         return false;
     }
-    memcpy(out, report_format == 5 ? slot->last_input05 : slot->last_input09, 63);
+    memcpy(out, report_format == 5 ? slot->last_input05 : slot->last_input_priv, 63);
+    return true;
+}
+
+/** 主机本次订阅的专用输入通道句柄（0 = 未订阅），供串口 link 显示。 */
+bool ble_controller_input_priv_handle(uint16_t conn_handle, uint16_t *out_handle)
+{
+    conn_slot_t *slot = conn_slot(conn_handle);
+    if (slot == NULL || out_handle == NULL) {
+        return false;
+    }
+    *out_handle = slot->input_priv_handle;
     return true;
 }
 

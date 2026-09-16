@@ -35,8 +35,8 @@ test('设置页列表进入功能页，且同时只显示一页', async ({ app }
 
   // 列表首行「手柄设置」：pt-[34] 起、行高 44，中心在 y=56。
   await app.touch.tap(120, 56);
-  // 「手柄设置」页的识别文本：顶部「手柄类型」标签已去掉，改用类型卡标题。
-  await expect.poll(() => app.hasVisibleText('Pro 手柄')).toBe(true);
+  // 「手柄设置」页的识别文本：页面只剩序列号 / MAC 两行与配色按钮，取序列号行。
+  await expect.poll(() => app.hasVisibleText('序列号 HEJ71001123456')).toBe(true);
   expect(await app.hasVisibleText('手柄配对')).toBe(false);
   expect(await app.hasVisibleText('手柄设置')).toBe(false);
 });

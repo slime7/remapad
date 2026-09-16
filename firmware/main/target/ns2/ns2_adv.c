@@ -49,24 +49,15 @@ bool ns2_adv_home_key_step(ns2_adv_home_key_t *key, bool pressed)
     return edge;
 }
 
-bool ns2_adv_lr_step(ns2_adv_lr_timer_t *timer, bool paired, bool both_ready,
-                     int64_t now_us)
-{
-    if (paired || !both_ready || now_us < timer->next_us) {
-        return false;
-    }
-    timer->next_us = now_us + NS2_ADV_LR_RETRY_US;
-    return true;
-}
-
-void ns2_adv_lr_reset(ns2_adv_lr_timer_t *timer)
-{
-    timer->next_us = 0;
-}
-
 bool ns2_adv_dormant_link(bool subscribed, bool features_enabled)
 {
     return subscribed && !features_enabled;
+}
+
+bool ns2_adv_host_registered(bool addr_matched, bool pair_handshake_done,
+                             bool features_enabled)
+{
+    return addr_matched || pair_handshake_done || features_enabled;
 }
 
 /** 地址是否可用：全零地址写进唤醒广播等于没带地址——主机既不会回连也不会被

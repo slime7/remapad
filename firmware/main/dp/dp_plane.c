@@ -345,8 +345,8 @@ esp_err_t dp_plane_start(void)
         return err;
     }
     battery_init();
-    /* 目标：NS2（Pro Controller 2 与 JoyCon 2 共用一份编码实现）。将来支持
-     * NS1 时在 target/ns1/ 新增实现并在这里切换。 */
+    /* 目标：NS2（设备只模拟 Pro Controller 2）。将来支持 NS1 时在
+     * target/ns1/ 新增实现并在这里切换。 */
     target_set(ns2_target_get());
     /* 输入源注册顺序即优先级：桥接 PC 先注册（拥有摇杆与设备字段），合成源
      * 只补静置状态，USB host 直插与桥接现实中互斥（同一个 Type-C），调试注入

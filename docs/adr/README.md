@@ -67,6 +67,7 @@
 | [0036](0036-host-pressure-triggered-js-gc.md) | active | JS 堆的显式 GC 由宿主按 PSRAM 压力触发（每帧读余量、跌过 256 KiB 步长才 JS_RunGC 并重钉基线），与上游 PSP host 的 arena-pressure GC 同构 |
 | [0037](0037-ui-tick-rate-30hz.md) | active | UI 帧节奏定为 30 Hz：tickHz 写进 host profile，UI 侧以 ui/src/tick.ts 为唯一换算来源（TICK_HZ 取框架烘焙值），与帧绑定的时长写成毫秒再换算、序列图动画按累计帧推进以保持感官时间；部分取代 0017 的 60 Hz 帧预算取值 |
 | [0038](0038-user-initiated-connection-window.md) | active | 连接由用户发起：上电与断连（主机睡下）静默，连接键（配对页「连接」、PWR 长按 3 秒）开 30 秒连接窗口广播、HOME 在未连接时开 10 秒唤醒窗口，窗口到期或主机连上即收窗；部分取代 0031 的常态回连广播与 0027 的 PWR 长按入口 |
+| [0039](0039-pro-controller-only.md) | active | 设备对外只模拟一台 Pro Controller 2：身份、专用输入通道、报文体与会话回到单身份单连接，JoyCon 形态（左/右身份、0x07 / 0x08 报文体、导轨键确认与 side / rails 开关）整体移除；部分取代 0026 的透传身份约束 |
 
 ## 创建 ADR 脚本用法
 

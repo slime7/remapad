@@ -263,6 +263,9 @@ uv run python remapadctl.py -p COM3 connect         # 连接键：开连接窗�
 uv run python remapadctl.py -p COM3 pairing start   # 配新主机：断开当前主机后进发现广播，等新主机搜索配对（stop 停止广播并断链）
 uv run python remapadctl.py -p COM3 wake            # 开唤醒窗口：未连接时发 0x81 把休眠主机叫起来，已连接则断开让它重连
 uv run python remapadctl.py -p COM3 adv auto        # 广播窗口内的形态（auto 默认按窗口来源 / wake / reconnect），实机 A/B 对账用
+uv run python remapadctl.py -p COM3 ctrl            # 手柄配色（ctrl [body button accent grip]，四段 0xRRGGBB，持久化；无参回读）
+uv run python remapadctl.py -p COM3 advaddr         # 广播地址形态（auto / public / random，不落盘），分辨主机是否按地址形态过滤
+uv run python remapadctl.py -p COM3 advpdu          # 广播 PDU 形态（auto / legacy / extended，不落盘）
 uv run python remapadctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
 uv run python remapadctl.py -p COM3 reboot          # 软重启回 COM 模式
 uv run python remapadctl.py -p COM3 --log --seconds 20         # 只读设备日志 20 秒
@@ -272,7 +275,7 @@ uv run python remapadctl.py -p COM3 --shot --out shots\ui.png   # 抓实机截�
 
 `key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr ui`。
 默认保持 250 ms（`ui` 为 500 ms，盖过组合键 300 ms 的翻转阈值），最长 60000 ms；注入叠加在输入源之上。
-`stick` 设定的一侧摇杆持续生效、未设定的一侧沿用输入源，因此 JoyCon 组合下可以分别推左摇杆与右摇杆，验证左右两只各自上报。`link` 打印当前形态与每个身份一行：
+`stick` 设定的一侧摇杆持续生效、未设定的一侧沿用输入源，因此可以分别推左摇杆与右摇杆做对照。`link` 打印当前身份一行：
 对外广播地址、连接句柄、会话状态（idle / advertising / wait-pair / normal）、报告格式、已开启的通知通道、已发送报告数与凭证条数，配对与回连过程可以直接在串口上对账。
 
 `ui` 与 `ui on` / `ui off` 对应手柄操控屏幕模式（[ADR 0028](adr/0028-pad-combo-captures-screen.md)）：
@@ -297,7 +300,7 @@ PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**�
 SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。
 软件关机走系统页「关机」按钮（bridge 的 `powerOff` 命令，串口对应 `poweroff`）：电池供电下释放锁存即断电，USB 供电下锁存被旁路、关不掉，固件重新锁存后界面提示「USB 供电下无法关机，请拔线后再试」。
 
-用户设置（背光亮度、手柄类型与配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。
+用户设置（背光亮度、手柄四段配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。
 PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmware/main/input/`，PC 侧见 [pc/README.md](../pc/README.md)；
 手柄插在板卡上的 USB host 直插也已落地（`firmware/main/usb/`）。
 实机核对清单见 [ROADMAP.md](ROADMAP.md) M5 与 [usb-input-plan.md](usb-input-plan.md)。

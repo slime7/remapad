@@ -20,8 +20,8 @@ extern "C" {
 #define CONFIG_DEFAULT_FW_VERSION_REVISION 9u
 
 /**
- * 用户设置持久化（NVS 命名空间 "remapad"，键 "cfg"）：背光亮度、手柄身份
- * 配置（类型 + 机身配色）与上报固件版本。USB 连接模式只在内存中生效、
+ * 用户设置持久化（NVS 命名空间 "remapad"，键 "cfg"）：背光亮度、手柄机身
+ * 配色与上报固件版本。USB 连接模式只在内存中生效、
  * 不落盘，开机恒为串口。内存表在 app_config_init 时读入，setter 只改内存
  * 表并置脏标记；落盘由内部 RAM 栈的提交任务每 1 分钟检查一次，确有改动才
  * 写一次 NVS（每次写入都要擦 flash 页，切选项这类高频改动不能改一次写一
@@ -36,12 +36,6 @@ typedef enum {
     APP_CONFIG_USB_HOST = 1,
 } app_config_usb_role_t;
 
-/** 手柄形态：Pro（默认）或 JoyCon 组合。 */
-typedef enum {
-    APP_CONFIG_CTRL_PRO = 0,
-    APP_CONFIG_CTRL_JOYCON = 1,
-} app_config_ctrl_type_t;
-
 typedef struct {
     /** 背光亮度 0-100；0 仅在息屏时出现，开机下限由调用方保证。 */
     uint8_t brightness;
@@ -49,10 +43,11 @@ typedef struct {
     bool screen_on;
     /** USB 角色（app_config_usb_role_t）：仅本次运行有效。 */
     uint8_t usb_role;
-    uint8_t ctrl_type; /* app_config_ctrl_type_t */
-    /** 机身 / 按键 / 握把配色 0xRRGGBB，0 表示未设置（沿用出厂占位）。 */
+    /** 机身 / 按键 / 高光 / 握把配色 0xRRGGBB，0 表示未设置（沿用出厂占位）。
+     *  四段与出厂块 0x13019 起的布局一一对应（见 controller.md §12）。 */
     uint32_t body_color;
     uint32_t button_color;
+    uint32_t accent_color;
     uint32_t grip_color;
     /**
      * 上报给主机的手柄固件版本（主.次.修订），0x10 版本查询、0x7E40 与
@@ -73,8 +68,8 @@ void app_config_set_brightness(uint8_t pct);
 void app_config_set_screen_on(bool on);
 /** 只改运行时角色（不落盘）：重启后回到串口。 */
 void app_config_set_usb_role(app_config_usb_role_t role);
-void app_config_set_controller(app_config_ctrl_type_t type,
-                               uint32_t body_rgb, uint32_t button_rgb, uint32_t grip_rgb);
+void app_config_set_controller_colors(uint32_t body_rgb, uint32_t button_rgb,
+                                      uint32_t accent_rgb, uint32_t grip_rgb);
 
 /** 覆盖上报固件版本（假升级完成时递增），随周期检查落盘。 */
 void app_config_set_fw_version(const uint8_t ver[3]);

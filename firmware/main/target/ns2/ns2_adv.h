@@ -104,27 +104,6 @@ bool ns2_adv_home_key_step(ns2_adv_home_key_t *key, bool pressed);
 const uint8_t *ns2_adv_choose_host_mac(const uint8_t *recorded,
                                        const uint8_t *const creds[], size_t cred_count);
 
-/** L+R 组合确认的重试间隔（微秒）：主机把两只 Joy-Con 认成一对靠 L 与 R 同时
- *  按下，拿到凭证之前按这个节奏重发。 */
-#define NS2_ADV_LR_RETRY_US (3 * 1000 * 1000LL)
-
-/** 单次 L+R 的按住时长（毫秒）：15 ms 上报节奏下约八帧，主机不会漏看。 */
-#define NS2_ADV_LR_HOLD_MS 120
-
-/** L+R 组合确认的复注入计时（本机时基，微秒）。 */
-typedef struct {
-    int64_t next_us; /**< 允许注入的时刻；0 = 立即可注入。 */
-} ns2_adv_lr_timer_t;
-
-/** 是否该注入 L+R：未配对（该形态凭证未拿齐）且左右两只都已就绪（收到
- *  0x0c/0x04、输入被主机采用）时立即注入一次，之后每 NS2_ADV_LR_RETRY_US
- *  重试；已配对或未就绪时从不注入。命中时把下次时刻推后，调用方据此注入。 */
-bool ns2_adv_lr_step(ns2_adv_lr_timer_t *timer, bool paired, bool both_ready,
-                     int64_t now_us);
-
-/** 复位计时（切换身份、重进配对流程）：下一次就绪即注入，不再等间隔。 */
-void ns2_adv_lr_reset(ns2_adv_lr_timer_t *timer);
-
 /** 休眠链路判据：主机已订阅输入、却始终没发 0x0c/0x04（启用特性）——输入
  *  报文被采用的前提是特性启用（参考实现把整个上报流押在它上，DEV_READY），
  *  与连接间隔无关（实测 itvl=4 但未启用的链路按键同样无效）。「已连接、已
@@ -132,10 +111,20 @@ void ns2_adv_lr_reset(ns2_adv_lr_timer_t *timer);
  *  会话层据此驱动休眠看门狗。 */
 bool ns2_adv_dormant_link(bool subscribed, bool features_enabled);
 
-/** 生成 31 字节广播载荷：pid 为本机型号 ID（Pro 0x2069 / JoyCon 2 0x2067、
- *  0x2066），host_mac 为主机地址（NimBLE 存储序，即显示序反转，与配对线
- *  格式一致）。发现形态与静默忽略 host_mac 并把地址填零；回连/唤醒形态在
- *  host_mac 为 NULL 时退化为发现形态。 */
+/** 主机注册证据（纯逻辑，主机端用例钉住）：对端地址命中凭证、私有配对握手
+ *  走完（0x15/0x03 或 0x03/0x07）、或主机已在链路上启用特性（0x0c/0x04）——
+ *  三者任一条成立，主机那边就认下了这只手柄。
+ *  第三条覆盖两个实机现场：主机换了随机地址、以及主机已存有本机凭证而不再
+ *  重跑 0x15。只看地址会把在用的链路一直留在等待态——屏幕停在「配对中…」，
+ *  配新主机的流程也退不出来（凭证拿齐的判断同样押在这条证据上）。
+ *  「已订阅但没启用特性」（握把页快捷回连）不算注册：主机此刻还没认这只手柄。 */
+bool ns2_adv_host_registered(bool addr_matched, bool pair_handshake_done,
+                             bool features_enabled);
+
+/** 生成 31 字节广播载荷：pid 为本机型号 ID（Pro Controller 2 = 0x2069），
+ *  host_mac 为主机地址（NimBLE 存储序，即显示序反转，与配对线格式一致）。
+ *  发现形态与静默忽略 host_mac 并把地址填零；回连/唤醒形态在 host_mac 为
+ *  NULL 时退化为发现形态。 */
 void ns2_adv_payload(uint8_t out[NS2_ADV_PAYLOAD_LEN], uint16_t pid,
                      ns2_adv_mode_t mode, const uint8_t host_mac[6]);
 

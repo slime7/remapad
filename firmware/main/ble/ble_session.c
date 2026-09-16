@@ -39,7 +39,7 @@ typedef enum {
     SESSION_NORMAL,
 } session_state_t;
 
-/** 单条连接的会话状态（Pro 1 槽 / JoyCon 组合 2 槽）。 */
+/** 单条连接的会话状态（一台主机一条，第二槽留给重连过渡）。 */
 #define SESSION_MAX 2
 
 typedef struct {
@@ -62,93 +62,73 @@ typedef struct {
     bool features_enabled;
     /** 休眠看门狗计数：每秒 +1，主机启用特性即清零。 */
     uint8_t dormant_ticks;
+    /** 注册证据（见 ns2_adv_host_registered）：连接时对端地址命中凭证。 */
+    bool addr_matched;
+    /** 注册证据：私有配对握手走完（0x15/0x03 或 0x03/0x07）。 */
+    bool pair_handshake_done;
 } session_slot_t;
 
 static struct {
     session_slot_t sess[SESSION_MAX];
     uint8_t own_mac[6];
     bool synced;
-    /** 设备形态：NS2_ID_PRO（单连接）或 NS2_ID_JOYCON_L（JoyCon 组合，
-     * 左右双连接；此字段存「形态」而非单只身份）。 */
-    uint8_t device_mode;
+    /** 四段配色：机身 / 按键 / 高光 / 握把（0 = 未配置，出厂块按默认值填），
+     *  随用户设置落盘。 */
     uint32_t body_color;
     uint32_t button_color;
+    uint32_t accent_color;
     uint32_t grip_color;
     bool pairing_mode;
-    /** 当前形态的身份是否都已连上（成对在线行只打印一次）。 */
+    /** 身份在线行是否已打印过（断连后重新武装）。 */
     bool pair_online_logged;
 } s_ses;
 
-/** 当前手柄身份集合：Pro = {PRO}；JoyCon 组合 = {JOYCON_L, JOYCON_R}。 */
+/** 当前手柄身份集合：设备只模拟 Pro Controller 2，因此只有一个身份。
+ *  真机手柄一律用 public 地址，而主机只接受 public 地址的广播（controller.md
+ *  §12 勘误，2026-09-16 实机对账），一台控制器只有一个 public 地址。 */
 static size_t mode_identities(ns2_identity_t *out)
 {
-    if (s_ses.device_mode == NS2_ID_PRO) {
-        out[0] = NS2_ID_PRO;
-        return 1;
-    }
-    out[0] = NS2_ID_JOYCON_L;
-    out[1] = NS2_ID_JOYCON_R;
-    return 2;
+    out[0] = NS2_ID_PRO;
+    return 1;
 }
 
-static bool identity_in_mode(ns2_identity_t identity)
+/** 实机对账开关：广播地址形态（ns2_adv_addr_form_t），默认 auto。不落盘，
+ *  只影响本轮广播——用于分辨主机是否按地址形态（public / 静态随机）过滤
+ *  广播：真机手柄一律用 public 地址，本机派生的都是静态随机地址。 */
+static uint8_t s_adv_addr_form;
+
+/** 是否用公共伪装地址广播：auto 与 public 都用公共地址——主机的芯片过滤只
+ *  接受 public 地址的广播（§12 勘误），派生的静态随机地址在主机侧完全看不见，
+ *  因此派生形态只留作实机对账开关。 */
+static bool adv_uses_public_addr(void)
 {
-    ns2_identity_t ids[2];
-    const size_t n = mode_identities(ids);
-    for (size_t i = 0; i < n; i++) {
-        if (ids[i] == identity) {
-            return true;
-        }
-    }
-    return false;
+    return s_adv_addr_form != NS2_ADV_ADDR_RANDOM;
 }
 
-/** 身份的 PID（controller.md 手柄型号表）：Pro 0x2069；Joy-Con 2 (L) 0x2067、
- * (R) 0x2066。 */
-static uint16_t identity_pid(ns2_identity_t identity)
+/** 这一轮真正用的广播地址；NULL 表示用公共伪装地址（传输层语义）。 */
+static const uint8_t *adv_addr_for(void)
 {
-    switch (identity) {
-    case NS2_ID_JOYCON_L:
-        return 0x2067;
-    case NS2_ID_JOYCON_R:
-        return 0x2066;
-    default:
-        return 0x2069;
+    static uint8_t s_addr[6];
+    if (!s_ses.synced || adv_uses_public_addr()) {
+        return NULL;
     }
+    ns2_identity_adv_addr_random(s_ses.own_mac, s_addr);
+    return s_addr;
 }
 
-/** 身份的序列号（3 字母前缀 + 10 位数字，末位校验位由 ns2_serial_build 补齐，
- * 命名规则见 controller.md §7.2）。不同手柄/配色批次预期不同序列号；
- * 当前每种身份一组固定值，颜色选择实装后再随配置派生。 */
-static const char *identity_serial_prefix(ns2_identity_t identity)
-{
-    switch (identity) {
-    case NS2_ID_JOYCON_L:
-        return "HBW";
-    case NS2_ID_JOYCON_R:
-        return "HCW";
-    default:
-        return "HEJ";
-    }
-}
+/** Pro Controller 2 的 PID（controller.md 手柄型号表）。 */
+#define NS2_PRO_PID 0x2069u
 
-static const char *identity_serial_digits(ns2_identity_t identity)
-{
-    switch (identity) {
-    case NS2_ID_JOYCON_L:
-        return "1006701234";
-    case NS2_ID_JOYCON_R:
-        return "1006801234";
-    default:
-        return "7100112345";
-    }
-}
+/** Pro Controller 2 的序列号（3 字母前缀 + 10 位数字，末位校验位由
+ *  ns2_serial_build 补齐，命名规则见 controller.md §7.2）。 */
+#define NS2_PRO_SERIAL_PREFIX "HEJ"
+#define NS2_PRO_SERIAL_DIGITS "7100112345"
 
 static uint8_t s_factory[FACTORY_SIZE];
 
 /** 0x13000 出厂数据块（实机抓包布局）：`01 00` + 序列号@2 + `00 00`
- * + VID/PID@18 + 版本@22 + 机身配色@25，尾部 0xFF。按身份各留一份，
- * 指令处理按连接身份取用（JoyCon 双连接各自上报自己的出厂信息）。 */
+ * + VID/PID@18 + 版本@22 + 机身配色@25，尾部 0xFF。按身份分槽存放，
+ * 指令处理按连接身份取用。 */
 #define MEM_FACTORY_MAX NS2_ID_COUNT
 static uint8_t s_mem_factory[MEM_FACTORY_MAX][64];
 
@@ -214,62 +194,59 @@ static bool aes_ecb_block(const uint8_t key[16], const uint8_t in[16], uint8_t o
 static void factory_init(void)
 {
     memset(s_factory, 0xFF, sizeof(s_factory));
-    ns2_identity_t ids[2];
-    const size_t n = mode_identities(ids);
-    const uint32_t body = s_ses.body_color != 0 ? s_ses.body_color : 0x232323;
-    const uint32_t button = s_ses.button_color != 0 ? s_ses.button_color : 0x3c3c3c;
-    const uint32_t grip = s_ses.grip_color != 0 ? s_ses.grip_color : 0x2e2e2e;
     static const uint8_t stick_cal[9] = {0x00, 0x08, 0x80, 0xFF, 0xF7, 0x7F, 0x00, 0x08, 0x80};
     memcpy(&s_factory[0x00A8], stick_cal, sizeof(stick_cal));
     memcpy(&s_factory[0x00E8], stick_cal, sizeof(stick_cal));
 
     const uint8_t *ver = app_config_get()->fw_version;
+    /* 四段配色（真机 0x13019 机身 / 0x1301C 按键 / 0x1301F 高光 / 0x13022 握把）：
+     * 未配置的段取 Pro Controller 2 的抓包值（机身深灰、按键浅灰、高光近白、
+     * 握把深灰），界面上选配色时四段一起覆盖。 */
+    const uint32_t body = s_ses.body_color != 0 ? s_ses.body_color : 0x232323u;
+    const uint32_t button = s_ses.button_color != 0 ? s_ses.button_color : 0xA0A0A0u;
+    const uint32_t accent = s_ses.accent_color != 0 ? s_ses.accent_color : 0xE6E6E6u;
+    const uint32_t grip = s_ses.grip_color != 0 ? s_ses.grip_color : 0x323232u;
     const uint8_t colors[12] = {
         (uint8_t)(body >> 16), (uint8_t)(body >> 8), (uint8_t)(body),
         (uint8_t)(button >> 16), (uint8_t)(button >> 8), (uint8_t)(button),
-        (uint8_t)(button >> 16), (uint8_t)(button >> 8), (uint8_t)(button),
+        (uint8_t)(accent >> 16), (uint8_t)(accent >> 8), (uint8_t)(accent),
         (uint8_t)(grip >> 16), (uint8_t)(grip >> 8), (uint8_t)(grip),
     };
-    for (size_t i = 0; i < n; i++) {
-        const ns2_identity_t identity = ids[i];
-        const uint16_t pid = identity_pid(identity);
-        char serial[15];
-        ns2_serial_build(identity_serial_prefix(identity),
-                         identity_serial_digits(identity), serial);
+    char serial[15];
+    ns2_serial_build(NS2_PRO_SERIAL_PREFIX, NS2_PRO_SERIAL_DIGITS, serial);
 
-        /* 0x7E40 首块：布局按实机抓包注释；6B 头内容未验证，取 `01 00`
-         * 前缀填零。此前未提供该块，主机初始化读取失败可能正是固件更新
-         * 提示的诱因（版本读不到即视为旧固件）。 */
-        uint8_t *blk = s_mem_7e40[identity];
-        memset(blk, 0xFF, 64);
-        blk[0] = 0x01;
-        blk[1] = 0x00;
-        memcpy(&blk[6], serial, 14);
-        blk[22] = 0x7E;
-        blk[23] = 0x05;
-        blk[24] = (uint8_t)(pid & 0xFF);
-        blk[25] = (uint8_t)(pid >> 8);
-        blk[26] = ver[0];
-        blk[27] = ver[1];
-        blk[28] = ver[2];
-        memcpy(&blk[29], colors, sizeof(colors));
+    /* 0x7E40 首块：布局按实机抓包注释；6B 头内容未验证，取 `01 00`
+     * 前缀填零。此前未提供该块，主机初始化读取失败可能正是固件更新
+     * 提示的诱因（版本读不到即视为旧固件）。 */
+    uint8_t *blk = s_mem_7e40[NS2_ID_PRO];
+    memset(blk, 0xFF, 64);
+    blk[0] = 0x01;
+    blk[1] = 0x00;
+    memcpy(&blk[6], serial, 14);
+    blk[22] = 0x7E;
+    blk[23] = 0x05;
+    blk[24] = (uint8_t)(NS2_PRO_PID & 0xFF);
+    blk[25] = (uint8_t)(NS2_PRO_PID >> 8);
+    blk[26] = ver[0];
+    blk[27] = ver[1];
+    blk[28] = ver[2];
+    memcpy(&blk[29], colors, sizeof(colors));
 
-        uint8_t *mem = s_mem_factory[identity];
-        memset(mem, 0xFF, 64);
-        mem[0] = 0x01;
-        mem[1] = 0x00;
-        memcpy(&mem[2], serial, 14);
-        mem[18] = 0x7E;
-        mem[19] = 0x05;
-        mem[20] = (uint8_t)(pid & 0xFF);
-        mem[21] = (uint8_t)(pid >> 8);
-        mem[22] = ver[0];
-        mem[23] = ver[1];
-        mem[24] = ver[2];
-        memcpy(&mem[25], colors, sizeof(colors));
-        ESP_LOGI(TAG, "factory[%u] serial=%s pid=0x%04x fw=%u.%u.%u",
-                 (unsigned)identity, serial, pid, ver[0], ver[1], ver[2]);
-    }
+    uint8_t *mem = s_mem_factory[NS2_ID_PRO];
+    memset(mem, 0xFF, 64);
+    mem[0] = 0x01;
+    mem[1] = 0x00;
+    memcpy(&mem[2], serial, 14);
+    mem[18] = 0x7E;
+    mem[19] = 0x05;
+    mem[20] = (uint8_t)(NS2_PRO_PID & 0xFF);
+    mem[21] = (uint8_t)(NS2_PRO_PID >> 8);
+    mem[22] = ver[0];
+    mem[23] = ver[1];
+    mem[24] = ver[2];
+    memcpy(&mem[25], colors, sizeof(colors));
+    ESP_LOGI(TAG, "factory serial=%s pid=0x%04x fw=%u.%u.%u", serial, NS2_PRO_PID,
+             ver[0], ver[1], ver[2]);
 }
 
 /** 休眠看门狗：已订阅输入但主机始终没发 0x0c/0x04（启用特性）持续这么多
@@ -292,9 +269,6 @@ static ns2_adv_window_t s_adv_win;
 /** 窗口内形态的实机对账开关（串口 `adv auto|wake|reconnect`）：钉住一种形态
  *  做 A/B 对账，auto 时按窗口来源决策。 */
 static ns2_window_form_t s_window_form = NS2_WINDOW_FORM_AUTO;
-
-/** JoyCon 组合的 L+R 自动注入计时：未配对期间每 3 秒重试。 */
-static ns2_adv_lr_timer_t s_lr_timer;
 
 /** 对账开关形态的日志名。 */
 static const char *window_form_name(ns2_window_form_t form)
@@ -365,26 +339,17 @@ static const char *adv_mode_name(ns2_adv_mode_t mode)
     }
 }
 
-/** 启动一个身份的广播：Pro 单身份占两个实例（扩展 + legacy PDU）共用公共
- * 伪装地址，JoyCon 组合左右各占一个实例（静态随机地址）。 */
+/** 启动一个身份的广播：每个身份一个实例（设备只有 Pro 一个身份，PDU 形态见
+ *  ble_controller）。地址形态由 adv_addr_for 决定（NULL = 公共伪装地址）。 */
 static void adv_start_identity(size_t index, ns2_identity_t identity,
                                const uint8_t payload[NS2_ADV_PAYLOAD_LEN])
 {
-    ns2_identity_t ids[2];
-    if (mode_identities(ids) == 1) {
-        ble_controller_adv_start(0, (uint8_t)NS2_ID_PRO, payload, NULL);
-        ble_controller_adv_start(1, (uint8_t)NS2_ID_PRO, payload, NULL);
-        return;
-    }
-    uint8_t addr[6];
-    ns2_identity_adv_addr(s_ses.own_mac, identity, addr);
-    ble_controller_adv_start((uint8_t)index, identity, payload, addr);
+    ble_controller_adv_start((uint8_t)index, identity, payload, adv_addr_for());
 }
 
 /** 按当前状态把广播设成该发的样子：逐身份取形态（静默 / 发现 / 窗口形态），
  *  静默的身份停掉自己的广播实例——设备不被请求连接时不留任何实例在发。
- *  Pro 双实例（扩展 + legacy PDU）共用公共伪装地址；JoyCon 双身份各占一个
- *  实例（静态随机地址，legacy PDU）。 */
+ *  当前形态每个身份只占一个实例（PDU 形态见 ble_controller）。 */
 static void apply_advertising(void)
 {
     ns2_identity_t ids[2];
@@ -401,7 +366,7 @@ static void apply_advertising(void)
             }
             continue;
         }
-        ns2_adv_payload(adv, identity_pid(ids[i]), mode, mac);
+        ns2_adv_payload(adv, NS2_PRO_PID, mode, mac);
         adv_start_identity(i, ids[i], adv);
         ESP_LOGI(TAG, "advertising: identity %u %s (%u creds)",
                  (unsigned)ids[i], adv_mode_name(mode), (unsigned)ble_creds_count(ids[i]));
@@ -515,8 +480,26 @@ static void log_session_normal(const session_slot_t *ses)
              ns2_identity_name(ses->identity), ses->conn_handle, ses->report_format);
 }
 
-/** 当前形态的所有身份都已连上时打印一次成对在线行：主机 Grip 页组合前
- *  的证据；任一身份断开后重新武装。 */
+/**
+ * 注册证据到齐就把会话从等待态提升为已注册（判据见 ns2_adv_host_registered）。
+ * 三条证据分别在连接时、配对握手上、以及主机启用特性时出现，三条都走这里——
+ * 只认地址的那条会让「主机换了随机地址」或「主机不再重跑 0x15」的链路一直停在
+ * 等待态：屏幕停在「配对中…」，配新主机的流程也退不出来（2026-09-17 实机现场）。
+ */
+static void promote_if_host_registered(session_slot_t *ses)
+{
+    if (ses->state != SESSION_CONNECTED_WAIT_PAIR) {
+        return;
+    }
+    if (!ns2_adv_host_registered(ses->addr_matched, ses->pair_handshake_done,
+                                ses->features_enabled)) {
+        return;
+    }
+    ses->state = SESSION_NORMAL;
+    log_session_normal(ses);
+}
+
+/** 身份在线时打印一次（断连后重新武装）：串口对账时确认会话已建立。 */
 static void log_pair_online(void)
 {
     ns2_identity_t ids[2];
@@ -530,18 +513,7 @@ static void log_pair_online(void)
         return;
     }
     s_ses.pair_online_logged = true;
-    char list[24];
-    size_t used = 0;
-    for (size_t i = 0; i < n; i++) {
-        const int written = snprintf(&list[used], sizeof(list) - used,
-                                     i == 0 ? "%s" : " + %s",
-                                     ns2_identity_name(ids[i]));
-        if (written <= 0 || (size_t)written >= sizeof(list) - used) {
-            break;
-        }
-        used += (size_t)written;
-    }
-    ESP_LOGI(TAG, "all identities online: %s", list);
+    ESP_LOGI(TAG, "identity online: %s", ns2_identity_name(ids[0]));
 }
 
 /** 身份对外广播地址（NimBLE 存储序）；host 未同步时地址尚未确定。 */
@@ -550,7 +522,8 @@ static bool identity_mac(uint8_t identity, uint8_t out[6])
     if (!s_ses.synced) {
         return false;
     }
-    ns2_identity_adv_addr(s_ses.own_mac, identity, out);
+    const uint8_t *addr = adv_addr_for();
+    memcpy(out, addr != NULL ? addr : s_ses.own_mac, 6);
     return true;
 }
 
@@ -631,6 +604,37 @@ ns2_window_form_t ns2_session_window_form(void)
     return s_window_form;
 }
 
+bool ns2_session_set_adv_addr_form(uint8_t form)
+{
+    if (form > NS2_ADV_ADDR_RANDOM) {
+        return false;
+    }
+    s_adv_addr_form = form;
+    ESP_LOGW(TAG, "adv addr form -> %s (own %02x:%02x:%02x:%02x:%02x:%02x)",
+             ns2_adv_addr_form_name(form),
+             s_ses.own_mac[0], s_ses.own_mac[1], s_ses.own_mac[2], s_ses.own_mac[3],
+             s_ses.own_mac[4], s_ses.own_mac[5]);
+    /* 没连接又确实在广播（连接窗口 / 配对流程）时立刻按新形态重发；已连接
+     * 的链路要断开重连才会换地址，改完用 `drop` 或 `pairing start` 触发。 */
+    if (!ble_controller_connected() && ns2_session_advertising()) {
+        apply_advertising();
+    }
+    return true;
+}
+
+uint8_t ns2_session_adv_addr_form(void)
+{
+    return s_adv_addr_form;
+}
+
+void ns2_session_set_adv_pdu_form(uint8_t form)
+{
+    ble_controller_set_adv_pdu_form(form);
+    if (!ble_controller_connected() && ns2_session_advertising()) {
+        apply_advertising();
+    }
+}
+
 void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
 {
     session_slot_t *slot = NULL;
@@ -656,6 +660,8 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
     slot->active = true;
     slot->conn_handle = conn_handle;
     slot->identity = identity;
+    /* 专用输入通道上的报文体固定 0x09：主机不会下发「选择输入报告格式」
+     * （0x03/0x0A）的命令，一台真机只暴露自己型号那一种报文。 */
     slot->report_format = NS2_REPORT_ID_09;
 
     uint8_t peer[6] = {0};
@@ -679,13 +685,14 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
              conn_handle, ns2_identity_name(identity),
              peer[0], peer[1], peer[2], peer[3], peer[4], peer[5],
              matched ? "paired host" : "unpaired host");
-    slot->state = matched ? SESSION_NORMAL : SESSION_CONNECTED_WAIT_PAIR;
+    slot->addr_matched = matched != NULL;
+    slot->state = SESSION_CONNECTED_WAIT_PAIR;
     slot->last_activity_us = esp_timer_get_time();
-    if (matched) {
+    if (matched != NULL) {
         /* 回连：把 NVS 里的 LTK 重新注入本周期 NimBLE RAM store。 */
         inject_ltk_to_ble_store(matched->mac, matched->ltk);
-        log_session_normal(slot);
     }
+    promote_if_host_registered(slot);
     ESP_LOGI(TAG, "waiting host init sequence");
     log_pair_online();
 }
@@ -703,7 +710,7 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
     if (slot != NULL) {
         memset(slot, 0, sizeof(*slot));
     }
-    /* 成对在线状态被打破，下一次全部在线时再打印一次。 */
+    /* 在线状态被打破，下次连上时再打印一次。 */
     s_ses.pair_online_logged = false;
     /* 主机睡下或移开：不再保持信号（真机断开后也不广播），只有窗口还开着
      * （连接请求还没达成）或配对流程还在跑时才继续发。 */
@@ -715,7 +722,7 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
 /** SPI 模拟内存映射块。0x13040 与 0x13100 为实机固定内容；0x13060 与
  * 用户自定义校准区（0x1FC000 运动 / 0x1FC040 主摇杆 / 0x1FC060 副摇杆）
  * 未经写入即未初始化，长度 0、读出为全 0xFF。出厂数据块按当前连接的
- * 身份提供（JoyCon 双连接各自读到自己的序列号 / PID / 配色）。 */
+ * 身份提供（序列号 / PID / 配色）。 */
 typedef struct {
     uint32_t start;
     size_t len;
@@ -828,12 +835,15 @@ static size_t handle_init_cmd(session_slot_t *ses, const uint8_t *req, size_t le
             ble_creds_save(ses->identity, &req[8], ltk);
             /* 配对交换走完才算确认是 NS2 主机：此时才记回连广播要用的地址。 */
             ble_creds_note_host_mac(ses->identity, &req[8]);
-            ses->state = SESSION_NORMAL;
-            log_session_normal(ses);
+            ses->pair_handshake_done = true;
+            promote_if_host_registered(ses);
         }
         return NS2_FRAME_HEADER_LEN;
     case 0x08:
         ble_creds_clear(ses->identity);
+        /* 主机要求解除配对：回到等待态，等它重新走一遍握手再算注册。 */
+        ses->addr_matched = false;
+        ses->pair_handshake_done = false;
         ses->state = SESSION_CONNECTED_WAIT_PAIR;
         return NS2_FRAME_HEADER_LEN;
     case 0x09:
@@ -903,9 +913,12 @@ static size_t handle_feature_cmd(session_slot_t *ses, const uint8_t *req, size_t
         break;
     case 0x04:
         /* 启用特性：主机采用输入报文的门槛（参考实现据此进入 DEV_READY 并
-         *  开始上报）。 */
+         *  开始上报）。主机只对它已经认下的手柄做这一步，因此这也是一条注册
+         *  证据：主机换了随机地址、或主机已有本机凭证而不再重跑 0x15 时，光靠
+         *  地址匹配会把在用的链路一直留在等待态。 */
         ses->feature_mask |= mask;
         ses->features_enabled = true;
+        promote_if_host_registered(ses);
         ESP_LOGI(TAG, "features enabled (mask 0x%02x) -> input reports on", mask);
         break;
     case 0x05:
@@ -989,8 +1002,8 @@ static size_t handle_pairing_cmd(session_slot_t *ses, const uint8_t *req, size_t
             inject_ltk_to_ble_store(ses->pair_host_mac, ses->pair_ltk);
             ses->pair_mac_ready = false;
             ses->pair_ltk_ready = false;
-            ses->state = SESSION_NORMAL;
-            log_session_normal(ses);
+            ses->pair_handshake_done = true;
+            promote_if_host_registered(ses);
         }
         resp[8] = 0x01;
         return NS2_FRAME_HEADER_LEN + 1;
@@ -1122,6 +1135,16 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         memset(&frame[8], 0, 24);
         resp_len = NS2_FRAME_HEADER_LEN + 24;
         break;
+    case 0x13:
+        /* 0x13/0x01：回空体时主机不发 0x0c/0x04、也不订阅输入通道；回 4 字节
+         *  `01 00 00 00` 后主机立刻启用特性并开始收输入（实机 2026-09-16）。
+         *  语义与长度未知，`01 00 00 00` 是实测能走通的形态（controller.md §12）。 */
+        {
+            static const uint8_t body[4] = {0x01, 0x00, 0x00, 0x00};
+            memcpy(&frame[8], body, sizeof(body));
+            resp_len = NS2_FRAME_HEADER_LEN + sizeof(body);
+        }
+        break;
     case 0x18:
         /* 主机在会话中每约 10 秒轮询一次 0x18/0x01，期望 8 字节应答体
          * （controller.md §6 与已验证实现一致）。不回这个体，主机不会把
@@ -1142,7 +1165,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         break;
     case NS2_CMD_VERSION:
         if (subcmd == 0x01) {
-            ns2_body_version(&frame[8], ses->identity);
+            ns2_body_version(&frame[8]);
             resp_len = NS2_FRAME_HEADER_LEN + NS2_VERSION_BODY_LEN;
         } else {
             resp_len = NS2_FRAME_HEADER_LEN;
@@ -1214,10 +1237,9 @@ void ns2_session_start_pairing_mode(void)
 {
     /* 配对新主机（相当于真机按住配对键）：先断开当前主机，再发标准发现广播
      * 等新主机搜索——目标是配一台新主机，不能带着旧主机的地址广播。
-     * JoyCon 组合左右两只同时进入发现广播（L+R 组合确认流程）。 */
+     * 设备只有一台 Pro，直接进发现广播。 */
     s_ses.pairing_mode = true;
     s_dormant_drops = 0;
-    ns2_adv_lr_reset(&s_lr_timer);
     const bool was_connected = ble_controller_connected();
     if (was_connected) {
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
@@ -1234,22 +1256,9 @@ bool ns2_session_pairing_mode_active(void)
     return s_ses.pairing_mode;
 }
 
-void ns2_session_press_lr(void)
-{
-    /* 配对模式期间双身份发现广播已在发（start_pairing_mode 保证），这里只
-     * 补 L+R 按键注入：主机 Grip 界面的组合确认动作，双连接时左右两只都
-     * 会上报。 */
-    dp_plane_debug_key(PAD_BTN_L1 | PAD_BTN_R1, 1000);
-    ESP_LOGI(TAG, "press LR (mode=%u, pairing=%u)", (unsigned)s_ses.device_mode,
-             (unsigned)s_ses.pairing_mode);
-}
-
 bool ns2_session_paired(void)
 {
-    if (s_ses.device_mode == NS2_ID_PRO) {
-        return ble_creds_count(NS2_ID_PRO) > 0;
-    }
-    return ble_creds_count(NS2_ID_JOYCON_L) > 0 && ble_creds_count(NS2_ID_JOYCON_R) > 0;
+    return ble_creds_count(NS2_ID_PRO) > 0;
 }
 
 bool ns2_session_host_registered(void)
@@ -1468,30 +1477,9 @@ static void fwupd_finish(void)
     s_fwupd.active = false;
 }
 
-/** JoyCon 组合是否两只都就绪：都在会话里，且都已收到 0x0c/0x04（输入被主机
- *  采用）。未就绪时主机的 Grip/顺序界面还没按时上报，注入 L+R 也认不成一对。 */
-static bool joycon_pair_ready(void)
-{
-    bool left = false;
-    bool right = false;
-    for (size_t i = 0; i < SESSION_MAX; i++) {
-        const session_slot_t *slot = &s_ses.sess[i];
-        if (!slot->active || !slot->features_enabled) {
-            continue;
-        }
-        if (slot->identity == NS2_ID_JOYCON_L) {
-            left = true;
-        } else if (slot->identity == NS2_ID_JOYCON_R) {
-            right = true;
-        }
-    }
-    return left && right;
-}
-
 /** 配对流程是否已经完成：当前形态的每个身份都「有凭证且已进入注册会话」。
  *  判据不能只看凭证——已配对设备本来就带着凭证，一按配对键就会被判成完成、
- *  一秒内退回「已配对」（配对键看起来毫无作用）；也不能只看连接——JoyCon
- *  组合会在只连上一只时提前收工，另一只再也配不上。 */
+ *  一秒内退回「已配对」（配对键看起来毫无作用）；也不能只看连接。 */
 static bool pairing_flow_done(void)
 {
     ns2_identity_t ids[2];
@@ -1548,15 +1536,6 @@ void ns2_session_tick(void)
         if (!ble_controller_connected()) {
             apply_advertising();
         }
-    }
-
-    /* JoyCon 组合确认：主机靠同时按下的 L 与 R 把两只认成一对，未配对期间
-     * 两只都就绪就自动注入，每 3 秒重试直到拿到凭证（见 ns2_adv_lr_step）。 */
-    if (s_ses.device_mode != NS2_ID_PRO &&
-        ns2_adv_lr_step(&s_lr_timer, ns2_session_paired(), joycon_pair_ready(),
-                        esp_timer_get_time())) {
-        dp_plane_debug_key(PAD_BTN_L1 | PAD_BTN_R1, NS2_ADV_LR_HOLD_MS);
-        ESP_LOGI(TAG, "press L+R for JoyCon pair confirmation");
     }
 
     /* 休眠看门狗：已订阅输入却始终没启用特性（ns2_adv_dormant_link）持续
@@ -1635,8 +1614,12 @@ void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *
             const uint16_t conn = slot->conn_handle;
             /* 特性启用（0x0c/0x04）前不发输入通知：对齐参考实现的 DEV_READY
              *  门槛——主机不采用未启用链路上的输入，提前灌报文只会挤占发送
-             *  队列（休眠连接上曾实测近半数通知因拥塞失败）。 */
+             *  队列（休眠连接上曾实测近半数通知因拥塞失败）。
+             *  但 READ 缓存要跟着刷新：主机在握把页的行只发了 0x0c/0x02、
+             *  没订阅输入通道，靠 READ 轮询取输入值（实机 2026-09-16）——
+             *  缓存不刷新，主机读到的永远是全零。 */
             if (!slot->features_enabled) {
+                ble_controller_store_input(conn, report_id, body);
                 return;
             }
             if (ble_controller_input_notify_ready(conn, report_id)) {
@@ -1664,48 +1647,60 @@ void ns2_session_refresh_fw_version(void)
     factory_init();
 }
 
-/** 控制面下发手柄身份（类型 + 配色）：切换等价于「旧手柄断电、新手柄上电」
- *  ——断开现有连接，按新身份重建出厂块与广播拓扑，新身份不自动广播（用户
- *  按连接键才发信号）。主机眼里另一台设备：没有凭证时连接键进配对流程，
- *  已配对时连接键发回连形态。 */
-void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
-                              uint32_t button_rgb, uint32_t grip_rgb)
+static bool apply_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent_rgb,
+                         uint32_t grip_rgb);
+
+/** 控制面下发四段配色：重建出厂块，并打开连接窗口让主机把这只「新手柄」
+ *  接回来（配色是主机连上时读的，换配色必须重新连一次；见 apply_colors）。 */
+void ns2_session_set_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent_rgb,
+                            uint32_t grip_rgb)
 {
-    const uint8_t mode = joycon ? (uint8_t)NS2_ID_JOYCON_L : (uint8_t)NS2_ID_PRO;
-    const bool changed = s_ses.device_mode != mode ||
-                         s_ses.body_color != body_rgb ||
+    apply_colors(body_rgb, button_rgb, accent_rgb, grip_rgb);
+}
+
+
+static bool apply_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent_rgb,
+                         uint32_t grip_rgb)
+{
+    const bool changed = s_ses.body_color != body_rgb ||
                          s_ses.button_color != button_rgb ||
+                         s_ses.accent_color != accent_rgb ||
                          s_ses.grip_color != grip_rgb;
     if (!changed) {
-        return;
+        return false;
     }
-    s_ses.device_mode = mode;
     s_ses.body_color = body_rgb;
     s_ses.button_color = button_rgb;
+    s_ses.accent_color = accent_rgb;
     s_ses.grip_color = grip_rgb;
-    /* 形态切换会改变「所有身份在线」的含义，重新武装成对在线行。 */
+    /* 配色变化要重建出厂块，重新武装在线行便于对照日志。 */
     s_ses.pair_online_logged = false;
     s_dormant_drops = 0;
-    ns2_adv_lr_reset(&s_lr_timer);
     if (s_ses.synced) {
-        /* 切换等价于旧手柄断电、新手柄上电：旧主机先断开，新身份不自动广播
-         * （真机换上的手柄不按键也不发信号），用户按连接键才连。 */
+        /* 等价于手柄断电再上电：重算出厂块，并直接打开连接窗口——主机照回连
+         * 形态自己连回来，读到的就是新颜色（用户不必再按一次连接键）。
+         * 未配对时没有主机可回连，保持静默：设备不被请求连接就不发信号。 */
         s_ses.pairing_mode = false;
-        ns2_adv_window_close(&s_adv_win);
         factory_init();
+        if (ns2_session_paired()) {
+            ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, esp_timer_get_time());
+        } else {
+            ns2_adv_window_close(&s_adv_win);
+        }
     }
-    ESP_LOGI(TAG, "controller identity -> %s (body=%06lx btn=%06lx grip=%06lx, "
-             "paired=%u pairing=%u)",
-             joycon ? "joycon-lr" : "pro", (unsigned long)body_rgb,
-             (unsigned long)button_rgb, (unsigned long)grip_rgb,
+    ESP_LOGI(TAG, "controller colors -> body=%06lx btn=%06lx accent=%06lx grip=%06lx "
+             "(paired=%u pairing=%u)",
+             (unsigned long)body_rgb, (unsigned long)button_rgb,
+             (unsigned long)accent_rgb, (unsigned long)grip_rgb,
              (unsigned)ns2_session_paired(), (unsigned)s_ses.pairing_mode);
     if (ble_controller_connected()) {
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
-        return; /* 断连事件里按新身份同步广播（没有窗口即静默） */
+        return true; /* 断连事件里按新配色同步广播（窗口已开即回连形态） */
     }
     if (s_ses.synced) {
         apply_advertising();
     }
+    return true;
 }
 
 /* --- 链路状态视图（串口诊断与控制面经这些接口取数）--- */
@@ -1739,7 +1734,7 @@ uint8_t ns2_session_player_leds(void)
 
 bool ns2_session_status(uint8_t identity, ns2_session_status_t *out)
 {
-    if (out == NULL || !identity_in_mode((ns2_identity_t)identity)) {
+    if (out == NULL || identity != NS2_ID_PRO) {
         return false;
     }
     memset(out, 0, sizeof(*out));
@@ -1760,7 +1755,9 @@ bool ns2_session_status(uint8_t identity, ns2_session_status_t *out)
     out->conn_handle = slot->conn_handle;
     out->report_format = slot->report_format;
     out->notify_05 = ble_controller_input_notify_ready(slot->conn_handle, NS2_REPORT_ID_05);
-    out->notify_09 = ble_controller_input_notify_ready(slot->conn_handle, NS2_REPORT_ID_09);
+    /* 专用通道与通用通道分开看：传 0x09 只表示「非 0x05 的那一路」。 */
+    out->notify_priv = ble_controller_input_notify_ready(slot->conn_handle, NS2_REPORT_ID_09);
+    ble_controller_input_priv_handle(slot->conn_handle, &out->notify_priv_handle);
     out->features_enabled = slot->features_enabled;
     out->reports = slot->reports;
     ble_controller_conn_itvl(slot->conn_handle, &out->conn_itvl);

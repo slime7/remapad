@@ -82,6 +82,10 @@ export const STYLE = {
   infoCardRows: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2 gap-2',
   actionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-3',
 
+  /** 配色按钮：48 尺寸圆形色块，四段配色整体生效；选中环画在内侧圆上。 */
+  colorSwatch: 'w-[48] h-[48] shrink-0 rounded-full flex-row items-center justify-center focus:border-2 focus:border-[#ffffff]',
+  colorSwatchRing: 'w-[42] h-[42] shrink-0 rounded-full border-2',
+
   /** 小型表面按钮：背光步进、调试按键（含触发高亮的选中形态）。 */
   surfaceBtn: 'w-[40] h-[40] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
   keyBtn: 'w-[64] h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',

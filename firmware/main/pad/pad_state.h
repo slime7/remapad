@@ -56,7 +56,8 @@ typedef enum {
     PAD_LANG_NS2, /**< Switch 2 手柄报告（0x05 / 0x09 报文体）。 */
 } pad_lang_t;
 
-/** 设备在目标侧对应的身份：透传时按身份挑会话（NS2 的 Pro 与 JoyCon 各半）。 */
+/** 设备自身的型号（诊断与按型号分配置用）：目标侧只模拟 Pro，透传不看它，
+ *  同代手柄的报文体能否原样转发由报告格式与目标语言决定（ADR 0026）。 */
 typedef enum {
     PAD_IDENTITY_ANY = 0,
     PAD_IDENTITY_PRO,

@@ -35,8 +35,8 @@ void ns2_frame_response_header(uint8_t out[NS2_FRAME_HEADER_LEN],
 size_t ns2_frame_response(uint8_t *out, size_t cap, uint8_t cmd, uint8_t transport,
                           uint8_t subcmd, const void *body, size_t body_len);
 
-/** Command 0x10 应答体：持久化固件版本 + 按身份的类型码（ns2_identity_t）。 */
-void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN], uint8_t identity);
+/** Command 0x10 应答体：持久化固件版本 + 手柄类型码（固定 Pro = 0x02）。 */
+void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN]);
 
 #ifdef __cplusplus
 }

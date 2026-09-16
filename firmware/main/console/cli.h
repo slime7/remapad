@@ -16,7 +16,7 @@ extern "C" {
  *
  * 可用命令（回车结尾，回复为单行文本）：
  *   help / ping / status
- *   key a|home|lr        调试注入按键（lr 为配对 L+R）
+ *   key <name> [ms]      调试注入按键（a b x y home capture c l r zl zr …）
  *   backlight 0-100      背光并持久化
  *   screen on|off        息屏 / 亮屏
  *   mode device|host     连接模式（桥接 otg 由 bridge 拒绝）
