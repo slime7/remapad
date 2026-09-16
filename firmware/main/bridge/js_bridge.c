@@ -522,12 +522,9 @@ static void handle_debug_key(int id, const char *cmd)
         /* 键名是 NS2 的 A 键，落在私有格式右侧的键位上（PS 的 ○）。 */
         mask = PAD_BTN_CIRCLE;
     } else if (key != NULL && key_len == 4 && strncmp(key, "home", 4) == 0) {
+        /* 调试页 HOME 模拟的是实体手柄按 HOME：这里只注入按键，未连接时开
+         * 唤醒窗口的动作由数据面按同一条 HOME 语义完成（见 dp_plane.c）。 */
         mask = PAD_BTN_HOME;
-        /* 实体手柄语义：主机在线时 HOME 就是主页键（注入按键即可）；主机
-         * 睡下时链路已断、按键到不了主机，改走唤醒窗口把它叫起来。 */
-        if (ns2_adv_home_action(ble_controller_connected()) == NS2_HOME_WAKE) {
-            ns2_session_wake_request();
-        }
     } else if (key != NULL && key_len == 2 && strncmp(key, "ui", 2) == 0) {
         /* 手柄操控 UI 的组合键：保持时长盖过 dp_ui 的翻转阈值（300ms），
          * 面板上点一次就等于按下再松开组合键。 */

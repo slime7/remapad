@@ -42,6 +42,13 @@ ns2_home_action_t ns2_adv_home_action(bool connected)
     return connected ? NS2_HOME_INJECT : NS2_HOME_WAKE;
 }
 
+bool ns2_adv_home_key_step(ns2_adv_home_key_t *key, bool pressed)
+{
+    const bool edge = pressed && !key->down;
+    key->down = pressed;
+    return edge;
+}
+
 bool ns2_adv_lr_step(ns2_adv_lr_timer_t *timer, bool paired, bool both_ready,
                      int64_t now_us)
 {

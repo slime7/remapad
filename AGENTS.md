@@ -105,7 +105,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 ## 项目特有约束
 
 - **连接由用户发起**：上电与断连（主机睡下）都静默，只有连接键（配对页「连接」、PWR 长按 3 秒）打开连接窗口、
-  未连接时按调试页 HOME 打开唤醒窗口把休眠主机叫起来；窗口到期或主机连上即收窗。改这条策略前先读 [ADR 0038](docs/adr/0038-user-initiated-connection-window.md)。
+  未连接时按手柄 HOME（实体手柄按下去或调试页注入）打开唤醒窗口把休眠主机叫起来；窗口到期或主机连上即收窗。
+  改这条策略前先读 [ADR 0038](docs/adr/0038-user-initiated-connection-window.md)。
 - **缺陷修复先写用例**：改 UI 的 bug 先在 `ui/tests/e2e/` 加一条能复现的红用例，改完 `ui/src` 后转绿才算修完；
   固件里与硬件无关的逻辑缺陷同样先补 `firmware/test/` 的主机端用例。
   用例标题写用户看到的现象，不放宽断言迁就实现，规则见 [docs/TESTING.md](docs/TESTING.md)。

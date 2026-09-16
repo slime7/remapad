@@ -243,6 +243,7 @@ static void dp_task(void *param)
 {
     (void)param;
     pad_state_t pad;
+    ns2_adv_home_key_t home_key = {0};
     TickType_t wake = xTaskGetTickCount();
     uint32_t last_buttons = 0;
     int64_t last_button_log_us = 0;
@@ -253,6 +254,16 @@ static void dp_task(void *param)
              target_name());
     for (;;) {
         dp_source_sample(&pad);
+        /* 实体手柄的 HOME：主机不在线时它就是「唤醒手柄」键——开唤醒窗口发
+         *  0x81，睡下的主机被叫醒后自动连回来、醒着的直接连回来；在线时 HOME
+         *  照常作为主页键进报文。按下那一刻触发一次，按住不重复（见
+         *  ns2_adv_home_key_step）。 */
+        const bool home_pressed = (pad.buttons & PAD_BTN_HOME) != 0;
+        if (ns2_adv_home_key_step(&home_key, home_pressed) &&
+            ns2_adv_home_action(ble_controller_connected()) == NS2_HOME_WAKE) {
+            ESP_LOGI(TAG, "home key: opening the wake window");
+            ns2_session_wake_request();
+        }
         if (s_feedback_pending) {
             pad_feedback_t feedback;
             portENTER_CRITICAL(&s_feedback_mux);

@@ -175,8 +175,9 @@ flowchart TB
   摇杆注入经 `dp_source_inject_stick()` 给出持续电平（0-4095，两侧独立，未设定的一侧沿用输入源，`dp_source_inject_stick_reset()` 回中并解除注入）。注入是合成的最后一步：
   按键叠加在合成按键上，设定过的摇杆覆盖合成摇杆。按键名表由 `dp_source_key_lookup()` 提供，串口 CLI 与主机端用例共用；
   UI 调试页「按键指令」区走 bridge 的 `debugKey`，提供 a / home / ui 三个键。
-  HOME 按实体手柄语义分流（`ns2_adv_home_action()`）：主机已注册会话时就是主页键，只注入按键；
-  未连接时按键到不了主机，转成唤醒请求打开唤醒窗口（10 秒内发 0x81 把它叫起来；设备平时静默，这是唯一的叫醒路径），按钮文案跟着主机状态走。
+  HOME 按实体手柄语义分流（`ns2_adv_home_action()`）：主机在线时就是主页键，只进报文；
+  不在线时按键到不了主机，改成唤醒请求打开唤醒窗口（10 秒内发 0x81 把它叫起来；设备平时静默，这是唯一的叫醒路径）。
+  这条语义长在数据面上（按下沿判定见 `ns2_adv_home_key_step()`），所以实体手柄（USB 直插或 PC 桥接）按 HOME 与调试页注入 HOME 是同一个动作；按钮文案跟着主机状态走。
   串口 `link` 按身份打印链路快照（`ns2_session_status()`）：对外广播地址、连接句柄、连接间隔（`itvl`，4 = 5 ms）、会话状态、报告格式、已开启的通知通道、特性启用位（`feat`）、已发送报告数、
   凭证条数与广播形态（`adv`，取 wake / reconnect / discovery / off）；按键变化另有数据面限频日志（`buttons 0x… -> 0x…`，最小间隔 200 ms）。
 - 输入与输出已解耦成三段稳定接口（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）：

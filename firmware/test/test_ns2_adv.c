@@ -246,6 +246,19 @@ static void home_key_follows_link_state(void)
     CHECK_EQ(ns2_adv_home_action(false), NS2_HOME_WAKE);
 }
 
+/** HOME 的按下沿：按住 HOME 只叫醒一次（一直按住不重复开窗），松开再按
+ *  才算下一次按下。 */
+static void home_key_fires_on_press_edge(void)
+{
+    ns2_adv_home_key_t key = {0};
+
+    CHECK(!ns2_adv_home_key_step(&key, false));
+    CHECK(ns2_adv_home_key_step(&key, true));
+    CHECK(!ns2_adv_home_key_step(&key, true));
+    CHECK(!ns2_adv_home_key_step(&key, false));
+    CHECK(ns2_adv_home_key_step(&key, true));
+}
+
 HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"发现广播与真机抓包一致", discovery_matches_capture},
                 {"回连广播不带唤醒标志", reconnect_keeps_normal_status},
@@ -258,4 +271,5 @@ HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"回连广播用主机最近一次连接的地址", host_mac_prefers_last_connected_address},
                 {"连接窗口与唤醒窗口各按自己的时长收窗", window_lifetime_follows_request},
                 {"HOME 按键按主机在线与否分流", home_key_follows_link_state},
+                {"按住 HOME 只触发一次唤醒", home_key_fires_on_press_edge},
                 {"厂商数据偏移与尾部标志", manufacturer_data_offsets});

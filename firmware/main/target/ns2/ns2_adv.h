@@ -87,6 +87,15 @@ typedef enum {
 /** 主机在线与否决定 HOME 按键的动作：醒着当主页键、睡眠当唤醒键。 */
 ns2_home_action_t ns2_adv_home_action(bool connected);
 
+/** HOME 按键的边沿状态：实体手柄的 HOME 在按下那一刻起作用（主机在线时上报
+ *  主页键、不在线时开唤醒窗口），一直按住不重复触发。 */
+typedef struct {
+    bool down; /**< 上一拍 HOME 是否按下。 */
+} ns2_adv_home_key_t;
+
+/** 推进一步：本次是「刚按下」（上升沿）时返回 true。 */
+bool ns2_adv_home_key_step(ns2_adv_home_key_t *key, bool pressed);
+
 /** 回连/唤醒广播要携带的主机地址（纯逻辑，主机端用例钉住）：优先「最近一次
  *  NS2 会话记录到的对端地址」——配对交换给的是主机两条只差一位（末字节 ±1）
  *  的地址，凭证里存的那条未必是主机连接时在用的那条，连接对端地址才是；其次
