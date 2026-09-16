@@ -61,6 +61,7 @@
 | [0033](0033-pc-single-process-tool-and-device-screenshot.md) | active | PC 侧工具合并为单进程会话（remapadctl：转发 + 命令行 + 截图 + OTA），桥接协议新增设备 → PC 的图像帧与串口 shot 命令把实机画面回传成 PNG |
 | [0034](0034-ns2-report-interval-fixed-15ms.md) | active | NS2 上报节奏固定 15 ms、不提供运行时档位（5 ms 试验被否：四成以上通知因 mbuf 耗尽被丢）；确认 0023 的上报节奏一项 |
 | [0035](0035-ns2-headset-state-passthrough.md) | active | NS2 耳机状态按输入设备的 3.5 mm 状态透传（0x09 的 0x0D 与 0x05 的插入位同源，串口 headset 可覆盖） |
+| [0036](0036-host-pressure-triggered-js-gc.md) | active | JS 堆的显式 GC 由宿主按 PSRAM 压力触发（每帧读余量、跌过 256 KiB 步长才 JS_RunGC 并重钉基线），与上游 PSP host 的 arena-pressure GC 同构 |
 
 ## 创建 ADR 脚本用法
 
