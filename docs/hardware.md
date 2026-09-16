@@ -157,6 +157,8 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 面板、触摸与背光已接入固件：
 `firmware/main/drivers/` 中的 `panel.c` 承担面板初始化与 strip 提交。
 驱动是 esp_lcd 内置 ST7789，SPI2 取上限 80 MHz，理由见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算。
+面板初始化在 IDF 内置序列（SLPOUT/MADCTL/COLMOD/RAMCTRL）之外补发厂商的电源、VCOM 与 gamma 表，
+取自微雪为同一块板自带的 Arduino 库调优值，见 `firmware/main/drivers/panel.c` 的 `s_panel_vendor_tuning`。
 `touch.c` 负责触点采样（Registry 组件 `esp_lcd_touch_cst816s`，I2C `0x15`），`backlight.c` 负责背光驱动（GPIO15 LEDC PWM）；
 选型与取舍见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
 此外 `pwr_key.c` 负责 PWR 按键（GPIO40 采样，短按息屏 / 长按是连接键），并在 `app_main` 入口把 SYS_EN（GPIO41）拉高锁存电池供电，USB 供电下该锁存被旁路。

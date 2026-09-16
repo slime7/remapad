@@ -10,10 +10,13 @@
 #include "driver/spi_master.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 
 /* 面板与引脚事实来自 docs/hardware.md；方向、GRAM 偏移与反转配置逐条对照微雪
  * 官方示例（02_ESP_IDF_ST7789_LVGL）：
  * https://github.com/waveshareteam/ESP32-S3-Touch-LCD-1.69/tree/main/examples/esp-idf/02_ESP_IDF_ST7789_LVGL
+ * 电源、VCOM 与 gamma 寄存器不在 IDF 内置驱动的初始化序列里，另按厂商调优表补发，
+ * 见下方的 s_panel_vendor_tuning。
  *
  * 像素时钟取 SPI2 的上限 80 MHz：条带管线里传输本就基本被渲染盖住，取上限
  * 是为了压缩整帧重绘时的串行等待与 DMA 占线时间（整帧 240x280 约 13.5 ms，
@@ -119,6 +122,57 @@ static bool IRAM_ATTR panel_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
     return higher_priority_woken == pdTRUE;
 }
 
+/* 面板电源、VCOM 与两组 gamma 抽头，取自微雪为同一块板自带的 Arduino 库
+ * （examples/arduino/libraries/GFX_Library_for_Arduino/src/display/Arduino_ST7789.h
+ * 的 st7789_init_operations），仓库 waveshareteam/ESP32-S3-Touch-LCD-1.69。
+ *
+ * IDF 内置的 esp_lcd_new_panel_st7789 初始化只发 SLPOUT/MADCTL/COLMOD/RAMCTRL
+ * 四条命令，微雪的两份 ESP-IDF 示例（01/02）同样没写这几组寄存器，于是 VCOM、
+ * 源极电压与 gamma 全部停在上电默认值，实机观感是黑位抬高、画面发灰。
+ *
+ * 与上电默认值不同的条目只有 VCOM 0xBB=0x19（默认 0x20）、源极电压 0xC3=0x12
+ * （默认 0x0B）与 0xE0/0xE1 两组 gamma 抽头；其余条目与默认值一致，保留是为了让
+ * 面板状态与厂商序列逐条对齐。只想单独试 gamma 就删到只剩最后两条。 */
+typedef struct {
+    uint8_t command;
+    uint8_t length;
+    uint8_t data[14];
+} panel_vendor_cmd_t;
+
+static const panel_vendor_cmd_t s_panel_vendor_tuning[] = {
+    { .command = 0xB2, .length = 5, .data = { 0x0C, 0x0C, 0x00, 0x33, 0x33 } },
+    { .command = 0xB7, .length = 1, .data = { 0x35 } },
+    { .command = 0xBB, .length = 1, .data = { 0x19 } },
+    { .command = 0xC0, .length = 1, .data = { 0x2C } },
+    { .command = 0xC2, .length = 1, .data = { 0x01 } },
+    { .command = 0xC3, .length = 1, .data = { 0x12 } },
+    { .command = 0xC4, .length = 1, .data = { 0x20 } },
+    { .command = 0xC6, .length = 1, .data = { 0x0F } },
+    { .command = 0xD0, .length = 2, .data = { 0xA4, 0xA1 } },
+    { .command = 0xE0, .length = 14,
+      .data = { 0xF0, 0x09, 0x13, 0x12, 0x12, 0x2B, 0x3C,
+                0x44, 0x4B, 0x1B, 0x18, 0x17, 0x1D, 0x21 } },
+    { .command = 0xE1, .length = 14,
+      .data = { 0xF0, 0x09, 0x13, 0x0C, 0x0D, 0x27, 0x3B,
+                0x44, 0x4D, 0x0B, 0x17, 0x17, 0x1D, 0x21 } },
+};
+
+/** 逐条下发厂商调优序列；面板 IO 直写，IDF 驱动不会覆盖这些寄存器。 */
+static esp_err_t panel_apply_vendor_tuning(void)
+{
+    for (size_t index = 0;
+         index < sizeof(s_panel_vendor_tuning) / sizeof(s_panel_vendor_tuning[0]);
+         ++index) {
+        const panel_vendor_cmd_t *entry = &s_panel_vendor_tuning[index];
+        ESP_RETURN_ON_ERROR(
+            esp_lcd_panel_io_tx_param(s_io, entry->command, entry->data, entry->length),
+            TAG, "vendor tuning 0x%02x failed", (unsigned)entry->command);
+    }
+    /* 厂商序列在打开显示前留 10 ms，等电源与 gamma 电压稳定。 */
+    vTaskDelay(pdMS_TO_TICKS(10));
+    return ESP_OK;
+}
+
 esp_err_t panel_init(void)
 {
     if (s_panel != NULL) {
@@ -178,6 +232,7 @@ esp_err_t panel_init(void)
 
     ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "panel reset failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "panel init failed");
+    ESP_RETURN_ON_ERROR(panel_apply_vendor_tuning(), TAG, "panel vendor tuning failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, false), TAG, "panel mirror failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "panel invert failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_set_gap(s_panel, 0, 20), TAG, "panel set gap failed");
