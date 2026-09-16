@@ -13,11 +13,12 @@ import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR, STYLE } from '../theme';
 import { hw, sendDebugKey } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
+import { ticksForMs } from '../tick';
 import type { DebugKey } from '../bridge/protocol';
 import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 
-/** 注入确认高亮的持续帧数：60Hz 下 9 帧约 150ms。 */
-const FLASH_TICKS = 9;
+/** 注入确认高亮的时长：150 ms，按公共帧节奏换算成帧数。 */
+const FLASH_TICKS = Math.max(1, Math.round(ticksForMs(150)));
 /** 按键指令卡高度：py-3 上下 24 + 两行按钮（第二行 mt-2 8 + 44）。 */
 const KEYS_CARD_H = 24 + 8 + 44 + 8 + 44;
 /** 两行按钮在内容坐标里的位置：说明文本 15 + 间距 8，卡内 py-3 再留 12。 */

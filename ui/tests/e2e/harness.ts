@@ -29,9 +29,14 @@ export function installHarness(): void {
   const queue: string[] = [];
   let lastTree: any = null;
   let lastTreeFrame = -1;
+  /** 收到的树快照份数：用例靠它等待新的一份快照到达。 */
+  let treeSeq = 0;
   let frame = 0;
   let paused = false;
   let flatCache: { source: any; nodes: Entry[] } | null = null;
+  /** 应用帧计数与 bundle 装上的帧回调（见下面的 globalThis.frame 存取器）。 */
+  let appFrames = 0;
+  let frameHandler: ((...args: any[]) => unknown) | null = null;
 
   function record(line: string): void {
     let message: any = null;
@@ -50,6 +55,7 @@ export function installHarness(): void {
     if (message.t === "tree") {
       lastTree = message.root ?? null;
       lastTreeFrame = typeof message.frame === "number" ? message.frame : frame;
+      treeSeq += 1;
     }
     messages.push(message);
     if (messages.length > MAX_MESSAGES) {
@@ -69,6 +75,24 @@ export function installHarness(): void {
     configurable: true,
     get: () => transport,
     set: () => {},
+  });
+
+  // 预览页从 bundle 装上的 globalThis.frame 逐帧驱动应用。这里包一层计数，
+  // 让 waitFrames 数的是应用帧本身：宿主帧率由 host profile 的 tickHz 决定，
+  // requestAnimationFrame 的节奏与它不同。
+  Object.defineProperty(global, "frame", {
+    configurable: true,
+    get: () => frameHandler,
+    set: (handler: unknown) => {
+      if (typeof handler !== "function") {
+        frameHandler = null;
+        return;
+      }
+      frameHandler = (...args: unknown[]): unknown => {
+        appFrames += 1;
+        return (handler as (...rest: unknown[]) => unknown)(...args);
+      };
+    },
   });
 
   /** 「hidden」是页面切换可见性的类名；overflow-hidden 这类子串不算。 */
@@ -112,25 +136,28 @@ export function installHarness(): void {
     },
     frame: () => frame,
     /**
-     * 等满 n 个显示帧。预览页的帧循环和这里都挂在 requestAnimationFrame
-     * 上，所以按 rAF 计数就等价于按应用帧计数；不要用 shim 每 30 帧才推一次
-     * 的 stats.frame 计数——那个粒度太粗（一次差半秒），会掩盖时序类回归。
+     * 等满 n 个应用帧。计数来自这里包住 globalThis.frame 的那一层，与宿主帧率
+     * 无关；不要用 shim 每 30 帧才推一次的 stats.frame 计数，那个粒度会掩盖
+     * 时序类回归。应用停帧时按墙钟兜底返回，用例带着自己的断言失败。
      */
-    waitFrames: (count: number) =>
-      new Promise<number>((resolve) => {
-        let remaining = Math.max(0, Math.floor(count));
+    waitFrames: (count: number) => {
+      const wanted = Math.max(0, Math.floor(count));
+      const target = appFrames + wanted;
+      const deadline = Date.now() + 5000 + wanted * 100;
+      return new Promise<number>((resolve) => {
         const step = (): void => {
-          if (remaining <= 0) {
-            resolve(frame);
+          if (appFrames >= target || Date.now() >= deadline) {
+            resolve(appFrames);
             return;
           }
-          remaining -= 1;
           requestAnimationFrame(step);
         };
         requestAnimationFrame(step);
-      }),
+      });
+    },
     paused: () => paused,
     treeFrame: () => lastTreeFrame,
+    treeSeq: () => treeSeq,
     treeReady: () => lastTree !== null,
     /** 扁平化后的组件树；同一份快照只展开一次。 */
     nodes: (): Entry[] => {

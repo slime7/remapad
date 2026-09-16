@@ -202,7 +202,7 @@ export class RemapadApp {
     await this.waitFrames(2);
   }
 
-  /** 等待应用推进 n 帧（宿主帧循环由预览页驱动，60 Hz 目标）。 */
+  /** 等待应用推进 n 帧（预览页按 host profile 的 tickHz 驱动帧循环）。 */
   async waitFrames(count: number): Promise<void> {
     await this.page.evaluate(async (frames) => {
       await globalThis.__remapadHarness?.waitFrames(frames);
@@ -236,15 +236,23 @@ export class RemapadApp {
     return box;
   }
 
-  /** 重新取一份组件树快照并等待它到达。 */
+  /**
+   * 重新取一份组件树快照并等待它到达。
+   *
+   * 等「份数增加」：shim 每 30 帧（TREE_THROTTLE）才自动推一次树，改动靠这次
+   * 请求带回来，请求与快照之间隔一个应用帧，因此要等新的一份到达再断言。
+   */
   async refreshTree(): Promise<void> {
+    const before = await this.page.evaluate(
+      () => globalThis.__remapadHarness?.treeSeq() ?? 0,
+    );
     await this.page.evaluate(() => globalThis.__remapadHarness?.requestTree());
     await expect
-      .poll(() => this.page.evaluate(() => globalThis.__remapadHarness?.treeFrame() ?? -1), {
+      .poll(() => this.page.evaluate(() => globalThis.__remapadHarness?.treeSeq() ?? 0), {
         timeout: 15_000,
         intervals: [30],
       })
-      .toBeGreaterThan(0);
+      .toBeGreaterThan(before);
   }
 
   /** 当前组件树的扁平视图；发现新快照时自动重新展开。 */

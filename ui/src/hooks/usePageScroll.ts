@@ -8,8 +8,8 @@
  *
  * 滚动位移每帧直接写给内容节点的 translateY（官方 jump），不经过响应式绑定：
  * 官方把「信号写入 → 副作用重跑 → JSX 绑定 → 原生属性」这条路径标为毫秒级
- * （框架 hot.ts / apps/clear 的注释），60 Hz 下用不起；jump 一次只有一个
- * FFI 调用，且 translate 是 paint-only，不触发重新布局。
+ * （框架 hot.ts / apps/clear 的注释），逐帧走这条路用不起；jump 一次只有
+ * 一个 FFI 调用，且 translate 是 paint-only，不触发重新布局。
  */
 import { onScopeDispose, watchEffect } from 'vue';
 import { jump } from '@pocketjs/framework/vue-vapor/animation';

@@ -27,7 +27,8 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
 
 ## 核心目标与成功指标
 
-1. **零刷机实时热重载**：在 PC 浏览器中通过 WebAssembly 提供与真机像素级一致的 60 FPS 实时仿真，保存代码后亚秒级刷新，UI 调试无需依赖硬件板卡。
+1. **零刷机实时热重载**：在 PC 浏览器中通过 WebAssembly 提供与真机像素级一致的 30 FPS 实时仿真，保存代码后亚秒级刷新，UI 调试无需依赖硬件板卡。
+   帧率取值同真机，见 [ADR 0037](adr/0037-ui-tick-rate-30hz.md)。
 2. **现代化的组件与样式体系**：支持 Vue Vapor 的 `ref` / `watchEffect` 响应式系统，全面支持 Tailwind 工具类，消除繁琐内联样式配置。
 3. **固件构建链路清晰可复现**：前端通过官方 PocketJS CLI 和 ESP32-S3 host profile 生成 `.pocket`，ESP-IDF 通过官方组件嵌入该包；
    16 MB Flash / 8 MB Octal PSRAM 内存配置和 240×280 视口由设备 profile 统一描述。

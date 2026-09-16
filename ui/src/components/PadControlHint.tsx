@@ -10,9 +10,10 @@ import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { ref, watch } from 'vue';
 import { COLOR, STYLE } from '../theme';
+import { ticksForMs } from '../tick';
 
-/** 提示停留时长：60Hz 下 210 帧约 3.5 秒。 */
-const HINT_FRAMES = 210;
+/** 提示停留时长：3.5 秒，按公共帧节奏换算成帧数。 */
+const HINT_TICKS = Math.max(1, Math.round(ticksForMs(3500)));
 
 export function PadControlHint(props: { active: () => boolean }) {
   const shown = ref(false);
@@ -20,7 +21,7 @@ export function PadControlHint(props: { active: () => boolean }) {
 
   /* props.active 是函数：在 watch 里读一次，模式一变就重新计时。 */
   watch(props.active, (on) => {
-    remaining = on ? HINT_FRAMES : 0;
+    remaining = on ? HINT_TICKS : 0;
     shown.value = on;
   });
 

@@ -15,7 +15,7 @@ import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { COLOR, STYLE } from '../theme';
 import { BottomPlaceholder } from '../components/BottomPlaceholder';
 import { hw, pressLr, startPairing, stopPairing } from '../hooks/useHardware';
-import { SPINNER_FRAMES } from '../spinner';
+import { SPINNER_FRAMES, SPINNER_STEP } from '../spinner';
 import { pairingColor, pairingLabel } from '../utils';
 
 export function PairingPage(props: {
@@ -23,7 +23,8 @@ export function PairingPage(props: {
   /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
   interactive: () => boolean;
 }) {
-  const spinnerSrc = createSpriteAnimation(SPINNER_FRAMES, { frameStep: 3 });
+  /* 步进由公共帧节奏算出（见 spinner.ts）。 */
+  const spinnerSrc = createSpriteAnimation(SPINNER_FRAMES, { frameStep: SPINNER_STEP });
   // Vue Vapor：条件以函数形式在 JSX 内调用才会被渲染作用跟踪。
   const isBusy = () => hw.pairing === 'scanning' || hw.pairing === 'pairing';
 

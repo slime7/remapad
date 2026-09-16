@@ -397,6 +397,7 @@ if (command === 'web') {
     pageDir: resolve(PROJECT_ROOT, 'ui/preview'),
     distDir: UI_OUTDIR,
     runtimeDir,
+    hostProfile: HOST_PROFILE,
   });
   console.log('[Remapad] 触摸屏预览: ' + server.url + '（240 × 280，触摸输入，无实体按键）');
   // 官方 DevTools 服务器（hosts/web/serve.ts = 面板 + WebSocket hub，单进程）。

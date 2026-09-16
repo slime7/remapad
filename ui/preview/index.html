@@ -222,15 +222,19 @@
 
   <script type="module">
     // 触摸预览驱动：官方 wasm 核心负责布局与栅格化，本页只负责浏览器事件到
-    // PocketJS 触摸帧契约的转换，以及固定 60 Hz 的 frame → tick → render 循环。
+    // PocketJS 触摸帧契约的转换，以及按 host profile 的 tickHz 驱动的
+    // frame → tick → render 循环。
     import { createWasmUi } from '/runtime/wasm-ops.js';
 
     // 视口与 ui/pocket.json 的 app.viewport.logical 保持一致。
     const VIEW_W = 240;
     const VIEW_H = 280;
     const RASTER_DENSITY = 1;
-    const SIM_HZ = 60;
-    const STEP_MS = 1000 / SIM_HZ;
+    // 帧节奏取自 host profile（/host-profile.json 的 tickHz）：bundle 按同一个
+    // 值烘焙，注入式宿主没有原生契约断言，不一致就会让动画速度与真机不同。
+    // boot() 读到后才赋值。
+    let SIM_HZ = 0;
+    let STEP_MS = 0;
     const MAX_CATCHUP_STEPS = 4;
     const MAX_DT_MS = 250;
     /** PocketJS 按键位（contracts/spec/spec.ts 的 BTN）：键盘按这里的位打包。 */
@@ -731,11 +735,27 @@
       safeFrame();
       blit();
       start();
-      setStatus('运行中 · 60 FPS 目标', '#10b981');
+      setStatus('运行中 · ' + SIM_HZ + ' FPS 目标', '#10b981');
       log('已加载 ' + APP_NAME);
     }
 
+    /** 帧节奏与编译器取自同一份 host profile，改 tickHz 后重新编译即可。 */
+    async function readHostTickHz() {
+      const response = await fetch('/host-profile.json');
+      if (!response.ok) {
+        throw new Error('缺少 host profile（HTTP ' + response.status + '）');
+      }
+      const profile = await response.json();
+      if (!Number.isInteger(profile.tickHz) || profile.tickHz < 1) {
+        throw new Error('host profile 的 tickHz 无效: ' + profile.tickHz);
+      }
+      return profile.tickHz;
+    }
+
     async function boot() {
+      SIM_HZ = await readHostTickHz();
+      STEP_MS = 1000 / SIM_HZ;
+      log('帧节奏 ' + SIM_HZ + ' Hz（取自 host profile）');
       const wasmResponse = await fetch('/runtime/pocketjs.wasm');
       if (!wasmResponse.ok) {
         throw new Error('缺少官方 wasm 核心（HTTP ' + wasmResponse.status + '）');

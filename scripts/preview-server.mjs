@@ -1,5 +1,6 @@
-// 触摸屏预览服务器。只提供三类内容：本仓库的预览页面、UI 构建产物（ui/dist），
-// 以及 @pocketjs/framework 自带的浏览器运行时（官方 wasm 核心与宿主绑定）。
+// 触摸屏预览服务器。只提供四类内容：本仓库的预览页面、UI 构建产物（ui/dist）、
+// @pocketjs/framework 自带的浏览器运行时（官方 wasm 核心与宿主绑定），
+// 以及 host profile（firmware/pocket.host.json，预览页据此对齐帧节奏）。
 // 官方 hosts/web 的 playground 页面面向 PSP 按键，本项目使用触摸预览页，因此由本脚本
 // 负责静态服务，渲染与触摸语义仍然来自官方运行时。
 import { createServer } from 'node:http';
@@ -42,7 +43,7 @@ async function sendFile(response, filePath) {
   response.end(body);
 }
 
-export function startPreviewServer({ port = 8130, pageDir, distDir, runtimeDir }) {
+export function startPreviewServer({ port = 8130, pageDir, distDir, runtimeDir, hostProfile }) {
   const routes = [
     { prefix: '/preview/', root: resolve(pageDir) },
     { prefix: '/dist/', root: resolve(distDir) },
@@ -71,6 +72,10 @@ export function startPreviewServer({ port = 8130, pageDir, distDir, runtimeDir }
     let filePath;
     if (path === '/' || path === '/index.html') {
       filePath = indexFile;
+    } else if (path === '/host-profile.json') {
+      // 预览页是注入式宿主，没有真机那套 tickHz 契约断言，帧节奏只能靠这份
+      // profile 与编译器对齐；文件每次现读，改完 profile 刷新页面即可生效。
+      filePath = hostProfile;
     } else if (route) {
       filePath = resolveInside(route.root, path.slice(route.prefix.length));
     } else {

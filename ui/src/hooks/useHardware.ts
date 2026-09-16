@@ -8,6 +8,7 @@
 import { reactive } from 'vue';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { hardware } from '../bridge/driver';
+import { SECOND_TICKS, msForTicks, ticksForMs } from '../tick';
 import type {
   BatteryInfo,
   ControllerAddresses,
@@ -102,10 +103,10 @@ export const hw = reactive<HardwareUiState>({
   poweringOff: false,
 });
 
-const POLL_TICKS = 300; // 60Hz × 5s
-const tickHz: number = (globalThis as unknown as { ui?: { __tickHz?: number } }).ui?.__tickHz ?? 60;
+/** 常规状态轮询间隔：5 秒，按公共帧节奏换算成帧数。 */
+const POLL_TICKS = Math.max(1, Math.round(ticksForMs(5000)));
 /** 帧率采样窗口：一秒的虚拟帧。健康时即一秒墙钟，掉帧时窗口相应拉长。 */
-const FPS_WINDOW_TICKS = tickHz;
+const FPS_WINDOW_TICKS = SECOND_TICKS;
 
 let started = false;
 let ticks = 0;
@@ -374,9 +375,9 @@ export function useHardware(): void {
     if (samplingFps && ticks - fpsRequestFrame >= FPS_WINDOW_TICKS) {
       requestFrameRateSample();
     }
-    if (ticks % tickHz === 0 && systemInfoLive) {
+    if (ticks % SECOND_TICKS === 0 && systemInfoLive) {
       // 两次状态轮询之间按帧数本地推算 uptime，避免每帧改响应式状态。
-      hw.uptimeMs += (ticks - uptimeSyncTicks) * (1000 / tickHz);
+      hw.uptimeMs += msForTicks(ticks - uptimeSyncTicks);
       uptimeSyncTicks = ticks;
     }
   });

@@ -4,7 +4,7 @@
   "id": "remapad-s3",
   "platform": "esp-idf",
   "form": "takeover",
-  "tickHz": 60,
+  "tickHz": 30,
   "display": {
     "physicalViewport": [240, 280],
     "logicalViewports": [[240, 280]],
