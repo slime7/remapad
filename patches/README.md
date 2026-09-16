@@ -9,15 +9,8 @@
 源码。上游记录的哈希与 ESP Component Registry 实际提供的 `espressif/quickjs-ng` 0.14.0 不一致，
 会导致 `idf.py build` 在 configure 阶段直接失败。
 
-核对过的事实：
-
-- Registry 的 `CHECKSUMS.json` 与下载得到的 `espressif__quickjs-ng-v0.14.0.zip` 都给出
-  `quickjs-ng/quickjs.c` = `36128da188cb236ffd029dd3c672ff8f85e5a196a9211e267a515c8efc1ab52c`。
-- Registry 只发布了 0.14.0 一个版本，没有其它版本可以满足上游记录的哈希。
-- 上游 quickjs-ng v0.14.0 的 `quickjs.c` 又是另一个哈希，说明 Registry 的副本经过重新打包。
-- `prepare_quickjs.py` 的全部结构断言（`js_typed_array_reverse` 中 `if (len > 0) {` 的唯一性、
-  两处 `js_typed_array___speciesCreate` 声明、`2, args` 与 `4, args` 调用点）在 Registry 当前源码上
-  仍然成立，不可变 ArrayBuffer 补丁本身依然适用。
+Registry 的 `espressif__quickjs-ng-v0.14.0.zip` 内 `quickjs.c` 的实际哈希是
+`36128da188cb236ffd029dd3c672ff8f85e5a196a9211e267a515c8efc1ab52c`（Registry 只有 0.14.0 一个版本，副本经过重新打包）。
 
 本仓库的处理方式是把 `firmware/components/pocketjs_guest/tools/prepare_quickjs.py` 中的
 `SOURCE_SHA256` 直接改成 Registry 实际内容。`0001-quickjs-ng-0.14.0-source-pin.patch` 是这份差异的
