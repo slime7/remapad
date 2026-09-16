@@ -19,6 +19,7 @@
 #include "backlight.h"
 #include "boot_splash.h"
 #include "bridge/js_bridge.h"
+#include "console_out.h"
 #include "dp_ui.h"
 #include "input_link.h"
 #include "ota_session.h"
@@ -48,6 +49,18 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_POCKETJS_STOP_TIMEOUT_MS 5000
 /** 持久化亮度缺失时的兜底值（app_config 加载后通常有用户设定值）。 */
 #define REMAPAD_BACKLIGHT_PCT_DEFAULT 40
+/** 内存对照日志的周期：5 秒统计窗口的个数，60 秒一行。JS_ComputeMemoryUsage
+ *  是全堆遍历（毫秒级），不能进 5 秒窗口；对照 QuickJS 记账值与 PSRAM 余量
+ *  是鉴别「JS 堆滞留 vs 原生 ui_core 增长」的唯一仪表（ui_core 分配不走
+ *  QuickJS 上限，PSRAM 涨满时它 abort 重启）。 */
+#define REMAPAD_MEM_REPORT_WINDOWS 12
+/** 显式 GC 的周期（统计窗口数，10 秒）：QuickJS 的阈值式 GC 每触发一次就把
+ *  阈值抬到存活堆的 1.5 倍，bundle eval 上来堆就有 ~3.8MB，此后 GC 实际上
+ *  不再触发，Vue 响应式链路的环垃圾在两次 GC 之间积到兆级，把物理 PSRAM
+ *  顶到 ui_core 分配失败（abort 重启，见 2026-09-16 的实机复盘）。宿主在
+ *  帧间隙按固定节奏 JS_RunGC，环垃圾被压在 KB 量级；GC 与 eval 同在 owner
+ *  task 执行，无并发问题。 */
+#define REMAPAD_GC_WINDOWS 2
 /** strip 缓冲数量：渲染下一条时，前几条仍在被 DMA 读取。 */
 #define REMAPAD_STRIP_BUFFER_COUNT 3
 /** 单条 strip 的逻辑高度：整屏 damage 会被切成这个高度的条带。一条
@@ -69,6 +82,9 @@ static const char *TAG = "remapad_pocketjs";
 
 /** 截图请求标志：串口 CLI（input_link / 控制台任务）置位、owner task 消费。 */
 static atomic_bool s_shot_requested;
+
+/** 内存全景请求标志：同截图请求，跨任务只传一个比特。 */
+static atomic_bool s_mem_requested;
 
 /** 一次截图已回传的进度：字节偏移与分块数，供日志与失败诊断。 */
 typedef struct {
@@ -309,6 +325,15 @@ static esp_err_t sample_input(pocketjs_ui_input_t *input, void *user_data)
 void remapad_ui_request_shot(void)
 {
     atomic_store_explicit(&s_shot_requested, true, memory_order_relaxed);
+}
+
+/**
+ * 请求一次实时内存全景：JS_ComputeMemoryUsage 会遍历整堆，只能与 guest 同任务
+ * 执行，跨任务只置标志位；owner task 在下一帧读取并打到控制台出口。
+ */
+void remapad_ui_request_mem(void)
+{
+    atomic_store_explicit(&s_mem_requested, true, memory_order_relaxed);
 }
 
 /**
@@ -858,6 +883,55 @@ static bool owner_wait_until(remapad_pocketjs_runtime_t *runtime, int64_t deadli
     return false;
 }
 
+/** CLI 回复出口：控制台通道的两种后端（UART0 / USJ vfs）都允许跨任务写。 */
+static void mem_line(const char *text, size_t len)
+{
+    console_out_write(text, len);
+}
+
+/**
+ * 实时内存全景（串口 mem 命令的应答）：PSRAM / 内部堆的当前余量与历史最低、
+ * QuickJS 记账与对象计数、JS turn 峰值耗时。全部在 owner task 上现场读取——
+ * 不经过 UI 层，截图冻结或页面门控（系统页隐藏时停止取数）都不影响这里的
+ * 实时性；guest 不在（启动失败）时只报堆账。整份报告拼成一块一次写出：
+ * 中间的全堆遍历要花上百毫秒，分两行写会让 PC 侧的应答窗断在两行中间。
+ */
+static void mem_report_print(const remapad_pocketjs_runtime_t *runtime)
+{
+    char report[320];
+    size_t used = 0;
+    used += (size_t)snprintf(report, sizeof(report),
+             "mem psram free=%u largest=%u min=%u internal free=%u largest=%u min=%u\r\n",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
+    if (runtime->guest == NULL) {
+        used += (size_t)snprintf(&report[used], sizeof(report) - used, "mem js guest=off\r\n");
+        mem_line(report, used);
+        return;
+    }
+    pocketjs_guest_stats_t stats = {.struct_size = sizeof(stats)};
+    const bool have_heap = pocketjs_guest_stats(runtime->guest, &stats) == ESP_OK;
+    JSMemoryUsage usage = {0};
+    if (have_heap) {
+        JS_ComputeMemoryUsage(
+            JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest)), &usage);
+    }
+    snprintf(&report[used], sizeof(report) - used,
+             "mem js_heap=%u/%u kB allocs=%u obj=%u prop=%u arr=%u turns=%u errors=%u "
+             "max_turn_us=%u max_render_us=%u\r\n",
+             (unsigned)(usage.malloc_size / 1024U),
+             (unsigned)(stats.heap_limit / 1024U),
+             (unsigned)usage.malloc_count, (unsigned)usage.obj_count,
+             (unsigned)usage.prop_count, (unsigned)usage.array_count,
+             (unsigned)stats.frames, (unsigned)stats.frame_errors,
+             (unsigned)runtime->max_turn_us, (unsigned)runtime->max_render_us);
+    mem_line(report, strlen(report));
+}
+
 static void pocketjs_owner_task(void *opaque)
 {
     remapad_pocketjs_runtime_t *runtime = opaque;
@@ -870,6 +944,7 @@ static void pocketjs_owner_task(void *opaque)
 
     const int64_t started = esp_timer_get_time();
     uint64_t tick = 0;
+    uint32_t report_windows = 0;
     int64_t report_due = started + INT64_C(5000000);
     while (!atomic_load_explicit(&runtime->stopping, memory_order_relaxed)) {
         const int64_t deadline =
@@ -922,6 +997,11 @@ static void pocketjs_owner_task(void *opaque)
          * eval 回发（render 之后调用不占用 turn 预算的统计）。 */
         js_bridge_service();
 
+        /* 串口 mem 命令：任意任务置位都安全，全堆遍历只能在这里消费。 */
+        if (atomic_exchange_explicit(&s_mem_requested, false, memory_order_relaxed)) {
+            mem_report_print(runtime);
+        }
+
         if (esp_timer_get_time() >= report_due) {
             const uint32_t frames_in_window =
                 runtime->window_frames == 0U ? 1U : runtime->window_frames;
@@ -939,6 +1019,42 @@ static void pocketjs_owner_task(void *opaque)
             runtime->window_render_us = 0U;
             runtime->window_damage_px = 0U;
             report_due += INT64_C(5000000);
+            report_windows++;
+            if (report_windows % REMAPAD_GC_WINDOWS == 0U && runtime->guest != NULL) {
+                JS_RunGC(JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest)));
+            }
+            if (report_windows % REMAPAD_MEM_REPORT_WINDOWS == 0U) {
+                pocketjs_guest_stats_t mem_stats = {.struct_size = sizeof(mem_stats)};
+                const bool have_heap = pocketjs_guest_stats(runtime->guest, &mem_stats) == ESP_OK;
+                /* 分桶 + 前后 GC 对照：obj/prop 涨而 func/str 平是「成环待回收」
+                 * 的特征。GC 后总账回落即为环垃圾（引擎阈值式 GC 之间会越积
+                 * 越多）；仍线性涨才是真被根引用的滞留。JS_RunGC 毫秒级。 */
+                uint32_t before_kb = 0;
+                if (have_heap && runtime->guest != NULL) {
+                    JSRuntime *qjs_rt =
+                        JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest));
+                    before_kb = (uint32_t)(mem_stats.heap_used / 1024U);
+                    JS_RunGC(qjs_rt);
+                }
+                JSMemoryUsage usage = {0};
+                if (have_heap && runtime->guest != NULL) {
+                    JS_ComputeMemoryUsage(
+                        JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest)), &usage);
+                }
+                ESP_LOGI(TAG,
+                         "mem: js_heap=%" PRIu32 "kB(pre %" PRIu32 "kB)/%" PRIu32 "kB "
+                         "psram_free=%u internal_free=%u "
+                         "allocs=%u obj_n=%u prop_n=%u arr_n=%u",
+                         (uint32_t)(usage.malloc_size / 1024U),
+                         before_kb,
+                         have_heap ? (uint32_t)(mem_stats.heap_limit / 1024U) : 0U,
+                         (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                         (unsigned)usage.malloc_count,
+                         (unsigned)usage.obj_count,
+                         (unsigned)usage.prop_count,
+                         (unsigned)usage.array_count);
+            }
         }
     }
 

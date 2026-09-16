@@ -110,6 +110,10 @@ const FPS_WINDOW_TICKS = tickHz;
 let started = false;
 let ticks = 0;
 let uptimeSyncTicks = 0;
+/** 系统页是否在画面上：每秒 uptime 推算只服务这一页，页面不在就停算
+ *  （隐藏页的响应式绑定仍挂着，喂进去的每次变更都会变成原生文本重写与
+ *  布局重排；见 SystemPage 的易变行门控）。 */
+let systemInfoLive = false;
 /** 采样开关（系统页可见时置位）、上次请求的帧号与当前窗口的锚点。 */
 let samplingFps = false;
 let fpsRequestFrame = -FPS_WINDOW_TICKS;
@@ -117,7 +121,11 @@ let fpsAnchorFrame = -1;
 let fpsAnchorUptimeMs = 0;
 
 function applySystemStatus(msg: Extract<DeviceMsg, { t: 'systemStatus' }>): void {
-  hw.battery = msg.battery;
+  /* battery 按字段原地写：整个对象换新会让所有读它的绑定（状态栏电池、
+   * 系统页电池行）每 5 秒重跑一次，即使数值没变——同值字段写不触发。 */
+  hw.battery.voltageMv = msg.battery.voltageMv;
+  hw.battery.percentage = msg.battery.percentage;
+  hw.battery.charging = msg.battery.charging;
   hw.backlight = msg.backlight;
   hw.screenOn = msg.screenOn;
   hw.pairing = msg.pairing;
@@ -179,6 +187,15 @@ export function setFrameRateSampling(on: boolean): void {
   if (on) {
     requestFrameRateSample();
   }
+}
+
+/**
+ * 系统页可见性同步给每秒 uptime 推算：页面不在就不再写 hw.uptimeMs，
+ * 隐藏页不再被这一秒一次的文本变更喂进原生重排。恢复时补上隐藏期间的
+ * 差值，开机时长保持墙钟语义。
+ */
+export function setSystemInfoLive(on: boolean): void {
+  systemInfoLive = on;
 }
 
 /* 三个动作的提示文案都在本文件里给出：屏幕文本必须是 ui/src 的字面量，
@@ -357,7 +374,7 @@ export function useHardware(): void {
     if (samplingFps && ticks - fpsRequestFrame >= FPS_WINDOW_TICKS) {
       requestFrameRateSample();
     }
-    if (ticks % tickHz === 0) {
+    if (ticks % tickHz === 0 && systemInfoLive) {
       // 两次状态轮询之间按帧数本地推算 uptime，避免每帧改响应式状态。
       hw.uptimeMs += (ticks - uptimeSyncTicks) * (1000 / tickHz);
       uptimeSyncTicks = ticks;

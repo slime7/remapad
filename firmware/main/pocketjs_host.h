@@ -18,6 +18,13 @@ esp_err_t remapad_pocketjs_start(void);
  */
 void remapad_ui_request_shot(void);
 
+/**
+ * 请求一次实时内存全景（串口 mem 命令）：owner task 在下一帧把 PSRAM/内部堆
+ * 余量、QuickJS 记账与对象计数写到控制台出口。JS_ComputeMemoryUsage 是全堆
+ * 遍历，只能与 guest 同任务执行，所以这里只置标志位（同截图请求）。
+ */
+void remapad_ui_request_mem(void);
+
 #ifdef __cplusplus
 }
 #endif

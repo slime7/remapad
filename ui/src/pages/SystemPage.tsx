@@ -1,10 +1,10 @@
 /** 系统页：背光调节（20%–100%，防误设黑屏）、重启与关机、设备信息与实时帧率。 */
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
-import { watchEffect } from 'vue';
+import { computed, watchEffect } from 'vue';
 import { Icon, ICON } from '../icons';
 import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR, STYLE } from '../theme';
-import { hw, setBacklight, setFrameRateSampling } from '../hooks/useHardware';
+import { hw, setBacklight, setFrameRateSampling, setSystemInfoLive } from '../hooks/useHardware';
 import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 import { formatMb, formatUptime } from '../utils';
@@ -23,7 +23,11 @@ const BACKLIGHT_H = 56;
 const GAP = 16;
 const ACTION_H = 44;
 
-/** 信息行：标签在左、值在右，用 justify-between 顶开（省掉一个占位节点）。 */
+/** 信息行：标签在左、值在右，用 justify-between 顶开（省掉一个占位节点）。
+ *  值表达式按页面可见性取值：页面不在时值恒为占位符，响应式依赖随之解除——
+ *  本页常驻挂载（ADR 0016），隐藏期间的每秒 uptime 与 5 秒轮询若继续写进
+ *  这些文本，每次都会变成原生文本重写加整树布局重排。回到本页时依赖恢复，
+ *  数值即刻刷新。 */
 function InfoRow(props: { label: string; value: string }) {
   return (
     <View class="w-full h-[22] shrink-0 flex-row items-center justify-between">
@@ -54,7 +58,34 @@ export function SystemPage(props: {
   // 帧率只在系统页可见时采样：离页停止，不为看不见的数字持续读设备状态。
   watchEffect(() => {
     setFrameRateSampling(props.active());
+    setSystemInfoLive(props.active());
   });
+
+  /* 易变信息行：三元逻辑全部收进 computed，JSX 只绑定算好的值。computed
+   * 只在页面可见时读实时状态（依赖随之挂上），隐藏时恒为占位符，页面隐藏
+   * 期间的状态变更不再写进这些文本节点。 */
+  const memText = computed(() =>
+    props.active()
+      ? hw.heapSize > 0
+        ? `${Math.round((hw.heapSize - hw.heapFree) / 1024)} / ${Math.round(hw.heapSize / 1024)} KB`
+        : '--'
+      : '--',
+  );
+  const psramText = computed(() =>
+    props.active()
+      ? hw.psramSize > 0
+        ? `${formatMb(hw.psramSize - hw.psramFree)} / ${formatMb(hw.psramSize)}`
+        : '--'
+      : '--',
+  );
+  const batteryText = computed(() =>
+    props.active()
+      ? `${hw.battery.percentage}% · ${(hw.battery.voltageMv / 1000).toFixed(2)}V` +
+        (hw.battery.charging ? ' · 充电中' : '')
+      : '--',
+  );
+  const uptimeText = computed(() => (props.active() ? formatUptime(hw.uptimeMs) : '--'));
+  const fpsText = computed(() => (props.active() ? (hw.fps?.toFixed(1) ?? '--') : '--'));
 
   /* 可聚焦行的位置：背光 −/+ 同处一行，下面是重启与关机两行。 */
   const rowNodes: Array<NodeMirror | null> = [];
@@ -133,27 +164,11 @@ export function SystemPage(props: {
         <View class={STYLE.infoCard}>
           <InfoRow label="芯片" value={hw.chip || 'ESP32-S3'} />
           <InfoRow label="固件" value={hw.firmwareVersion || '--'} />
-          <InfoRow
-            label="内存"
-            value={
-              hw.heapSize > 0
-                ? `${Math.round((hw.heapSize - hw.heapFree) / 1024)} / ${Math.round(hw.heapSize / 1024)} KB`
-                : '--'
-            }
-          />
-          <InfoRow
-            label="PSRAM"
-            value={hw.psramSize > 0 ? `${formatMb(hw.psramSize - hw.psramFree)} / ${formatMb(hw.psramSize)}` : '--'}
-          />
-          <InfoRow
-            label="电池"
-            value={
-              `${hw.battery.percentage}% · ${(hw.battery.voltageMv / 1000).toFixed(2)}V` +
-              (hw.battery.charging ? ' · 充电中' : '')
-            }
-          />
-          <InfoRow label="运行时长" value={formatUptime(hw.uptimeMs)} />
-          <InfoRow label="FPS" value={hw.fps === null ? '--' : hw.fps.toFixed(1)} />
+          <InfoRow label="内存" value={memText.value} />
+          <InfoRow label="PSRAM" value={psramText.value} />
+          <InfoRow label="电池" value={batteryText.value} />
+          <InfoRow label="运行时长" value={uptimeText.value} />
+          <InfoRow label="FPS" value={fpsText.value} />
         </View>
 
         <BottomPlaceholder />

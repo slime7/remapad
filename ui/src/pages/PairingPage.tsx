@@ -31,7 +31,12 @@ export function PairingPage(props: {
     <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
       <View class="w-full flex-col items-center pt-[38]">
         <View class="w-full h-[40] flex-row items-center justify-center gap-2 shrink-0">
-          {isBusy() ? <Image class="w-[20] h-[20] shrink-0" src={spinnerSrc.value} /> : null}
+          {/* 页面不在画面上时不渲染 spinner：createSpriteAnimation 的逐帧推进
+              仍在跑，但 Image 卸下后没有人订阅帧值，原生 setImage 与随之的
+              重排只在页面可见时发生。 */}
+          {props.active() && isBusy() ? (
+            <Image class="w-[20] h-[20] shrink-0" src={spinnerSrc.value} />
+          ) : null}
           <Text class="text-lg font-bold shrink-0" style={{ textColor: pairingColor(hw.pairing) }}>
             {pairingLabel(hw.pairing)}
           </Text>
