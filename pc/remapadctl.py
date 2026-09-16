@@ -28,6 +28,9 @@ rumble/lamp/haptic、屏幕 ui/backlight/screen、模式 mode（固件侧 help �
 手柄转发默认只在交互模式里开：一次性命令、截图、只读日志与升级不碰手柄（否则主机会看到
 手柄闪一下），要在这些模式里也转发就加 --pad，任何模式下都用 --no-pad 彻底关掉。
 
+图形界面入口见同目录的 remapadgui.py：界面复用这里的会话循环与所有命令处理，
+只是把输出换成队列、把键盘输入换成按钮与输入框；两边不要同时打开同一个串口。
+
 依赖 hidapi（读手柄）与 link.py（串口 + 帧编解码）；细节见 pc/README.md。
 """
 
@@ -94,6 +97,40 @@ CONN_NAMES = {CONN_UNKNOWN: "-", CONN_USB: "usb", CONN_BT: "bt"}
 SHOT_DIR = Path(__file__).resolve().parent / "shots"
 SHOT_PREFIX = "remapad-"
 
+
+class HidUnavailable(RuntimeError):
+    """hidapi 不可用：环境没装齐，工具的手柄功能无法工作。"""
+
+
+class ImageError(RuntimeError):
+    """应用镜像不合法：内容、芯片标识或项目名不符合本设备的升级条件。"""
+
+
+class Reporter:
+    """会话输出接收器：命令行写标准流，图形界面把同一批记录送进队列。"""
+
+    def line(self, text: str) -> None:
+        """一行普通输出（设备回复、固件日志、工具提示）。"""
+
+    def error(self, text: str) -> None:
+        """一行错误：命令行进 stderr，界面标红。"""
+
+    def event(self, name: str, **fields) -> None:
+        """结构化事件：手柄接入/断开、截图落盘、升级推进与结束、链路错误。"""
+
+
+class ConsoleReporter(Reporter):
+    """默认实现：保持工具原来的标准输出与标准错误行为。"""
+
+    def line(self, text: str) -> None:
+        print(text, flush=True)
+
+    def error(self, text: str) -> None:
+        print(text, file=sys.stderr, flush=True)
+
+    def event(self, name: str, **fields) -> None:
+        pass
+
 # --- OTA：镜像校验常量（与固件 ota/ 的约定一致）---
 ESP_IMAGE_MAGIC = 0xE9
 ESP_CHIP_ID_OFFSET = 0x0C
@@ -145,12 +182,11 @@ ALL_QUERIES = (
 
 
 def load_hid():
-    """导入 hidapi；缺失时按环境问题（退出码 2）结束。"""
+    """导入 hidapi；缺失时抛 HidUnavailable，由调用方决定怎么报（命令行退出码 2）。"""
     try:
         import hid  # type: ignore
-    except ImportError:
-        print("缺少 hidapi：在 pc/ 目录下执行 uv sync 后重试", file=sys.stderr)
-        raise SystemExit(2)
+    except ImportError as exc:
+        raise HidUnavailable("缺少 hidapi：在 pc/ 目录下执行 uv sync 后重试") from exc
     return hid
 
 
@@ -183,11 +219,14 @@ def describe(info: dict) -> str:
 
 
 def pick_device(args, hid) -> dict | None:
-    """按 --vid / --pid 过滤候选，取第一只。"""
+    """按 --vid / --pid 过滤候选，取第一只；图形界面用 args.pad_path 钉住具体接口。"""
+    wanted_path = getattr(args, "pad_path", None)
     for info in list_candidates(hid):
         if args.vid is not None and info["vendor_id"] != args.vid:
             continue
         if args.pid is not None and info["product_id"] != args.pid:
+            continue
+        if wanted_path is not None and info["path"] != wanted_path:
             continue
         return info
     return None
@@ -356,11 +395,11 @@ class OtaJob:
     END_ACK_TIMEOUT_S = 30.0
     MAX_WINDOW_RETRIES = 5
 
-    def __init__(self, image: bytes, version: str, send, log) -> None:
+    def __init__(self, image: bytes, version: str, send, reporter: Reporter) -> None:
         self.image = image
         self.version = version
         self._send = send
-        self._log = log
+        self.reporter = reporter
         self.confirmed = 0
         self.next_seq = 0
         self.retries = 0
@@ -371,7 +410,7 @@ class OtaJob:
         self.exit_code = 1
 
     def start(self, now: float) -> None:
-        self._log(f"写入 {len(self.image)} 字节（镜像版本 {self.version}）")
+        self.reporter.line(f"写入 {len(self.image)} 字节（镜像版本 {self.version}）")
         self._send(encode(TYPE_OTA_BEGIN, 0, 0, ota_begin_payload(len(self.image)),
                           max_payload=WIRE_MAX_PAYLOAD))
         self.phase = "begin"
@@ -408,7 +447,7 @@ class OtaJob:
                 self._fail(f"连续 {self.retries} 个窗口没有应答，升级中止；"
                            "设备侧 5 秒无数据会自行作废会话，仍从旧镜像启动")
                 return
-            self._log(f"窗口应答超时，从 {self.confirmed} 字节处重发（第 {self.retries} 次）")
+            self.reporter.line(f"窗口应答超时，从 {self.confirmed} 字节处重发（第 {self.retries} 次）")
             self._send_window(now)
             return
         if self.phase == "end":
@@ -422,7 +461,7 @@ class OtaJob:
                 self._fail(f"设备拒绝升级（{describe_ack(ack)}）；设备忙或镜像被拒时稍后重试")
                 return
             if ack["version"]:
-                self._log(f"设备当前版本 {ack['version']} → 写入 {self.version}")
+                self.reporter.line(f"设备当前版本 {ack['version']} → 写入 {self.version}")
             self.phase = "data"
             self._send_window(time.monotonic())
             return
@@ -436,13 +475,15 @@ class OtaJob:
             pct = self.confirmed * 100 // max(len(self.image), 1)
             if pct != self.printed_pct:
                 self.printed_pct = pct
-                print(f"  写入 {pct:3d}%（{self.confirmed}/{len(self.image)} 字节）", flush=True)
+                self.reporter.line(f"  写入 {pct:3d}%（{self.confirmed}/{len(self.image)} 字节）")
+                self.reporter.event("ota_progress", confirmed=self.confirmed,
+                                    total=len(self.image))
             now = time.monotonic()
             if self.confirmed >= len(self.image):
                 self.phase = "end"
                 self._send(encode(TYPE_OTA_END, 0, 0))
                 self.deadline = now + self.END_ACK_TIMEOUT_S
-                print("数据传输完成，等待设备校验镜像", flush=True)
+                self.reporter.line("数据传输完成，等待设备校验镜像")
                 return
             self._send_window(now)
             return
@@ -450,48 +491,41 @@ class OtaJob:
             if ack["state_id"] == OTA_STATE_DONE and ack["code_id"] == 0:
                 self.finished = True
                 self.exit_code = 0
-                print("升级完成：设备切到新分区并重启，首次启动会先处于「待验证」状态",
-                      flush=True)
+                self.reporter.line(
+                    "升级完成：设备切到新分区并重启，首次启动会先处于「待验证」状态")
+                self.reporter.event("ota_finished", ok=True, message="")
             else:
                 self._fail(f"升级失败（{describe_ack(ack)}）；设备仍从旧镜像启动")
 
     def _fail(self, message: str) -> None:
-        print(message, file=sys.stderr)
+        self.reporter.error(message)
+        self.reporter.event("ota_finished", ok=False, message=message)
         self.finished = True
         self.exit_code = 1
 
 
 def load_image(path: Path) -> tuple[bytes, str]:
-    """读入并校验应用镜像，返回（字节, 版本号）；不合法直接退出。"""
+    """读入并校验应用镜像，返回（字节, 版本号）；不合法抛 ImageError。"""
     try:
         data = path.read_bytes()
     except OSError as exc:
-        print(f"读不到镜像 {path}：{exc}", file=sys.stderr)
-        raise SystemExit(2)
+        raise ImageError(f"读不到镜像 {path}：{exc}") from exc
     if len(data) < APP_DESC_PROJECT_OFFSET + APP_DESC_FIELD_LEN:
-        print(f"{path} 只有 {len(data)} 字节，不是应用镜像", file=sys.stderr)
-        raise SystemExit(2)
+        raise ImageError(f"{path} 只有 {len(data)} 字节，不是应用镜像")
     if data[0] != ESP_IMAGE_MAGIC:
-        print(f"{path} 首字节是 0x{data[0]:02x}，不是 ESP-IDF 应用镜像", file=sys.stderr)
-        raise SystemExit(2)
+        raise ImageError(f"{path} 首字节是 0x{data[0]:02x}，不是 ESP-IDF 应用镜像")
     chip = int.from_bytes(data[ESP_CHIP_ID_OFFSET:ESP_CHIP_ID_OFFSET + 2], "little")
     if chip != ESP_CHIP_ID_ESP32S3:
-        print(f"{path} 的芯片标识是 0x{chip:04x}，不是 ESP32-S3", file=sys.stderr)
-        raise SystemExit(2)
+        raise ImageError(f"{path} 的芯片标识是 0x{chip:04x}，不是 ESP32-S3")
     magic = int.from_bytes(data[APP_DESC_OFFSET:APP_DESC_OFFSET + 4], "little")
     if magic != APP_DESC_MAGIC:
-        print(f"{path} 缺少应用描述符（magic 0x{magic:08x}）", file=sys.stderr)
-        raise SystemExit(2)
+        raise ImageError(f"{path} 缺少应用描述符（magic 0x{magic:08x}）")
     version = desc_field(data, APP_DESC_VERSION_OFFSET)
     project = desc_field(data, APP_DESC_PROJECT_OFFSET)
     if project != EXPECTED_PROJECT:
-        print(f"{path} 是 {project or '未知'} 的镜像，本设备只接受 {EXPECTED_PROJECT}",
-              file=sys.stderr)
-        raise SystemExit(2)
+        raise ImageError(f"{path} 是 {project or '未知'} 的镜像，本设备只接受 {EXPECTED_PROJECT}")
     if len(data) > PARTITION_MAX_BYTES:
-        print(f"{path} 有 {len(data)} 字节，超过应用分区容量 {PARTITION_MAX_BYTES}",
-              file=sys.stderr)
-        raise SystemExit(2)
+        raise ImageError(f"{path} 有 {len(data)} 字节，超过应用分区容量 {PARTITION_MAX_BYTES}")
     return data, version
 
 
@@ -500,8 +534,9 @@ def desc_field(data: bytes, offset: int) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def wait_for_version(port: str, baud: int) -> int:
+def wait_for_version(port: str, baud: int, reporter: Reporter | None = None) -> int:
     """等设备重启回来，问一次 version 命令并打印。"""
+    out = reporter or ConsoleReporter()
     deadline = time.monotonic() + REOPEN_TIMEOUT_S
     while time.monotonic() < deadline:
         time.sleep(REOPEN_INTERVAL_S)
@@ -517,21 +552,23 @@ def wait_for_version(port: str, baud: int) -> int:
             while time.monotonic() < quit_at:
                 line = ser.readline().decode("utf-8", errors="replace").strip()
                 if line.startswith("fw="):
-                    print(f"设备已回到 COM 口：{line}")
+                    out.line(f"设备已回到 COM 口：{line}")
                     return 0
         finally:
             ser.close()
-    print(f"{REOPEN_TIMEOUT_S:.0f} 秒内没有等到设备回到 {port}", file=sys.stderr)
+    out.error(f"{REOPEN_TIMEOUT_S:.0f} 秒内没有等到设备回到 {port}")
     return 1
 
 
 class Session:
     """一个进程里的桥接 + 命令行会话：串口只有这一个持有者。"""
 
-    def __init__(self, args, hid, ser: SerialLink) -> None:
+    def __init__(self, args, hid, ser: SerialLink, reporter: Reporter | None = None) -> None:
         self.args = args
         self.hid = hid
         self.link = ser
+        # 输出接收器：命令行写标准流，图形界面送进队列（同一批文案两边共用）。
+        self.reporter = reporter or ConsoleReporter()
         self.decoder = FrameDecoder()
         self.pad = None
         self.pad_info: dict | None = None
@@ -578,7 +615,9 @@ class Session:
         self.pad_info = info
         self.ident = identity_payload(info, 0, 0)
         self.link.write(encode(TYPE_ATTACH, 0, self.seq, self.ident))
-        print(f"设备接入：{describe(info)}", flush=True)
+        description = describe(info)
+        self.reporter.line(f"设备接入：{description}")
+        self.reporter.event("pad_attached", describe=description)
 
     def detach_pad(self) -> None:
         if self.pad is None:
@@ -593,6 +632,7 @@ class Session:
             pass
         self.pad = None
         self.pad_info = None
+        self.reporter.event("pad_detached")
 
     def pump_pad(self, now: float) -> None:
         if self.hid is None or not self.forward:
@@ -605,6 +645,11 @@ class Session:
             if info is None:
                 return
             self.attach_pad(info)
+        elif (getattr(self.args, "pad_path", None) is not None
+              and self.pad_info["path"] != self.args.pad_path):
+            # 图形界面里换了手柄：在本任务内断开，下一轮重新接入选中的那只。
+            self.detach_pad()
+            return
         data = self.pad.read(64)
         if data and now >= self.next_send:
             raw = bytes(data)
@@ -621,7 +666,7 @@ class Session:
         try:
             self.pad.write(payload)
         except OSError as exc:
-            print(f"反馈写回失败：{exc}", file=sys.stderr)
+            self.reporter.error(f"反馈写回失败：{exc}")
             return False
         return True
 
@@ -635,12 +680,12 @@ class Session:
         for frame_type, _slot, _seq, payload in frames:
             self.frames += 1
             if frame_type == TYPE_FEEDBACK:
-                print(format_feedback(payload), flush=True)
+                self.reporter.line(format_feedback(payload))
             elif frame_type == TYPE_OUT_REPORT:
                 if self.write_output_report(payload):
                     self.outputs += 1
             elif frame_type == TYPE_PING:
-                print(f"设备在线（协议 v{payload[0] if payload else 0}）", flush=True)
+                self.reporter.line(f"设备在线（协议 v{payload[0] if payload else 0}）")
             elif frame_type == TYPE_IMAGE_INFO:
                 self.shot.on_info(payload)
             elif frame_type == TYPE_IMAGE_DATA:
@@ -662,9 +707,9 @@ class Session:
         if not line:
             return
         if self.log_mode and not self.log_raw and self.log_started:
-            print(f"[{time.monotonic() - self.log_started:7.2f}s] {line}", flush=True)
+            self.reporter.line(f"[{time.monotonic() - self.log_started:7.2f}s] {line}")
         else:
-            print(line, flush=True)
+            self.reporter.line(line)
         if self.expect_reply:
             # 任何一行都算「设备还在说话」：status / link / pad 这类回复不以 ok 开头，
             # 固件日志也会夹在中间；每条新行把静默窗往后推，硬截止兜住总时长。
@@ -703,31 +748,32 @@ class Session:
                 self.send_cli(line)
 
     def run_local(self, text: str) -> None:
-        parts = text.split()
-        name = parts[0] if parts else "help"
-        rest = parts[1:]
+        name, _, arguments = text.partition(" ")
+        arguments = arguments.strip()
+        parts = arguments.split()
         if name in ("help", "h", "?"):
-            print_local_help()
+            print_local_help(self.reporter)
         elif name == "all":
             self.run_all()
         elif name == "shot":
-            self.request_shot(rest[0] if rest else None)
+            # 截图路径整段当参数：路径里有空格也不用引号（图形界面的截图按钮同样走这里）。
+            self.request_shot(arguments or None)
         elif name == "log":
-            if rest and rest[0] == "off":
+            if parts and parts[0] == "off":
                 self.log_mode = False
-                print("日志透传关闭", flush=True)
+                self.reporter.line("日志透传关闭")
                 return
-            seconds = float(rest[0]) if rest else 15.0
+            seconds = float(parts[0]) if parts else 15.0
             self.log_mode = True
             self.log_started = time.monotonic()
             self.log_deadline = self.log_started + seconds if seconds > 0 else 0.0
-            print(f"透传设备日志 {seconds:.0f} 秒（0 表示持续到 :log off）", flush=True)
+            self.reporter.line(f"透传设备日志 {seconds:.0f} 秒（0 表示持续到 :log off）")
         elif name == "ota":
-            self.request_upgrade(rest[0] if rest else None)
+            self.request_upgrade(arguments or None)
         elif name in ("quit", "q", "exit"):
             self.stop = True
         else:
-            print(f"未知的工具命令：{name}（:help 看清单）", file=sys.stderr)
+            self.reporter.error(f"未知的工具命令：{name}（:help 看清单）")
 
     def request_shot(self, path: str | None) -> None:
         self.shot_path = Path(path).expanduser() if path else default_shot_path()
@@ -740,21 +786,24 @@ class Session:
             return
         problem = self.shot.on_end(payload)
         if problem:
-            print(problem, file=sys.stderr)
+            self.reporter.error(problem)
             return
         # 交互模式里设备命令 shot 是用户直接敲的，走到这里才决定落盘路径。
         path = self.shot_path or default_shot_path()
         write_png(path, self.shot.width, self.shot.height, bytes(self.shot.buffer))
         self.shot_path = path
-        print(f"截图已保存：{path}（{self.shot.width}x{self.shot.height}，"
-              f"{self.shot.chunks} 块）", flush=True)
+        self.reporter.line(f"截图已保存：{path}（{self.shot.width}x{self.shot.height}，"
+                           f"{self.shot.chunks} 块）")
+        self.reporter.event("shot_saved", path=str(path), width=self.shot.width,
+                            height=self.shot.height, chunks=self.shot.chunks)
         self.shot_ready = True
 
     def request_upgrade(self, image_path: str | None) -> None:
         path = Path(image_path).expanduser() if image_path else Path(self.args.image)
         image, version = load_image(path)
-        print(f"镜像 {path}：{len(image)} 字节，版本 {version}")
-        self.ota = OtaJob(image, version, self.link.write, lambda text: print(text, flush=True))
+        self.reporter.line(f"镜像 {path}：{len(image)} 字节，版本 {version}")
+        self.reporter.event("ota_started", path=str(path), size=len(image), version=version)
+        self.ota = OtaJob(image, version, self.link.write, self.reporter)
         self.ota.start(time.monotonic())
 
     # --- 主循环 ----------------------------------------------------
@@ -771,24 +820,26 @@ class Session:
         if self.log_mode and self.log_deadline and now >= self.log_deadline:
             self.log_mode = False
             self.log_deadline = 0.0
-            print("日志透传结束", flush=True)
+            self.reporter.line("日志透传结束")
         if self.interactive and now - self.last_stat >= 5.0:
             self.last_stat = now
-            print(f"已转发 {self.reports} 帧报告，收到设备帧 {self.frames} 个，"
-                  f"写回手柄 {self.outputs} 条", flush=True)
+            self.reporter.line(f"已转发 {self.reports} 帧报告，收到设备帧 {self.frames} 个，"
+                               f"写回手柄 {self.outputs} 条")
 
-    def run_interactive(self) -> int:
+    def run_interactive(self, read_stdin: bool = True) -> int:
+        """交互会话主循环；图形界面传 read_stdin=False，命令由界面塞进队列。"""
         self.interactive = True
         self.forward = self.args.pad or not self.args.no_pad
-        print("Remapad 会话已连接：不是 : 开头的行按固件 CLI 发送（:help 看工具命令）",
-              flush=True)
-        self.start_stdin()
+        self.reporter.line("Remapad 会话已连接：不是 : 开头的行按固件 CLI 发送（:help 看工具命令）")
+        if read_stdin:
+            self.start_stdin()
         while not self.stop:
             now = time.monotonic()
             try:
                 self.pump(now)
             except OSError as exc:
-                print(f"链路错误：{exc}", file=sys.stderr)
+                self.reporter.error(f"链路错误：{exc}")
+                self.reporter.event("link_error", message=str(exc))
                 return 1
             time.sleep(0.001)
         return self.stop_code
@@ -824,7 +875,7 @@ class Session:
         # mem 的应答由 owner task 下一帧才打印，等满整个窗口再收尾。
         hold = command.split()[0] == "mem"
         if not self.query_once(command, hold_full_window=hold):
-            print(f"{self.args.reply_wait:.1f} 秒内没有等到命令回复", file=sys.stderr)
+            self.reporter.error(f"{self.args.reply_wait:.1f} 秒内没有等到命令回复")
             return 1
         return 0
 
@@ -836,12 +887,12 @@ class Session:
         self.forward = self.args.pad and not self.args.no_pad
         missing = []
         for command in ALL_QUERIES:
-            print(f"--- {command} " + "-" * max(0, 56 - len(command)), flush=True)
+            self.reporter.line(f"--- {command} " + "-" * max(0, 56 - len(command)))
             hold = command == "mem"  # mem 的应答下一帧才回，等满窗口。
             if not self.query_once(command, hold_full_window=hold):
                 missing.append(command)
         if missing:
-            print("没有回复的命令：" + " ".join(missing), file=sys.stderr)
+            self.reporter.error("没有回复的命令：" + " ".join(missing))
             return 1
         return 0
 
@@ -872,7 +923,7 @@ class Session:
         while not self.stop and not self.shot_ready:
             now = time.monotonic()
             if now >= deadline:
-                print(f"{self.args.shot_timeout:.0f} 秒内没有收到完整截图", file=sys.stderr)
+                self.reporter.error(f"{self.args.shot_timeout:.0f} 秒内没有收到完整截图")
                 return 1
             self.pump(now)
             time.sleep(0.001)
@@ -888,18 +939,21 @@ class Session:
         return self.stop_code
 
 
-def print_local_help() -> None:
-    print("本工具命令：")
-    print("  :help              显示这份清单")
-    print("  :all               拉取设备全部观测数据（status/mem/link/... 一键轮询）")
-    print("  :shot [路径]       抓实机截图并存成 PNG（默认 pc/shots/）")
-    print("  :log [秒|off]      透传设备日志（0 表示持续到 :log off）")
-    print("  :ota [镜像路径]    推固件镜像（默认 firmware/build/remapad_firmware.bin）")
-    print("  :quit              退出")
-    print("其余行按固件 CLI 原样发送。手柄功能的完整控制面都在固件 CLI 里：")
-    print("  输入注入 key/stick，身份 ctrl，连接 connect/pairing/wake/adv/drop，")
-    print("  上报内容 motion/headset/fwver/fwpost/fwack/fwapply，链路 ltk/relay，")
-    print("  反馈测试 rumble/lamp/haptic，屏幕 ui/backlight/screen，模式 mode。")
+def print_local_help(reporter: Reporter) -> None:
+    for text in (
+        "本工具命令：",
+        "  :help              显示这份清单",
+        "  :all               拉取设备全部观测数据（status/mem/link/... 一键轮询）",
+        "  :shot [路径]       抓实机截图并存成 PNG（默认 pc/shots/）",
+        "  :log [秒|off]      透传设备日志（0 表示持续到 :log off）",
+        "  :ota [镜像路径]    推固件镜像（默认 firmware/build/remapad_firmware.bin）",
+        "  :quit              退出",
+        "其余行按固件 CLI 原样发送。手柄功能的完整控制面都在固件 CLI 里：",
+        "  输入注入 key/stick，身份 ctrl，连接 connect/pairing/wake/adv/drop，",
+        "  上报内容 motion/headset/fwver/fwpost/fwack/fwapply，链路 ltk/relay，",
+        "  反馈测试 rumble/lamp/haptic，屏幕 ui/backlight/screen，模式 mode。",
+    ):
+        reporter.line(text)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -946,9 +1000,17 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 def main(argv=None) -> int:
+    """命令行入口：环境与镜像类问题统一映射成退出码 2（与改造前一致）。"""
     args = parse_args(argv)
     command = [item for item in args.command if item]
+    try:
+        return _run(args, command)
+    except (HidUnavailable, ImageError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
 
+
+def _run(args, command) -> int:
     # 老用法的 log 子命令：等价于 --log，参数照旧。
     if command and command[0] == "log":
         args.log = True

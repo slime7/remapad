@@ -105,6 +105,9 @@ PC 侧合并成单进程 `pc/remapadctl.py`（转发 + 命令行 + 截图 + OTA�
 - [x] 桥接运行中的控制通路：转发同时跑 `status` / `link` / `shot` 与 `headset`，互不干扰；`--upgrade --wait` 在同一会话里完成升级并打印新版本。
 - [x] 3.5 mm 耳机状态核对（2026-09-15，DualSense Edge 蓝牙）：插拔差分定位到第 55 字节（bit0 插入、bit1 带麦），已回填 `pad/layouts/ds5.c`；
   主机接受 0x05 / 0x0D，换上 0x07 / 0x0F 后约 150 ms 取消订阅，因此派生值只报插入，带麦档留待 0x002C 音频通路落地后再评估；DS4 与 DS5 有线行未核对。
+- [ ] 图形连接控制台（`pc/remapadgui.py`，[ADR 0040](adr/0040-pc-gui-customtkinter-console.md)）的实机验收：
+  手动连上后日志逐行滚动、转发开关生效且主机收到手柄输入、截图按钮落盘并交给系统看图器打开；
+  升级页完成一次真实 OTA、勾选等待时能自动重连；关窗后设备状态回静置不卡键。
 
 
 UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重建上（见 [adr/0017](adr/0017-display-path-and-scroll-frame-budget.md)）。
