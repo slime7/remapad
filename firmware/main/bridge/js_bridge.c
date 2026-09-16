@@ -209,7 +209,8 @@ static void handle_hello(int id)
 /** 从 BLE 会话推导 UI 六态配对模型（ui/src/bridge/protocol.ts PairingState）。
  * 连接中的状态以协议证据为准：仅白名单放行进入握手等待的主机视为 pairing
  * 进行中，主机初始化/0x15 握手完成（或凭证匹配回连）才算 connected；
- * 手机/PC 等被立即断开的连接不改变状态。 */
+ * 手机/PC 等被立即断开的连接不改变状态。没有链路时先看广播：配对流程是
+ * scanning、连接窗口是 advertising，两者都没有才落到 paired / idle（静默）。 */
 static const char *real_pairing_state(void)
 {
     if (ns2_session_host_registered()) {
@@ -220,6 +221,9 @@ static const char *real_pairing_state(void)
     }
     if (ns2_session_pairing_mode_active()) {
         return "scanning";
+    }
+    if (ns2_session_advertising()) {
+        return "advertising";
     }
     return ns2_session_paired() ? "paired" : "idle";
 }
@@ -309,6 +313,14 @@ esp_err_t js_bridge_submit_command(const char *cmd_json)
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
+}
+
+void js_bridge_connect_key(void)
+{
+    /* 屏幕按钮按同一规则在 UI 侧推导，两条入口走同一对命令。 */
+    const bool active = ble_controller_connected() || ns2_session_advertising();
+    js_bridge_submit_command(active ? "{\"t\":\"disconnect\",\"id\":0}"
+                                    : "{\"t\":\"connect\",\"id\":0}");
 }
 
 /** 外部任务向 UI 广播事件 JSON：同样经队列在 owner task 上回发。 */
@@ -419,26 +431,36 @@ static void handle_start_pairing(int id)
     ns2_session_start_pairing_mode();
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
-             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"scanning\"}", id);
+             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\"}",
+             id, real_pairing_state());
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing flow on (discovery advertising, link dropped)");
+    ESP_LOGI(TAG, "pair new host: discovery advertising, link dropped");
 }
 
-static void handle_stop_pairing(int id)
+/** 连接键（屏幕「连接」、PWR 长按 3 秒）：开连接窗口等主机连上来；未配对
+ *  身份改为进配对流程发发现广播。 */
+static void handle_connect(int id)
 {
-    /* 停止搜索退出配对模式并恢复常规广播；连接中但注册握手未完成的主机
-     * 一并断开，否则 pairing 状态由连接驱动、停止永远无法退出。凭证以
-     * 协议证据为准持久化，解除配对走显式 unpair 命令。 */
-    ns2_session_stop_pairing_mode();
-    if (!ns2_session_host_registered()) {
-        ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
-    }
+    ns2_session_connect();
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\"}",
              id, real_pairing_state());
     reply_raw(event);
-    ESP_LOGI(TAG, "pairing mode stopped (credentials untouched)");
+    ESP_LOGI(TAG, "connect key -> %s", real_pairing_state());
+}
+
+/** 停止广播（屏幕「停止」/「断开」）：收掉连接窗口与配对流程，断开当前
+ *  链路，设备回到静默。解除配对走显式 unpair 命令。 */
+static void handle_disconnect(int id)
+{
+    ns2_session_disconnect();
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"pairingResult\",\"id\":%d,\"state\":\"%s\"}",
+             id, real_pairing_state());
+    reply_raw(event);
+    ESP_LOGI(TAG, "link stopped -> %s (credentials untouched)", real_pairing_state());
 }
 
 static void handle_unpair(int id)
@@ -611,8 +633,10 @@ static void handle_cmd(const char *cmd)
         handle_set_controller_config(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"startPairing\"")) {
         handle_start_pairing(id);
-    } else if (cmd_has(cmd, "\"t\":\"stopPairing\"")) {
-        handle_stop_pairing(id);
+    } else if (cmd_has(cmd, "\"t\":\"connect\"")) {
+        handle_connect(id);
+    } else if (cmd_has(cmd, "\"t\":\"disconnect\"")) {
+        handle_disconnect(id);
     } else if (cmd_has(cmd, "\"t\":\"unpair\"")) {
         handle_unpair(id);
     } else if (cmd_has(cmd, "\"t\":\"pressLr\"")) {

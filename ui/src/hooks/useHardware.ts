@@ -199,8 +199,38 @@ export function setSystemInfoLive(on: boolean): void {
   systemInfoLive = on;
 }
 
-/* 三个动作的提示文案都在本文件里给出：屏幕文本必须是 ui/src 的字面量，
- * 固件回发的文本不进界面（见 utils.ts 的 PairingNotice）。 */
+/* 连接键与配对动作的提示文案都在本文件里给出：屏幕文本必须是 ui/src 的
+ * 字面量，固件回发的文本不进界面（见 utils.ts 的 PairingNotice）。 */
+
+/** 连接键：打开连接窗口（已配对发回连形态等主机连回来，未配对进配对流程）。 */
+export function connect(): void {
+  hardware.send({ t: 'connect' }, (msg) => {
+    if (msg.t === 'pairingResult') {
+      hw.pairing = msg.state;
+      hw.pairingMessage = '已打开连接，等待主机连回来';
+    } else if (msg.t === 'error') {
+      hw.pairingMessage = '连接命令未生效';
+    }
+  });
+}
+
+/**
+ * 停止广播：收掉连接窗口与配对流程（有链路时一并断开），设备回到静默。
+ * 提示文案按按下之前有没有链路分两句，用户看到的正是自己刚停掉的东西。
+ */
+export function disconnect(): void {
+  const hadLink = hw.pairing === 'connected' || hw.pairing === 'pairing';
+  hardware.send({ t: 'disconnect' }, (msg) => {
+    if (msg.t === 'pairingResult') {
+      hw.pairing = msg.state;
+      hw.pairingMessage = hadLink ? '已断开连接' : '已停止广播';
+    } else if (msg.t === 'error') {
+      hw.pairingMessage = '停止命令未生效';
+    }
+  });
+}
+
+/** 配对新主机：断开当前主机后发发现广播等新主机搜索，配上自动退出流程。 */
 export function startPairing(): void {
   hardware.send({ t: 'startPairing' }, (msg) => {
     if (msg.t === 'pairingResult') {
@@ -208,15 +238,6 @@ export function startPairing(): void {
       hw.pairingMessage = '广播中，等待主机连接';
     } else if (msg.t === 'error') {
       hw.pairingMessage = '配对命令未生效';
-    }
-  });
-}
-
-export function stopPairing(): void {
-  hardware.send({ t: 'stopPairing' }, (msg) => {
-    if (msg.t === 'pairingResult') {
-      hw.pairing = msg.state;
-      hw.pairingMessage = '已退出配对流程';
     }
   });
 }
@@ -339,9 +360,12 @@ export function useHardware(): void {
   hardware.onEvent((msg) => {
     switch (msg.t) {
       case 'pairingStateChanged':
+        // 阶段提示只在命令应答里给一次：状态真的流转了才清，落在同一个状态上的
+        // 事件（命令应答刚把状态改成这个值，随后的状态广播又播一遍）不该把提示擦掉。
+        if (msg.state !== hw.pairing) {
+          hw.pairingMessage = '';
+        }
         hw.pairing = msg.state;
-        // 阶段提示只在命令应答里给一次，状态流转后清掉避免残留。
-        hw.pairingMessage = '';
         break;
       case 'usbRoleChanged':
         hw.usbRole = msg.role;

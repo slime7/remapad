@@ -18,10 +18,11 @@ extern "C" {
  *   - 唤醒广播：带主机地址，状态位 0x81。
  *
  * 状态位是主机唯一的唤醒判据：0x81 会把休眠中的主机叫起来，0x00 不会。
- * 已配对设备在未连接期间默认发回连形态——主机醒着会自己按它连回来（实机：
- * 主机停在首页、顺序页或刚从待机醒来都会连），休眠中的主机安静地睡；只有
- * 显式唤醒请求打开的唤醒窗口内才发唤醒形态，把睡下的主机叫起来。
- * 未配对或处于配对流程时发发现广播等主机搜索。策略与取舍见 ADR 0031。
+ * 设备与真机一样不主动发信号：上电、断连（主机睡下）都回到静默，只有用户
+ * 按连接键打开连接窗口、或按 HOME 打开唤醒窗口时才广播——连接窗口内已配对
+ * 身份发回连形态（主机醒着会自己按它连回来，实机：停在首页、顺序页或刚从
+ * 待机醒来都会连），未配对身份发发现广播等主机搜索；唤醒窗口内才发唤醒形态，
+ * 把睡下的主机叫起来。策略与取舍见 ADR 0038。
  */
 
 #define NS2_ADV_PAYLOAD_LEN 31
@@ -33,38 +34,49 @@ extern "C" {
 #define NS2_ADV_STATUS_WAKE 0x81
 
 typedef enum {
-    NS2_ADV_DISCOVERY = 0, /**< 标准发现广播：等待主机搜索/首次配对。 */
-    NS2_ADV_RECONNECT = 1, /**< 已配对回连广播：等待主机回连。 */
-    NS2_ADV_WAKE = 2,      /**< 唤醒广播：请休眠中的主机立即醒来。 */
+    NS2_ADV_OFF = 0,       /**< 静默：不发广播（没被请求连接的真机形态）。 */
+    NS2_ADV_DISCOVERY = 1, /**< 标准发现广播：等待主机搜索/首次配对。 */
+    NS2_ADV_RECONNECT = 2, /**< 已配对回连广播：等待主机回连。 */
+    NS2_ADV_WAKE = 3,      /**< 唤醒广播：请休眠中的主机立即醒来。 */
 } ns2_adv_mode_t;
 
-/** 广播形态决策：配对流程中或未配对的身份发发现广播（未配对身份绝不发唤醒
- *  广播——不允许把主机从休眠里叫醒）；已配对身份发 steady——常态是
- *  NS2_ADV_RECONNECT（见 ns2_adv_steady_mode），唤醒窗口内才是 NS2_ADV_WAKE。 */
-ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
-                                   ns2_adv_mode_t steady);
+/** 广播窗口的打开来源：决定窗口内已配对身份发哪一种形态。 */
+typedef enum {
+    NS2_ADV_REQ_CONNECT = 0, /**< 连接键：屏幕「连接」按钮、PWR 长按 3 秒。 */
+    NS2_ADV_REQ_WAKE = 1,    /**< 唤醒键：调试页 HOME 在未连接时按下。 */
+} ns2_adv_request_t;
 
-/** 唤醒窗口时长（微秒）：显式唤醒请求（调试页 HOME、串口 wake）开窗，主机连上
- *  或窗口到期收窗。窗口内未连接时发唤醒形态，窗口外只发回连形态。 */
+/** 广播窗口：设备只在被显式请求后的一段时间内广播，真机不开机不发信号。 */
+typedef struct {
+    ns2_adv_request_t request; /**< 最近一次打开窗口的请求。 */
+    int64_t until_us;          /**< 到期时刻（本机时基微秒）；0 = 没有窗口。 */
+} ns2_adv_window_t;
+
+/** 连接键窗口时长：主机没在这段时间内连上就静默，想重试再按一次。 */
+#define NS2_ADV_CONNECT_WINDOW_US (30 * 1000 * 1000LL)
+
+/** 唤醒窗口时长：真机唤醒突发只有约 2 秒，主机扫描窗口远长于它，太短会错过。 */
 #define NS2_ADV_WAKE_WINDOW_US (10 * 1000 * 1000LL)
 
-/** 唤醒窗口：本机时基（微秒）。 */
-typedef struct {
-    int64_t until_us; /**< 到期时刻；0 = 未开窗。 */
-} ns2_adv_wake_window_t;
+/** 开窗（重新计时）：重复请求不会把窗口算短，按请求来源取对应时长。 */
+void ns2_adv_window_open(ns2_adv_window_t *win, ns2_adv_request_t request,
+                         int64_t now_us);
 
-/** 开窗（重新计时）：重复请求不会把窗口算短。 */
-void ns2_adv_wake_window_open(ns2_adv_wake_window_t *win, int64_t now_us);
+/** 收窗：主机连上、用户停止广播、或窗口到期后调用。已收窗时无副作用。 */
+void ns2_adv_window_close(ns2_adv_window_t *win);
 
-/** 收窗：主机连上、或窗口到期后调用。已收窗时调用无副作用。 */
-void ns2_adv_wake_window_close(ns2_adv_wake_window_t *win);
+/** 窗口是否仍然有效（没有窗口或已到期都返回 false）。 */
+bool ns2_adv_window_active(const ns2_adv_window_t *win, int64_t now_us);
 
-/** 窗口是否仍然有效（未开窗或已到期都返回 false）。 */
-bool ns2_adv_wake_window_active(const ns2_adv_wake_window_t *win, int64_t now_us);
-
-/** 已配对、未连接时的常态广播形态：窗口内是唤醒形态（会把休眠中的主机叫醒
- *  并回连），窗口外是回连形态（休眠中的主机不受打扰，醒着的主机自己连回来）。 */
-ns2_adv_mode_t ns2_adv_steady_mode(bool wake_window);
+/** 当前该发的广播形态（纯逻辑，主机端用例钉住）：
+ *  - 配对流程中恒发发现广播——要配的是新主机，不能带着旧主机的地址广播；
+ *  - 没有窗口就静默（NS2_ADV_OFF），设备不被请求连接时不发信号；
+ *  - 连接窗口内：已配对发回连形态（醒着的主机自己连回来），未配对发发现
+ *    广播（配对键语义，等主机搜索）；
+ *  - 唤醒窗口内：已配对发唤醒形态把休眠主机叫起来；未配对没有主机可唤醒，
+ *    退化为发现广播等主机来配。 */
+ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
+                                   const ns2_adv_window_t *window, int64_t now_us);
 
 /** 调试页 HOME 按键的动作（实体手柄语义）。 */
 typedef enum {
@@ -72,7 +84,7 @@ typedef enum {
     NS2_HOME_WAKE = 1,   /**< 未连接：按键到不了主机，改走唤醒窗口。 */
 } ns2_home_action_t;
 
-/** 主机在线与否决定 HOME 按键的动作：醒着当主页键、睡眠当唤醒。 */
+/** 主机在线与否决定 HOME 按键的动作：醒着当主页键、睡眠当唤醒键。 */
 ns2_home_action_t ns2_adv_home_action(bool connected);
 
 /** 回连/唤醒广播要携带的主机地址（纯逻辑，主机端用例钉住）：优先「最近一次
@@ -113,7 +125,7 @@ bool ns2_adv_dormant_link(bool subscribed, bool features_enabled);
 
 /** 生成 31 字节广播载荷：pid 为本机型号 ID（Pro 0x2069 / JoyCon 2 0x2067、
  *  0x2066），host_mac 为主机地址（NimBLE 存储序，即显示序反转，与配对线
- *  格式一致）。发现形态忽略 host_mac 并把地址填零；回连/唤醒形态在
+ *  格式一致）。发现形态与静默忽略 host_mac 并把地址填零；回连/唤醒形态在
  *  host_mac 为 NULL 时退化为发现形态。 */
 void ns2_adv_payload(uint8_t out[NS2_ADV_PAYLOAD_LEN], uint16_t pid,
                      ns2_adv_mode_t mode, const uint8_t host_mac[6]);

@@ -13,7 +13,7 @@ USB 复用开关事实见 [hardware.md](hardware.md)「USB 控制器复用」，
   USB-Serial/JTAG（烧录/日志/串口 CLI）与 USB OTG（host/device）通过片内复用开关二选一，**复位默认永远回到 Serial/JTAG**，运行时切换是纯软件操作（`usb_new_phy()`）。
 - 桥接（PC 输入 → NS2）不切 OTG：它复用现有的 USB-Serial/JTAG（COM 口）承载桥接帧，与固件日志、CLI 文本共用一条字节流，PC 上的 COM 口不会消失，也完全不触碰 USB mux。
   真正需要 mux 实验的是「手柄插在板卡上」的 host 形态。
-- 切到 OTG 后 PC 上的 COM 口消失：无人值守时无法烧录。**桥接（otg）模式因此双端禁切**（UI 与 PWR 长按路径均被 bridge 拒绝），只有数据面接入、且能给出安全的恢复路径后才解锁。
+- 切到 OTG 后 PC 上的 COM 口消失：无人值守时无法烧录。**桥接（otg）模式因此禁切**（UI 与串口都到不了这一档，bridge 直接跳过），只有数据面接入、且能给出安全的恢复路径后才解锁。
 - VBUS 5V 供电路径未确认（host 模式要给插入的手柄供电），是 M5 的门禁项。
 - 桥接路径的 PC 侧配套程序已落地（[pc/README.md](../pc/README.md)），手柄插板卡这条路径的固件实现也已完成；剩下的门禁是 VBUS 供电（见上一条）与 mux 切换的实机核对。
 - USB-Serial/JTAG 的 DTR/RTS 由片内状态机解释成复位控制线：RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态（需复位脉冲恢复）。
@@ -78,7 +78,7 @@ PC 程序职责：枚举本机手柄、采样原始报告、按约定格式打�
    复用开关机制见 [hardware.md](hardware.md)，取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)，结论回填本节与 hardware.md。
 2. **VBUS 供电确认**：host 模式给手柄供 5V 的路径（原理图/实测），决定 host 模式可行性；未确认前手柄能否枚举只能在实机验证。
 3. **桥接已用不切 mux 的形态落地**：走 USB-Serial/JTAG 的桥接帧不需要 mux 实验，也没有失联风险。
-   若将来要把桥接改到 OTG device 形态（例如为了更高的带宽），仍受上面两条门槛约束，且需要「确认后重启回 COM」的保底恢复路径（复位即回 Serial/JTAG，天然成立）；在那之前 UI 与 PWR 长按保持双端禁切。
+   若将来要把桥接改到 OTG device 形态（例如为了更高的带宽），仍受上面两条门槛约束，且需要「确认后重启回 COM」的保底恢复路径（复位即回 Serial/JTAG，天然成立）；在那之前 UI 与串口两条入口都保持禁切。
 4. **电池**：`drivers/battery.c` 是电池数据获取唯一入口（当前占位值）；
    真实 ADC（GPIO1，`VBAT = VADC × 3`）随 M5 接入，输入源经 `ns2_output_set_battery` 上报，Report 0x05 / 0x09 电池字段随报告自动携带。
 5. **amiibo**：`ns2_output_amiibo_stage / _read` 已预留（PSRAM 内缓存 NTAG215 镜像，Report 0x09 的 NFC 状态字节随预置汇报 0x01）；

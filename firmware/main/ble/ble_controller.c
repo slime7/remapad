@@ -649,6 +649,11 @@ void ble_controller_adv_stop(void)
     }
 }
 
+void ble_controller_adv_stop_identity(uint8_t identity)
+{
+    stop_advertising_for(identity);
+}
+
 static void notify(uint16_t conn_handle, uint16_t attr_handle, bool enabled,
                    const uint8_t *data, size_t len)
 {

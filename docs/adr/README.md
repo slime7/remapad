@@ -55,17 +55,18 @@
 | [0024](0024-ns2-steady-wake-adv-and-pairing-key.md) | active | 已配对身份常驻唤醒广播（0x81 + 主机地址）自动回连，配对页按钮改真机配对键语义，切换手柄走断连重连；部分取代 0023 的广播形态与唤醒突发；广播里的主机地址来源由 0030 部分取代，常态广播形态由 0031 部分取代，其中「上报节奏 15 ms 仍生效」经 2026-09-15 复测确认 |
 | [0025](0025-pad-layout-modules-per-series.md) | active | 家族布局按系列分文件登记（layout.h/layout.c + layouts/），注册表统一匹配；补全 0021 在 pad/ 内的文件划分 |
 | [0026](0026-same-generation-input-passthrough.md) | active | 手柄输入按同代透传、异代解析分发：设备自带报告语言与目标语言一致时原样转发报文体 |
-| [0027](0027-runtime-usb-role-switch.md) | active | USB host 直插采用运行时角色切换（日志改走 UART0），复位回到串口 |
+| [0027](0027-runtime-usb-role-switch.md) | active | USB host 直插采用运行时角色切换（日志改走 UART0），复位回到串口；PWR 长按这一入口由 0038 部分取代 |
 | [0028](0028-pad-combo-captures-screen.md) | active | 手柄组合键 L1+R1+L3+R3 捕获为屏幕操控（方向键移动焦点、圆圈键确认），捕获期间停发报文并补一帧全松开 |
 | [0029](0029-pad-ui-axis-split.md) | active | 手柄操控屏幕的方向键分两个轴：上下走页面内容（到末尾再按下继续滚到页底）、左右只在底栏两项之间走；实机 L1 / R1 等价于左右 |
 | [0030](0030-ns2-wake-adv-host-address.md) | active | NS2 唤醒与回连广播携带主机最近一次连接记录到的地址（凭证地址作兜底），部分取代 0024 的广播地址来源 |
-| [0031](0031-ns2-reconnect-adv-and-explicit-wake-window.md) | active | NS2 常态广播回到 0x00 回连形态（不叫醒休眠主机），0x81 收成显式唤醒窗口，调试页 HOME 按实体手柄语义分流；部分取代 0024 的常态广播形态 |
+| [0031](0031-ns2-reconnect-adv-and-explicit-wake-window.md) | active | NS2 常态广播回到 0x00 回连形态（不叫醒休眠主机），0x81 收成显式唤醒窗口，调试页 HOME 按实体手柄语义分流；部分取代 0024 的常态广播形态，其中「常态回连广播」一项由 0038 部分取代 |
 | [0032](0032-ns2-fw-update-masquerade.md) | active | 主机推手柄固件更新时按「接住数据、逐帧空体应答、不重启」伪装（重启改由串口一次性武装），上报版本固化在 CONFIG_DEFAULT_FW_VERSION_* |
 | [0033](0033-pc-single-process-tool-and-device-screenshot.md) | active | PC 侧工具合并为单进程会话（remapadctl：转发 + 命令行 + 截图 + OTA），桥接协议新增设备 → PC 的图像帧与串口 shot 命令把实机画面回传成 PNG |
 | [0034](0034-ns2-report-interval-fixed-15ms.md) | active | NS2 上报节奏固定 15 ms、不提供运行时档位（5 ms 试验被否：四成以上通知因 mbuf 耗尽被丢）；确认 0023 的上报节奏一项 |
 | [0035](0035-ns2-headset-state-passthrough.md) | active | NS2 耳机状态按输入设备的 3.5 mm 状态透传（0x09 的 0x0D 与 0x05 的插入位同源，串口 headset 可覆盖） |
 | [0036](0036-host-pressure-triggered-js-gc.md) | active | JS 堆的显式 GC 由宿主按 PSRAM 压力触发（每帧读余量、跌过 256 KiB 步长才 JS_RunGC 并重钉基线），与上游 PSP host 的 arena-pressure GC 同构 |
 | [0037](0037-ui-tick-rate-30hz.md) | active | UI 帧节奏定为 30 Hz：tickHz 写进 host profile，UI 侧以 ui/src/tick.ts 为唯一换算来源（TICK_HZ 取框架烘焙值），与帧绑定的时长写成毫秒再换算、序列图动画按累计帧推进以保持感官时间；部分取代 0017 的 60 Hz 帧预算取值 |
+| [0038](0038-user-initiated-connection-window.md) | active | 连接由用户发起：上电与断连（主机睡下）静默，连接键（配对页「连接」、PWR 长按 3 秒）开 30 秒连接窗口广播、HOME 在未连接时开 10 秒唤醒窗口，窗口到期或主机连上即收窗；部分取代 0031 的常态回连广播与 0027 的 PWR 长按入口 |
 
 ## 创建 ADR 脚本用法
 

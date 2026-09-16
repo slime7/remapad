@@ -259,9 +259,10 @@ uv run python remapadctl.py -p COM3 mode host       # 切到 host：COM 口消�
 uv run python remapadctl.py -p COM3 pad             # 识别到的手柄：来源、家族、型号、命中布局行、兜底与透传状态
 uv run python remapadctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
 uv run python remapadctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
-uv run python remapadctl.py -p COM3 pairing start   # 配对键：断开当前主机后进发现广播，等新主机搜索配对（stop 退出）
+uv run python remapadctl.py -p COM3 connect         # 连接键：开连接窗口等主机连上来（未配对身份进配对流程）
+uv run python remapadctl.py -p COM3 pairing start   # 配新主机：断开当前主机后进发现广播，等新主机搜索配对（stop 停止广播并断链）
 uv run python remapadctl.py -p COM3 wake            # 开唤醒窗口：未连接时发 0x81 把休眠主机叫起来，已连接则断开让它重连
-uv run python remapadctl.py -p COM3 adv auto        # 常态广播形态（auto 默认按唤醒窗口 / wake / reconnect），实机 A/B 对账用
+uv run python remapadctl.py -p COM3 adv auto        # 广播窗口内的形态（auto 默认按窗口来源 / wake / reconnect），实机 A/B 对账用
 uv run python remapadctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
 uv run python remapadctl.py -p COM3 reboot          # 软重启回 COM 模式
 uv run python remapadctl.py -p COM3 --log --seconds 20         # 只读设备日志 20 秒
@@ -290,7 +291,8 @@ USB-Serial/JTAG 的片内状态机把 CDC 的 DTR/RTS 当复位控制线解释�
 需要复位时用 `--log --reset`（只脉冲 RTS），自己写 PC 端工具时按同样规则处理这两条线。抓包/监视工具与烧录、CLI 互斥，端口被占用时先结束占用进程（按 PID 精确清理，见常见问题）。
 
 PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；
-**长按 3-6 秒松开**切换连接模式（device ↔ host，只在本次运行有效、重启回到串口；桥接 otg 双端禁切，防止 USB PHY 切走后 COM 消失无法烧录）。
+**长按 3-6 秒松开**是连接键（与配对页「连接」按钮同一个动作）：没有链路也不在广播时打开连接窗口（已配对发回连形态、未配对进配对流程），
+有链路或正在广播时停止广播并断开（设备平时静默，见 [ADR 0038](adr/0038-user-initiated-connection-window.md)）。USB 角色切换只在模式页与串口 `mode` 里做。
 长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。
 SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。
 软件关机走系统页「关机」按钮（bridge 的 `powerOff` 命令，串口对应 `poweroff`）：电池供电下释放锁存即断电，USB 供电下锁存被旁路、关不掉，固件重新锁存后界面提示「USB 供电下无法关机，请拔线后再试」。
@@ -338,7 +340,7 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 - [firmware/main/boot_splash.c](../firmware/main/boot_splash.c)：UI 就绪前的固件自绘启动画面（主题底色 + 手柄标记 + 阶段进度条），同时在启动画面落屏后提前点亮背光。
 - [firmware/main/config/app_config.c](../firmware/main/config/app_config.c)：用户设置 NVS 持久化（亮度 / 连接模式 / 手柄身份）。
 - [firmware/main/console/cli.c](../firmware/main/console/cli.c)：串口行命令 CLI（USB-Serial/JTAG）。
-- [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按切模式）。
+- [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按是连接键）。
 - [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制；桥接源在 `input/`，USB host 源在 `usb/`）。
 - [firmware/main/usb/](../firmware/main/usb)：USB host 直插（枚举与 HID 收发、输入源、运行时角色切换）与主机反馈写回。
 - [firmware/main/pad/feedback.c](../firmware/main/pad/feedback.c)：反馈编码（按设备布局行把震动 / 玩家灯 / 触觉采样编码成该手柄的输出报告）。
@@ -368,11 +370,11 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 手柄插在板卡 Type-C 上时设备做 USB 主机：`firmware/main/usb/` 装 host 栈、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口）、收 IN 报告后按 VID/PID 走同一份家族布局表。
 真 Switch 2 手柄的报文体原样转发给 NS2 主机（真电量与真陀螺仪直达），其余家族解析成私有格式后重新编码；主机下发的震动与玩家灯按布局行编码写回手柄的 OUT 端点。
 
-切换入口有三个：模式页「手柄」卡片、PWR 长按 3-6 秒、串口 `mode host`；角色只在本次运行有效、不写 NVS。
+切换入口有两个：模式页「手柄」卡片、串口 `mode host`；角色只在本次运行有效、不写 NVS。
 切过去之后在 UART0 上敲 `pad` 看识别结果与是否透传，敲 `usb` 看 host 栈状态与收发计数。
 
 - host 模式下 PC 上不再有 COM 口：串口 CLI、桥接程序与 OTA 都用不了，日志与 CLI 改走 UART0（GPIO43/44 扩展焊盘接 USB-UART 适配器，115200）。
-- 回到串口有两条路：在 UART0 上敲 `mode device`（或再长按 PWR），或者复位——复用开关复位默认回 USB-Serial/JTAG，COM 口天然回来，烧录不受影响。
+- 回到串口有两条路：在 UART0 上敲 `mode device`（或从模式页切回「串口」），或者复位——复用开关复位默认回 USB-Serial/JTAG，COM 口天然回来，烧录不受影响。
 - 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 Xbox 有线布局并打兜底标记。
 - 门禁：host 模式要给插入的手柄供 VBUS 5V，供电路径还没确认（[hardware.md](hardware.md) 挂起项）；确认前手柄能否枚举只能在实机验证。
 

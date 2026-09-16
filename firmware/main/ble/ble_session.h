@@ -16,15 +16,19 @@ extern "C" {
  * 传输细节（NimBLE、GATT 表、notify）由 ble_controller 承载，本模块只面对协议。
  * 会话按连接分槽（最多 2 条）：Pro 单会话；JoyCon 组合左右两只各一个会话，
  * 各自独立的身份、报告格式、配对状态与凭证（凭证按身份分槽持久化）。
+ *
+ * 广播与真机一样只由用户动作打开：上电静默、主机睡下（断连）后静默，连接键
+ * （屏幕「连接」、PWR 长按）开连接窗口，HOME 键在未连接时开唤醒窗口；窗口
+ * 到期或主机连上即关闭。配对流程与未配对身份的发现广播见 ns2_session_connect。
  */
 
-/** host 同步完成（栈就绪）：记录自身 MAC 并启动标准发现广播。 */
+/** host 同步完成（栈就绪）：记录自身 MAC，不启动广播（等用户按连接键）。 */
 void ns2_session_on_sync(const uint8_t own_mac[6]);
 
 /** ACL 连接建立（identity 为该连接呈现的手柄身份）。 */
 void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity);
 
-/** 连接建立失败：恢复广播，不影响会话状态。 */
+/** 连接建立失败：按当前窗口同步广播，不影响会话状态。 */
 void ns2_session_on_connect_fail(void);
 
 /** 记录一次主机协议活动（ATT 读写/订阅），刷新所在连接的空闲计时。 */
@@ -37,7 +41,8 @@ bool ns2_session_conn_idle_expired(uint16_t conn_handle);
 /** 周期任务（1s，ble_controller 空闲定时器驱动）：固件假升级会话超时收尾。 */
 void ns2_session_tick(void);
 
-/** 断连：复位该连接的会话并按身份恢复广播。 */
+/** 断连（主机睡眠 / 移开）：复位该连接的会话并停止广播——没有窗口与配对
+ *  流程就回到静默，等下一次连接键或唤醒键。 */
 void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity);
 
 /** Command 通道（0x0014）写入：8 字节帧头 + 应答体，BLE 传输层。 */
@@ -74,33 +79,43 @@ bool ns2_session_fw_restart_armed(void);
 /** 特性掩码 bit5（触觉震动）是否在任一活跃会话开启，影响 0x09 状态标志字节。 */
 bool ns2_session_rumble_enabled(void);
 
-/** 配对键（配对页「配对」、串口 pairing start）：断开当前主机后发标准发现
- *  广播（Pro 单身份 / JoyCon 双身份），等新主机搜索配对。 */
+/** 配对新主机（配对页「新主机配对」、串口 pairing start）：断开当前主机后发
+ *  标准发现广播（Pro 单身份 / JoyCon 双身份），等新主机搜索配对；流程一直
+ *  挂着，直到新主机配上或用户停止广播。 */
 void ns2_session_start_pairing_mode(void);
-
-/** 结束配对流程：已配对回到常态广播（唤醒窗口外是回连形态）；未配对停止
- *  广播（真机没配对时不广播，等下一次配对请求）。 */
-void ns2_session_stop_pairing_mode(void);
 
 /** 手动配对模式是否开启（供控制面推导 UI 六态）。 */
 bool ns2_session_pairing_mode_active(void);
 
-/** 唤醒请求（调试页 HOME 在未连接时、串口 wake）：打开唤醒窗口，让常态广播
- *  升到唤醒形态 0x81 把休眠中的主机叫起来（窗口到期落回回连形态）；已连接
- *  就断开让主机按唤醒广播重连（握把/顺序页连上来的会话不采用输入报文）。
- *  配对流程进行时忽略。 */
+/** 连接键（屏幕「连接」、PWR 长按 3 秒）：打开连接窗口广播等主机连上来——
+ *  已配对身份发回连形态（醒着的主机看到就会连回来，因此主机停在握把/顺序页
+ *  时可以先把设备留给它再按，同主机按新玩家序号重新分配）；未配对身份进
+ *  配对流程发发现广播。已连接时忽略，配对流程进行时不重复开窗。 */
+void ns2_session_connect(void);
+
+/** 停止广播（屏幕「停止」/「断开」、串口 drop）：关闭连接窗口与配对流程，
+ *  已连接就断开当前主机。设备回到静默，不再由本机主动发信号。 */
+void ns2_session_disconnect(void);
+
+/** 连接窗口是否在开（正在广播等主机连上来），供控制面推导 UI 六态。 */
+bool ns2_session_advertising(void);
+
+/** 唤醒请求（调试页 HOME 在未连接时、串口 wake）：打开唤醒窗口发唤醒形态
+ *  0x81 把休眠中的主机叫起来；窗口到期即静默。已连接时先断开，让主机按
+ *  唤醒广播重连（握把/顺序页连上来的会话不采用输入报文）。配对流程进行时
+ *  忽略。 */
 void ns2_session_wake_request(void);
 
-/** 常态（已配对、未连接）广播形态的来源。 */
+/** 广播窗口内形态的来源（实机对账开关）。 */
 typedef enum {
-    NS2_STEADY_AUTO = 0,      /**< 按唤醒窗口：窗口内唤醒形态，窗口外回连形态。 */
-    NS2_STEADY_WAKE = 1,      /**< 钉住唤醒形态 0x81。 */
-    NS2_STEADY_RECONNECT = 2, /**< 钉住回连形态 0x00。 */
-} ns2_steady_form_t;
+    NS2_WINDOW_FORM_AUTO = 0,      /**< 按窗口来源：连接键回连形态、HOME 唤醒形态。 */
+    NS2_WINDOW_FORM_WAKE = 1,      /**< 钉住唤醒形态 0x81。 */
+    NS2_WINDOW_FORM_RECONNECT = 2, /**< 钉住回连形态 0x00。 */
+} ns2_window_form_t;
 
-/** 常态形态的实机对账开关：只有串口 `adv` 诊断命令改它，见 ADR 0031。 */
-void ns2_session_set_steady_form(ns2_steady_form_t form);
-ns2_steady_form_t ns2_session_steady_form(void);
+/** 窗口内形态的实机对账开关：只有串口 `adv` 诊断命令改它。 */
+void ns2_session_set_window_form(ns2_window_form_t form);
+ns2_window_form_t ns2_session_window_form(void);
 
 /** LTK 注入形态（0 = 反转后写入，1 = 原样写入）。主机连上但链路未加密时
  *  用它做现场 A/B；改动在下次连接时生效。 */
@@ -168,7 +183,7 @@ typedef struct {
     uint16_t conn_itvl;    /* 当前连接间隔（1.25ms 单位，4 = 5ms）；未连接为 0 */
     uint8_t creds;         /* 该身份的配对凭证条数 */
     bool advertising;      /* 该身份的广播实例在发 */
-    uint8_t adv_mode;      /* ns2_adv_mode_t：在发（或恢复时会发）的广播形态 */
+    uint8_t adv_mode;      /* ns2_adv_mode_t：在发（或按当前状态会发）的广播形态 */
     bool mac_valid;
     uint8_t mac[6];
 } ns2_session_status_t;

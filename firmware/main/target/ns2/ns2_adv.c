@@ -3,35 +3,38 @@
 #include <string.h>
 
 ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
-                                   ns2_adv_mode_t steady)
+                                   const ns2_adv_window_t *window, int64_t now_us)
 {
-    if (pairing_requested || !paired) {
+    if (pairing_requested) {
         return NS2_ADV_DISCOVERY;
     }
-    /* 常态形态二选一（见 ns2_adv_steady_mode：默认回连，唤醒窗口内才是唤醒）；
-     * 发现形态只由未配对/配对流程触发，传进来按回连处理，避免把已配对身份
-     * 静默掉。 */
-    return steady == NS2_ADV_WAKE ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
+    if (!ns2_adv_window_active(window, now_us)) {
+        return NS2_ADV_OFF;
+    }
+    if (!paired) {
+        /* 没有凭证就没有主机可回连或唤醒：发发现广播等主机来配。 */
+        return NS2_ADV_DISCOVERY;
+    }
+    return window->request == NS2_ADV_REQ_WAKE ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
 }
 
-void ns2_adv_wake_window_open(ns2_adv_wake_window_t *win, int64_t now_us)
+void ns2_adv_window_open(ns2_adv_window_t *win, ns2_adv_request_t request,
+                         int64_t now_us)
 {
-    win->until_us = now_us + NS2_ADV_WAKE_WINDOW_US;
+    const int64_t duration = request == NS2_ADV_REQ_WAKE ? NS2_ADV_WAKE_WINDOW_US
+                                                         : NS2_ADV_CONNECT_WINDOW_US;
+    win->request = request;
+    win->until_us = now_us + duration;
 }
 
-void ns2_adv_wake_window_close(ns2_adv_wake_window_t *win)
+void ns2_adv_window_close(ns2_adv_window_t *win)
 {
     win->until_us = 0;
 }
 
-bool ns2_adv_wake_window_active(const ns2_adv_wake_window_t *win, int64_t now_us)
+bool ns2_adv_window_active(const ns2_adv_window_t *win, int64_t now_us)
 {
-    return win->until_us != 0 && now_us < win->until_us;
-}
-
-ns2_adv_mode_t ns2_adv_steady_mode(bool wake_window)
-{
-    return wake_window ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
+    return win != NULL && win->until_us != 0 && now_us < win->until_us;
 }
 
 ns2_home_action_t ns2_adv_home_action(bool connected)
@@ -110,7 +113,7 @@ void ns2_adv_payload(uint8_t out[NS2_ADV_PAYLOAD_LEN], uint16_t pid,
     memcpy(out, s_template, sizeof(s_template));
     out[12] = (uint8_t)(pid & 0xFF);
     out[13] = (uint8_t)(pid >> 8);
-    if (mode == NS2_ADV_DISCOVERY || host_mac == NULL) {
+    if (mode == NS2_ADV_DISCOVERY || mode == NS2_ADV_OFF || host_mac == NULL) {
         return;
     }
     memcpy(&out[5 + NS2_ADV_MFR_HOST_MAC_OFFSET], host_mac, 6);

@@ -284,60 +284,47 @@ static void factory_init(void)
 /** 本次上电已执行的休眠断开次数（上限 NS2_DORMANT_MAX_DROPS）。 */
 static uint8_t s_dormant_drops;
 
-/** 唤醒窗口：显式唤醒请求（调试页 HOME、串口 wake）开窗，主机连上或窗口到期
- *  收窗。窗口内未连接时发唤醒形态 0x81；窗口外只发回连形态 0x00——0x81 会把
- *  休眠中的主机叫醒，常态挂着它就等于主机一进待机就被叫起来（见 ADR 0031）。 */
-static ns2_adv_wake_window_t s_wake_win;
+/** 广播窗口：连接键（屏幕「连接」、PWR 长按）与唤醒键（调试页 HOME 在未
+ *  连接时）开窗，主机连上或窗口到期收窗。设备只在窗口开着或配对流程里广播
+ *  ——上电与断连都静默，与真机「不按键就不发信号」一致（见 ADR 0038）。 */
+static ns2_adv_window_t s_adv_win;
 
-/** 常态形态的实机对账开关（串口 `adv auto|wake|reconnect`）：钉住一种形态
- *  做 A/B 对账，auto 时按唤醒窗口决策。 */
-static ns2_steady_form_t s_steady_form = NS2_STEADY_AUTO;
+/** 窗口内形态的实机对账开关（串口 `adv auto|wake|reconnect`）：钉住一种形态
+ *  做 A/B 对账，auto 时按窗口来源决策。 */
+static ns2_window_form_t s_window_form = NS2_WINDOW_FORM_AUTO;
 
 /** JoyCon 组合的 L+R 自动注入计时：未配对期间每 3 秒重试。 */
 static ns2_adv_lr_timer_t s_lr_timer;
 
-/** 已配对、未连接时的常态形态：对账开关优先，其次看唤醒窗口。 */
-static ns2_adv_mode_t steady_mode(void)
-{
-    switch (s_steady_form) {
-    case NS2_STEADY_WAKE:
-        return NS2_ADV_WAKE;
-    case NS2_STEADY_RECONNECT:
-        return NS2_ADV_RECONNECT;
-    default:
-        return ns2_adv_steady_mode(
-            ns2_adv_wake_window_active(&s_wake_win, esp_timer_get_time()));
-    }
-}
-
 /** 对账开关形态的日志名。 */
-static const char *steady_form_name(ns2_steady_form_t form)
+static const char *window_form_name(ns2_window_form_t form)
 {
     switch (form) {
-    case NS2_STEADY_WAKE:
+    case NS2_WINDOW_FORM_WAKE:
         return "wake (0x81)";
-    case NS2_STEADY_RECONNECT:
+    case NS2_WINDOW_FORM_RECONNECT:
         return "reconnect (0x00)";
     default:
-        return "auto (wake window)";
+        return "auto (window request)";
     }
 }
 
-/** 身份的广播形态：配对流程中或当前形态还没配齐凭证 → 发现广播（新主机
- * 要能搜到它，也不能带着旧主机地址发唤醒）；已配对 → 常态形态（默认回连
- * 0x00：醒着的主机自己会连回来，休眠中的主机不被吵醒，实机对账见 ADR 0031）。
- * 地址的挑选规则见 ns2_adv_choose_host_mac。 */
+/** 身份的广播形态：配对流程与未配对身份发发现广播，窗口内按请求与凭证决定
+ *  回连或唤醒，没有窗口就静默。地址的挑选规则见 ns2_adv_choose_host_mac。 */
 static ns2_adv_mode_t adv_mode_for(ns2_identity_t identity, const uint8_t **out_mac)
 {
     static uint8_t s_adv_host_mac[6];
-    const ns2_adv_mode_t steady = steady_mode();
-    if (s_ses.pairing_mode) {
-        *out_mac = NULL;
-        return ns2_adv_choose_mode(false, true, steady);
+    *out_mac = NULL;
+    ns2_adv_mode_t mode = ns2_adv_choose_mode(ns2_session_paired(), s_ses.pairing_mode,
+                                              &s_adv_win, esp_timer_get_time());
+    /* 对账开关只钉窗口内的已配对形态（串口 adv）：连接窗口默认回连 0x00，
+     * 对账时可强发唤醒 0x81 比较主机反应。 */
+    if (s_window_form != NS2_WINDOW_FORM_AUTO &&
+        (mode == NS2_ADV_RECONNECT || mode == NS2_ADV_WAKE)) {
+        mode = s_window_form == NS2_WINDOW_FORM_WAKE ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
     }
-    if (!ns2_session_paired()) {
-        *out_mac = NULL;
-        return ns2_adv_choose_mode(false, false, steady);
+    if (mode != NS2_ADV_RECONNECT && mode != NS2_ADV_WAKE) {
+        return mode;
     }
     /* 记录值只在「对端命中凭证」的连接与配对交换里写入（普通 BLE 主机不写），
      * 凭证作兜底：配好还没连过时只有凭证地址可用。挑选规则在 ns2_adv。 */
@@ -356,13 +343,12 @@ static ns2_adv_mode_t adv_mode_for(ns2_identity_t identity, const uint8_t **out_
     const uint8_t *picked = ns2_adv_choose_host_mac(recorded_ptr, creds, cred_count);
     if (picked == NULL) {
         /* 形态已配齐但这一只没有可用地址：退回发现广播，绝不发全零地址的
-         * 唤醒广播（主机既不会回连也不会被唤醒）。 */
-        *out_mac = NULL;
-        return ns2_adv_choose_mode(false, false, steady);
+         * 回连或唤醒广播（主机既不会回连也不会醒）。 */
+        return NS2_ADV_DISCOVERY;
     }
     memcpy(s_adv_host_mac, picked, sizeof(s_adv_host_mac));
     *out_mac = s_adv_host_mac;
-    return ns2_adv_choose_mode(true, false, steady);
+    return mode;
 }
 
 static const char *adv_mode_name(ns2_adv_mode_t mode)
@@ -372,8 +358,10 @@ static const char *adv_mode_name(ns2_adv_mode_t mode)
         return "wake";
     case NS2_ADV_RECONNECT:
         return "reconnect";
-    default:
+    case NS2_ADV_DISCOVERY:
         return "discovery";
+    default:
+        return "off";
     }
 }
 
@@ -393,28 +381,74 @@ static void adv_start_identity(size_t index, ns2_identity_t identity,
     ble_controller_adv_start((uint8_t)index, identity, payload, addr);
 }
 
-/** 按凭证状态恢复广播：Pro 双实例（扩展 + legacy PDU）共用公共伪装地址；
- * JoyCon 双身份各占一个实例（静态随机地址，legacy PDU）。已配对身份发
- * 常态唤醒广播等主机回连；未配对身份只在配对流程里发发现广播待主机搜索，
- * 流程之外保持静默（真机没配对时不广播）。 */
-static void resume_advertising(void)
+/** 按当前状态把广播设成该发的样子：逐身份取形态（静默 / 发现 / 窗口形态），
+ *  静默的身份停掉自己的广播实例——设备不被请求连接时不留任何实例在发。
+ *  Pro 双实例（扩展 + legacy PDU）共用公共伪装地址；JoyCon 双身份各占一个
+ *  实例（静态随机地址，legacy PDU）。 */
+static void apply_advertising(void)
 {
-    if (!s_ses.pairing_mode && !ns2_session_paired()) {
-        ble_controller_adv_stop();
-        ESP_LOGI(TAG, "no pairing flow and no credentials: advertising stopped");
-        return;
-    }
     ns2_identity_t ids[2];
     const size_t n = mode_identities(ids);
     for (size_t i = 0; i < n; i++) {
         uint8_t adv[NS2_ADV_PAYLOAD_LEN];
         const uint8_t *mac = NULL;
         const ns2_adv_mode_t mode = adv_mode_for(ids[i], &mac);
+        if (mode == NS2_ADV_OFF) {
+            if (ble_controller_adv_running(ids[i])) {
+                ble_controller_adv_stop_identity(ids[i]);
+                ESP_LOGI(TAG, "silent: identity %u advertising stopped",
+                         (unsigned)ids[i]);
+            }
+            continue;
+        }
         ns2_adv_payload(adv, identity_pid(ids[i]), mode, mac);
         adv_start_identity(i, ids[i], adv);
-        ESP_LOGI(TAG, "resume: identity %u %s advertising (%u creds)",
+        ESP_LOGI(TAG, "advertising: identity %u %s (%u creds)",
                  (unsigned)ids[i], adv_mode_name(mode), (unsigned)ble_creds_count(ids[i]));
     }
+}
+
+void ns2_session_connect(void)
+{
+    if (ble_controller_connected()) {
+        ESP_LOGI(TAG, "connect ignored (link in use)");
+        return;
+    }
+    if (s_ses.pairing_mode) {
+        ESP_LOGI(TAG, "connect ignored (pairing flow advertising)");
+        return;
+    }
+    /* 用户主动发起的一次连接尝试：休眠看门狗的断开预算跟着复位。 */
+    s_dormant_drops = 0;
+    if (!ns2_session_paired()) {
+        ESP_LOGI(TAG, "connect: no credentials -> pairing flow (discovery advertising)");
+        ns2_session_start_pairing_mode();
+        return;
+    }
+    ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, esp_timer_get_time());
+    ESP_LOGI(TAG, "connect: advertising for %llds",
+             (long long)(NS2_ADV_CONNECT_WINDOW_US / 1000000LL));
+    apply_advertising();
+}
+
+void ns2_session_disconnect(void)
+{
+    /* 停止广播：收掉窗口与配对流程，链路在线就断开。断连回调据此同步广播，
+     * 没有窗口与配对流程就是静默。 */
+    ns2_adv_window_close(&s_adv_win);
+    s_ses.pairing_mode = false;
+    if (ble_controller_connected()) {
+        ESP_LOGI(TAG, "disconnect: dropping the current link");
+        ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
+        return;
+    }
+    apply_advertising();
+    ESP_LOGI(TAG, "disconnect: silent until the next connect request");
+}
+
+bool ns2_session_advertising(void)
+{
+    return ns2_adv_window_active(&s_adv_win, esp_timer_get_time()) || s_ses.pairing_mode;
 }
 
 void ns2_session_wake_request(void)
@@ -423,10 +457,10 @@ void ns2_session_wake_request(void)
         ESP_LOGI(TAG, "wake request ignored (pairing flow)");
         return;
     }
-    /* 唤醒是显式请求：开窗让常态广播升到唤醒形态 0x81（窗口到期自动落回
-     * 回连形态，主机随后睡下不会再被叫醒）；已连接就断开，让主机按唤醒广播
-     * 重新连上来（从握把/顺序页连上来的会话不采用输入报文，靠这次重连纠正）。 */
-    ns2_adv_wake_window_open(&s_wake_win, esp_timer_get_time());
+    /* 唤醒是显式请求：开窗发唤醒形态 0x81（窗口到期即静默，主机随后睡下不会
+     * 再被叫醒）；已连接就断开，让主机按唤醒广播重新连上来（从握把/顺序页
+     * 连上来的会话不采用输入报文，靠这次重连纠正）。 */
+    ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_WAKE, esp_timer_get_time());
     if (ble_controller_connected()) {
         ESP_LOGI(TAG, "wake: dropping current link to force a reconnect");
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
@@ -434,7 +468,7 @@ void ns2_session_wake_request(void)
     }
     ESP_LOGI(TAG, "wake: wake advertising for %llds",
              (long long)(NS2_ADV_WAKE_WINDOW_US / 1000000LL));
-    resume_advertising();
+    apply_advertising();
 }
 
 void ns2_session_on_sync(const uint8_t own_mac[6])
@@ -444,14 +478,8 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     memcpy(s_ses.own_mac, own_mac, 6);
     ESP_LOGI(TAG, "host synced, own MAC %02x:%02x:%02x:%02x:%02x:%02x",
              own_mac[0], own_mac[1], own_mac[2], own_mac[3], own_mac[4], own_mac[5]);
-    /* 上电即按凭证决定形态：配过主机就常驻唤醒广播等它回连（主机停在任意
-     * 页面、甚至待机都能连上）；从未配过就自动进入配对流程发发现广播，
-     * 等价于真机首次上电后等主机来配。 */
-    s_ses.pairing_mode = !ns2_session_paired();
-    if (s_ses.pairing_mode) {
-        ESP_LOGI(TAG, "no credentials: pairing flow started automatically");
-    }
-    resume_advertising();
+    /* 上电不主动发信号（真机不按键就不广播）：等用户按连接键（屏幕「连接」
+     * 或 PWR 长按 3 秒）打开连接窗口，或按 HOME 唤醒键去叫醒主机。 */
 }
 
 /** 连接空闲超时（微秒）：主机连上后会立刻跑初始化序列（毫秒级到达），
@@ -588,30 +616,30 @@ uint8_t ns2_session_ltk_form(void)
     return s_ltk_form;
 }
 
-void ns2_session_set_steady_form(ns2_steady_form_t form)
+void ns2_session_set_window_form(ns2_window_form_t form)
 {
-    /* 只在这里切唤醒/回连/自动：发现形态由凭证与配对流程决定。 */
-    s_steady_form = form;
-    ESP_LOGI(TAG, "steady form -> %s", steady_form_name(s_steady_form));
-    if (!ble_controller_connected() && !s_ses.pairing_mode) {
-        resume_advertising();
+    /* 只在这里钉窗口内的形态：发现与静默由凭证、配对流程与窗口有效期决定。 */
+    s_window_form = form;
+    ESP_LOGI(TAG, "window form -> %s", window_form_name(s_window_form));
+    if (!ble_controller_connected() && ns2_session_advertising()) {
+        apply_advertising();
     }
 }
 
-ns2_steady_form_t ns2_session_steady_form(void)
+ns2_window_form_t ns2_session_window_form(void)
 {
-    return s_steady_form;
+    return s_window_form;
 }
 
 void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
 {
     session_slot_t *slot = NULL;
 
-    /* 主机已经连上：收掉唤醒窗口。主机随后睡下（链路断开）时才会回到常态
-     * 广播，那时窗口必须已经关闭，否则会把它重新叫起来。 */
-    if (ns2_adv_wake_window_active(&s_wake_win, esp_timer_get_time())) {
-        ESP_LOGI(TAG, "wake window closed (host connected)");
-        ns2_adv_wake_window_close(&s_wake_win);
+    /* 主机已经连上：收掉广播窗口（连接请求达成 / 唤醒达成）。主机随后睡下
+     * （链路断开）时不再发信号，那时窗口必须已经关闭，否则会把它重新叫起来。 */
+    if (ns2_adv_window_active(&s_adv_win, esp_timer_get_time())) {
+        ESP_LOGI(TAG, "advertising window closed (host connected)");
+        ns2_adv_window_close(&s_adv_win);
     }
     for (size_t i = 0; i < SESSION_MAX; i++) {
         if (!s_ses.sess[i].active) {
@@ -665,7 +693,7 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
 void ns2_session_on_connect_fail(void)
 {
     if (!ble_controller_connected()) {
-        resume_advertising();
+        apply_advertising();
     }
 }
 
@@ -677,16 +705,11 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
     }
     /* 成对在线状态被打破，下一次全部在线时再打印一次。 */
     s_ses.pair_online_logged = false;
-    if (!ble_controller_connected()) {
-        resume_advertising();
-    } else if (identity != NS2_ID_PRO && identity_in_mode(identity)) {
-        /* JoyCon 组合：另一只仍在线，只恢复断开身份的广播等它回连。 */
-        uint8_t adv[NS2_ADV_PAYLOAD_LEN];
-        const uint8_t *mac = NULL;
-        const ns2_adv_mode_t mode = adv_mode_for(identity, &mac);
-        ns2_adv_payload(adv, identity_pid(identity), mode, mac);
-        adv_start_identity(identity == NS2_ID_JOYCON_L ? 0 : 1, identity, adv);
-    }
+    /* 主机睡下或移开：不再保持信号（真机断开后也不广播），只有窗口还开着
+     * （连接请求还没达成）或配对流程还在跑时才继续发。 */
+    ESP_LOGI(TAG, "disconnected (conn=%u, identity=%s, advertising=%u)", conn_handle,
+             ns2_identity_name(identity), (unsigned)ns2_session_advertising());
+    apply_advertising();
 }
 
 /** SPI 模拟内存映射块。0x13040 与 0x13100 为实机固定内容；0x13060 与
@@ -1189,7 +1212,7 @@ bool ns2_session_rumble_enabled(void)
 
 void ns2_session_start_pairing_mode(void)
 {
-    /* 配对键语义（相当于真机按住配对键）：先断开当前主机，再发标准发现广播
+    /* 配对新主机（相当于真机按住配对键）：先断开当前主机，再发标准发现广播
      * 等新主机搜索——目标是配一台新主机，不能带着旧主机的地址广播。
      * JoyCon 组合左右两只同时进入发现广播（L+R 组合确认流程）。 */
     s_ses.pairing_mode = true;
@@ -1201,20 +1224,9 @@ void ns2_session_start_pairing_mode(void)
     }
     ESP_LOGI(TAG, "pairing request accepted (dropped link=%u)", (unsigned)was_connected);
     if (was_connected) {
-        return; /* 断连事件里按配对流程恢复广播 */
+        return; /* 断连事件里按配对流程起广播 */
     }
-    resume_advertising();
-}
-
-void ns2_session_stop_pairing_mode(void)
-{
-    s_ses.pairing_mode = false;
-    if (!ble_controller_connected()) {
-        /* 已配对回到常态唤醒广播等主机回连；未配对由 resume_advertising
-         * 判为静默（真机没配对时不广播，等下一次配对请求）。 */
-        resume_advertising();
-    }
-    ESP_LOGI(TAG, "pairing flow stopped (paired=%u)", (unsigned)ns2_session_paired());
+    apply_advertising();
 }
 
 bool ns2_session_pairing_mode_active(void)
@@ -1267,9 +1279,13 @@ void ns2_session_unpair(void)
     for (size_t i = 0; i < n; i++) {
         ble_creds_clear(ids[i]);
     }
-    /* 凭证清空后 Wake 广播失效：按「从未配过」处理，回到配对流程的发现广播。 */
-    s_ses.pairing_mode = true;
-    resume_advertising();
+    /* 凭证清空后回连与唤醒都失去目标：按「从未配过」处理——静默，等用户按
+     * 连接键重新配对（未配对的连接键进配对流程）。 */
+    s_ses.pairing_mode = false;
+    ns2_adv_window_close(&s_adv_win);
+    if (!ble_controller_connected()) {
+        apply_advertising();
+    }
     ESP_LOGI(TAG, "pairing credentials cleared");
 }
 
@@ -1513,25 +1529,24 @@ void ns2_session_tick(void)
         esp_restart();
     }
 
-    /* 唤醒窗口到期：常态广播从唤醒形态落回回连形态（未连接时要重发一次广播
-     * 改形态），主机随后睡下就不会再被叫醒。 */
-    if (s_wake_win.until_us != 0 &&
-        !ns2_adv_wake_window_active(&s_wake_win, esp_timer_get_time())) {
-        ns2_adv_wake_window_close(&s_wake_win);
-        ESP_LOGI(TAG, "wake window expired: steady advertising -> reconnect");
-        if (!ble_controller_connected() && !s_ses.pairing_mode) {
-            resume_advertising();
+    /* 广播窗口到期（连接窗口 / 唤醒窗口）：设备回到静默——真机不会一直发
+     * 信号，想再连一次就再按一次连接键或 HOME。 */
+    if (s_adv_win.until_us != 0 && !ns2_adv_window_active(&s_adv_win, esp_timer_get_time())) {
+        ns2_adv_window_close(&s_adv_win);
+        ESP_LOGI(TAG, "advertising window expired: silent");
+        if (!ble_controller_connected()) {
+            apply_advertising();
         }
     }
 
     /* 配对流程收尾：主机真的配好并连上（当前形态每个身份都凭证在手、会话
-     * 注册完成）才自动退出，回到常态广播——真机配完就处于已连接状态，
-     * 不需要用户再按；没有主机来配就一直挂着发现广播。 */
+     * 注册完成）才自动退出——真机配完就处于已连接状态，不需要用户再按；
+     * 没有主机来配就一直挂着发现广播，等用户按停止或主机来配。 */
     if (s_ses.pairing_mode && pairing_flow_done()) {
         s_ses.pairing_mode = false;
         ESP_LOGI(TAG, "pairing flow finished (host registered)");
         if (!ble_controller_connected()) {
-            resume_advertising();
+            apply_advertising();
         }
     }
 
@@ -1544,9 +1559,11 @@ void ns2_session_tick(void)
         ESP_LOGI(TAG, "press L+R for JoyCon pair confirmation");
     }
 
-    /* 休眠看门狗：已订阅输入但间隔停在激活门槛之上（ns2_adv_dormant_link）
-     * 持续 NS2_DORMANT_TICKS 秒的连接，主机永远不会采用它的输入——断开并
-     * 开唤醒突发，逼主机按会激活的回连路径重连。手动配对模式下不干预
+    /* 休眠看门狗：已订阅输入却始终没启用特性（ns2_adv_dormant_link）持续
+     * NS2_DORMANT_TICKS 秒的连接，主机永远不会采用它的输入——断开并开一次
+     * 连接窗口，逼主机按会启用特性的回连路径重连。主机此刻就在线（它是醒
+     * 着的），因此用回连形态而不是唤醒形态，免得把可能刚睡下的主机叫醒。
+     * 手动配对模式下不干预
      * （此时由用户主导流程）。 */
     if (!s_ses.pairing_mode) {
         for (size_t i = 0; i < SESSION_MAX; i++) {
@@ -1566,10 +1583,11 @@ void ns2_session_tick(void)
             }
             s_dormant_drops++;
             ses->dormant_ticks = 0;
-            ESP_LOGW(TAG, "dormant link (conn=%u, features not enabled) -> drop + wake "
+            ESP_LOGW(TAG, "dormant link (conn=%u, features not enabled) -> drop + reconnect "
                      "(attempt %u/%u)", ses->conn_handle,
                      (unsigned)s_dormant_drops, (unsigned)NS2_DORMANT_MAX_DROPS);
-            ns2_session_wake_request();
+            ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, esp_timer_get_time());
+            ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
             break;
         }
     }
@@ -1647,9 +1665,9 @@ void ns2_session_refresh_fw_version(void)
 }
 
 /** 控制面下发手柄身份（类型 + 配色）：切换等价于「旧手柄断电、新手柄上电」
- *  ——断开现有连接，按新身份重建出厂块与广播拓扑。新手柄没有凭证时自动进入
- *  配对流程发发现广播（主机眼里它是另一台设备，需要在主机配对页配一次）；
- *  已配对时发常态唤醒广播等主机回连。 */
+ *  ——断开现有连接，按新身份重建出厂块与广播拓扑，新身份不自动广播（用户
+ *  按连接键才发信号）。主机眼里另一台设备：没有凭证时连接键进配对流程，
+ *  已配对时连接键发回连形态。 */
 void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
                               uint32_t button_rgb, uint32_t grip_rgb)
 {
@@ -1670,9 +1688,10 @@ void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
     s_dormant_drops = 0;
     ns2_adv_lr_reset(&s_lr_timer);
     if (s_ses.synced) {
-        /* 先按新身份定好配对状态与出厂块，再断开：断连回调据此恢复广播，
-         * 新手柄（无凭证）进配对流程，老手柄（有凭证）发唤醒广播。 */
-        s_ses.pairing_mode = !ns2_session_paired();
+        /* 切换等价于旧手柄断电、新手柄上电：旧主机先断开，新身份不自动广播
+         * （真机换上的手柄不按键也不发信号），用户按连接键才连。 */
+        s_ses.pairing_mode = false;
+        ns2_adv_window_close(&s_adv_win);
         factory_init();
     }
     ESP_LOGI(TAG, "controller identity -> %s (body=%06lx btn=%06lx grip=%06lx, "
@@ -1682,10 +1701,10 @@ void ns2_session_set_identity(bool joycon, uint32_t body_rgb,
              (unsigned)ns2_session_paired(), (unsigned)s_ses.pairing_mode);
     if (ble_controller_connected()) {
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
-        return; /* 断连事件里按新身份恢复广播 */
+        return; /* 断连事件里按新身份同步广播（没有窗口即静默） */
     }
     if (s_ses.synced) {
-        resume_advertising();
+        apply_advertising();
     }
 }
 

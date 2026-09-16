@@ -70,8 +70,8 @@ export async function openMode(app: RemapadApp): Promise<void> {
 }
 
 /**
- * 打开配对页（设置列表第二行）。配对流程可能从开机就在跑，页面一开始就是
- * 「扫描中…」，所以这里只等页面自身的「配对」副标题可见，状态由用例各自轮询。
+ * 打开配对页（设置列表第二行）。设备开机静默，页面状态由开关广播决定，
+ * 所以这里只等页面自身的「配对」按钮文案可见，状态由用例各自轮询。
  */
 export async function openPairing(app: RemapadApp): Promise<void> {
   await openSettingsItem(app, '手柄配对');

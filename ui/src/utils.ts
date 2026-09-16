@@ -52,6 +52,8 @@ export function pairingLabel(state: PairingState): string {
   switch (state) {
     case 'scanning':
       return '扫描中…';
+    case 'advertising':
+      return '连接中…';
     case 'pairing':
       return '配对中…';
     case 'paired':
@@ -73,9 +75,13 @@ export function pairingLabel(state: PairingState): string {
 export type PairingNotice =
   | ''
   | '广播中，等待主机连接'
-  | '已退出配对流程'
+  | '已打开连接，等待主机连回来'
+  | '已断开连接'
+  | '已停止广播'
   | '已解除配对'
   | '当前状态无法执行 LR 配对'
+  | '连接命令未生效'
+  | '停止命令未生效'
   | '配对命令未生效'
   | '重启中…';
 
@@ -89,6 +95,7 @@ export function pairingColor(state: PairingState): string {
       return COLOR.primary;
     case 'connected':
       return COLOR.tertiary;
+    case 'advertising':
     case 'scanning':
     case 'pairing':
       return COLOR.tertiary;

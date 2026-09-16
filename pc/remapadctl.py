@@ -897,7 +897,7 @@ def print_local_help() -> None:
     print("  :ota [镜像路径]    推固件镜像（默认 firmware/build/remapad_firmware.bin）")
     print("  :quit              退出")
     print("其余行按固件 CLI 原样发送。手柄功能的完整控制面都在固件 CLI 里：")
-    print("  输入注入 key/stick，身份 ctrl，配对 pairing/wake/adv/drop，")
+    print("  输入注入 key/stick，身份 ctrl，连接 connect/pairing/wake/adv/drop，")
     print("  上报内容 motion/headset/fwver/fwpost/fwack/fwapply，链路 ltk/relay，")
     print("  反馈测试 rumble/lamp/haptic，屏幕 ui/backlight/screen，模式 mode。")
 

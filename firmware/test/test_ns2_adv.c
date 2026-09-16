@@ -1,9 +1,10 @@
 /**
  * NS2 广播载荷与广播策略（ns2_adv.c）：厂商数据里的状态位是主机唯一的唤醒
  * 判据。三种形态的字节在这里钉死——状态位或主机地址写错一位，主机就认不出
- * 这台手柄；策略部分——未配对与配对流程发发现广播、已配对只在显式唤醒窗口
- * 内发唤醒形态、调试页 HOME 按键按主机是否在线分流、JoyCon 组合的 L+R 自动
- * 注入节奏——同样在这里定死。
+ * 这台手柄；策略部分——没有被请求连接就静默（上电与主机睡下都不发信号）、
+ * 配对流程发发现广播、连接窗口内已配对发回连形态、唤醒窗口内已配对发唤醒
+ * 形态、调试页 HOME 按键按主机是否在线分流、JoyCon 组合的 L+R 自动注入
+ * 节奏——同样在这里定死。
  *
  * 期望值取自真机 Pro Controller 2 抓包（ndeadly/switch2_controller_research
  * 的 reconnect / wake 录制）：回连状态位 0x00，唤醒状态位 0x81，两者都
@@ -74,6 +75,9 @@ static void missing_host_mac_degrades_to_discovery(void)
     CHECK_BYTES(out, s_discovery, sizeof(s_discovery));
     ns2_adv_payload(out, 0x2069, NS2_ADV_WAKE, NULL);
     CHECK_BYTES(out, s_discovery, sizeof(s_discovery));
+    /* 静默不是形态：真被调用时按发现广播成型，绝不带主机地址或 0x81。 */
+    ns2_adv_payload(out, 0x2069, NS2_ADV_OFF, s_host_mac);
+    CHECK_BYTES(out, s_discovery, sizeof(s_discovery));
 }
 
 static void pid_follows_identity(void)
@@ -89,19 +93,37 @@ static void pid_follows_identity(void)
     CHECK_EQ(out[13], 0x20);
 }
 
-/** 广播形态决策：未配对与配对流程恒发发现广播（不能把主机从休眠里叫醒，
- *  也不该带着旧主机地址等新主机）；已配对发传入的常态形态（唤醒窗口外是
- *  0x00 回连形态，见 steady_form_follows_wake_window）。 */
-static void mode_choice_follows_pairing(void)
+/** 广播形态决策：设备与真机一样只在被请求后广播——没有窗口就是静默，
+ *  上电与主机睡下都回到这一态。 */
+static void mode_choice_follows_window(void)
 {
-    CHECK_EQ(ns2_adv_choose_mode(false, false, NS2_ADV_WAKE), NS2_ADV_DISCOVERY);
-    CHECK_EQ(ns2_adv_choose_mode(false, true, NS2_ADV_WAKE), NS2_ADV_DISCOVERY);
-    CHECK_EQ(ns2_adv_choose_mode(true, true, NS2_ADV_WAKE), NS2_ADV_DISCOVERY);
-    CHECK_EQ(ns2_adv_choose_mode(true, false, NS2_ADV_WAKE), NS2_ADV_WAKE);
-    CHECK_EQ(ns2_adv_choose_mode(true, false, NS2_ADV_RECONNECT), NS2_ADV_RECONNECT);
-    /* 误传发现形态时按回连处理：已配对身份不会因为参数错而静默，也不会平白
-     * 带上唤醒标志把主机叫醒。 */
-    CHECK_EQ(ns2_adv_choose_mode(true, false, NS2_ADV_DISCOVERY), NS2_ADV_RECONNECT);
+    ns2_adv_window_t win = {0};
+    const int64_t t0 = 1000000;
+
+    /* 没有窗口：静默，已配对也不例外。 */
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0), NS2_ADV_OFF);
+    CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0), NS2_ADV_OFF);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, NULL, t0), NS2_ADV_OFF);
+
+    /* 配对流程优先：要配的是新主机，发现广播不带旧主机的地址。 */
+    ns2_adv_window_open(&win, NS2_ADV_REQ_CONNECT, t0);
+    CHECK_EQ(ns2_adv_choose_mode(true, true, &win, t0), NS2_ADV_DISCOVERY);
+    CHECK_EQ(ns2_adv_choose_mode(false, true, &win, t0), NS2_ADV_DISCOVERY);
+
+    /* 连接窗口：已配对发回连形态（醒着的主机自己会连回来），未配对发发现
+     * 广播等主机来搜。 */
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0), NS2_ADV_RECONNECT);
+    CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0), NS2_ADV_DISCOVERY);
+
+    /* 唤醒窗口：已配对发唤醒形态把休眠主机叫起来；未配对没有主机可唤醒，
+     * 退化为发现广播。 */
+    ns2_adv_window_open(&win, NS2_ADV_REQ_WAKE, t0);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0), NS2_ADV_WAKE);
+    CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0), NS2_ADV_DISCOVERY);
+
+    /* 窗口到期即静默。 */
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_WAKE_WINDOW_US),
+             NS2_ADV_OFF);
 }
 
 /** JoyCon 组合确认：两只都就绪（收到 0x0c/0x04、输入被采用）后立即注入
@@ -178,41 +200,42 @@ static void host_mac_prefers_last_connected_address(void)
     CHECK(ns2_adv_choose_host_mac(NULL, NULL, 0) == NULL);
 }
 
-/** 常态广播形态按唤醒窗口决策：窗口外发回连形态 0x00——它不会把休眠中的
- *  主机叫醒，醒着的主机自己会按它连回来；只有显式唤醒请求打开的窗口内才发
- *  唤醒形态 0x81。主机连上或窗口到期都要收窗，否则链路断开后还会继续叫醒
- *  已经睡下的主机（实机现象：主机一进待机就被叫醒）。 */
-static void steady_form_follows_wake_window(void)
+/** 广播窗口的有效期：连接键与唤醒键各自取自己的时长，末微秒仍算窗口内，
+ *  到期与「主机连上就收窗」都立刻失效——主机随后睡下时不能再被叫醒。 */
+static void window_lifetime_follows_request(void)
 {
-    ns2_adv_wake_window_t win = {0};
+    ns2_adv_window_t win = {0};
     const int64_t t0 = 5 * 1000 * 1000LL;
 
-    /* 默认收窗：回连形态。 */
-    CHECK(!ns2_adv_wake_window_active(&win, t0));
-    CHECK_EQ(ns2_adv_steady_mode(ns2_adv_wake_window_active(&win, t0)), NS2_ADV_RECONNECT);
+    /* 收窗状态：没有窗口，也没有请求来源。 */
+    CHECK(!ns2_adv_window_active(&win, t0));
+    CHECK(!ns2_adv_window_active(NULL, t0));
 
-    /* 显式唤醒请求打开窗口：窗口内是唤醒形态，末微秒仍然有效。 */
-    ns2_adv_wake_window_open(&win, t0);
-    CHECK(ns2_adv_wake_window_active(&win, t0));
-    CHECK_EQ(ns2_adv_steady_mode(true), NS2_ADV_WAKE);
-    CHECK(ns2_adv_wake_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US - 1));
+    /* 连接键开窗：30 秒。 */
+    ns2_adv_window_open(&win, NS2_ADV_REQ_CONNECT, t0);
+    CHECK_EQ(win.request, NS2_ADV_REQ_CONNECT);
+    CHECK(ns2_adv_window_active(&win, t0));
+    CHECK(ns2_adv_window_active(&win, t0 + NS2_ADV_CONNECT_WINDOW_US - 1));
+    CHECK(!ns2_adv_window_active(&win, t0 + NS2_ADV_CONNECT_WINDOW_US));
 
-    /* 到期即失效：形态回落到回连。 */
-    CHECK(!ns2_adv_wake_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US));
-    CHECK_EQ(ns2_adv_steady_mode(ns2_adv_wake_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US)),
-             NS2_ADV_RECONNECT);
+    /* HOME 开窗：10 秒，比连接窗口短。 */
+    ns2_adv_window_open(&win, NS2_ADV_REQ_WAKE, t0);
+    CHECK_EQ(win.request, NS2_ADV_REQ_WAKE);
+    CHECK(ns2_adv_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US - 1));
+    CHECK(!ns2_adv_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US));
 
-    /* 主机连上就收窗：它随后睡下（链路断开）时不能再发唤醒形态。 */
-    ns2_adv_wake_window_open(&win, t0);
-    CHECK(ns2_adv_wake_window_active(&win, t0));
-    ns2_adv_wake_window_close(&win);
-    CHECK(!ns2_adv_wake_window_active(&win, t0 + 1));
+    /* 再按一次连接键：按新请求重新计时（到期时刻从再按的时刻往后算 30 秒），
+     * 并把窗口时长换成连接键的。 */
+    const int64_t t1 = t0 + NS2_ADV_WAKE_WINDOW_US;
+    ns2_adv_window_open(&win, NS2_ADV_REQ_CONNECT, t1);
+    CHECK_EQ(win.request, NS2_ADV_REQ_CONNECT);
+    CHECK(ns2_adv_window_active(&win, t0 + NS2_ADV_CONNECT_WINDOW_US));
+    CHECK(ns2_adv_window_active(&win, t1 + NS2_ADV_WAKE_WINDOW_US));
+    CHECK(!ns2_adv_window_active(&win, t1 + NS2_ADV_CONNECT_WINDOW_US));
 
-    /* 连按唤醒请求重新计时，不会把窗口算短。 */
-    ns2_adv_wake_window_open(&win, t0);
-    ns2_adv_wake_window_open(&win, t0 + NS2_ADV_WAKE_WINDOW_US / 2);
-    CHECK(ns2_adv_wake_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US));
-    CHECK(!ns2_adv_wake_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US * 2));
+    /* 主机连上 / 用户停止广播：收窗后立刻失效。 */
+    ns2_adv_window_close(&win);
+    CHECK(!ns2_adv_window_active(&win, t0 + 1));
 }
 
 /** 调试页 HOME 按键走实体手柄语义：主机在线时它就是主页键（注入按键），
@@ -229,10 +252,10 @@ HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"唤醒广播带 0x81 状态位", wake_sets_wake_status},
                 {"缺少主机地址时退化为发现形态", missing_host_mac_degrades_to_discovery},
                 {"型号 ID 随身份变化", pid_follows_identity},
-                {"已配对发唤醒形态、未配对发发现形态", mode_choice_follows_pairing},
+                {"没被请求连接就静默，窗口内才发对应形态", mode_choice_follows_window},
                 {"未配对 JoyCon 就绪后注入 L+R 并重试", lr_injection_follows_readiness},
                 {"休眠链路按特性启用判定", dormant_link_follows_feature_enable},
                 {"回连广播用主机最近一次连接的地址", host_mac_prefers_last_connected_address},
-                {"唤醒窗口外只发回连形态", steady_form_follows_wake_window},
+                {"连接窗口与唤醒窗口各按自己的时长收窗", window_lifetime_follows_request},
                 {"HOME 按键按主机在线与否分流", home_key_follows_link_state},
                 {"厂商数据偏移与尾部标志", manufacturer_data_offsets});

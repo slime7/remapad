@@ -133,22 +133,21 @@ function startPairingFlow(): void {
   later(HOST_PAIR_MS, hostConnects);
 }
 
-/** 已配对身份的回连：主机按常驻的回连形态连上来，只剩握手窗口。 */
-function startReconnectFlow(): void {
-  setPairing('pairing');
+/** 连接键（已配对身份）：连接窗口内发回连形态，主机看到就连上来。 */
+function startConnectFlow(): void {
+  setPairing('advertising');
   later(HOST_RECONNECT_MS, hostConnects);
 }
 
-/** 切换手柄身份（类型或配色）：旧手柄断电、新手柄上电，按新身份的凭证重走。 */
+/**
+ * 切换手柄身份（类型或配色）：等价于旧手柄断电、新手柄上电——新身份不自动
+ * 发信号（真机换上的手柄不按键也不广播），用户按连接键才连。
+ */
 function beginIdentityFlow(): void {
   clearMockTimers();
   state.controller = null;
   setPlayerLed(0);
-  if (bonded[bondKey()]) {
-    startReconnectFlow();
-  } else {
-    startPairingFlow();
-  }
+  setPairing(bonded[bondKey()] ? 'paired' : 'idle');
 }
 
 /** 浏览器环境下的产品控制面协议 mock；不模拟 PocketJS UI binding。 */
@@ -266,8 +265,28 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       break;
     }
 
+    case 'connect':
+      /* 连接键：已配对发回连形态等主机连回来，未配对进配对流程发发现广播。 */
+      clearMockTimers();
+      if (bonded[bondKey()]) {
+        startConnectFlow();
+      } else {
+        startPairingFlow();
+      }
+      reply({ t: 'pairingResult', id, state: state.pairing });
+      break;
+
+    case 'disconnect':
+      /* 停止广播：收掉连接窗口与配对流程，有链路时一并断开，回到静默。 */
+      clearMockTimers();
+      state.controller = null;
+      setPlayerLed(0);
+      setPairing(bonded[bondKey()] ? 'paired' : 'idle');
+      reply({ t: 'pairingResult', id, state: state.pairing });
+      break;
+
     case 'startPairing':
-      /* 配对键：先断开当前主机，再发发现广播等新主机搜索（配完自动退出）。 */
+      /* 配新主机：先断开当前主机，再发发现广播等新主机搜索（配完自动退出）。 */
       clearMockTimers();
       state.controller = null;
       setPlayerLed(0);
@@ -275,21 +294,14 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       reply({ t: 'pairingResult', id, state: 'scanning' });
       break;
 
-    case 'stopPairing':
-      clearMockTimers();
-      /* 已配对回常态等主机回连；未配对静默（真机没配对时不广播）。 */
-      setPairing(bonded[bondKey()] ? 'paired' : 'idle');
-      reply({ t: 'pairingResult', id, state: state.pairing });
-      break;
-
     case 'unpair':
       clearMockTimers();
       bonded[bondKey()] = false;
       state.controller = null;
       setPlayerLed(0);
-      // 凭证清空后按「从未配过」处理：回到配对流程发发现广播。
-      startPairingFlow();
-      reply({ t: 'unpairResult', id, state: 'scanning' });
+      // 凭证清空后回连与唤醒都失去目标：静默，等用户按连接键重新配对。
+      setPairing('idle');
+      reply({ t: 'unpairResult', id, state: 'idle' });
       break;
 
     case 'pressLr':
@@ -337,5 +349,5 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
   }
 }
 
-/* 上电即按凭证决定形态：mock 里主机从未配过，开机自动进入配对流程。 */
-startPairingFlow();
+/* 上电不主动发信号（真机不按键不广播）：mock 里主机从未配过，开机静默等
+ * 用户按连接键。 */

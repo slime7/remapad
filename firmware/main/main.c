@@ -1,5 +1,4 @@
 #include <inttypes.h>
-#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -30,8 +29,9 @@ static void nvs_init(void)
     ESP_ERROR_CHECK(err);
 }
 
-/** PWR 按键事件（pwr-key 任务上下文）：短按息屏/亮屏，长按 3-6s 切换
- *  连接模式（device ↔ host，桥接锁定；经 bridge 外部队列走持久化路径）。 */
+/** PWR 按键事件（pwr-key 任务上下文）：短按息屏/亮屏，长按 3-6s 是连接键
+ *  ——有链路或正在广播就断开并静默，否则打开连接（已配对身份回连形态、
+ *  未配对身份发现广播）。命令经 bridge 外部队列在 owner task 上执行。 */
 static void pwr_key_handler(pwr_key_event_t event, void *user)
 {
     (void)user;
@@ -39,11 +39,7 @@ static void pwr_key_handler(pwr_key_event_t event, void *user)
         js_bridge_screen_power(!app_config_get()->screen_on);
         return;
     }
-    const bool to_host = app_config_get()->usb_role != APP_CONFIG_USB_HOST;
-    char json[64];
-    snprintf(json, sizeof(json), "{\"t\":\"setUsbRole\",\"role\":\"%s\",\"id\":0}",
-             to_host ? "host" : "device");
-    js_bridge_submit_command(json);
+    js_bridge_connect_key();
 }
 
 void app_main(void)

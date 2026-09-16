@@ -11,8 +11,19 @@ export type ControllerMode = 'ble' | 'usb' | 'handheld';
 /** USB 控制器角色：device=插电脑（COM/烧录/日志），otg=插电脑（OTG 非串口），host=插手柄（读取输入）。 */
 export type UsbRole = 'device' | 'otg' | 'host';
 
-/** 手柄连接与配对状态。 */
-export type PairingState = 'idle' | 'scanning' | 'pairing' | 'paired' | 'connected' | 'error';
+/**
+ * 手柄连接与配对状态：idle=未配对且静默、paired=已配对且静默（等用户按连接键）、
+ * scanning=配对流程在发发现广播、advertising=连接窗口在发回连形态、
+ * pairing=已连接但注册握手未完成、connected=已连接并可输入。
+ */
+export type PairingState =
+  | 'idle'
+  | 'scanning'
+  | 'advertising'
+  | 'pairing'
+  | 'paired'
+  | 'connected'
+  | 'error';
 
 /** 手柄设备型号。 */
 export type ControllerModel = 'pro-controller-2' | 'joycon-l' | 'joycon-r';
@@ -76,8 +87,9 @@ export type DeviceCmd =
   | { t: 'setUsbRole'; id: number; role: UsbRole }
   | { t: 'getControllerConfig'; id: number }
   | { t: 'setControllerConfig'; id: number; config: ControllerConfig }
+  | { t: 'connect'; id: number }
+  | { t: 'disconnect'; id: number }
   | { t: 'startPairing'; id: number }
-  | { t: 'stopPairing'; id: number }
   | { t: 'unpair'; id: number }
   | { t: 'pressLr'; id: number }
   | { t: 'triggerRumble'; id: number; frequencyHz: number; amplitude: number; durationMs: number }
@@ -128,6 +140,7 @@ export type DeviceMsg =
    * 字面量（构建期字体字符集按源码字面量扫描烘焙），固件回发的文本直接
    * 渲染会显示成豆腐块。 */
   | { t: 'usbRoleSet'; id: number; role: UsbRole; active: boolean }
+  /** connect / disconnect / startPairing 的应答：只回状态，文案由 UI 给出。 */
   | { t: 'pairingResult'; id: number; state: PairingState }
   | { t: 'unpairResult'; id: number; state: PairingState }
   | { t: 'pressLrAck'; id: number; success: boolean }

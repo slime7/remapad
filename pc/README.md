@@ -58,8 +58,9 @@ key a 200        注入按键（a b x y plus minus home capture c l r zl zr ls r
                  up down left right gl gr ui），key release 全部松开
 stick l 2048 2048  设摇杆电平 0-4095（stick reset 回中）
 ctrl joycon      手柄形态与配色（ctrl pro 0x2d2d2d 0x8b0000 0x2d2d2d），持久化
-pairing start    配对（sync key）：断链 + 发现广播；pairing stop 停
-wake             打开唤醒窗口；adv auto|wake|reconnect 钉常态广播形态
+connect          连接键：开连接窗口等主机连上来（未配对身份进配对流程）
+pairing start    配新主机：断链 + 发现广播；pairing stop 停止广播并断链
+wake             打开唤醒窗口；adv auto|wake|reconnect 钉窗口内形态
 drop             断开当前主机
 motion 3         0x09 运动块内容（0 全零 / 1 抓包占位 / 2 不带 / 3 真实样本）
 headset 0x05     耳机状态字节（auto 回到按输入设备派生）

@@ -63,10 +63,11 @@ static void cli_help(void)
     cli_print("  ctrl [pro|joycon [body button grip]]");
     cli_print("                      controller type + 0xRRGGBB colors, persisted (no arg = current)");
     cli_print("  mode device|host    usb connection mode");
-    cli_print("  pairing start|stop  sync key: drop link + discovery advertising");
+    cli_print("  connect             connection key: advertising window (PWR long press)");
+    cli_print("  pairing start|stop  pair a new host: drop link + discovery advertising");
     cli_print("  wake                open the wake window (drop link if connected)");
     cli_print("  adv auto|wake|reconnect");
-    cli_print("                      steady form while paired (default auto, no arg = current)");
+    cli_print("                      form inside the advertising window (default auto)");
     cli_print("  report              dump the last input report actually sent");
     cli_print("  motion [0|1|2|3]    0x09 motion block (no arg = current)");
     cli_print("                      0 zeros / 1 stamp / 2 none / 3 sensor");
@@ -245,7 +246,7 @@ static const char *link_state_name(uint8_t state)
     }
 }
 
-/** 广播形态短名：未在广播（已连接或未配对静默）时报 off。 */
+/** 广播形态短名：没在广播（设备静默、已连接或配对流程之外）时报 off。 */
 static const char *link_adv_name(const ns2_session_status_t *status)
 {
     if (!status->advertising) {
@@ -256,6 +257,8 @@ static const char *link_adv_name(const ns2_session_status_t *status)
         return "wake";
     case NS2_ADV_RECONNECT:
         return "reconnect";
+    case NS2_ADV_OFF:
+        return "off";
     default:
         return "discovery";
     }
@@ -425,46 +428,54 @@ static void cli_pairing(const char *arg)
 {
     if (strcmp(arg, "start") == 0) {
         js_bridge_submit_command("{\"t\":\"startPairing\",\"id\":0}");
-        cli_print("ok pairing start queued");
+        cli_print("ok pair-new-host queued (drop link + discovery advertising)");
     } else if (strcmp(arg, "stop") == 0) {
-        js_bridge_submit_command("{\"t\":\"stopPairing\",\"id\":0}");
-        cli_print("ok pairing stop queued");
+        js_bridge_submit_command("{\"t\":\"disconnect\",\"id\":0}");
+        cli_print("ok advertising stop queued (drop link, silent)");
     } else {
         cli_print("err usage: pairing start|stop");
     }
 }
 
-/** 唤醒请求：打开唤醒窗口（未连接时常态广播升到 0x81 把休眠主机叫起来），
- *  已连接就断开让主机按唤醒广播重连一次。 */
+/** 连接键：打开连接窗口（已配对发回连形态等主机连回来，未配对进配对流程）。
+ *  与 PWR 长按、屏幕「连接」按钮同一条路径。 */
+static void cli_connect(void)
+{
+    js_bridge_submit_command("{\"t\":\"connect\",\"id\":0}");
+    cli_print("ok connect queued (connection window)");
+}
+
+/** 唤醒请求：打开唤醒窗口（未连接时发 0x81 把休眠主机叫起来），已连接就
+ *  断开让主机按唤醒广播重连一次。 */
 static void cli_wake(void)
 {
     ns2_session_wake_request();
     cli_print("ok wake window opened");
 }
 
-/** 常态广播形态 A/B：auto 按唤醒窗口决策（默认），wake/reconnect 钉住一种
- *  形态做实机对账。 */
+/** 广播窗口内形态的 A/B：auto 按窗口来源决策（默认，连接键回连、HOME 唤醒），
+ *  wake/reconnect 钉住窗口内的已配对形态做实机对账。 */
 static void cli_adv(const char *arg)
 {
     if (strcmp(arg, "auto") == 0) {
-        ns2_session_set_steady_form(NS2_STEADY_AUTO);
-        cli_print("ok steady form: auto");
+        ns2_session_set_window_form(NS2_WINDOW_FORM_AUTO);
+        cli_print("ok window form: auto");
     } else if (strcmp(arg, "wake") == 0) {
-        ns2_session_set_steady_form(NS2_STEADY_WAKE);
-        cli_print("ok steady form: wake (0x81)");
+        ns2_session_set_window_form(NS2_WINDOW_FORM_WAKE);
+        cli_print("ok window form: wake (0x81)");
     } else if (strcmp(arg, "reconnect") == 0) {
-        ns2_session_set_steady_form(NS2_STEADY_RECONNECT);
-        cli_print("ok steady form: reconnect (0x00)");
+        ns2_session_set_window_form(NS2_WINDOW_FORM_RECONNECT);
+        cli_print("ok window form: reconnect (0x00)");
     } else if (arg[0] == '\0') {
-        switch (ns2_session_steady_form()) {
-        case NS2_STEADY_WAKE:
-            cli_print("steady form: wake (0x81)");
+        switch (ns2_session_window_form()) {
+        case NS2_WINDOW_FORM_WAKE:
+            cli_print("window form: wake (0x81)");
             break;
-        case NS2_STEADY_RECONNECT:
-            cli_print("steady form: reconnect (0x00)");
+        case NS2_WINDOW_FORM_RECONNECT:
+            cli_print("window form: reconnect (0x00)");
             break;
         default:
-            cli_print("steady form: auto (wake window)");
+            cli_print("window form: auto (window request)");
             break;
         }
     } else {
@@ -945,6 +956,8 @@ static void cli_dispatch(char *line)
         cli_mode(arg);
     } else if (strcmp(line, "pairing") == 0) {
         cli_pairing(arg);
+    } else if (strcmp(line, "connect") == 0) {
+        cli_connect();
     } else if (strcmp(line, "wake") == 0) {
         cli_wake();
     } else if (strcmp(line, "adv") == 0) {

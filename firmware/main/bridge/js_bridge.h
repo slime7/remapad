@@ -35,6 +35,10 @@ esp_err_t js_bridge_enqueue(const char *cmd_json);
  *  在 js_bridge_service 里走同一分发路径；不阻塞调用方。 */
 esp_err_t js_bridge_submit_command(const char *cmd_json);
 
+/** PWR 长按的连接键：有链路或正在广播就提交「停止广播」，否则提交「连接」。
+ *  UI 的连接按钮按同一规则在两侧各自推导，两条入口走同一条命令路径。 */
+void js_bridge_connect_key(void);
+
 /** 外部任务向 UI 广播事件 JSON：经队列由 owner task 回发给 guest。 */
 void js_bridge_post_event(const char *event_json);
 

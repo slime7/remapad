@@ -66,8 +66,12 @@ void ble_controller_notify_input_09(uint16_t conn_handle, const uint8_t report[6
 /** 发送指令应答帧（0x001E，需该主机已开 0x001F CCCD）到指定连接。 */
 void ble_controller_notify_answer(uint16_t conn_handle, const uint8_t *frame, size_t len);
 
-/** 停止全部广播实例（未配对空闲态不保持可发现广播，与真实手柄一致）。 */
+/** 停止全部广播实例（设备静默时不留可发现广播，与真实手柄一致）。 */
 void ble_controller_adv_stop(void);
+
+/** 停止指定身份在发的广播实例（Pro 两实例同址，一并停止）：JoyCon 组合下
+ *  只停静默的那一只，另一只的连接与广播不受影响。 */
+void ble_controller_adv_stop_identity(uint8_t identity);
 
 /**
  * 以 31 字节原始载荷启动一个广播实例。addr 为 NULL 时用公共伪装地址

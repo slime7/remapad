@@ -5,6 +5,18 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 PocketJS 屏幕 UI。
 工程分为 `ui/`（PocketJS 前端，Vue Vapor + Tailwind）与 `firmware/`（ESP-IDF 固件）两个工作区；
 NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格见 [docs/hardware.md](docs/hardware.md)。
 
+## 名词约定
+
+文档、代码注释与提交信息里的几组称呼按下面含义使用，不要混用：
+
+- **目标主机**：接收本设备手柄报告的那台游戏机；`主机`、`游戏机`、`NS`、`Switch`、`NS2`、`Switch 2` 都指它。
+  需要区分型号时写全称（如 `NS2 主机`），泛指协议行为时用 `主机`。
+- **本硬件**：运行 Remapad 固件的这块板卡；`ESP`、`板子`、`ESP32`、`ESP32-S3` 都指它（对外型号为微雪 ESP32-S3-Touch-LCD-1.69）。
+- **连接键**：用户按下就开广播的那颗键——配对页的「连接」按钮与 PWR 长按 3 秒是同一个动作；
+  它在未配对身份上等价于真机的配对键，因此也叫 `配对键`。
+- **手柄身份**：本设备对外呈现的手柄（`Pro` 或 `JoyCon 组合`），与「目标主机」不是一回事；
+  指 USB 直插的实体手柄时写 `输入设备` 或 `USB 手柄`。
+
 ## 开始任务前必读
 
 在参与本项目的设计、编码、审查或重构任务前，必须阅读以下项目文档：
@@ -92,6 +104,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 
 ## 项目特有约束
 
+- **连接由用户发起**：上电与断连（主机睡下）都静默，只有连接键（配对页「连接」、PWR 长按 3 秒）打开连接窗口、
+  未连接时按调试页 HOME 打开唤醒窗口把休眠主机叫起来；窗口到期或主机连上即收窗。改这条策略前先读 [ADR 0038](docs/adr/0038-user-initiated-connection-window.md)。
 - **缺陷修复先写用例**：改 UI 的 bug 先在 `ui/tests/e2e/` 加一条能复现的红用例，改完 `ui/src` 后转绿才算修完；
   固件里与硬件无关的逻辑缺陷同样先补 `firmware/test/` 的主机端用例。
   用例标题写用户看到的现象，不放宽断言迁就实现，规则见 [docs/TESTING.md](docs/TESTING.md)。
