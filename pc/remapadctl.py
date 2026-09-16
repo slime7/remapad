@@ -11,12 +11,19 @@
     uv run python remapadctl.py -p COM3                   # 桥接 + 交互命令行
     uv run python remapadctl.py -p COM3 --no-pad          # 只当串口命令行用
     uv run python remapadctl.py -p COM3 status            # 一次性命令后退出
+    uv run python remapadctl.py -p COM3 --all             # 拉取设备全部观测数据
     uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
     uv run python remapadctl.py -p COM3 --log --seconds 20
     uv run python remapadctl.py -p COM3 --upgrade --wait
 
-交互模式里不是 `:` 开头的行按固件 CLI 命令发送；`:` 开头的是本工具命令：
-    :help  :shot [路径]  :log [秒]  :ota [镜像]  :quit
+交互模式里不是 `:` 开头的行按固件 CLI 原样发送，手柄功能由此完整可控：
+输入注入 key/stick、身份 ctrl、配对 pairing/wake/adv/drop、上报内容
+motion/headset/fwver/fwpost/fwack/fwapply、链路 ltk/relay、反馈测试
+rumble/lamp/haptic、屏幕 ui/backlight/screen、模式 mode（固件侧 help 有全表）。
+数据命令都由固件现场读数应答，不经过 UI 层——UI 冻结（截图期间、页面门控
+不取数）不影响 status/mem 等数据的实时性。
+`:` 开头的是本工具命令：
+    :help  :all  :shot [路径]  :log [秒]  :ota [镜像]  :quit
 
 手柄转发默认只在交互模式里开：一次性命令、截图、只读日志与升级不碰手柄（否则主机会看到
 手柄闪一下），要在这些模式里也转发就加 --pad，任何模式下都用 --no-pad 彻底关掉。
@@ -107,6 +114,34 @@ OTA_STATE_FAILED = 3
 #: 升级后等设备回来的超时与轮询间隔。
 REOPEN_TIMEOUT_S = 60.0
 REOPEN_INTERVAL_S = 1.0
+
+
+#: 一键拉取设备数据的命令清单（每个都有无参回读；见 firmware/main/console/cli.c）。
+ALL_QUERIES = (
+    "status",
+    "mem",
+    "version",
+    "link",
+    "pad",
+    "usb",
+    "report",
+    "ui",
+    "adv",
+    "headset",
+    "fwver",
+    "fwack",
+    "fwpost",
+    "fwapply",
+    "ctrl",
+    "backlight",
+    "screen",
+    "relay",
+    "motion",
+    "ltk",
+    "rumble",
+    "lamp",
+    "haptic",
+)
 
 
 def load_hid():
@@ -673,6 +708,8 @@ class Session:
         rest = parts[1:]
         if name in ("help", "h", "?"):
             print_local_help()
+        elif name == "all":
+            self.run_all()
         elif name == "shot":
             self.request_shot(rest[0] if rest else None)
         elif name == "log":
@@ -756,25 +793,55 @@ class Session:
             time.sleep(0.001)
         return self.stop_code
 
-    def run_command(self, command: str) -> int:
-        """一次性命令：发一条、等回复、退出（桥接转发同时照跑）。"""
-        self.one_shot = True
-        self.expect_reply = True
-        self.forward = self.args.pad and not self.args.no_pad
+    def query_once(self, command: str, hold_full_window: bool = False) -> bool:
+        """发一条设备命令并等回复安静下来；收到任何行都返回 True。
+
+        hold_full_window 用于应答不在 CLI 任务上、晚几拍才回的命令（mem 的
+        报告由 PocketJS owner task 下一帧打印）：这类命令禁用安静窗提前退出，
+        等满 --reply-wait，否则会话在 ok 之后、报告到达之前就退了。
+        """
         self.link.purge_input()
         self.decoder = FrameDecoder()
+        self.reply_seen = False
         deadline = time.monotonic() + self.args.reply_wait
         self.reply_deadline = deadline
         self.reply_hard_deadline = deadline
         self.send_cli(command)
         while not self.stop:
             now = time.monotonic()
-            if now >= deadline or (self.reply_seen and now >= self.reply_deadline):
+            quiet_expired = self.reply_seen and now >= self.reply_deadline
+            if now >= deadline or (quiet_expired and not hold_full_window):
                 break
             self.pump(now)
             time.sleep(0.001)
-        if not self.reply_seen:
+        return self.reply_seen
+
+    def run_command(self, command: str) -> int:
+        """一次性命令：发一条、等回复、退出（桥接转发同时照跑）。"""
+        self.one_shot = True
+        self.expect_reply = True
+        self.forward = self.args.pad and not self.args.no_pad
+        # mem 的应答由 owner task 下一帧才打印，等满整个窗口再收尾。
+        hold = command.split()[0] == "mem"
+        if not self.query_once(command, hold_full_window=hold):
             print(f"{self.args.reply_wait:.1f} 秒内没有等到命令回复", file=sys.stderr)
+            return 1
+        return 0
+
+    def run_all(self) -> int:
+        """一键拉取设备全部观测数据：数据全部由固件现场读取（不经过 UI 层，
+        截图冻结或页面门控不影响实时性），每个 getter 发一条、等回复安静。"""
+        self.one_shot = True
+        self.expect_reply = True
+        self.forward = self.args.pad and not self.args.no_pad
+        missing = []
+        for command in ALL_QUERIES:
+            print(f"--- {command} " + "-" * max(0, 56 - len(command)), flush=True)
+            hold = command == "mem"  # mem 的应答下一帧才回，等满窗口。
+            if not self.query_once(command, hold_full_window=hold):
+                missing.append(command)
+        if missing:
+            print("没有回复的命令：" + " ".join(missing), file=sys.stderr)
             return 1
         return 0
 
@@ -824,11 +891,15 @@ class Session:
 def print_local_help() -> None:
     print("本工具命令：")
     print("  :help              显示这份清单")
+    print("  :all               拉取设备全部观测数据（status/mem/link/... 一键轮询）")
     print("  :shot [路径]       抓实机截图并存成 PNG（默认 pc/shots/）")
     print("  :log [秒|off]      透传设备日志（0 表示持续到 :log off）")
     print("  :ota [镜像路径]    推固件镜像（默认 firmware/build/remapad_firmware.bin）")
     print("  :quit              退出")
-    print("其余行按固件 CLI 命令发送（status / key / ui / pad / rate / headset / shot ...）")
+    print("其余行按固件 CLI 原样发送。手柄功能的完整控制面都在固件 CLI 里：")
+    print("  输入注入 key/stick，身份 ctrl，配对 pairing/wake/adv/drop，")
+    print("  上报内容 motion/headset/fwver/fwpost/fwack/fwapply，链路 ltk/relay，")
+    print("  反馈测试 rumble/lamp/haptic，屏幕 ui/backlight/screen，模式 mode。")
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -860,6 +931,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--shot-timeout", type=float, default=10.0,
                         help="等一次完整截图的秒数（默认 10）")
     parser.add_argument("--log", action="store_true", help="只读设备日志（--seconds 控制时长）")
+    parser.add_argument("--all", action="store_true",
+                        help="拉取设备全部观测数据（status/mem/link/... 逐条轮询）后退出")
     parser.add_argument("--upgrade", action="store_true", help="推固件镜像后重启设备")
     parser.add_argument("--image", default=DEFAULT_IMAGE,
                         help=f"镜像路径（默认 {DEFAULT_IMAGE}）")
@@ -910,6 +983,8 @@ def main(argv=None) -> int:
                 code = session.run_upgrade()
             elif args.shot:
                 code = session.run_shot(args.out)
+            elif args.all:
+                code = session.run_all()
             elif args.log:
                 code = session.run_log(args.seconds, args.reset, args.raw)
             elif command:

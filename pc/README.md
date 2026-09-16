@@ -34,6 +34,7 @@ uv run python remapadctl.py --dump --seconds 10       # 采集 10 秒原始报�
 uv run python remapadctl.py -p COM3                   # 桥接 + 交互命令行
 uv run python remapadctl.py -p COM3 --no-pad          # 只当串口命令行用，不转发手柄
 uv run python remapadctl.py -p COM3 status            # 执行一条设备命令后退出
+uv run python remapadctl.py -p COM3 --all             # 拉取设备全部观测数据后退出
 uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
 uv run python remapadctl.py -p COM3 --log --seconds 20
 uv run python remapadctl.py -p COM3 --log --reset --seconds 25
@@ -42,11 +43,43 @@ uv run python remapadctl.py -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --n
 uv run python remapadctl.py -p COM3 --logs            # 桥接的同时打印设备日志
 ```
 
-交互模式里不是 `:` 开头的行按固件 CLI 命令发送（`status`、`key a`、`ui on`、
-`headset auto`、`pad`…），`:` 开头的是本工具命令：
+`--all` 把设备的全部观测命令各发一遍（status / mem / version / link / pad / usb /
+report / ui / adv / headset / fwver / fwack / fwpost / fwapply / ctrl / backlight /
+screen / relay / motion / ltk / rumble / lamp / haptic），数据全部由固件现场读取——
+不经过 UI 层，UI 冻结（截图期间、页面门控不取数）不影响实时性。
+
+## 串口命令面（完整控制手柄）
+
+交互模式里不是 `:` 开头的行按固件 CLI 原样发送，手柄功能的完整控制面都在固件 CLI 里
+（设备侧敲 `help` 有全表）：
+
+```text
+key a 200        注入按键（a b x y plus minus home capture c l r zl zr ls rs
+                 up down left right gl gr ui），key release 全部松开
+stick l 2048 2048  设摇杆电平 0-4095（stick reset 回中）
+ctrl joycon      手柄形态与配色（ctrl pro 0x2d2d2d 0x8b0000 0x2d2d2d），持久化
+pairing start    配对（sync key）：断链 + 发现广播；pairing stop 停
+wake             打开唤醒窗口；adv auto|wake|reconnect 钉常态广播形态
+drop             断开当前主机
+motion 3         0x09 运动块内容（0 全零 / 1 抓包占位 / 2 不带 / 3 真实样本）
+headset 0x05     耳机状态字节（auto 回到按输入设备派生）
+fwver 9.9.9      上报给主机的手柄固件版本；fwpost / fwack / fwapply 配套假升级
+ltk 1            LTK 存储形态；relay 1 同代透传开关
+rumble 200 0     手动震动（0-255 双侧，rumble off 停）；lamp 0xF 玩家灯；
+                 haptic 0x10 触觉采样——与主机反馈走同一条编码投递路径
+ui on            手柄操控屏幕模式（ui off 退出）
+backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode host USB 角色
+```
+
+无参敲这些命令即回读当前值（`backlight`、`ctrl`、`motion`、`relay`、`rumble`…），
+`--all` 拉的就是这批回读。`mem` 的应答在下一帧打出：PSRAM / 内部堆的余量与历史
+最低、QuickJS 记账与对象计数，观察内存趋势不用等 60 秒一条的周期日志。
+
+交互模式里 `:` 开头的是本工具命令：
 
 ```text
 :help              显示工具命令清单
+:all               拉取设备全部观测数据（同 --all）
 :shot [路径]       抓实机截图并存成 PNG
 :log [秒|off]      透传设备日志（0 表示持续到 :log off）
 :ota [镜像路径]    推固件镜像（默认 ../firmware/build/remapad_firmware.bin）

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <stdint.h>
+
 #include "esp_err.h"
+#include "pad_state.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,6 +26,17 @@ esp_err_t dp_plane_start(void);
  * 独立完成。
  */
 void dp_plane_debug_key(uint32_t buttons_mask, uint32_t hold_ms);
+
+/**
+ * 手动反馈注入（串口联调用）：把一次反馈事件叠加进持续帧（fields 用
+ * pad/feedback.h 的 PAD_FEEDBACK_FIELD_* 位），数据面任务下一拍按接入设备的
+ * 布局编码并投递——与主机反馈走完全同一条路径。可用于没有主机在场时，
+ * 从串口脚本验证震动 / 玩家灯 / 触觉采样到实体手柄的整条反馈链路。
+ */
+void dp_plane_inject_feedback(uint8_t fields, const pad_feedback_t *event);
+
+/** 读出当前持续反馈帧（串口回读用）：叠加后的震动、玩家灯与触觉采样。 */
+void dp_plane_feedback_held(pad_feedback_t *out);
 
 #ifdef __cplusplus
 }

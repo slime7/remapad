@@ -115,6 +115,18 @@ static volatile bool s_feedback_pending;
  * BLE 回调里碰 USB 传输。持续帧是必需的——每个事件都从默认值重建，会把刚
  * 点亮的玩家灯被随后的震动帧写灭，马达强度也在主机不更新时来回跳。
  */
+/** 叠加进持续帧并标记待投递；PC 侧收叠加后的状态（打印与对账用）。 */
+static void feedback_commit(uint8_t fields, const pad_feedback_t *event)
+{
+    pad_feedback_t merged;
+    portENTER_CRITICAL(&s_feedback_mux);
+    pad_feedback_apply(&s_feedback, fields, event);
+    s_feedback_pending = true;
+    merged = s_feedback;
+    portEXIT_CRITICAL(&s_feedback_mux);
+    input_link_send_feedback(&merged);
+}
+
 static void feedback_listener(ns2_feedback_type_t type, const void *payload, void *user)
 {
     (void)user;
@@ -152,17 +164,27 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
     default:
         break;
     }
-    if (fields == 0) {
+    if (fields != 0) {
+        feedback_commit(fields, &event);
+    }
+}
+
+void dp_plane_inject_feedback(uint8_t fields, const pad_feedback_t *event)
+{
+    if (fields == 0 || event == NULL) {
         return;
     }
-    pad_feedback_t merged;
+    feedback_commit(fields, event);
+}
+
+void dp_plane_feedback_held(pad_feedback_t *out)
+{
+    if (out == NULL) {
+        return;
+    }
     portENTER_CRITICAL(&s_feedback_mux);
-    pad_feedback_apply(&s_feedback, fields, &event);
-    s_feedback_pending = true;
-    merged = s_feedback;
+    *out = s_feedback;
     portEXIT_CRITICAL(&s_feedback_mux);
-    /* PC 侧收叠加后的状态（打印与对账用），与写回手柄的帧一致。 */
-    input_link_send_feedback(&merged);
 }
 
 /**

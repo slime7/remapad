@@ -20,6 +20,7 @@
 #include "dp_source.h"
 #include "dp_ui.h"
 #include "dp_plane.h"
+#include "feedback.h"
 #include "input_source.h"
 #include "layout.h"
 #include "ns2_identity.h"
@@ -47,6 +48,7 @@ static void cli_help(void)
 {
     cli_print("remapad cli commands:");
     cli_print("  status              system status one-liner");
+    cli_print("  mem                 live memory snapshot (psram/internal/js, printed next frame)");
     cli_print("  key <name> [ms]     inject debug key (key release clears)");
     cli_print("                      a b x y plus minus home capture c l r zl zr");
     cli_print("                      ls rs up down left right gl gr ui");
@@ -55,22 +57,28 @@ static void cli_help(void)
     cli_print("  ui [on|off]         pad-captured screen control (no arg = state)");
     cli_print("  link                per-identity BLE link status");
     cli_print("  shot                capture the real screen to the PC (PNG on the PC side)");
-    cli_print("  backlight 0-100     set + persist backlight");
-    cli_print("  screen on|off       screen power");
+    cli_print("  backlight [0-100]   set + persist backlight (no arg = current)");
+    cli_print("  screen [on|off]     screen power (no arg = current)");
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
+    cli_print("  ctrl [pro|joycon [body button grip]]");
+    cli_print("                      controller type + 0xRRGGBB colors, persisted (no arg = current)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  pairing start|stop  sync key: drop link + discovery advertising");
     cli_print("  wake                open the wake window (drop link if connected)");
     cli_print("  adv auto|wake|reconnect");
-    cli_print("                      steady form while paired (default auto)");
+    cli_print("                      steady form while paired (default auto, no arg = current)");
     cli_print("  report              dump the last input report actually sent");
-    cli_print("  motion 0|1|2|3      0x09 motion block: zeros / stamp / none / sensor");
+    cli_print("  motion [0|1|2|3]    0x09 motion block (no arg = current)");
+    cli_print("                      0 zeros / 1 stamp / 2 none / 3 sensor");
     cli_print("  headset [auto|0xNN] 0x09 headset byte sent to the host (auto = input device)");
-    cli_print("  ltk 0|1             LTK store form (0 reversed, 1 as-is)");
+    cli_print("  ltk [0|1]           LTK store form (no arg = current)");
     cli_print("  drop                disconnect the current host");
     cli_print("  pad                 recognized pad, layout row and relay state");
     cli_print("  usb                 usb host state (role, device, counters)");
-    cli_print("  relay 0|1           same-generation passthrough (default on)");
+    cli_print("  relay [0|1]         same-generation passthrough (default on, no arg = current)");
+    cli_print("  rumble [off|l r]    manual rumble 0-255 per side (no arg = held state)");
+    cli_print("  lamp [0x0-0xF]      manual player lamp mask (no arg = held state)");
+    cli_print("  haptic [0xNN]       manual haptic sample byte (no arg = held state)");
     cli_print("  fwver [a.b.c]       handset fw version reported to the host");
     cli_print("  fwack [hex bytes]   ack body for the host update frame (default empty)");
     cli_print("  fwpost [a.b.c]      version reported after a host update (default 9.9.9)");
@@ -101,6 +109,17 @@ static void cli_status(void)
              input_source_attached() ? input_source_device_desc()
                                      : (usb_input_attached() ? usb_input_device_desc() : "none"));
     cli_print(line);
+}
+
+/**
+ * 实时内存全景：owner task 下一帧直接从引擎与堆账读数后经控制台出口回打。
+ * 不经过 UI 层——截图冻结或系统页门控（隐藏时停止取数）都不影响这里的
+ * 实时性，串口侧拿到的永远是发起那一刻的现场值。
+ */
+static void cli_mem(void)
+{
+    remapad_ui_request_mem();
+    cli_print("ok mem report queued (printed next frame)");
 }
 
 /** 运行镜像信息：版本与分区来自 OTA 会话（与 UI 系统页同一来源）。 */
@@ -289,6 +308,12 @@ static void cli_link(void)
 
 static void cli_backlight(const char *arg)
 {
+    if (arg[0] == '\0') {
+        char line[48];
+        snprintf(line, sizeof(line), "backlight %u", (unsigned)backlight_get());
+        cli_print(line);
+        return;
+    }
     const int value = atoi(arg);
     if (value < 0 || value > 100) {
         cli_print("err backlight 0-100");
@@ -300,6 +325,10 @@ static void cli_backlight(const char *arg)
 
 static void cli_screen(const char *arg)
 {
+    if (arg[0] == '\0') {
+        cli_print(app_config_get()->screen_on ? "screen on" : "screen off");
+        return;
+    }
     if (strcmp(arg, "on") == 0) {
         js_bridge_screen_power(true);
         cli_print("ok screen on");
@@ -307,8 +336,62 @@ static void cli_screen(const char *arg)
         js_bridge_screen_power(false);
         cli_print("ok screen off");
     } else {
-        cli_print("err usage: screen on|off");
+        cli_print("err usage: screen [on|off]");
     }
+}
+
+/**
+ * 手柄身份配置（与 UI 手柄设置页同一条持久化路径）：无参回读当前形态与
+ * 三处配色；带形态名则改形态（配色沿用现值），再带 0xRRGGBB 三元组则一并
+ * 改配色。写 NVS 由提交任务按周期落盘，BLE 侧经 ns2_session_set_identity
+ * 即时生效（下次广播/握手带新出厂块）。
+ */
+static void cli_ctrl(const char *arg)
+{
+    const app_config_t *cfg = app_config_get();
+    if (arg[0] == '\0') {
+        char line[128];
+        snprintf(line, sizeof(line), "ctrl type=%s body=0x%06x button=0x%06x grip=0x%06x",
+                 cfg->ctrl_type == APP_CONFIG_CTRL_JOYCON ? "joycon" : "pro",
+                 (unsigned)cfg->body_color, (unsigned)cfg->button_color,
+                 (unsigned)cfg->grip_color);
+        cli_print(line);
+        return;
+    }
+    char type[16] = {0};
+    char body_text[16] = {0};
+    char button_text[16] = {0};
+    char grip_text[16] = {0};
+    const int fields = sscanf(arg, "%15s %15s %15s %15s", type, body_text, button_text,
+                              grip_text);
+    bool joycon;
+    if (strcmp(type, "joycon") == 0) {
+        joycon = true;
+    } else if (strcmp(type, "pro") == 0) {
+        joycon = false;
+    } else {
+        cli_print("err usage: ctrl [pro|joycon [body button grip 0xRRGGBB]]");
+        return;
+    }
+    uint32_t colors[3] = {cfg->body_color, cfg->button_color, cfg->grip_color};
+    const char *color_text[3] = {body_text, button_text, grip_text};
+    for (int i = 0; i < fields - 1; i++) {
+        char *end = NULL;
+        const unsigned long value = strtoul(color_text[i], &end, 0);
+        if (end == color_text[i] || *end != '\0' || value > 0xFFFFFFu) {
+            cli_print("err colors are 0xRRGGBB");
+            return;
+        }
+        colors[i] = (uint32_t)value;
+    }
+    app_config_set_controller(joycon ? APP_CONFIG_CTRL_JOYCON : APP_CONFIG_CTRL_PRO,
+                              colors[0], colors[1], colors[2]);
+    ns2_session_set_identity(joycon, colors[0], colors[1], colors[2]);
+    char line[96];
+    snprintf(line, sizeof(line), "ok ctrl type=%s body=0x%06x button=0x%06x grip=0x%06x",
+             joycon ? "joycon" : "pro", (unsigned)colors[0], (unsigned)colors[1],
+             (unsigned)colors[2]);
+    cli_print(line);
 }
 
 /** 蜂鸣器自检：不依赖 PWR 按键，便于确认提示音通路与背光互不影响。 */
@@ -395,6 +478,7 @@ static void cli_report(void)
 {
     uint8_t ids[2] = {0};
     const size_t count = ns2_session_mode_identities(ids);
+    bool printed = false;
     for (size_t i = 0; i < count; i++) {
         ns2_session_status_t status;
         if (!ns2_session_status(ids[i], &status) || !status.connected) {
@@ -404,6 +488,7 @@ static void cli_report(void)
         const uint8_t fmt = status.report_format == 5 ? 5 : 9;
         if (!ble_controller_last_input(status.conn_handle, fmt, body)) {
             cli_print("err no report sent yet");
+            printed = true;
             continue;
         }
         char line[176];
@@ -414,12 +499,22 @@ static void cli_report(void)
                  body[4], body[5], body[6], body[7], body[8], body[9], body[10], body[0x0B],
                  body[0x0C], body[0x0E]);
         cli_print(line);
+        printed = true;
+    }
+    if (!printed) {
+        cli_print("report none (no connected host)");
     }
 }
 
 /** 0x09 运动块内容切换：0 全零 / 1 抓包占位 / 2 不带 / 3 输入设备的真实样本。 */
 static void cli_motion(const char *arg)
 {
+    if (arg[0] == '\0') {
+        char line[32];
+        snprintf(line, sizeof(line), "motion %u", (unsigned)ns2_output_motion_mode());
+        cli_print(line);
+        return;
+    }
     const int mode = atoi(arg);
     if (mode < NS2_MOTION_ZERO || mode > NS2_MOTION_SENSOR) {
         cli_print("err motion 0|1|2|3");
@@ -482,6 +577,12 @@ static void cli_headset(const char *arg)
  *  形态，判断是不是密钥字节序导致主机不认这台手柄。 */
 static void cli_ltk(const char *arg)
 {
+    if (arg[0] == '\0') {
+        char line[32];
+        snprintf(line, sizeof(line), "ltk_form %u", (unsigned)ns2_session_ltk_form());
+        cli_print(line);
+        return;
+    }
     const int form = atoi(arg);
     if (form != 0 && form != 1) {
         cli_print("err ltk 0|1");
@@ -498,6 +599,118 @@ static void cli_drop(void)
 {
     ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
     cli_print("ok disconnect requested");
+}
+
+/** 当前持续反馈帧一行：叠加后的震动、玩家灯与触觉采样（无参回读共用）。 */
+static void cli_feedback_state(void)
+{
+    pad_feedback_t held;
+    dp_plane_feedback_held(&held);
+    char haptic[12];
+    if (held.haptic_sample_valid) {
+        snprintf(haptic, sizeof(haptic), "0x%02x", (unsigned)held.haptic_sample);
+    } else {
+        snprintf(haptic, sizeof(haptic), "none");
+    }
+    char line[128];
+    snprintf(line, sizeof(line),
+             "feedback rumble l=%u r=%u lamp=0x%x haptic=%s",
+             (unsigned)held.rumble_strength[PAD_TRIGGER_L2],
+             (unsigned)held.rumble_strength[PAD_TRIGGER_R2],
+             (unsigned)held.player_led, haptic);
+    cli_print(line);
+}
+
+/**
+ * 手动反馈注入：把事件叠加进持续帧后由数据面按接入设备的布局编码投递，
+ * 与主机下发的反馈走完全同一条路径（USB 直插走 OUT 端点，桥接路径回传 PC
+ * 写手柄）。没有主机在场时，串口脚本用它验证震动 / 玩家灯 / 触觉采样整条
+ * 反馈链路。震动手动注入按归一强度（0-255）走；同代 NS2 手柄吃主机的原始
+ * LRA 参数包，这条命令对它只能写停（全零包）。
+ */
+static void cli_rumble(const char *arg)
+{
+    if (arg[0] == '\0') {
+        cli_feedback_state();
+        return;
+    }
+    if (strcmp(arg, "off") == 0) {
+        pad_feedback_t off;
+        pad_feedback_defaults(&off);
+        dp_plane_inject_feedback(PAD_FEEDBACK_FIELD_RUMBLE, &off);
+        cli_print("ok rumble off");
+        return;
+    }
+    char left[8] = {0};
+    char right[8] = {0};
+    if (sscanf(arg, "%7s %7s", left, right) != 2) {
+        cli_print("err usage: rumble [off|<l 0-255> <r 0-255>]");
+        return;
+    }
+    char *left_end = NULL;
+    char *right_end = NULL;
+    const unsigned long l = strtoul(left, &left_end, 0);
+    const unsigned long r = strtoul(right, &right_end, 0);
+    if (left_end == left || *left_end != '\0' || l > 255 || right_end == right ||
+        *right_end != '\0' || r > 255) {
+        cli_print("err usage: rumble [off|<l 0-255> <r 0-255>]");
+        return;
+    }
+    pad_feedback_t event;
+    pad_feedback_defaults(&event);
+    event.rumble_on[PAD_TRIGGER_L2] = l > 0;
+    event.rumble_on[PAD_TRIGGER_R2] = r > 0;
+    event.rumble_strength[PAD_TRIGGER_L2] = (uint8_t)l;
+    event.rumble_strength[PAD_TRIGGER_R2] = (uint8_t)r;
+    dp_plane_inject_feedback(PAD_FEEDBACK_FIELD_RUMBLE, &event);
+    char line[48];
+    snprintf(line, sizeof(line), "ok rumble l=%lu r=%lu", l, r);
+    cli_print(line);
+}
+
+/** 玩家灯手动注入：bit0-3 掩码，0 全灭。 */
+static void cli_lamp(const char *arg)
+{
+    if (arg[0] == '\0') {
+        cli_feedback_state();
+        return;
+    }
+    char *end = NULL;
+    const unsigned long mask = strtoul(arg, &end, 0);
+    if (end == arg || *end != '\0' || mask > 0x0Fu) {
+        cli_print("err usage: lamp [0x0-0xF]");
+        return;
+    }
+    pad_feedback_t event;
+    pad_feedback_defaults(&event);
+    event.player_led = (uint8_t)mask;
+    dp_plane_inject_feedback(PAD_FEEDBACK_FIELD_PLAYER_LED, &event);
+    char line[32];
+    snprintf(line, sizeof(line), "ok lamp 0x%lx", mask);
+    cli_print(line);
+}
+
+/** 触觉采样手动注入：0x00 合法（主机用它收掉提示音）。 */
+static void cli_haptic(const char *arg)
+{
+    if (arg[0] == '\0') {
+        cli_feedback_state();
+        return;
+    }
+    char *end = NULL;
+    const unsigned long sample = strtoul(arg, &end, 0);
+    if (end == arg || *end != '\0' || sample > 0xFF) {
+        cli_print("err usage: haptic [0xNN]");
+        return;
+    }
+    pad_feedback_t event;
+    pad_feedback_defaults(&event);
+    event.haptic_sample_valid = true;
+    event.haptic_sample = (uint8_t)sample;
+    dp_plane_inject_feedback(PAD_FEEDBACK_FIELD_HAPTIC, &event);
+    char line[40];
+    snprintf(line, sizeof(line), "ok haptic 0x%02lx", sample);
+    cli_print(line);
 }
 
 static const char *cli_conn_name(pad_conn_t conn)
@@ -552,11 +765,17 @@ static void cli_usb(void)
     cli_print(line);
 }
 
-/** 同代透传开关：0 关、1 开（默认开）。 */
+/** 同代透传开关：0 关、1 开（默认开）；无参回读当前值。 */
 static void cli_relay(const char *arg)
 {
-    if (arg == NULL || (arg[0] != '0' && arg[0] != '1') || arg[1] != '\0') {
-        cli_print("err relay 0|1");
+    if (arg[0] == '\0') {
+        char line[32];
+        snprintf(line, sizeof(line), "relay %u", target_relay_enabled() ? 1u : 0u);
+        cli_print(line);
+        return;
+    }
+    if (arg[0] != '0' && arg[0] != '1') {
+        cli_print("err relay [0|1]");
         return;
     }
     target_set_relay(arg[0] == '1');
@@ -704,6 +923,8 @@ static void cli_dispatch(char *line)
         cli_print("pong");
     } else if (strcmp(line, "status") == 0) {
         cli_status();
+    } else if (strcmp(line, "mem") == 0) {
+        cli_mem();
     } else if (strcmp(line, "key") == 0) {
         cli_key(arg);
     } else if (strcmp(line, "stick") == 0) {
@@ -716,6 +937,8 @@ static void cli_dispatch(char *line)
         cli_backlight(arg);
     } else if (strcmp(line, "screen") == 0) {
         cli_screen(arg);
+    } else if (strcmp(line, "ctrl") == 0) {
+        cli_ctrl(arg);
     } else if (strcmp(line, "beep") == 0) {
         cli_beep(arg);
     } else if (strcmp(line, "mode") == 0) {
@@ -740,6 +963,12 @@ static void cli_dispatch(char *line)
         cli_usb();
     } else if (strcmp(line, "relay") == 0) {
         cli_relay(arg);
+    } else if (strcmp(line, "rumble") == 0) {
+        cli_rumble(arg);
+    } else if (strcmp(line, "lamp") == 0) {
+        cli_lamp(arg);
+    } else if (strcmp(line, "haptic") == 0) {
+        cli_haptic(arg);
     } else if (strcmp(line, "ltk") == 0) {
         cli_ltk(arg);
     } else if (strcmp(line, "drop") == 0) {
