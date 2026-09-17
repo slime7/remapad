@@ -9,6 +9,7 @@ export default [
       'node_modules/**/*',
       'dist/**/*',
       'coverage/**/*',
+      'test-results/**/*',
       '**/*.d.ts',
       '**/*.bin',
       '**/*.pocket',

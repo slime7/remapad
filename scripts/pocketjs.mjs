@@ -153,6 +153,11 @@ function run(args, cwd) {
   return result.status ?? 1;
 }
 
+const FONT_REGULAR = resolve(UI_ROOT, 'assets/fonts/NotoSansSC-Regular.otf');
+const FONT_BOLD = resolve(UI_ROOT, 'assets/fonts/NotoSansSC-Regular.otf');
+const PLAN_PATH = resolve(UI_ROOT, '.pocket/remapad-s3/plan.json');
+const PACK_SCRIPT = resolve(SCRIPT_DIR, 'pack-pocket.ts');
+
 function cliArgs(root, subcommand, outdir) {
   const args = [
     resolve(root, 'tools/pocket.ts'),
@@ -171,6 +176,35 @@ function cliArgs(root, subcommand, outdir) {
     args.push('--output', PACKAGE_OUTPUT);
   }
   return args;
+}
+
+function compileUi(compilerRoot, outdir) {
+  const checkStatus = run([
+    resolve(compilerRoot, 'tools/pocket.ts'),
+    'compile',
+    '--host-profile',
+    HOST_PROFILE,
+    '--manifest',
+    MANIFEST,
+    '--project-root',
+    UI_ROOT,
+    '--outdir',
+    outdir,
+  ], compilerRoot);
+  if (checkStatus !== 0) {
+    return checkStatus;
+  }
+  const buildArgs = [
+    resolve(compilerRoot, 'tools/build.ts'),
+    `--plan=${PLAN_PATH}`,
+    `--project-root=${UI_ROOT}`,
+    `--outdir=${outdir}`,
+    '--hz=30',
+    `--font-regular=${FONT_REGULAR}`,
+    `--font-bold=${FONT_BOLD}`,
+    ...backendArgs,
+  ];
+  return run(buildArgs, compilerRoot);
 }
 
 /** 监听 UI 源码，变更后重新编译并让预览页加载新产物。 */
@@ -227,33 +261,18 @@ async function watchUiSources(compilerRoot, server) {
       return;
     }
     compiling = true;
-    const child = trackChild(spawn('bun', cliArgs(compilerRoot, 'compile', UI_OUTDIR), {
-      cwd: compilerRoot,
-      stdio: ['ignore', 'ignore', 'inherit'],
-    }));
-    // spawn 失败（bun 丢失/被占用等）只触发 error 不触发 close；挂上处理器避免
-    // 未捕获的 error 事件带崩整个 dev 进程。
-    child.on('error', (error) => {
-      compiling = false;
-      console.error('[Remapad] 重新编译进程启动失败: ' + error.message);
-      if (pending) {
-        pending = false;
-        compile();
-      }
-    });
-    child.on('close', (code) => {
-      compiling = false;
-      if (code === 0) {
-        console.log('[Remapad] 已重新编译，通知预览页加载新产物');
-        server.notifyReload();
-      } else {
-        console.error('[Remapad] 重新编译失败，预览页继续使用上一份产物（退出码 ' + code + '）');
-      }
-      if (pending) {
-        pending = false;
-        compile();
-      }
-    });
+    const code = compileUi(compilerRoot, UI_OUTDIR);
+    compiling = false;
+    if (code === 0) {
+      console.log('[Remapad] 已重新编译，通知预览页加载新产物');
+      server.notifyReload();
+    } else {
+      console.error('[Remapad] 重新编译失败，预览页继续使用上一份产物（退出码 ' + code + '）');
+    }
+    if (pending) {
+      pending = false;
+      compile();
+    }
   };
 
   for (const target of watched) {
@@ -381,7 +400,7 @@ if (command === 'web') {
   const runtimeDir = resolve(runtimeRoot, 'hosts/web');
   console.log('[Remapad] compiler: ' + compilerRoot);
   console.log('[Remapad] 浏览器运行时: ' + runtimeDir);
-  const status = run(cliArgs(compilerRoot, 'compile', UI_OUTDIR), compilerRoot);
+  const status = compileUi(compilerRoot, UI_OUTDIR);
   if (status !== 0) {
     process.exit(status);
   }
@@ -423,7 +442,36 @@ if (command === 'web') {
   watchParent();
 }
 
-// check / compile / build 直接转发官方 CLI，产物写入本仓库的 ui/dist。
-if (command !== 'web') {
-  process.exit(run(cliArgs(compilerRoot, command, UI_OUTDIR), compilerRoot));
+if (command === 'check') {
+  process.exit(run([
+    resolve(compilerRoot, 'tools/pocket.ts'),
+    'check',
+    '--host-profile',
+    HOST_PROFILE,
+    '--manifest',
+    MANIFEST,
+    '--project-root',
+    UI_ROOT,
+    ...backendArgs,
+  ], compilerRoot));
 }
+
+if (command === 'compile') {
+  process.exit(compileUi(compilerRoot, UI_OUTDIR));
+}
+
+if (command === 'build') {
+  const compileStatus = compileUi(compilerRoot, UI_OUTDIR);
+  if (compileStatus !== 0) {
+    process.exit(compileStatus);
+  }
+  const packStatus = run([
+    PACK_SCRIPT,
+    PLAN_PATH,
+    MANIFEST,
+    UI_OUTDIR,
+    PACKAGE_OUTPUT,
+  ], SCRIPT_DIR);
+  process.exit(packStatus);
+}
+

@@ -18,6 +18,9 @@
     "viewport": {
       "logical": [240, 280],
       "presentation": "native"
+    },
+    "modality": {
+      "touch": "primary"
     }
   }
 }

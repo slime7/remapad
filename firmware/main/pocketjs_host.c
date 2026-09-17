@@ -732,12 +732,10 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
     stage = boot_stage(2);
     pocketjs_guest_config_t guest_config;
     pocketjs_guest_config_defaults(&guest_config);
-    /* JS 堆预算：7 个常驻页面 + 5 键导航的 mount 峰值实测越过 4MB 默认
-     * （guest_eval OOM），提到 5.5MB 后挂载峰值仍随页面增重间歇性越过
-     * （QuickJS InternalError: out of memory，两次连续复现），再提到
-     * 6.5MB；OOM 时 PSRAM 尚余 2.6MB、内部 RAM 尚余 264KB，该值留有
-     * 运行期增长余量，继续扩页面前先看 mount 后的 js_heap 日志。 */
-    guest_config.heap_limit = 6656U * 1024U;
+    /* JS 堆预算：7 个常驻页面挂载与 PocketJS 0.12.0 devtools 飞行记录仪
+     * （首次触屏分配 36000 元素 tapeTouch）需要充足堆空间，设为 7.2MB；
+     * ESP32-S3 具有 8MB PSRAM，该值留有运行期余量。 */
+    guest_config.heap_limit = 7372U * 1024U;
     guest_config.stack_limit = REMAPAD_POCKETJS_STACK_LIMIT;
     guest_config.prefer_psram = true;
     result = pocketjs_guest_create(&guest_config, &runtime->guest);
