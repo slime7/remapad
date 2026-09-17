@@ -24,10 +24,10 @@ export const NAV_SETTINGS = { x: 188, y: 240 } as const;
  * 底部中区微型玩家指示灯：4 个 8px 方块（间距 3px），居中排在底栏中区图标下方。
  */
 export const PLAYER_LED = {
-  y: 252,
+  y: 256,
   xs: [104, 115, 126, 137],
-  on: '#4ade80',
-  off: '#14432a',
+  on: '#a6c8ff',
+  off: '#002613',
 } as const;
 
 export interface FlatNode {

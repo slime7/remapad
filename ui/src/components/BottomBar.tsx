@@ -30,15 +30,15 @@ export function BottomBar() {
   const isOta = () => hw.ota.phase === 'receiving';
   const isPadUi = () => hw.padUiMode;
 
-  // 手柄状态
+  // 手柄状态：tertiary 背景上已连接使用高强调 onTertiary，未连接使用弱化 onTertiaryContainer
   const padAttached = () => hw.physicalPad.attached;
   const padGlyph = () => (padAttached() ? ICON.videogameAsset : ICON.videogameAssetOff);
-  const padColor = () => (padAttached() ? COLOR.primary : COLOR.disabled);
+  const padColor = () => (padAttached() ? COLOR.onTertiary : COLOR.onTertiaryContainer);
   const padLabel = () => (padAttached() ? (hw.physicalPad.name || 'PRO') : '未连接');
 
   // 主机连接状态
   const hostConnected = () => hw.pairing === 'connected';
-  const hostColor = () => (hostConnected() ? COLOR.primary : COLOR.disabled);
+  const hostColor = () => (hostConnected() ? COLOR.onTertiary : COLOR.onTertiaryContainer);
 
   // 电池电量状态
   const batteryPct = () => hw.battery.percentage;
@@ -55,9 +55,9 @@ export function BottomBar() {
   const batteryColor = () => {
     const pct = batteryPct();
     if (pct <= 15) {
-      return COLOR.error;
+      return COLOR.onError;
     }
-    return COLOR.onSurface;
+    return COLOR.onTertiary;
   };
 
   const onHostClick = () => {
@@ -66,12 +66,12 @@ export function BottomBar() {
 
   return (
     <View class="absolute left-[8] right-[8] bottom-[8] h-[64] z-40 overflow-hidden">
-      {/* 底部异形圆角矢量背景贴图（256×64，两边各留 16px 透明边距） */}
+      {/* 底部异形圆角矢量背景贴图（256×64，两边各留 16px 透明边距，背景为 tertiary #4eb079） */}
       <Image src="bottom-bar.svg" class="absolute left-[-16] top-0 w-[256] h-[64]" />
 
       {/* 优先级 1：OTA 进度条 */}
       <View class={isOta() ? 'w-full h-full flex-col items-center justify-center px-4 gap-2' : 'hidden'}>
-        <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>
+        <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>
           {`OTA 接收中: ${hw.ota.percentage}%`}
         </Text>
         <View class={STYLE.track}>
@@ -85,51 +85,63 @@ export function BottomBar() {
       {/* 优先级 2：手柄操控提示 */}
       <View class={!isOta() && isPadUi() ? 'w-full h-full flex-col items-center justify-center px-2 py-1 gap-1' : 'hidden'}>
         <View class="flex-row items-center gap-1">
-          <Icon glyph={ICON.gamepadLeft} class="text-sm shrink-0" color={COLOR.primary} />
-          <Icon glyph={ICON.gamepadRight} class="text-sm shrink-0" color={COLOR.primary} />
-          <Icon glyph={ICON.gameButtonL} class="text-sm shrink-0" color={COLOR.primary} />
-          <Icon glyph={ICON.gameButtonR} class="text-sm shrink-0" color={COLOR.primary} />
-          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>翻页</Text>
+          <Icon glyph={ICON.gamepadLeft} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Icon glyph={ICON.gamepadRight} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Icon glyph={ICON.gameButtonL} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Icon glyph={ICON.gameButtonR} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>翻页</Text>
           <View class="w-2" />
-          <Icon glyph={ICON.gamepadUp} class="text-sm shrink-0" color={COLOR.primary} />
-          <Icon glyph={ICON.gamepadDown} class="text-sm shrink-0" color={COLOR.primary} />
-          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>选择</Text>
+          <Icon glyph={ICON.gamepadUp} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Icon glyph={ICON.gamepadDown} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>选择</Text>
         </View>
         <View class="flex-row items-center gap-1">
-          <Icon glyph={ICON.gamepadCircleRight} class="text-sm shrink-0" color={COLOR.primary} />
-          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>确认</Text>
+          <Icon glyph={ICON.gamepadCircleRight} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>确认</Text>
           <View class="w-2" />
-          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>长按</Text>
-          <Icon glyph={ICON.gamepadCircleDown} class="text-sm shrink-0" color={COLOR.primary} />
-          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>退出</Text>
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>长按</Text>
+          <Icon glyph={ICON.gamepadCircleDown} class="text-sm shrink-0" color={COLOR.onTertiary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>退出</Text>
         </View>
       </View>
 
-      {/* 优先级 3：三等分状态显示 */}
+      {/* 优先级 3：三等分状态显示（上行图标 h-[24]、下行状态 h-[18]，确保三列图标严格水平对齐） */}
       <View class={!isOta() && !isPadUi() ? 'w-full h-full flex-row items-center px-1' : 'hidden'}>
         {/* 左区：物理手柄 */}
         <View class="grow basis-0 h-full flex-col items-center justify-center gap-1">
-          <Icon glyph={padGlyph()} class="text-xl shrink-0" color={padColor()} />
-          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-            {padLabel()}
-          </Text>
+          <View class="h-[24] flex-row items-center justify-center">
+            <Icon glyph={padGlyph()} class="text-xl shrink-0" color={padColor()} />
+          </View>
+          <View class="h-[18] flex-row items-center justify-center">
+            <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>
+              {padLabel()}
+            </Text>
+          </View>
         </View>
 
         {/* 中区：主机连接 + 玩家指示灯（仅供点击触发，不参与手柄焦点导航） */}
         <View
           onPress={onHostClick}
-          class="grow basis-0 h-full flex-col items-center justify-center gap-1 rounded-[8] active:bg-[#4a2f40] transition-colors duration-150"
+          class="grow basis-0 h-full flex-col items-center justify-center gap-1 rounded-[8] active:bg-[#1a8552] transition-colors duration-150"
         >
-          <Icon glyph={ICON.missingController} class="text-xl shrink-0" color={hostColor()} />
-          <MiniPlayerLedRow mask={() => hw.playerLed} />
+          <View class="h-[24] flex-row items-center justify-center">
+            <Icon glyph={ICON.missingController} class="text-xl shrink-0" color={hostColor()} />
+          </View>
+          <View class="h-[18] flex-row items-center justify-center">
+            <MiniPlayerLedRow mask={() => hw.playerLed} />
+          </View>
         </View>
 
         {/* 右区：设备电量 */}
         <View class="grow basis-0 h-full flex-col items-center justify-center gap-1">
-          <Icon glyph={batteryGlyph()} class="text-xl shrink-0" color={batteryColor()} />
-          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-            {`${batteryPct()}%`}
-          </Text>
+          <View class="h-[24] flex-row items-center justify-center">
+            <Icon glyph={batteryGlyph()} class="text-xl shrink-0" color={batteryColor()} />
+          </View>
+          <View class="h-[18] flex-row items-center justify-center">
+            <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>
+              {`${batteryPct()}%`}
+            </Text>
+          </View>
         </View>
       </View>
     </View>

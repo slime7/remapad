@@ -2,9 +2,9 @@
  * 亮度调节页（第 1 页）：
  * 位于四叶草中心区域 (120 × 120)。
  * 遵循 MD3 container / on-container 规范：
- * - 四叶草底色为 primaryContainer (#9ecefe)；
- * - 表面直显文字百分比采用 onPrimaryContainer (#04456e)；
- * - 嵌套加减号按钮采用 surfaceContainer (#0c1a2c) 配 onSurface (#d9e6ff)；
+ * - 四叶草底色为 primaryContainer (#a6c8ff)；
+ * - 表面直显文字百分比采用 onPrimaryContainer (#1b416f)；
+ * - 嵌套加减号按钮采用 surfaceContainer (#0d1a2c) 配 onSurface (#d9e6ff)；
  * - 加减号使用无损排版字符 '+' 与 '−'，杜绝图标字体缺失导致的豆腐块。
  */
 import { View, Text } from '@pocketjs/framework/vue-vapor/components';
