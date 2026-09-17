@@ -350,6 +350,54 @@ static void headset_override_pins_the_reported_byte(void)
     CHECK_EQ(ns2_output_headset_byte(), ns2_output_headset_derived());
 }
 
+/**
+ * 电量来源跟输入设备走：自报电量（PAD_CAP_BATTERY 且本帧解出电量字段）的
+ * 手柄把真实电量折进电源字节，主机看到的就是手柄电量；设备没带电量数据
+ * （Xbox 系没有电量字节、报告过短、桥上没插手柄）时保持板载电池兜底。
+ * 0x05 报文专用的端电压字段按电压—容量表反演成名义值，不泄漏板载电压。
+ */
+static void pad_battery_overrides_board_battery(void)
+{
+    prepare();
+    const pad_target_facts_t board = {
+        .battery_level = 7,
+        .battery_mv = 3786,
+        .charging = true,
+        .external_power = true,
+    };
+    pad_target_facts_t facts = board;
+    target_set_facts(&facts);
+
+    pad_state_t pad;
+    pad_state_defaults(&pad);
+    target_send_pad(&pad);
+    /* 手柄没有自报电量：电源字节保持板载档位（7 档 + 充电 + 外部供电）。 */
+    CHECK_EQ(s_capture.body[0x01], (uint8_t)((7u << 2) | 0x02u | 0x01u));
+
+    /* 手柄自报 50%（0x09 的 5 档）且未充电：电源字节跟手柄走，端电压按
+     * 电压—容量表反演成名义值（50% 恰为表点 3605mV），不再泄漏板载电压。 */
+    pad.caps = PAD_CAP_BATTERY;
+    pad.battery_percent = 50;
+    pad.battery_present = true;
+    facts = board;
+    target_apply_pad_battery(&facts, &pad);
+    CHECK_EQ(facts.battery_level, 5);
+    CHECK_EQ(facts.battery_mv, 3605);
+    target_set_facts(&facts);
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[0x01], (uint8_t)(5u << 2));
+
+    /* 能力位置了但这帧没解出电量（报告过短等）：继续用板载值。 */
+    pad_state_t partial;
+    pad_state_defaults(&partial);
+    partial.caps = PAD_CAP_BATTERY;
+    facts = board;
+    target_apply_pad_battery(&facts, &partial);
+    CHECK_EQ(facts.battery_level, 7);
+    CHECK(facts.charging);
+    CHECK(facts.external_power);
+}
+
 HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"面键按位置映射到 NS2 的 A/B/X/Y（私有用 PS 键名）",
                  face_buttons_keep_position_semantics},
@@ -358,6 +406,8 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"扳机按 50% 阈值数字化成 ZL / ZR", analog_triggers_digitize_at_half},
                 {"摇杆原样进报文且中位正确", sticks_keep_values_and_center},
                 {"目标事实折进电量字节", target_facts_fold_into_power_byte},
+                {"上报主机的电量跟输入设备自报值走，板载电池兜底",
+                 pad_battery_overrides_board_battery},
                 {"NS2 吃不下能力位也不改报文", unconsumed_caps_do_not_change_the_report},
                 {"未识别型号兜底后仍照常上报", unknown_model_still_reports_keys},
                 {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form},

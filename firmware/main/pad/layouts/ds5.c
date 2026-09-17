@@ -53,9 +53,12 @@ static const pad_layout_t s_rows[] = {
     {
         /* 蓝牙（0x31）：比 DS4 蓝牙的 0x11 整体后移一位。偏移为 DualSense Edge
          * 实测抓包：静止帧第 9 字节读作 0x08（帽子开关松开）、四轴落在死区内、
-         * 第 17-22 字节的角速度接近 0 而加速度有一轴约 1 g。触摸点与电量字节
-         * 尚未核对，本轮不登记。第 55 字节是耳机状态：插拔差分实测 0x00（未
-         * 插入）/ 0x01（插入）/ 0x03（插入带麦），第 56 字节跟着 bit0 走。 */
+         * 第 17-22 字节的角速度接近 0 而加速度有一轴约 1 g。触摸点尚未核对，
+         * 本轮不登记。第 55 字节是耳机状态：插拔差分实测 0x00（未插入）/
+         * 0x01（插入）/ 0x03（插入带麦），第 56 字节跟着 bit0 走。电量在第
+         * 54 字节：2026-09-15 与 2026-09-17 两份抓包分别读作 0x09（90%）与
+         * 0x05（50%），同一期间耳机字节都在原位，与 DS4 的电量字节同一套
+         * 读法（低四位 0-10 档、bit4 充电中）。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_BT,
         .report_id = 0x31,
@@ -67,11 +70,12 @@ static const pad_layout_t s_rows[] = {
         .stick_off = {2, 3, 4, 5},
         .touch_off = PAD_OFF_NONE,
         .motion_off = 17,
-        .battery_off = PAD_OFF_NONE,
+        .battery_off = 54,
         .headset_off = 55,
         .headset_style = PAD_HEADSET_PS,
         .stick_style = PAD_STICK_U8,
-        .caps = PAD_CAP_MOTION | PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE | PAD_CAP_MIC,
+        .caps = PAD_CAP_MOTION | PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE |
+                PAD_CAP_BATTERY | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},

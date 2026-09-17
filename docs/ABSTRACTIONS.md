@@ -190,7 +190,9 @@ flowchart TB
   目标侧 `target_send_pad()` 按注册的 `pad_target_t` 编码（现役 `target/ns2/`，内部仍调 `ns2_output_send()`，可只填需要输出的按键）。
   主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等），在反馈监听者里叠加进 `pad_feedback_t` 持续帧并回发桥接帧
   （事件带哪些字段就覆盖哪些字段：震动与玩家灯是主机的持续状态，回落到默认值会把刚点亮的玩家灯写灭；触觉采样是一次性事件）；
-  写回插入手柄的动作见下一条。电池经 `battery.c` 唯一入口 + `ns2_output_set_battery` 随报告上发；
+  写回插入手柄的动作见下一条。上报主机的电量跟输入设备走：家族表置 `PAD_CAP_BATTERY` 且本帧解出电量字段的设备（如 DualSense 蓝牙）
+  经 `target_apply_pad_battery` 覆盖事实表后随报告上发，板载电池（`battery.c` 唯一入口）只在设备没报电量时兜底，
+  0x05 报文专用的端电压字段按电压—容量表反演成名义值（输入设备的电量以档位到达，没有真实的毫伏可带）；
   amiibo 镜像经 `ns2_output_amiibo_stage` 预置（传输方式待定），Report 0x09 的 NFC 状态字节随预置汇报。
   USB host 直插的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
 - USB host 直插的数据面：`usb/usb_transport.c` 装 host 栈、枚举、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口）。
@@ -376,8 +378,8 @@ sequenceDiagram
 家族表按系列拆在 `firmware/main/pad/layouts/` 下，契约与注册表是 `pad/layout.h` / `pad/layout.c`。
 取舍见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)。表按（家族、Report ID、连接方式、PID）定位偏移，同一个 Report ID 下的不同型号按 PID 分行：
 PS 系的 DS3、DS4 与 DualSense 有线都报 0x01，DS3 有线与蓝牙字段一致、共用一行。
-各行的偏移初值取自公开资料，落地时用 `pc/remapadctl.py --dump` 抓原始报告核对后再固化（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过）；
-DS3 的按键极性、蓝牙前缀长度，以及 DualSense 的电量与触摸板坐标仍未核对，见 [ROADMAP.md](ROADMAP.md) 的家族表回填。Steam 原生布局未抓包，整族走 Xbox 兜底并在能力位里标记。
+各行的偏移初值取自公开资料，落地时用 `pc/remapadctl.py --dump` 抓原始报告核对后再固化（DualSense 蓝牙的 0x31 行按 Edge 实测核对过，含第 54 字节的电量）；
+DS3 的按键极性、蓝牙前缀长度，DualSense 的触摸板坐标与有线行各字段仍未核对，见 [ROADMAP.md](ROADMAP.md) 的家族表回填。Steam 原生布局未抓包，整族走 Xbox 兜底并在能力位里标记。
 
 手柄组合键 L1+R1+L3+R3 按住 300 ms 会捕获输入、转为屏幕操控（[ADR 0028](adr/0028-pad-combo-captures-screen.md)）：
 判定在私有格式层完成（`firmware/main/dp/dp_ui.c`），家族表只需要把 L1/R1/L3/R3 映射到 `PAD_BTN_L1/R1/L3/R3`，既有与将来的布局都自动可用。

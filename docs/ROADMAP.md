@@ -45,7 +45,7 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
 - [ ] 家族表按实测抓包回填：
   用 `cd pc ; uv run python remapadctl.py --dump` 抓 Xbox 有线与蓝牙 / DS3 / DS4 有线与蓝牙 / DualSense 有线 / Steam 原生布局的原始报告。
   核对 `firmware/main/pad/layouts/` 里对应系列的字段偏移。现有偏移都取自公开资料（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过），待确认项：
-  Xbox Series 的分享位、DS3 的按键极性（是否低电平有效）与蓝牙前缀长度、DualSense 的电量字节与触摸板坐标（每点 4 字节，DS4 是 3 字节，两处当前都不登记）。
+  Xbox Series 的分享位、DS3 的按键极性（是否低电平有效）与蓝牙前缀长度、DualSense 的触摸板坐标（每点 4 字节，DS4 是 3 字节，当前不登记）。
 
 **USB host 直插（手柄插在板卡上）　状态：代码完成，实机验收待做**
 
@@ -105,6 +105,9 @@ PC 侧合并成单进程 `pc/remapadctl.py`（转发 + 命令行 + 截图 + OTA�
 - [x] 桥接运行中的控制通路：转发同时跑 `status` / `link` / `shot` 与 `headset`，互不干扰；`--upgrade --wait` 在同一会话里完成升级并打印新版本。
 - [x] 3.5 mm 耳机状态核对（2026-09-15，DualSense Edge 蓝牙）：插拔差分定位到第 55 字节（bit0 插入、bit1 带麦），已回填 `pad/layouts/ds5.c`；
   主机接受 0x05 / 0x0D，换上 0x07 / 0x0F 后约 150 ms 取消订阅，因此派生值只报插入，带麦档留待 0x002C 音频通路落地后再评估；DS4 与 DS5 有线行未核对。
+- [x] DualSense 蓝牙电量字节核对（2026-09-17，DualSense Edge 蓝牙）：与 2026-09-15 两份抓包差分定位到第 54 字节
+  （低四位 0-10 档、bit4 充电中，同一期间耳机字节都在原位；实测 0x09 → 0x05 随电量回落），已回填 `pad/layouts/ds5.c`。
+  上报主机的电量同时改为跟输入设备自报值走（`target_apply_pad_battery` 覆盖事实表），板载电池只在设备没报电量时兜底。
 - [ ] 图形连接控制台（`pc/remapadgui.py`，[ADR 0040](adr/0040-pc-gui-customtkinter-console.md)）的实机验收：
   手动连上后日志逐行滚动、转发开关生效且主机收到手柄输入、截图按钮落盘并交给系统看图器打开；
   升级页完成一次真实 OTA、勾选等待时能自动重连；关窗后设备状态回静置不卡键。

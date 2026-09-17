@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include "battery_curve.h"
+
 static const pad_target_t *s_target;
 static bool s_relay_enabled = true;
 
@@ -25,6 +27,19 @@ void target_set_facts(const pad_target_facts_t *facts)
     if (s_target != NULL && s_target->set_facts != NULL && facts != NULL) {
         s_target->set_facts(facts);
     }
+}
+
+void target_apply_pad_battery(pad_target_facts_t *facts, const pad_state_t *pad)
+{
+    if (pad == NULL || (pad->caps & PAD_CAP_BATTERY) == 0u || !pad->battery_present) {
+        return;
+    }
+    facts->battery_level = battery_ns2_level_from_percent(pad->battery_percent);
+    /* 0x05 报文的端电压字段没有真实来源（输入设备的电量以档位到达），按
+     * 电压—容量表反演名义值，避免把板载电压漏给主机。 */
+    facts->battery_mv = (uint16_t)battery_mv_from_percent(pad->battery_percent);
+    facts->charging = pad->charging;
+    facts->external_power = pad->charging;
 }
 
 void target_send_pad(const pad_state_t *pad)

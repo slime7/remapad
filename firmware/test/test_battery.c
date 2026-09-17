@@ -72,9 +72,26 @@ static void maps_ns2_level(void)
     CHECK_EQ(battery_ns2_level_from_percent(120), 9);
 }
 
+/**
+ * 反演（电量百分比 → 名义端电压）：输入设备只报档位不带电压，0x05 报文的
+ * 电池电压字段用它折算。表上的点必须原值命中，两点之间线性内插，越界钳位。
+ */
+static void inverse_maps_percent_to_nominal_mv(void)
+{
+    CHECK_EQ(battery_mv_from_percent(100), 4070);
+    CHECK_EQ(battery_mv_from_percent(0), 2870);
+    CHECK_EQ(battery_mv_from_percent(75), 3786);
+    CHECK_EQ(battery_mv_from_percent(50), 3605);
+    /* 77% 落在 75%（3786mV）与 80%（3838mV）之间：五分之二档行程。 */
+    CHECK_EQ(battery_mv_from_percent(77), 3807);
+    CHECK_EQ(battery_mv_from_percent(120), 4070);
+}
+
 HOST_TEST_SUITE(suite_battery, "battery",
                 {"曲线两端钳位在 0-100%", clamps_outside_curve},
                 {"表上的电压点原值命中", hits_table_points},
                 {"两点之间线性过渡且不越档", interpolates_between_table_points},
                 {"放电过程中电量单调不回升", percentage_never_rises_while_voltage_falls},
-                {"NS2 电量等级按 10% 一档映射", maps_ns2_level});
+                {"NS2 电量等级按 10% 一档映射", maps_ns2_level},
+                {"百分比反演名义端电压（表点命中、线性内插、越界钳位）",
+                 inverse_maps_percent_to_nominal_mv});

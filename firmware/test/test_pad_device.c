@@ -595,6 +595,34 @@ static void dualsense_bt_headset_state_parses(void)
     CHECK_EQ(state.headset_mic, 1);
 }
 
+/**
+ * DualSense 蓝牙行登记了电量字节（第 54 字节）：与 DS4 同一套读法，低四位是
+ * 0-10 档、bit4 表示充电中。两份实机抓包交叉核对：2026-09-15 的空闲帧样本
+ * 读作 0x09（90%），2026-09-17 同一只 Edge 掉到 0x05（50%），两份样本里耳机
+ * 字节（第 55 字节）都在原位，偏移没有漂移。
+ */
+static void dualsense_bt_battery_parses(void)
+{
+    pad_report_t report = dualsense_bt_report();
+    pad_state_t state;
+
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.caps & PAD_CAP_BATTERY, PAD_CAP_BATTERY);
+    CHECK(state.battery_present);
+    CHECK_EQ(state.battery_percent, 90);
+    CHECK(!state.charging);
+
+    report.data[54] = 0x05; /* 两天后的同一只 Edge：90% → 50% */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.battery_percent, 50);
+    CHECK(!state.charging);
+
+    report.data[54] = 0x1A; /* 10 档 + 充电中 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.battery_percent, 100);
+    CHECK(state.charging);
+}
+
 HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"Xbox 面键按位置映射（物理 A 下 → ✕、物理 B 右 → ○）",
                  xbox_face_buttons_map_by_position},
@@ -616,4 +644,6 @@ HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"未登记耳机偏移的行不上报耳机状态",
                  unregistered_headset_row_reports_nothing},
                 {"DualSense 蓝牙耳机状态按第 55 字节解析",
-                 dualsense_bt_headset_state_parses});
+                 dualsense_bt_headset_state_parses},
+                {"DualSense 蓝牙电量按第 54 字节解析（低四位 0-10 档、bit4 充电）",
+                 dualsense_bt_battery_parses});

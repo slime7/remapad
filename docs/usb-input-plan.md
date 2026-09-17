@@ -79,7 +79,7 @@ PC 程序职责：枚举本机手柄、采样原始报告、按约定格式打�
 2. **VBUS 供电确认**：host 模式给手柄供 5V 的路径（原理图/实测），决定 host 模式可行性；未确认前手柄能否枚举只能在实机验证。
 3. **桥接已用不切 mux 的形态落地**：走 USB-Serial/JTAG 的桥接帧不需要 mux 实验，也没有失联风险。
    若将来要把桥接改到 OTG device 形态（例如为了更高的带宽），仍受上面两条门槛约束，且需要「确认后重启回 COM」的保底恢复路径（复位即回 Serial/JTAG，天然成立）；在那之前 UI 与串口两条入口都保持禁切。
-4. **电池**：`drivers/battery.c` 是电池数据获取唯一入口（当前占位值）；
-   真实 ADC（GPIO1，`VBAT = VADC × 3`）随 M5 接入，输入源经 `ns2_output_set_battery` 上报，Report 0x05 / 0x09 电池字段随报告自动携带。
+4. **电池**：上报主机的电量优先取输入设备自报值（家族表置 `PAD_CAP_BATTERY`，经 `target_apply_pad_battery` 覆盖事实表）；
+   板载 `drivers/battery.c`（GPIO1，`VBAT = VADC × 3`）只在设备没报电量时兜底，经 `ns2_output_set_battery` 上报，Report 0x05 / 0x09 电池字段随报告自动携带。
 5. **amiibo**：`ns2_output_amiibo_stage / _read` 已预留（PSRAM 内缓存 NTAG215 镜像，Report 0x09 的 NFC 状态字节随预置汇报 0x01）；
    传输方式未定（bridge 分块 / storage 分区文件 / USB 通道均可），NFC 命令通路（Command 0x01）在会话层实现时消费该镜像，届时不再改动输出封装。

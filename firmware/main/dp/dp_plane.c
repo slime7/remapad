@@ -89,11 +89,12 @@ static const ns2_output_sink_t s_ble_sink = {
 
 /** 目标侧事实：电量与端电压取自电池驱动（充电状态是趋势推断值，板上没有
  *  充电状态引脚，推断到充电即认为接了外部供电）；触觉特性与 NFC 状态来自
- *  主机会话与 amiibo 预置。 */
-static void refresh_target_facts(void)
+ *  主机会话与 amiibo 预置。输入设备自报电量（PAD_CAP_BATTERY）时覆盖电源
+ *  字段的电量档位——主机看到的电量跟手柄走，板载电池只是设备没报时的兜底。 */
+static void refresh_target_facts(const pad_state_t *pad)
 {
     const bool charging = battery_is_charging();
-    const pad_target_facts_t facts = {
+    pad_target_facts_t facts = {
         .battery_level = battery_ns2_level_from_percent(battery_get_percentage()),
         .battery_mv = (uint16_t)battery_get_voltage_mv(),
         .charging = charging,
@@ -101,6 +102,7 @@ static void refresh_target_facts(void)
         .rumble_enabled = ns2_session_rumble_enabled(),
         .nfc_state = ns2_output_nfc_state(),
     };
+    target_apply_pad_battery(&facts, pad);
     target_set_facts(&facts);
 }
 
@@ -315,7 +317,7 @@ static void dp_task(void *param)
         if (ui_event == DP_UI_EVENT_ENTERED) {
             ESP_LOGI(TAG, "pad captures the screen: dpad moves focus, circle confirms");
         }
-        refresh_target_facts();
+        refresh_target_facts(&pad);
         if (++send_div >= DP_SEND_DIV) {
             send_div = 0;
             if (paused) {
