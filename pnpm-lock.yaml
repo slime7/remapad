@@ -11,8 +11,8 @@ importers:
   ui:
     dependencies:
       '@pocketjs/framework':
-        specifier: file:vendor/pocketjs
-        version: file:ui/vendor/pocketjs
+        specifier: ^0.12.0
+        version: 0.12.0(@typescript-eslint/types@8.69.0)(csstype@3.2.3)(esbuild@0.28.2)(typescript@5.9.3)
       '@vue-jsx-vapor/runtime':
         specifier: 3.2.19
         version: 3.2.19(csstype@3.2.3)(vue@3.6.0-rc.1(typescript@5.9.3))
@@ -38,6 +38,9 @@ importers:
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
+      '@pocketjs/cli':
+        specifier: ^0.12.0
+        version: 0.12.0
       '@stylistic/eslint-plugin':
         specifier: ^5.10.0
         version: 5.10.0(eslint@10.9.1(jiti@2.7.0))
@@ -551,8 +554,13 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@pocketjs/framework@file:ui/vendor/pocketjs':
-    resolution: {directory: ui/vendor/pocketjs, type: directory}
+  '@pocketjs/cli@0.12.0':
+    resolution: {integrity: sha512-9nLPVGhukA8DxNaUHriZ3bgAE9Fzdl68G8OegZULAybjRQLAQq1K+kB3iB5zgRb+JiK3yekir9E+/UHJp760FA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  '@pocketjs/framework@0.12.0':
+    resolution: {integrity: sha512-0xV2LO7rLOdwg63SXO9WPOtsEl63QbiAkAuDyLKUBkrLgN9IKbfm+yG9TR1rfNUTNhihxZrOa8ytwNCLxI7yww==}
 
   '@stylistic/eslint-plugin@5.10.0':
     resolution: {integrity: sha512-nPK52ZHvot8Ju/0A4ucSX1dcPV2/1clx0kLcH5wDmrE4naKso7TUC/voUyU1O9OTKTrR6MYip6LP0ogEMQ9jPQ==}
@@ -1899,7 +1907,33 @@ snapshots:
     dependencies:
       playwright: 1.62.1
 
-  '@pocketjs/framework@file:ui/vendor/pocketjs': {}
+  '@pocketjs/cli@0.12.0': {}
+
+  '@pocketjs/framework@0.12.0(@typescript-eslint/types@8.69.0)(csstype@3.2.3)(esbuild@0.28.2)(typescript@5.9.3)':
+    dependencies:
+      '@vue/compiler-sfc': 3.6.0-rc.1
+      '@vue/compiler-vapor': 3.6.0-rc.1
+      octane: 0.1.26(@typescript-eslint/types@8.69.0)
+      solid-js: 1.9.15
+      vue: 3.6.0-rc.1(typescript@5.9.3)
+      vue-jsx-vapor: 3.2.19(csstype@3.2.3)(esbuild@0.28.2)(vue@3.6.0-rc.1(typescript@5.9.3))
+    transitivePeerDependencies:
+      - '@farmfe/core'
+      - '@nuxt/kit'
+      - '@nuxt/schema'
+      - '@rspack/core'
+      - '@typescript-eslint/types'
+      - bun-types-no-globals
+      - csstype
+      - esbuild
+      - react
+      - react-dom
+      - rolldown
+      - rollup
+      - typescript
+      - unloader
+      - vite
+      - webpack
 
   '@stylistic/eslint-plugin@5.10.0(eslint@10.9.1(jiti@2.7.0))':
     dependencies:

@@ -11,7 +11,7 @@
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
-    "@pocketjs/framework": "file:vendor/pocketjs",
+    "@pocketjs/framework": "^0.12.0",
     "@vue-jsx-vapor/runtime": "3.2.19",
     "solid-js": "^1.9.0",
     "vue": "3.6.0-rc.1",
@@ -22,6 +22,7 @@
     "@babel/preset-typescript": "^7",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "1.62.1",
+    "@pocketjs/cli": "^0.12.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@tailwindcss/cli": "^4.3.2",
     "@tailwindcss/typography": "^0.5.20",

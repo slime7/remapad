@@ -7,8 +7,6 @@ export default [
   {
     ignores: [
       'node_modules/**/*',
-      // 上游 PocketJS 快照，按上游代码风格维护，不受本项目规则约束。
-      'vendor/**/*',
       'dist/**/*',
       'coverage/**/*',
       '**/*.d.ts',

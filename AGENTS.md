@@ -34,7 +34,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 
 - **前端 UI 工程 (`ui/`)**：
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法；样式用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
-  - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，来源为仓库内 `ui/vendor/pocketjs` 快照。
+  - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，来源为 `@pocketjs/framework` 官方 npm 依赖。
   - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部七个页面，切页只翻转各页根节点的 `hidden`，新增页面直接写进 JSX
     （[ADR 0016](docs/adr/0016-mount-all-pages-before-first-frame.md)）。
 - **设备固件工程 (`firmware/`)**：
@@ -126,12 +126,10 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - 只在运行时动态拼接、从未出现在字面量里的字符不会被烘焙；字体未映射的码点（如 emoji）渲染为 tofu 方框。
   - 界面文案必须写在 `ui/src` 里：固件经 bridge 回发的文本不会被烘焙，直接上屏显示成豆腐块。
 - **PocketJS 组件、归档与脚本入口**：
-  - 仓库自包含：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定编译器、框架源码与触摸预览用的 wasm 核心。
-  - `ui/vendor/pocketjs/framework/src/styles.generated.ts` 必须随快照提交（官方类型检查跑在编译器写入它之前，且 `pnpm install` 后新增的快照文件不进依赖副本）；
-    它按 `ui/src` 重新生成，出现差异直接提交。
-  - `POCKETJS_ROOT` 只在重新生成快照（`scripts/vendor-pocketjs.mjs`）或重建原生归档时用作对照路径，不要把本项目产物写进去。
+  - 仓库自包含：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，前端通过 `@pocketjs/framework` 与 `@pocketjs/cli` npm 依赖获得官方编译器与浏览器运行时。
+  - `POCKETJS_ROOT` 只在对照官方源码 checkout 或重建原生归档时用作路径覆盖，日常构建不依赖它。
   - 触摸预览一律用 `ui/preview/`（浏览器触摸事件 → PocketJS 触摸帧，官方 playground 无触摸输入）。
-  - 升级 `firmware/components/` 后必须重新生成原生归档并核对 QuickJS 校验值，见 [patches/README.md](patches/README.md)。
+  - 升级 `firmware/components/` 后必须核对 QuickJS 校验值并重新生成原生归档，见 [patches/README.md](patches/README.md)。
 - **单行不超过 120 字符**：`.editorconfig` 的 `max_line_length = 120` 适用于代码、脚本与文档；Markdown 正文按句子断行，一句一行，整句过长就改短。
   上游快照（`ui/vendor/pocketjs/`、`firmware/components/`）、`patches/*.patch`、锁文件与单行 SVG 豁免；
   GFM 表格行（单元格不能折行）与必须整行粘贴执行的命令保持原样。

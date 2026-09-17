@@ -49,11 +49,10 @@ flowchart LR
 
 ```text
 remapad/
-├── scripts/                     # PocketJS 工具链入口、触摸预览服务、快照与原生归档、固件测试
+├── scripts/                     # PocketJS 工具链入口、触摸预览服务、原生归档与固件测试
 ├── patches/                     # 上游 PocketJS 组件对账记录
 ├── ui/
 │   ├── pocket.json              # PocketJS 应用清单
-│   ├── vendor/pocketjs/         # 固定的 PocketJS 编译器与框架快照
 │   ├── preview/                 # 触摸屏预览页（浏览器触摸事件 → PocketJS 触摸帧）
 │   └── src/                     # Vue Vapor JSX UI（pages / components / hooks / bridge）
 ├── firmware/
@@ -90,7 +89,7 @@ pnpm run build
 pnpm run dev
 ```
 
-`check`、`compile`、`build` 调用快照内的官方 `tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；
+`check`、`compile`、`build` 调用官方 `@pocketjs/framework` 的 `tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；
 `dev` 编译后启动触摸预览页（`ui/preview/`，240 × 280，触摸输入）。
 输出位于 `ui/dist/`（`remapad-ui.js`、`remapad-ui.pak`、`remapad-ui.pocket`），都是生成产物，不手动编辑或提交。
 

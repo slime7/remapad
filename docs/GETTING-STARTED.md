@@ -11,7 +11,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | Node.js | 18 或更高 | 运行项目脚本和已发布 CLI |
 | pnpm | 当前稳定版 | 工作区依赖与任务调度 |
 | Bun | PocketJS 官方要求的版本 | 执行官方 compiler、官方构建脚本和 Web 开发主机 |
-| PocketJS compiler | 仓库内的 `ui/vendor/pocketjs` 快照 | 提供 `tools/pocket.ts` 与 ESP-IDF host profile 支持；npm 上发布的 0.11.0 尚不含该支持 |
+| PocketJS compiler | `@pocketjs/framework` 0.12.0 npm 依赖 | 提供 `tools/pocket.ts` 与 ESP-IDF host profile 官方支持 |
 | Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 仅在升级组件、重新生成 ESP32-S3 原生归档时需要 |
 | Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
 | uv | 当前稳定版 | 运行 `pc/` 下的工具（`cd pc ; uv run python remapadctl.py -p COMx` 与图形入口 `uv run python remapadgui.py`）；第三方依赖是 `hidapi` 与 `customtkinter`，由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`，解释器要 3.10 或更高，uv 找不到会自己下载 |
@@ -40,8 +40,7 @@ pnpm install
 六个官方 ESP-IDF 组件与 ESP32-S3 原生归档已随仓库固定在 `firmware/components/`。
 Web 开发主机随 `ui/node_modules/@pocketjs/framework` 一起安装，因此这一条之后就只剩构建命令。
 
-前端检查、编译和打包使用仓库内的 `ui/vendor/pocketjs` 快照，依赖由 `pnpm install` 安装，因此不需要额外准备。
-快照的来源与同步方式见 [ui/vendor/pocketjs/README.md](../ui/vendor/pocketjs/README.md)。
+前端检查、编译和打包使用官方 `@pocketjs/framework` npm 依赖，依赖由 `pnpm install` 安装，因此不需要额外准备。
 
 ### 2. 准备 PocketJS ESP-IDF 依赖（升级时）
 
@@ -88,21 +87,16 @@ remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
 ```
 
 开发环节默认开启 dev 状态（包含第 6 页调试页）；只有通过 `pnpm run build:release`、传入 `--release` / `--prod` / `--no-dev` 参数或设置 `REMAPAD_RELEASE=1` 时，才会关闭 dev 状态并剔除调试页。
-`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、`ui/vendor/pocketjs`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；
-默认命中仓库内的快照。它只负责路径与参数转发、建立快照的依赖链接，不实现 compiler，也不改变 package 格式。
-
-快照同时携带编译器生成的 `framework/src/styles.generated.ts`（class 字面量到 styleId 的映射）。它必须提交：
-官方 CLI 的类型检查跑在编译器写入该文件之前，而 `pnpm install` 之后新写入的快照文件不会进入 pnpm 的依赖副本，缺少它时连 `pnpm run check` 都会以 TS2307 失败。
-每次 `pnpm run build` 会按当前 `ui/src` 重新生成该文件，出现差异时正常提交即可。
+`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、官方 npm 安装目录 `ui/node_modules/@pocketjs/framework`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；
+默认命中项目安装的官方包。它只负责路径与参数转发、建立依赖软链接，不实现 compiler，也不改变 package 格式。
 
 官方命令的语义如下，`pocket build` 的 `--host-profile` 形式等价于上面的项目脚本：
 
 ```powershell
-cd ui/vendor/pocketjs
-bun tools/pocket.ts build --manifest ../pocket.json `
-  --host-profile firmware/pocket.host.json `
-  --project-root ui --outdir ui/dist `
-  --output ui/dist/remapad-ui.pocket
+bun node_modules/@pocketjs/framework/tools/pocket.ts build --manifest pocket.json `
+  --host-profile ../firmware/pocket.host.json `
+  --project-root . --outdir dist `
+  --output dist/remapad-ui.pocket
 ```
 
 不要将 `--target psp` 用在本项目上。`psp` 是 Sony PSP 后端的 target 名称；ESP32 使用自定义 `--host-profile`。
@@ -115,7 +109,7 @@ pnpm run dev
 
 该命令先用官方 `compile` 把 bundle 与 PAK 写入 `ui/dist/`，再启动项目内的触摸预览页。
 打开 [http://127.0.0.1:8130](http://127.0.0.1:8130) 可以看到 240 × 280 屏幕、触摸输入和运行读数。
-同一命令还会用快照内的官方 `hosts/web/serve.ts` 拉起官方 DevTools 服务器。
+同一命令还会用官方包内 `hosts/web/serve.ts` 拉起官方 DevTools 服务器。
 预览页的「DevTools 面板」按钮会打开 [http://127.0.0.1:8131/devtools](http://127.0.0.1:8131/devtools)：
 组件树与屏幕高亮、暂停/单步、console 镜像与 REPL、输入磁带导出/重放/时序回退、截图，全部由官方面板与 hub 承载，预览页只负责按官方 `engine.js` 的设备协议接入 `/ws`。
 

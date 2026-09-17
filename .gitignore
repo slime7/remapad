@@ -10,9 +10,6 @@ compile_commands.json
 
 # Node / Bun 前端依赖与产物
 node_modules/
-# 快照目录内的依赖链接与编译缓存
-ui/vendor/pocketjs/node_modules
-ui/vendor/pocketjs/.cache/
 dist/
 ui/dist/
 # 官方编译器在入口目录生成又删除的类型检查临时目录
@@ -46,6 +43,7 @@ target/
 # 编辑器与 IDE 配置
 .vscode/
 .idea/
+.zcode/
 *.suo
 *.user
 *.userosv

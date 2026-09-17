@@ -1,6 +1,7 @@
 # 上游对账记录
 
 本目录记录本仓库固定的 PocketJS 组件与上游实现之间的差异，以及重新对账的方法。
+当前固件组件对账至 PocketJS v0.12.0（commit `d3f0be0c7739ea704ca25d8b5158581bb176abc6`）。
 这些差异都已经写进 `firmware/components/` 内的仓库副本，构建时不需要再对任何目录打补丁。
 
 ## 0001-quickjs-ng-0.14.0-source-pin

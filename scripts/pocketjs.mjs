@@ -1,6 +1,6 @@
-// 官方 PocketJS 工具链入口。编译器、框架源码、字体与浏览器运行时都取自仓库内的
-// ui/vendor/pocketjs 快照，因此项目自身就能完成检查、编译、打包与预览；POCKETJS_ROOT
-// 只在需要对照官方 checkout 或重建原生归档时使用。
+// 官方 PocketJS 工具链入口。编译器、框架源码、字体与浏览器运行时取自官方 npm 包
+// @pocketjs/framework 与 @pocketjs/cli，因此项目无需 vendor 快照即可完成检查、编译、
+// 打包与预览；POCKETJS_ROOT 只在需要对照官方源码 checkout 或自定义编译时使用。
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -15,8 +15,29 @@ const HOST_PROFILE = resolve(PROJECT_ROOT, 'firmware/pocket.host.json');
 const UI_OUTDIR = resolve(UI_ROOT, 'dist');
 const PACKAGE_OUTPUT = resolve(UI_OUTDIR, 'remapad-ui.pocket');
 const COMPONENTS_DIR = resolve(PROJECT_ROOT, 'firmware/components');
-const VENDOR_ROOT = resolve(UI_ROOT, 'vendor/pocketjs');
+const NPM_FRAMEWORK_ROOT = resolve(UI_ROOT, 'node_modules/@pocketjs/framework');
 const SIBLING_CHECKOUT = resolve(PROJECT_ROOT, '../pocketjs');
+
+// 官方包 tools/build.ts 与 jsx-plugin.ts 会在 pass 2 时从包自身目录的相对路径
+// 解析 vue、solid-js（../../node_modules/...）。在 pnpm 软链接结构下，
+// 该包目录内没有直接的 node_modules，需要将其指向项目的 ui/node_modules。
+function ensureFrameworkNodeModules(root) {
+  const link = resolve(root, 'node_modules');
+  if (existsSync(link)) {
+    return;
+  }
+  const target = resolve(UI_ROOT, 'node_modules');
+  if (!existsSync(target)) {
+    console.error('[Remapad] 缺少 ' + target + '，请先执行 pnpm install');
+    process.exit(1);
+  }
+  try {
+    symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+    console.log('[Remapad] 已把 ' + root + '/node_modules 指向项目依赖目录');
+  } catch (error) {
+    console.warn('[Remapad] 建立 node_modules 软链接时提示:', error.message);
+  }
+}
 
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? '';
@@ -97,7 +118,7 @@ writeFileSync(envFile, `/**\n * 由 scripts/pocketjs.mjs 自动生成的构建�
 
 const candidates = [
   process.env.POCKETJS_ROOT?.trim() ? resolve(process.env.POCKETJS_ROOT.trim()) : null,
-  VENDOR_ROOT,
+  NPM_FRAMEWORK_ROOT,
   SIBLING_CHECKOUT,
 ].filter((root, index, roots) => root !== null && roots.indexOf(root) === index);
 
@@ -150,37 +171,6 @@ function cliArgs(root, subcommand, outdir) {
     args.push('--output', PACKAGE_OUTPUT);
   }
   return args;
-}
-
-// 编译器在打包阶段从自身包根解析 vue、solid-js 等运行时依赖。快照位于仓库内，
-// 因此这里把它指向项目已安装的 ui/node_modules，避免同一批依赖出现第二份副本。
-// 目标已存在时不做任何事；pnpm install 会重建 ui/node_modules。
-function ensureVendorNodeModules() {
-  const link = resolve(VENDOR_ROOT, 'node_modules');
-  if (existsSync(link)) {
-    return;
-  }
-  const target = resolve(UI_ROOT, 'node_modules');
-  if (!existsSync(target)) {
-    console.error('[Remapad] 缺少 ' + target + '，请先执行 pnpm install');
-    process.exit(1);
-  }
-  symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
-  console.log('[Remapad] 已把 ui/vendor/pocketjs/node_modules 指向项目依赖目录');
-}
-
-// 框架源码 import 了编译器生成的 framework/src/styles.generated.ts，而官方 CLI 的类型检查
-// 跑在编译器写入该文件之前，所以它必须随快照提交、并在 pnpm install 之前就位：安装之后再
-// 写入的文件不会进入 pnpm 的依赖副本，类型检查仍然会以 TS2307 失败。缺失时给出修复提示，
-// 具体错误仍由官方 CLI 输出。
-const GENERATED_STYLES = 'framework/src/styles.generated.ts';
-
-function warnIfGeneratedStylesMissing(root) {
-  if (existsSync(resolve(root, GENERATED_STYLES))) {
-    return;
-  }
-  const hint = '，请从 git 恢复该文件，或在该 checkout 里执行官方 bun tools/build.ts 后重新执行 pnpm install';
-  console.error('[Remapad] ' + root + ' 缺少 ' + GENERATED_STYLES + hint);
 }
 
 /** 监听 UI 源码，变更后重新编译并让预览页加载新产物。 */
@@ -382,16 +372,12 @@ if (command === 'native') {
 // 编译需要含 ESP-IDF host profile 的官方 compiler；预览主机可以与编译分离，这样
 // bundle 仍然输出到本仓库的 ui/dist。
 const compilerRoot = requireRoot(hasHostProfileCompiler, '包含 --host-profile 的 PocketJS compiler');
-
-if (compilerRoot === VENDOR_ROOT) {
-  ensureVendorNodeModules();
-}
-warnIfGeneratedStylesMissing(compilerRoot);
+ensureFrameworkNodeModules(compilerRoot);
 console.log('[Remapad] compiler: ' + compilerRoot);
 
 if (command === 'web') {
-  // 浏览器运行时取自与编译器同一份快照，避免版本错配。
-  const runtimeRoot = [VENDOR_ROOT, ...candidates].find(hasWebHost) ?? compilerRoot;
+  // 浏览器运行时取自与编译器同一份来源，避免版本错配。
+  const runtimeRoot = [NPM_FRAMEWORK_ROOT, ...candidates].find(hasWebHost) ?? compilerRoot;
   const runtimeDir = resolve(runtimeRoot, 'hosts/web');
   console.log('[Remapad] compiler: ' + compilerRoot);
   console.log('[Remapad] 浏览器运行时: ' + runtimeDir);
@@ -431,7 +417,7 @@ if (command === 'web') {
     }));
     console.log('[Remapad] 官方 DevTools: http://127.0.0.1:8131/devtools');
   } else {
-    console.log('[Remapad] 快照缺少 hosts/web/serve.ts，未启动官方 DevTools 服务器（重新执行 scripts/vendor-pocketjs.mjs 同步）');
+    console.log('[Remapad] 缺少 hosts/web/serve.ts，未启动官方 DevTools 服务器');
   }
   watchUiSources(compilerRoot, server);
   watchParent();

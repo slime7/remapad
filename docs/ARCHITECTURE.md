@@ -106,7 +106,6 @@ flowchart TB
     Root --> Firmware["firmware/：ESP-IDF 固件工作区"]
 
     UI --> UiFiles["package.json / pocket.json / jsconfig.json"]
-    UI --> UiVendor["vendor/pocketjs/：固定的官方编译器与框架快照"]
     UI --> UiSrc["src/：index.tsx / App.tsx / 入口同级图片资源 / bridge/（控制面协议）"]
     UI --> UiPreview["preview/：触摸屏预览页"]
 
@@ -126,7 +125,7 @@ flowchart TB
     FwMain --> MainOta["ota/：升级会话（分区回写与回滚门槛）"]
 ```
 
-仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，`ui/vendor/pocketjs` 固定了编译器、框架源码与浏览器运行时；
+仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，前端通过官方 `@pocketjs/framework` 与 `@pocketjs/cli` npm 依赖获得编译器与浏览器运行时；
 上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。
 `scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。
 `ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；
