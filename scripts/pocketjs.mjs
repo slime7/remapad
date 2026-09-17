@@ -178,6 +178,26 @@ function cliArgs(root, subcommand, outdir) {
   return args;
 }
 
+function sanitizeBundledJs(outdir) {
+  const jsPath = resolve(outdir, 'remapad-ui.js');
+  if (!existsSync(jsPath)) {
+    console.error('[Remapad] sanitizeBundledJs: file not found:', jsPath);
+    return;
+  }
+  let code = readFileSync(jsPath, 'utf8');
+  const regex = /recordMask\(mask,\s*analog,\s*touch,\s*touchSurfaces,\s*rightAnalog\);/;
+  if (regex.test(code)) {
+    code = code.replace(
+      regex,
+      'if (state.transport) { recordMask(mask, analog, touch, touchSurfaces, rightAnalog); }',
+    );
+    writeFileSync(jsPath, code);
+    console.log('[Remapad] 已对 remapad-ui.js 进行嵌入式触控防爆安全加固');
+  } else {
+    console.log('[Remapad] sanitizeBundledJs: pattern not matched');
+  }
+}
+
 function compileUi(compilerRoot, outdir) {
   const checkStatus = run([
     resolve(compilerRoot, 'tools/pocket.ts'),
@@ -204,7 +224,12 @@ function compileUi(compilerRoot, outdir) {
     `--font-bold=${FONT_BOLD}`,
     ...backendArgs,
   ];
-  return run(buildArgs, compilerRoot);
+  const buildStatus = run(buildArgs, compilerRoot);
+  if (buildStatus !== 0) {
+    return buildStatus;
+  }
+  sanitizeBundledJs(outdir);
+  return 0;
 }
 
 /** 监听 UI 源码，变更后重新编译并让预览页加载新产物。 */
