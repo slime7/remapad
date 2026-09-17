@@ -1,0 +1,137 @@
+/**
+ * Remapad 底部状态栏组件（224 × 64）：
+ * 位于屏幕底部 (x:8, y:208, w:224, h:64)，上圆角 8px，下圆角 32px。
+ *
+ * 状态优先级：
+ * 1. OTA 数据接收进度条（最高）
+ * 2. 手柄操控屏幕提示模式（两行提示文本）
+ * 3. 三等分状态栏（默认）：物理手柄状态、主机连接状态（带玩家指示灯，点击触发 HOME 动作）、电池电量。
+ */
+import { View, Text, Image } from '@pocketjs/framework/vue-vapor/components';
+import { COLOR, STYLE } from '../theme';
+import { ICON, Icon } from '../icons';
+import { hw, sendDebugKey } from '../hooks/useHardware';
+
+const OTA_TRACK_W = 192;
+
+/** 微型玩家序号指示灯（单格 8×8，间距 3px）。 */
+function MiniPlayerLedRow(props: { mask: () => number }) {
+  return (
+    <View class="flex-row gap-[3] shrink-0 items-center justify-center">
+      <View class={(props.mask() & 0b0001) !== 0 ? STYLE.miniPlayerLedOn : STYLE.miniPlayerLedOff} />
+      <View class={(props.mask() & 0b0010) !== 0 ? STYLE.miniPlayerLedOn : STYLE.miniPlayerLedOff} />
+      <View class={(props.mask() & 0b0100) !== 0 ? STYLE.miniPlayerLedOn : STYLE.miniPlayerLedOff} />
+      <View class={(props.mask() & 0b1000) !== 0 ? STYLE.miniPlayerLedOn : STYLE.miniPlayerLedOff} />
+    </View>
+  );
+}
+
+export function BottomBar() {
+  const isOta = () => hw.ota.phase === 'receiving';
+  const isPadUi = () => hw.padUiMode;
+
+  // 手柄状态
+  const padAttached = () => hw.physicalPad.attached;
+  const padGlyph = () => (padAttached() ? ICON.videogameAsset : ICON.videogameAssetOff);
+  const padColor = () => (padAttached() ? COLOR.primary : COLOR.disabled);
+  const padLabel = () => (padAttached() ? (hw.physicalPad.name || 'PRO') : '未连接');
+
+  // 主机连接状态
+  const hostConnected = () => hw.pairing === 'connected';
+  const hostColor = () => (hostConnected() ? COLOR.primary : COLOR.disabled);
+
+  // 电池电量状态
+  const batteryPct = () => hw.battery.percentage;
+  const batteryGlyph = () => {
+    const pct = batteryPct();
+    if (pct <= 15) {
+      return ICON.batteryAlert;
+    }
+    if (pct >= 90) {
+      return ICON.batteryFull;
+    }
+    return ICON.batteryStd;
+  };
+  const batteryColor = () => {
+    const pct = batteryPct();
+    if (pct <= 15) {
+      return COLOR.error;
+    }
+    return COLOR.onSurface;
+  };
+
+  const onHostClick = () => {
+    sendDebugKey('home');
+  };
+
+  return (
+    <View class="absolute left-[8] right-[8] bottom-[8] h-[64] z-40 overflow-hidden">
+      {/* 底部异形圆角矢量背景贴图（256×64，两边各留 16px 透明边距） */}
+      <Image src="bottom-bar.svg" class="absolute left-[-16] top-0 w-[256] h-[64]" />
+
+      {/* 优先级 1：OTA 进度条 */}
+      <View class={isOta() ? 'w-full h-full flex-col items-center justify-center px-4 gap-2' : 'hidden'}>
+        <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>
+          {`OTA 接收中: ${hw.ota.percentage}%`}
+        </Text>
+        <View class={STYLE.track}>
+          <View
+            class={STYLE.trackFill}
+            style={{ width: Math.round((Math.max(0, Math.min(100, hw.ota.percentage)) / 100) * OTA_TRACK_W) }}
+          />
+        </View>
+      </View>
+
+      {/* 优先级 2：手柄操控提示 */}
+      <View class={!isOta() && isPadUi() ? 'w-full h-full flex-col items-center justify-center px-2 py-1 gap-1' : 'hidden'}>
+        <View class="flex-row items-center gap-1">
+          <Icon glyph={ICON.gamepadLeft} class="text-sm shrink-0" color={COLOR.primary} />
+          <Icon glyph={ICON.gamepadRight} class="text-sm shrink-0" color={COLOR.primary} />
+          <Icon glyph={ICON.gameButtonL} class="text-sm shrink-0" color={COLOR.primary} />
+          <Icon glyph={ICON.gameButtonR} class="text-sm shrink-0" color={COLOR.primary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>翻页</Text>
+          <View class="w-2" />
+          <Icon glyph={ICON.gamepadUp} class="text-sm shrink-0" color={COLOR.primary} />
+          <Icon glyph={ICON.gamepadDown} class="text-sm shrink-0" color={COLOR.primary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>选择</Text>
+        </View>
+        <View class="flex-row items-center gap-1">
+          <Icon glyph={ICON.gamepadCircleRight} class="text-sm shrink-0" color={COLOR.primary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>确认</Text>
+          <View class="w-2" />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>长按</Text>
+          <Icon glyph={ICON.gamepadCircleDown} class="text-sm shrink-0" color={COLOR.primary} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurface }}>退出</Text>
+        </View>
+      </View>
+
+      {/* 优先级 3：三等分状态显示 */}
+      <View class={!isOta() && !isPadUi() ? 'w-full h-full flex-row items-center px-1' : 'hidden'}>
+        {/* 左区：物理手柄 */}
+        <View class="grow basis-0 h-full flex-col items-center justify-center gap-1">
+          <Icon glyph={padGlyph()} class="text-xl shrink-0" color={padColor()} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+            {padLabel()}
+          </Text>
+        </View>
+
+        {/* 中区：主机连接 + 玩家指示灯（仅供点击触发，不参与手柄焦点导航） */}
+        <View
+          onPress={onHostClick}
+          class="grow basis-0 h-full flex-col items-center justify-center gap-1 rounded-[8] active:bg-[#4a2f40] transition-colors duration-150"
+        >
+          <Icon glyph={ICON.missingController} class="text-xl shrink-0" color={hostColor()} />
+          <MiniPlayerLedRow mask={() => hw.playerLed} />
+        </View>
+
+        {/* 右区：设备电量 */}
+        <View class="grow basis-0 h-full flex-col items-center justify-center gap-1">
+          <Icon glyph={batteryGlyph()} class="text-xl shrink-0" color={batteryColor()} />
+          <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
+            {`${batteryPct()}%`}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}

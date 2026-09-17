@@ -100,7 +100,7 @@ flowchart TB
     Root --> RootFiles["AGENTS.md / package.json / pnpm-workspace.yaml"]
     Root --> Scripts["scripts/：create_adr.py / pocketjs.mjs（官方工具链与触摸预览入口）/ preview-server.mjs"]
     Root --> Patches["patches/：上游 PocketJS 对账记录与发布说明"]
-    Root --> PC["pc/：PC 侧单工具 remapadctl（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）"]
+    Root --> PC["pc/：PC 侧工具 remapadctl（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）与图形入口 remapadgui"]
     Root --> Docs["docs/：VISION / ARCHITECTURE / ABSTRACTIONS / GETTING-STARTED / controller / hardware / adr/"]
     Root --> UI["ui/：PocketJS 前端工作区"]
     Root --> Firmware["firmware/：ESP-IDF 固件工作区"]

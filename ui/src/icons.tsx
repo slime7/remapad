@@ -25,6 +25,22 @@ export const ICON = {
   swapHoriz: '\ue8d4',
   bug: '\ue868',
   brightnessHigh: '\ue1ac',
+  add: '\ue145',
+  remove: '\ue15b',
+  /** 物理手柄连接状态图标（videogame_asset e338 / videogame_asset_off e500）。 */
+  videogameAsset: '\ue338',
+  videogameAssetOff: '\ue500',
+  /** 主机连接图标（missing_controller e701）。 */
+  missingController: '\ue701',
+  /** 手柄操控底栏提示按键图标。 */
+  gamepadLeft: '\ueecb',
+  gamepadRight: '\ueeca',
+  gameButtonL: '\ueede',
+  gameButtonR: '\ueedb',
+  gamepadUp: '\ueec9',
+  gamepadDown: '\ueecc',
+  gamepadCircleRight: '\ueece',
+  gamepadCircleDown: '\ueed0',
   /** 电池分档只有经典四个字形（实心满电 / 通用 / 告警 / 充电），
    *  图集里没有按百分比分格的电量条，档位差由颜色区分（见 AppStatusBar）。 */
   batteryFull: '\ue1a4',

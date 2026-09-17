@@ -88,20 +88,3 @@ export type PairingNotice =
 /** USB 角色切换提示：同 PairingNotice，必须是 ui/src 里的字面量。 */
 export type RoleNotice = '' | 'USB host 数据面未接入，切换暂不生效' | 'USB 角色切换未生效';
 
-/** 配对状态强调色。 */
-export function pairingColor(state: PairingState): string {
-  switch (state) {
-    case 'paired':
-      return COLOR.primary;
-    case 'connected':
-      return COLOR.tertiary;
-    case 'advertising':
-    case 'scanning':
-    case 'pairing':
-      return COLOR.tertiary;
-    case 'error':
-      return COLOR.error;
-    default:
-      return COLOR.onSurfaceVariant;
-  }
-}

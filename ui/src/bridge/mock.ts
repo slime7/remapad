@@ -22,6 +22,7 @@ interface MockHardwareState {
   usbRoleActive: boolean;
   /** 主机下发的玩家序号灯掩码（bit0-3），无主机时为 0。 */
   playerLed: number;
+  padUiMode: boolean;
   bootAt: number;
   heapSize: number;
   heapFree: number;
@@ -56,6 +57,7 @@ const state: MockHardwareState = {
   usbRole: 'device',
   usbRoleActive: true,
   playerLed: 0,
+  padUiMode: false,
   bootAt: Date.now(),
   heapSize: 320 * 1024,
   heapFree: 186 * 1024,
@@ -181,8 +183,8 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         usbRole: state.usbRole,
         usbRoleActive: state.usbRoleActive,
         playerLed: state.playerLed,
-        /* 浏览器预览没有数据面：手柄操控模式恒关，键盘随时可用。 */
-        padUiMode: false,
+        /* 浏览器预览下可通过 debugKey('ui') 模拟进入/退出手柄操控模式。 */
+        padUiMode: state.padUiMode,
         uptimeMs: Date.now() - state.bootAt,
         heapFree: state.heapFree,
         heapSize: state.heapSize,
@@ -312,7 +314,10 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       break;
 
     case 'debugKey':
-      // 浏览器预览没有数据面，只回执确认供调试页高亮反馈。
+      if (cmd.key === 'ui') {
+        state.padUiMode = !state.padUiMode;
+        emit({ t: 'padUiModeChanged', on: state.padUiMode });
+      }
       reply({ t: 'debugKeySet', id, key: cmd.key });
       break;
 

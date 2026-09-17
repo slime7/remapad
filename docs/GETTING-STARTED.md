@@ -14,7 +14,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | PocketJS compiler | 仓库内的 `ui/vendor/pocketjs` 快照 | 提供 `tools/pocket.ts` 与 ESP-IDF host profile 支持；npm 上发布的 0.11.0 尚不含该支持 |
 | Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 仅在升级组件、重新生成 ESP32-S3 原生归档时需要 |
 | Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
-| uv | 当前稳定版 | 运行 `pc/` 下的工具（`cd pc ; uv run python remapadctl.py -p COMx`）；第三方依赖只有 `hidapi`，由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`，解释器要 3.10 或更高，uv 找不到会自己下载 |
+| uv | 当前稳定版 | 运行 `pc/` 下的工具（`cd pc ; uv run python remapadctl.py -p COMx` 与图形入口 `uv run python remapadgui.py`）；第三方依赖是 `hidapi` 与 `customtkinter`，由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`，解释器要 3.10 或更高，uv 找不到会自己下载 |
 | ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
@@ -74,8 +74,9 @@ pnpm run check
 ### 4. 编译 UI 资源与 `.pocket`
 
 ```powershell
-pnpm run compile
-pnpm run build
+pnpm run compile       # 编译资源（默认 dev 状态，包含调试页）
+pnpm run build         # 打包应用（默认 dev 状态，包含调试页）
+pnpm run build:release # 正式发布打包（带 --release，摇树剔除调试页）
 ```
 
 脚本最终调用 PocketJS 官方 CLI，输出到 `ui/dist/`：
@@ -86,6 +87,7 @@ remapad-ui.pak      样式、字体和图像资源包
 remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
 ```
 
+开发环节默认开启 dev 状态（包含第 6 页调试页）；只有通过 `pnpm run build:release`、传入 `--release` / `--prod` / `--no-dev` 参数或设置 `REMAPAD_RELEASE=1` 时，才会关闭 dev 状态并剔除调试页。
 `scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、`ui/vendor/pocketjs`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；
 默认命中仓库内的快照。它只负责路径与参数转发、建立快照的依赖链接，不实现 compiler，也不改变 package 格式。
 
@@ -217,25 +219,28 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 乐鑫的 Flash Download Tool 也可以直接加载这个合并镜像。ESP-IDF 的 esptool 随 Python 环境安装，命令名是 `esptool`（`esptool.py` 在新版中已弃用）。
 不确定端口时用 `Get-PnpDevice -Class Ports | Where-Object Status -eq OK` 列出当前串口。
 
-+## 自动化测试
+## 自动化测试
 
-两套测试都在开发机上跑，不需要真板；细节与回归规则见 [TESTING.md](TESTING.md)。
+三套测试都在开发机上跑，不需要真板；细节与回归规则见 [TESTING.md](TESTING.md)。
 
 ```powershell
 pnpm run test:e2e         # UI 端到端：Playwright 驱动触摸预览页，断言行为与像素
 pnpm run test:firmware    # 固件主机端：把纯逻辑模块编译成本机可执行文件并运行
+pnpm run test:pc          # PC 侧：串口枚举、镜像校验、帧编解码与输出分流（标准库 unittest）
 ```
 
 `test:e2e` 会自己按 `pnpm run dev` 的方式编译产物并拉起预览服务器（8130），本地已有 dev 会话时直接复用；
 加 `--headed`（根脚本是 `pnpm run test:e2e:headed`）可以看到点击过程。`test:firmware` 会自动探测本机编译器（MSVC / clang / gcc，可用 `CC` 指定），几秒钟出结果。
 
 改 UI 的 bug 时先在 `ui/tests/e2e/` 写一条能复现的用例，改完让用例转绿；改固件里与硬件无关的逻辑（NS2 编码、序列号、命令帧、像素回调、输入源合成）同理，先补 `firmware/test/` 下的用例。
+PC 侧工具里与设备无关的逻辑（串口枚举、镜像校验、帧编解码、命令解析）同样先补 `pc/tests/` 下的用例。
 
 ## 串口 CLI 与 PWR 按键
 
 
 固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。
 项目自带 [pc/remapadctl.py](../pc/remapadctl.py)（桥接转发、命令行、实机截图与 OTA 都在同一个进程里），串口与帧编解码实现在 [pc/link.py](../pc/link.py)。
+同一套会话还有图形入口 [pc/remapadgui.py](../pc/remapadgui.py)（`uv run python remapadgui.py`：选口连接、转发开关、日志、命令行、截图与升级），界面与命令行不要同时连同一个口。
 依赖由 uv 管理（在 `pc/` 目录下执行，见 [pc/README.md](../pc/README.md)）：
 
 ```powershell
@@ -355,6 +360,7 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
   涵盖按键构建报告、结构化反馈、电池与 amiibo 预置。
 - [pc/remapadctl.py](../pc/remapadctl.py) 与 [pc/link.py](../pc/link.py)：
   PC 侧单工具（hidapi 读手柄 → 桥接帧、串口命令行、实机截图与 OTA 在同一个进程里；`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
+- [pc/remapadgui.py](../pc/remapadgui.py)：同一套会话的图形界面（CustomTkinter；输出走可注入的 Reporter、命令由按钮与输入框投递，见 [ADR 0040](adr/0040-pc-gui-customtkinter-console.md)）。
 - [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端入口是 `remapadctl.py --upgrade`。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。

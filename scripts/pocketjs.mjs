@@ -2,7 +2,7 @@
 // ui/vendor/pocketjs 快照，因此项目自身就能完成检查、编译、打包与预览；POCKETJS_ROOT
 // 只在需要对照官方 checkout 或重建原生归档时使用。
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, symlinkSync } from 'node:fs';
+import { existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,7 +20,8 @@ const SIBLING_CHECKOUT = resolve(PROJECT_ROOT, '../pocketjs');
 
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? '';
-const backendArgs = argv.filter((value) => value !== '--');
+const RELEASE_FLAGS = new Set(['--release', '--prod', '--no-dev']);
+const backendArgs = argv.filter((value) => value !== '--' && !RELEASE_FLAGS.has(value));
 
 // 隐藏子命令 __devtools-watchdog：DevTools（bun serve.ts）经它拉起。它只盯主
 // 进程的 PID——主进程被强杀时收不到任何退出事件，由这个还活着的中间层负责
@@ -80,6 +81,19 @@ if (!['check', 'compile', 'build', 'web', 'native'].includes(command)) {
   console.error('usage: node scripts/pocketjs.mjs <check|compile|build|web|native>');
   process.exit(1);
 }
+
+// 开发环节默认开启 dev 状态（显示调试页）；仅当用户明确传入 --release / --prod / --no-dev 或 REMAPAD_RELEASE=1 时取消 dev
+const isExplicitRelease =
+  process.argv.includes('--release') ||
+  process.argv.includes('--prod') ||
+  process.argv.includes('--no-dev') ||
+  process.env.REMAPAD_RELEASE === '1' ||
+  process.env.REMAPAD_DEV === '0';
+const isDev = !isExplicitRelease;
+const envFile = resolve(UI_ROOT, 'src/env.generated.ts');
+writeFileSync(envFile, `/**\n * 由 scripts/pocketjs.mjs 自动生成的构建环境常量。\n */\nexport const IS_DEV = ${isDev};\n`);
+
+
 
 const candidates = [
   process.env.POCKETJS_ROOT?.trim() ? resolve(process.env.POCKETJS_ROOT.trim()) : null,

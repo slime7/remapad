@@ -65,7 +65,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - `drivers/`：panel / touch / backlight / pwr_key / buzzer / battery；
     显示通路条带划分与刷新取值见 [ADR 0017](docs/adr/0017-display-path-and-scroll-frame-budget.md)。
   - 顶层 `boot_splash.c`：UI 就绪前的启动画面，随面板启动点亮背光；`render_accel.c`：S3 上接管渲染器填充/掩码混合/直拷回调的本机实现。
-  - PC 侧程序在 `pc/`（单工具 `pc/remapadctl.py`：转发 + 命令行 + 实机截图 + OTA），见 [pc/README.md](pc/README.md)。
+  - PC 侧程序在 `pc/`（`remapadctl.py`：转发 + 命令行 + 实机截图 + OTA；`remapadgui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
   - 新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
 
 ## 项目核心操作命令
@@ -76,9 +76,10 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 | **代码检查** | `pnpm run lint` | 前端 ESLint 静态检查 |
 | **UI 端到端测试** | `pnpm run test:e2e` | Playwright 驱动触摸预览页里的真实产物，断言页面行为与屏幕像素；`test:e2e:headed` 可看过程，规则见 [docs/TESTING.md](docs/TESTING.md) |
 | **固件主机端测试** | `pnpm run test:firmware` | 把与硬件无关的固件逻辑编译成开发机可执行文件并运行，秒级出结果 |
+| **PC 侧主机端测试** | `pnpm run test:pc` | `pc/` 工具里与设备无关的纯逻辑（串口枚举、镜像校验、帧编解码、输出分流、工具命令解析）在 `pc/tests/` 用标准库 unittest 跑，不接设备 |
 | **PocketJS 契约检查** | `pnpm run check` | 官方 CLI + `firmware/pocket.host.json` 校验清单、能力与视口 |
-| **前端资源编译** | `pnpm run compile` | 官方 PocketJS 编译器输出 `.js` 与 `.pak` |
-| **前端应用打包** | `pnpm run build` | 官方 `pocket build --host-profile` 输出 `.pocket` |
+| **前端资源编译** | `pnpm run compile` | 官方 PocketJS 编译器输出 `.js` 与 `.pak`（默认 dev 状态，包含调试页） |
+| **前端应用打包** | `pnpm run build` | 官方 `pocket build --host-profile` 输出 `.pocket`（默认 dev 状态）；正式发布使用 `pnpm run build:release`（剔除调试页） |
 | **原生归档重建** | `pnpm run native` | 仅升级组件时重新生成 `firmware/components/` 内的两个 `.a` |
 | **上游对账** | 见 [patches/README.md](patches/README.md) | 升级 `firmware/components/` 后核对 QuickJS 校验值与 `build-receipt.json` |
 | **触摸预览** | `pnpm run dev` | 编译并启动触摸预览页（端口 8130，240 × 280，触摸输入），同时拉起官方 DevTools 服务器（面板 8131） |
@@ -88,6 +89,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
 | **固件 OTA 升级** | `cd pc ; uv run python remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
 | **PC 手柄桥接** | `cd pc ; uv run python remapadctl.py -p COMx` | 读 PC 手柄原始报告按桥接帧转发给设备，同进程提供串口命令行、实机截图与 OTA；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移；转发默认只在交互模式开，`--pad` / `--no-pad` 控制 |
+| **PC 连接控制台** | `cd pc ; uv run python remapadgui.py` | 同一套会话的图形界面：选串口、连接/断开、手柄转发开关、实时日志、命令输入、实机截图与 OTA；与命令行不要同时连同一个口 |
 | **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`version`、`rollback` |
 | **实机截图** | `cd pc ; uv run python remapadctl.py -p COMx --shot` | 固件把当前画面整屏重渲染并按图像帧回传，PC 拼成 PNG（默认 `pc/shots/`，`--out` 指定路径；期间 UI 冻结约 0.2-1 秒，见 [ADR 0033](docs/adr/0033-pc-single-process-tool-and-device-screenshot.md)） |
 

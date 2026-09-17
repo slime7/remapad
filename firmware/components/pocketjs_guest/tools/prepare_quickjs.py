@@ -49,5 +49,5 @@ if __name__ == "__main__":
     result = prepare(Path(sys.argv[1]).read_bytes())
     output = Path(sys.argv[2])
     output.parent.mkdir(parents=True, exist_ok=True)
-    if not output.exists() or output.read_text() != result:
-        output.write_text(result)
+    if not output.exists() or output.read_text(encoding="utf-8", errors="ignore") != result:
+        output.write_text(result, encoding="utf-8")

@@ -21,13 +21,11 @@ export const NAV_STATUS = { x: 84, y: 240 } as const;
 export const NAV_SETTINGS = { x: 188, y: 240 } as const;
 
 /**
- * 首页玩家序号指示灯：4 个 16 见方的方块（间距 8），居中排在两枚 56 状态圆
- * （pt-[38]，圆行 38..94）下方 18 处，即 y 112..128。on/off 是这两种状态的
- * 底色：点亮为绿色，未点亮为暗绿灯槽。
+ * 底部中区微型玩家指示灯：4 个 8px 方块（间距 3px），居中排在底栏中区图标下方。
  */
 export const PLAYER_LED = {
-  y: 120,
-  xs: [84, 108, 132, 156],
+  y: 252,
+  xs: [104, 115, 126, 137],
   on: '#4ade80',
   off: '#14432a',
 } as const;
@@ -305,6 +303,14 @@ export class RemapadApp {
   /** 屏幕上是否可见某段文本。 */
   async hasVisibleText(text: string): Promise<boolean> {
     return (await this.visibleTexts()).includes(text);
+  }
+
+  /** 向应用派发模拟的原生/固件 Bridge 事件。 */
+  async emitBridge(msg: Record<string, unknown>): Promise<void> {
+    await this.page.evaluate((m) => {
+      (globalThis as any).__onNativeBridgeMessage?.(m);
+    }, msg);
+    await this.refreshTree();
   }
 
   /**

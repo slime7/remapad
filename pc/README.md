@@ -1,13 +1,14 @@
 # Remapad PC 侧工具（remapadctl）
 
-`remapadctl.py` 是 PC 侧唯一入口：一个进程同时做四件事——把手柄原始报告转发给设备、
+`remapadctl.py` 是 PC 侧的命令行入口：一个进程同时做四件事——把手柄原始报告转发给设备、
 当串口命令行、抓实机截图、推固件 OTA。设备只有一根 Type-C，USB-Serial/JTAG 既跑
 桥接帧也跑固件日志与 CLI 文本，因此这些能力共用同一个串口句柄，彼此不再抢口。
 
-- `link.py`：桥接帧编解码（与固件 `firmware/main/input/input_frame.c` 同一套规则）
-  与免复位的 Win32 串口打开，是 PC 侧唯一的串口实现。
+  与免复位的 Win32 串口打开，是 PC 侧唯一的串口实现（含串口枚举与打开失败的提示文案）。
 - `remapadctl.py`：桥接转发（读手柄、发桥接帧、把主机的震动与玩家灯写回手柄）、
   串口命令行、实机截图、固件 OTA 与交互式工具命令。
+- `remapadgui.py`：上面这套会话的图形入口（CustomTkinter），与命令行共用同一份
+  `Session` 与串口实现，只是把输出接到日志区、把控制做成按钮与输入框。
 
 ## 依赖
 
@@ -17,9 +18,10 @@ uv sync
 ```
 
 依赖由 [uv](https://docs.astral.sh/uv/) 管理：版本要求写在 `pyproject.toml`，锁文件是
-`uv.lock`，环境建在 `pc/.venv`。第三方依赖只有 `hidapi` 一个（读手柄用），Python 需要
-3.10 或更高；uv 找不到合适的解释器时会自己下载一个。串口部分直接调 Win32 API，不依赖
-pyserial。当前实现只支持 Windows。
+`uv.lock`，环境建在 `pc/.venv`。第三方依赖是 `hidapi`（读手柄）与 `customtkinter`
+（图形界面，连带 darkdetect 与 packaging），Python 需要 3.10 或更高；uv 找不到合适的
+解释器时会自己下载一个。串口与端口枚举直接走 Win32 API 与注册表，不依赖 pyserial。
+当前实现只支持 Windows。
 
 `uv run` 每次都会按锁文件把环境对齐，因此日常直接跑下面的命令即可；`uv sync` 只在想
 显式建环境或核对依赖时用。
@@ -47,6 +49,32 @@ uv run python remapadctl.py -p COM3 --logs            # 桥接的同时打印设
 report / ui / adv / headset / fwver / fwack / fwpost / fwapply / ctrl / backlight /
 screen / relay / motion / ltk / rumble / lamp / haptic），数据全部由固件现场读取——
 不经过 UI 层，UI 冻结（截图期间、页面门控不取数）不影响实时性。
+
+## 图形界面（remapadgui.py）
+
+`remapadgui.py` 是同一套会话的图形入口，适合长时间挂着看日志、按固定动作做验收：
+
+```powershell
+cd pc
+uv run python remapadgui.py
+```
+
+- 顶部工具条：选串口（下拉列出注册表里的 COM 口，默认 COM3）+ 连接 / 断开 + 状态灯 + 当前手柄摘要
+  （长名字按词截断，完整描述在「会话」页的下拉里）。
+- 「会话」页：转发开关（连接后默认开）、候选手柄下拉（与 `--list` 同一份枚举，选中哪只就只转发哪只）、
+  转发计数、「列出候选接口」按钮（等价于 `--list`），以及连接键 / 配新主机 / 停止广播 / 唤醒 / 断开主机 /
+  屏幕操控 / 状态 / `:all` / `:shot` / `reboot` 这些常用动作按钮。
+- 「升级」页：镜像路径与浏览、本地校验（同 `--dry-run`）、开始升级、进度条，以及
+  「升级完成后等设备回来并重新连接」（等价于 `--upgrade --wait`）。
+- 日志区：设备输出与工具提示逐行滚动，错误标红、发出去的整行命令带 `>` 前缀；
+  可开关时间戳与自动滚动，可清空、导出成文本；输入框回车发送命令，↑ / ↓ 取历史，
+  上方按钮把常用命令填进输入框。
+- 底部状态栏：链路状态、转发计数与最近一次错误。
+
+界面与命令行共用 `Session`、`link.py` 与同一份命令处理，因此「串口只有一个持有者」的约束不变：
+**界面与命令行不要同时连同一个口**。界面不做自动连接、不写配置文件；
+截图在落盘 PNG 后用系统看图器打开（界面里不放图像预览，因此不需要 Pillow）。
+关闭窗口会同步收尾当前会话：向设备补发 `DETACH` 并放掉串口，随后可以立刻改用命令行或重开界面连接。
 
 ## 串口命令面（完整控制手柄）
 
@@ -88,6 +116,8 @@ backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode 
 :quit              退出
 ```
 
+`:shot` 与 `:ota` 的路径参数整段生效：路径里有空格也不用加引号（界面里的截图与升级按钮走同一条路径）。
+
 手柄转发默认只在交互模式里开：一次性命令、`--shot`、`--log` 与 `--upgrade` 都不碰手柄（否则
 主机会看到手柄闪一下），要在这些模式里也转发就加 `--pad`；`--no-pad` 在任何模式下都关掉转发。
 
@@ -112,6 +142,7 @@ backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode 
 重渲染一遍（与面板上看到的是同一条渲染路径，含本机渲染加速器），再按 200 字节分块经
 图像帧回传。PC 侧按偏移把分块拼齐，写进 `pc/shots/remapad-<时间戳>.png`（`--out` 可
 指定路径）；缺块、越界或超时都不写文件，只报一行原因。
+图形界面里的「实机截图」按钮走同一条命令，落盘后交给系统看图器打开。
 
 截图期间屏幕会整屏刷一次、UI 冻结约 0.2–1 秒：这是调试通路，BLE 输入在另一个任务上，
 不受影响。
@@ -178,6 +209,8 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 
 上传前先在本地校验镜像：首字节 `0xE9`、芯片标识 `0x0009`（ESP32-S3）、偏移 `0x20` 的应用
 描述符（项目名必须是 `remapad_firmware`、版本取自构建时的 `git describe`）与 4 MB 分区上限。
+图形界面「升级」页把同一套检查做成「校验镜像」按钮，推送与进度显示走同一条 `:ota` 命令；
+勾选「升级完成后等设备回来并重新连接」等价于 `--upgrade --wait`。
 上传按 16 帧一个窗口推送，收到设备 ACK（含期望序号与已收字节）才发下一窗；ACK 的期望序号
 就是重发起点，因此超时重发不会重复写 flash。窗口末帧在帧头 `slot` 上带标记（末尾不足一窗也带），
 设备收到即应答，不必等固定帧数；整窗重发时设备的序号错误应答按 50 ms 最小间隔限流。
@@ -186,6 +219,19 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 
 设备侧行为与恢复路径见 [GETTING-STARTED.md](../docs/GETTING-STARTED.md) 的「固件 OTA 升级」。
 设备仍在验证上一个镜像（开机 30 秒内的健康门槛）时会回 BUSY，等一会重试即可。
+
+## 主机端用例
+
+与设备无关的 PC 侧逻辑有一组标准库 `unittest` 用例（串口枚举、镜像校验、帧编解码、输出分流与工具命令解析），
+不需要接设备：
+
+```powershell
+cd pc
+uv run python -m unittest discover -s tests -t . -v
+```
+
+仓库根也提供同一条命令：`pnpm run test:pc`。用例跑的是 `pc/` 下的真源码，不复制被测逻辑；
+范围与规则见 [TESTING.md](../docs/TESTING.md) 的「PC 侧主机端用例」。
 
 ## 已知限制
 

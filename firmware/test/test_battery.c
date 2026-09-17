@@ -9,35 +9,36 @@
 
 #include "battery_curve.h"
 
-/** 曲线两端：满电电压以上恒 100%，空电电压以下恒 0%。 */
+/** 曲线两端：实测满电电压 4.07V (4070mV) 及以上（插电到 4.15V）恒 100%，截止电压 2.87V (2870mV) 以下恒 0%。 */
 static void clamps_outside_curve(void)
 {
-    CHECK_EQ(battery_percent_from_mv(4200), 100);
-    CHECK_EQ(battery_percent_from_mv(4300), 100);
+    CHECK_EQ(battery_percent_from_mv(4070), 100);
+    CHECK_EQ(battery_percent_from_mv(4150), 100);
     CHECK_EQ(battery_percent_from_mv(5000), 100);
-    CHECK_EQ(battery_percent_from_mv(3270), 0);
-    CHECK_EQ(battery_percent_from_mv(3000), 0);
+    CHECK_EQ(battery_percent_from_mv(2870), 0);
+    CHECK_EQ(battery_percent_from_mv(2500), 0);
     CHECK_EQ(battery_percent_from_mv(0), 0);
 }
 
 /** 表上给出的点原值命中（插值不能把这些点带偏）。 */
 static void hits_table_points(void)
 {
-    CHECK_EQ(battery_percent_from_mv(4150), 95);
-    CHECK_EQ(battery_percent_from_mv(4020), 80);
-    CHECK_EQ(battery_percent_from_mv(3870), 60);
-    CHECK_EQ(battery_percent_from_mv(3840), 50);
-    CHECK_EQ(battery_percent_from_mv(3750), 25);
-    CHECK_EQ(battery_percent_from_mv(3690), 10);
+    CHECK_EQ(battery_percent_from_mv(4005), 95);
+    CHECK_EQ(battery_percent_from_mv(3838), 80);
+    CHECK_EQ(battery_percent_from_mv(3644), 60);
+    CHECK_EQ(battery_percent_from_mv(3605), 50);
+    CHECK_EQ(battery_percent_from_mv(3489), 25);
+    CHECK_EQ(battery_percent_from_mv(3412), 10);
 }
 
 /** 两点之间线性过渡，结果不会越过相邻档位。 */
 static void interpolates_between_table_points(void)
 {
-    /* 3840 mV = 50%，3850 mV = 55%：中点是 52.5%，取整到 53%。 */
-    CHECK_EQ(battery_percent_from_mv(3845), 53);
-    const uint8_t low = battery_percent_from_mv(3843);
-    const uint8_t high = battery_percent_from_mv(3847);
+    /* 3605 mV = 50%，3618 mV = 55%：过渡点不越界。 */
+    CHECK_EQ(battery_percent_from_mv(3611), 52);
+    CHECK_EQ(battery_percent_from_mv(3612), 53);
+    const uint8_t low = battery_percent_from_mv(3608);
+    const uint8_t high = battery_percent_from_mv(3615);
     CHECK(low >= 50 && low <= 55);
     CHECK(high >= 50 && high <= 55);
     CHECK(low <= high);
@@ -50,7 +51,7 @@ static void interpolates_between_table_points(void)
 static void percentage_never_rises_while_voltage_falls(void)
 {
     uint8_t previous = 100;
-    for (uint32_t mv = 4300; mv >= 3200; mv--) {
+    for (uint32_t mv = 4300; mv >= 2800; mv--) {
         const uint8_t percentage = battery_percent_from_mv(mv);
         CHECK(percentage <= previous);
         previous = percentage;

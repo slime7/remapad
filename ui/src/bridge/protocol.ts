@@ -150,6 +150,16 @@ export type DeviceMsg =
   | { t: 'playerLedChanged'; led: number }
   | { t: 'padUiModeChanged'; on: boolean }
   | { t: 'buttonEvent'; buttons: ControllerButtons }
+  /** OTA 数据接收进度广播。 */
+  | {
+      t: 'otaProgress';
+      phase: 'idle' | 'receiving' | 'verifying' | 'rebooting' | 'failed';
+      received: number;
+      total: number;
+      percentage: number;
+    }
+  /** 物理手柄连接状态广播。 */
+  | { t: 'padAttachedChanged'; attached: boolean; name?: string }
   /** 关机被外部供电拦下（USB 供电时电源锁存被旁路，系统仍在运行）。 */
   | { t: 'powerOffBlocked' }
   | { t: 'lowBatteryAlert'; percentage: number };

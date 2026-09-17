@@ -10,7 +10,7 @@
  * .editorconfig 里的 120 字符行宽约定。
  */
 
-/** MD3 深色主题 token（用户提供），键名与 MD3 token 对应。 */
+/** MD3 深色主题语义 token（键名与 Material Design 3 token 对应）。 */
 export const COLOR = {
   primary: '#b8dbff',
   onPrimary: '#154e77',
@@ -30,43 +30,30 @@ export const COLOR = {
   onErrorContainer: '#ff9993',
   background: '#060f1b',
   onBackground: '#d9e6ff',
+  surface: '#0c1a2c',
+  onSurface: '#d9e6ff',
+  surfaceVariant: '#14263e',
+  onSurfaceVariant: '#9aacca',
   surfaceContainerLowest: '#000000',
   surfaceContainerLow: '#081423',
   surfaceContainer: '#0c1a2c',
   surfaceContainerHigh: '#102035',
   surfaceContainerHighest: '#14263e',
-  onSurface: '#d9e6ff',
-  onSurfaceVariant: '#9aacca',
+  inverseSurface: '#d9e6ff',
+  inverseOnSurface: '#0c1a2c',
+  inversePrimary: '#154e77',
   outline: '#657692',
   outlineVariant: '#374962',
-  /** 导航禁用态置灰（页面文字与 SVG 同源）。 */
   disabled: '#5b6a85',
-  /** 按压态衍生色（只被本文件的 class 字面量引用）。 */
-  pressedHigh: '#1c3350',
-  pressedSecondary: '#4a2f40',
-  pressedError: '#a02a2e',
-  pressedPrimaryContainer: '#b8dbff',
-  pressedTertiaryContainer: '#ffafd7',
-  /** 半透明遮罩（状态栏 / 模态）。 */
-  statusBarBg: '#081423b3',
-  scrim: '#000000b3',
 } as const;
 
 /**
- * 表面样式常量：每条都是完整 class 字面量（构建期整体注册），供页面按
- * 语义复用；带 active: 前缀的按压色同样收在此处。
- *
- * 可点表面一律带 focus: 白环：手柄操控模式下方向键移动焦点，原生核心直接
- * 套用 focus 变体，不需要每帧 JS 介入（见 docs/adr/0028）。环画在节点自身的
- * 边框层、又是 inset 的，所以只在子节点没铺满整块表面时才看得见——底栏按钮
- * 的贴图铺满整块，那里另加一层透明的焦点层（见 AppNavBar.tsx）。
- * 环写进每条 class 字面量而不是拼一个共用常量：构建期按字符串字面量登记样式，
- * 运行时拼出来的组合不在表里（设备上是抛错的未知 class）。
+ * 表面样式常量：每条都是完整 class 字面量（构建期整体注册），供页面按语义复用。
+ * 可点表面一律带 focus: 白环：手柄操控模式下方向键移动焦点由原生核心直接呈现。
  */
 export const STYLE = {
   /** 应用根容器与覆盖层。 */
   appRoot: 'w-full h-full relative bg-[#060f1b] overflow-hidden',
-  statusBar: 'absolute top-0 left-0 right-0 h-[26] z-40 flex-row items-center px-6 gap-2 bg-[#081423b3]',
   scrim: 'absolute inset-0 z-50 flex-col items-center justify-center bg-[#000000b3]',
   busyOverlay: 'absolute inset-0 z-50 flex-row items-center justify-center bg-[#000000]',
 
@@ -75,62 +62,40 @@ export const STYLE = {
   modalCancelBtn: 'w-[84] h-[40] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
   modalDangerBtn: 'w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
-  /** 列表行与信息卡。 */
-  rowCard: 'w-full h-[44] shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 active:bg-[#14263e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  infoCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2',
-  /** 信息行卡：每行一个文本节点，行距由 gap 给出。 */
-  infoCardRows: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-2 gap-2',
-  actionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-col px-3 py-3',
+  /** 手柄配色圆钮：42 尺寸圆形色块与选中指示环。 */
+  colorSwatch42: 'w-[42] h-[42] shrink-0 rounded-full flex-row items-center justify-center focus:border-2 focus:border-[#ffffff]',
+  colorSwatchRing42: 'w-[36] h-[36] shrink-0 rounded-full border-2',
 
-  /** 配色按钮：48 尺寸圆形色块，四段配色整体生效；选中环画在内侧圆上。 */
-  colorSwatch: 'w-[48] h-[48] shrink-0 rounded-full flex-row items-center justify-center focus:border-2 focus:border-[#ffffff]',
-  colorSwatchRing: 'w-[42] h-[42] shrink-0 rounded-full border-2',
+  /** 配对页操作按钮。 */
+  pairMainBtn: 'w-[100] h-[36] rounded-[12] bg-[#04456e] flex-row items-center justify-center active:bg-[#081423] focus:border-2 focus:border-[#ffffff]',
+  pairStopBtn: 'w-[100] h-[36] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  pairAuxBtn: 'w-[100] h-[32] rounded-[10] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
-  /** 小型表面按钮：背光步进、调试按键（含触发高亮的选中形态）。 */
-  surfaceBtn: 'w-[40] h-[40] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  keyBtn: 'w-[64] h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  keyBtnGrow: 'grow h-[44] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  keyBtnFull: 'w-full h-[44] shrink-0 rounded-[12] bg-[#14263e] flex-row items-center justify-center mt-2 active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  keyBtnOn: 'w-[64] h-[44] shrink-0 rounded-[12] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  keyBtnGrowOn: 'grow h-[44] rounded-[12] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  keyBtnFullOn: 'w-full h-[44] shrink-0 rounded-[12] bg-[#9ecefe] flex-row items-center justify-center mt-2 active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  /** 电源管理操作按钮。 */
+  powerBtn: 'w-[104] h-[36] rounded-[12] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  powerDangerBtn: 'w-[104] h-[36] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
-  /** 背光滑轨与危险操作行。 */
-  backlightRow: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-2 gap-2',
+  /** 调试页操作按钮。 */
+  dbgBtn: 'w-[52] h-[32] rounded-[10] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  dbgBtnOn: 'w-[52] h-[32] rounded-[10] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  dbgFullBtn: 'w-[110] h-[32] rounded-[10] bg-[#14263e] flex-row items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  dbgFullBtnOn: 'w-[110] h-[32] rounded-[10] bg-[#9ecefe] flex-row items-center justify-center active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+
+  /** 底部中区玩家指示灯：8px 微型方块。 */
+  miniPlayerLedOn: 'w-[8] h-[8] rounded-[2] shrink-0 bg-[#4ade80]',
+  miniPlayerLedOff: 'w-[8] h-[8] rounded-[2] shrink-0 bg-[#14432a]',
+
+  /** 进度轨与填充（OTA 数据接收进度条）。 */
   track: 'grow h-[8] rounded-[4] bg-[#14263e] overflow-hidden',
   trackFill: 'h-[8] rounded-[4] bg-[#9ecefe]',
-  dangerRow: 'w-full h-[44] shrink-0 rounded-[16] bg-[#8a1a1e] flex-row items-center justify-center gap-2 active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
-  /** 首页状态圆与配对页大按钮。 */
-  circle: 'w-[56] h-[56] rounded-full bg-[#14263e] flex-col items-center justify-center active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  pairMain: 'w-[76] h-[76] rounded-full bg-[#9ecefe] flex-col items-center justify-center shrink-0 active:bg-[#b8dbff] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  pairMainStop: 'w-[76] h-[76] rounded-full bg-[#8a1a1e] flex-col items-center justify-center shrink-0 active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  pairAux: 'w-[76] h-[76] rounded-full bg-[#14263e] flex-col items-center justify-center shrink-0 active:bg-[#1c3350] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-
-  /** 首页玩家序号四格指示灯（对齐 NS2 手柄的绿色序号灯）：点亮 / 未点亮。 */
-  playerLedOn: 'w-[16] h-[16] rounded-[4] shrink-0 bg-[#4ade80]',
-  playerLedOff: 'w-[16] h-[16] rounded-[4] shrink-0 bg-[#14432a]',
-
-  /**
-   * 手柄操控模式的提示条：抬起手柄、屏幕接管输入后浮在底栏上方，几秒后
-   * 收起（见 components/PadControlHint.tsx）。深底加白边，压在任何页面内容
-   * 上都读得清。
-   */
-  padHint: 'absolute left-[8] right-[8] bottom-[80] z-40 rounded-[12] bg-[#060f1bee] border border-[#657692] flex-col items-center px-3 py-2 gap-1',
-
-  /**
-   * 模式页/手柄设置页的选项卡（未选中 / 选中）。
-   * 这两条不带 transition-colors：选中态要一步到位。加过渡后切换要连画 9 帧
-   * （150 ms），每帧重画两张卡片（约 2.2 万像素，实机上每帧 11–14 ms），
-   * 点下去像慢半拍。
-   */
-  optionCard: 'w-full shrink-0 rounded-[16] bg-[#0c1a2c] flex-row items-center px-3 py-3 gap-3 active:bg-[#14263e] focus:border-2 focus:border-[#ffffff]',
-  optionCardSel: 'w-full shrink-0 rounded-[16] bg-[#9ecefe] flex-row items-center px-3 py-3 gap-3 active:bg-[#b8dbff] focus:border-2 focus:border-[#ffffff]',
+  /** 垂直亮度控制相关（四叶草 primaryContainer 背景上的嵌套组件）。 */
+  vSliderTrack: 'w-[20] h-[96] rounded-[10] bg-[#04456e] flex-col justify-end p-1 overflow-hidden',
+  vSliderFill: 'w-full rounded-[6] bg-[#ffffff]',
+  brightnessBtn: 'w-[38] h-[38] rounded-[12] bg-[#0c1a2c] flex-row items-center justify-center active:bg-[#14263e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 } as const;
 
 /**
- * 构建期字符集锚点：uptime、百分比等文本在运行时由数字动态拼出，数字与
- * 符号必须出现在某个字面量里才会被烘焙进字体图集；设备地址是运行时
- * 拼出的大写十六进制，字母表同样在这里锚定。
+ * 构建期字符集锚点：保证运行时动态拼接的数字、状态字符进入字体图集。
  */
-export const CHARSET_ANCHOR = '0123456789:.%-ABCDEF';
+export const CHARSET_ANCHOR = '0123456789:.%-ABCDEF左右上下选择确认长按退出翻页未连接接收中';

@@ -59,6 +59,16 @@ export interface HardwareUiState {
   rebooting: boolean;
   /** 已确认关机、等待断电（USB 供电时断不了，固件回报后遮罩收起）。 */
   poweringOff: boolean;
+  /** 物理手柄连接状态与简称。 */
+  physicalPad: {
+    attached: boolean;
+    name: string;
+  };
+  /** OTA 升级进度信息。 */
+  ota: {
+    phase: 'idle' | 'receiving' | 'verifying' | 'rebooting' | 'failed';
+    percentage: number;
+  };
 }
 
 /** 手柄配置默认值：标准黑的四段配色（与固件出厂块占位一致）。 */
@@ -99,6 +109,8 @@ export const hw = reactive<HardwareUiState>({
   fps: null,
   rebooting: false,
   poweringOff: false,
+  physicalPad: { attached: false, name: '' },
+  ota: { phase: 'idle', percentage: 0 },
 });
 
 /** 常规状态轮询间隔：5 秒，按公共帧节奏换算成帧数。 */
@@ -369,6 +381,14 @@ export function useHardware(): void {
       case 'batteryChanged':
         hw.battery = msg.battery;
         break;
+      case 'padAttachedChanged':
+        hw.physicalPad.attached = msg.attached;
+        hw.physicalPad.name = msg.name ?? (msg.attached ? 'PRO' : '');
+        break;
+      case 'otaProgress':
+        hw.ota.phase = msg.phase;
+        hw.ota.percentage = msg.percentage;
+        break;
       case 'powerOffBlocked':
         hw.poweringOff = false;
         break;
@@ -376,6 +396,8 @@ export function useHardware(): void {
         break;
     }
   });
+
+  refreshStatus();
 
   onFrame(() => {
     ticks++;

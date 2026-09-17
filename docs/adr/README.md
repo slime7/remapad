@@ -57,7 +57,7 @@
 | [0026](0026-same-generation-input-passthrough.md) | active | 手柄输入按同代透传、异代解析分发：设备自带报告语言与目标语言一致时原样转发报文体 |
 | [0027](0027-runtime-usb-role-switch.md) | active | USB host 直插采用运行时角色切换（日志改走 UART0），复位回到串口；PWR 长按这一入口由 0038 部分取代 |
 | [0028](0028-pad-combo-captures-screen.md) | active | 手柄组合键 L1+R1+L3+R3 捕获为屏幕操控（方向键移动焦点、圆圈键确认），捕获期间停发报文并补一帧全松开 |
-| [0029](0029-pad-ui-axis-split.md) | active | 手柄操控屏幕的方向键分两个轴：上下走页面内容（到末尾再按下继续滚到页底）、左右只在底栏两项之间走；实机 L1 / R1 等价于左右 |
+| [0029](0029-pad-ui-axis-split.md) | superseded | 手柄操控屏幕的方向键分两个轴：上下走页面内容（到末尾再按下继续滚到页底）、左右只在底栏两项之间走；由 0041 取代 |
 | [0030](0030-ns2-wake-adv-host-address.md) | active | NS2 唤醒与回连广播携带主机最近一次连接记录到的地址（凭证地址作兜底），部分取代 0024 的广播地址来源 |
 | [0031](0031-ns2-reconnect-adv-and-explicit-wake-window.md) | active | NS2 常态广播回到 0x00 回连形态（不叫醒休眠主机），0x81 收成显式唤醒窗口，调试页 HOME 按实体手柄语义分流；部分取代 0024 的常态广播形态，其中「常态回连广播」一项由 0038 部分取代 |
 | [0032](0032-ns2-fw-update-masquerade.md) | active | 主机推手柄固件更新时按「接住数据、逐帧空体应答、不重启」伪装（重启改由串口一次性武装），上报版本固化在 CONFIG_DEFAULT_FW_VERSION_* |
@@ -68,6 +68,8 @@
 | [0037](0037-ui-tick-rate-30hz.md) | active | UI 帧节奏定为 30 Hz：tickHz 写进 host profile，UI 侧以 ui/src/tick.ts 为唯一换算来源（TICK_HZ 取框架烘焙值），与帧绑定的时长写成毫秒再换算、序列图动画按累计帧推进以保持感官时间；部分取代 0017 的 60 Hz 帧预算取值 |
 | [0038](0038-user-initiated-connection-window.md) | active | 连接由用户发起：上电与断连（主机睡下）静默，连接键（配对页「连接」、PWR 长按 3 秒）开 30 秒连接窗口广播、HOME 在未连接时开 10 秒唤醒窗口，窗口到期或主机连上即收窗；部分取代 0031 的常态回连广播与 0027 的 PWR 长按入口 |
 | [0039](0039-pro-controller-only.md) | active | 设备对外只模拟一台 Pro Controller 2：身份、专用输入通道、报文体与会话回到单身份单连接，JoyCon 形态（左/右身份、0x07 / 0x08 报文体、导轨键确认与 side / rails 开关）整体移除；部分取代 0026 的透传身份约束 |
+| [0040](0040-pc-gui-customtkinter-console.md) | active | PC 侧新增图形界面入口 remapadgui.py（CustomTkinter）：与命令行共用 Session 与串口，输出改走可注入的 Reporter，界面只做队列排空、命令投递与事件映射 |
+| [0041](0041-clover-carousel-and-pad-axis-navigation.md) | active | 四叶草菜单左右滑动轮播与手柄双轴交互重构：内容单屏固定不溢出不滚动，左右无限轮播，方向键左右切页、上下选控件，底部三态栏按优先级展示且中区不参与手柄焦点；取代 0029 |
 
 ## 创建 ADR 脚本用法
 

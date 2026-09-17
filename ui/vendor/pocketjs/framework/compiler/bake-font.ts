@@ -319,17 +319,27 @@ export function bakeSlot(
   for (const cp of chars) {
     if (cp === TOFU_CODEPOINT) continue; // reserved for gid 0
     const ch = String.fromCodePoint(cp);
-    // The slot's own face first; a codepoint it does not map comes from the
-    // first fallback that does. Metrics scale through the SOURCE face's
-    // unitsPerEm (opentype.js stamps it on the glyph path), so the fallback
-    // glyph lands on this slot's baseline at this slot's px.
+    // PUA 私有区码点 (0xE000~0xF8FF) 优先从 fallback 图标字体查找，避免被主英文字体的内部备用字符拦截
     let source = font;
-    let gi = font.charToGlyphIndex(ch);
-    for (let f = 0; gi <= 0 && f < fallbacks.length; f++) {
-      const candidate = fallbacks[f]!.charToGlyphIndex(ch);
-      if (candidate > 0) {
-        source = fallbacks[f]!;
-        gi = candidate;
+    let gi = 0;
+    if (cp >= 0xe000 && cp <= 0xf8ff) {
+      for (let f = 0; gi <= 0 && f < fallbacks.length; f++) {
+        const candidate = fallbacks[f]!.charToGlyphIndex(ch);
+        if (candidate > 0) {
+          source = fallbacks[f]!;
+          gi = candidate;
+        }
+      }
+    }
+    if (gi <= 0) {
+      source = font;
+      gi = font.charToGlyphIndex(ch);
+      for (let f = 0; gi <= 0 && f < fallbacks.length; f++) {
+        const candidate = fallbacks[f]!.charToGlyphIndex(ch);
+        if (candidate > 0) {
+          source = fallbacks[f]!;
+          gi = candidate;
+        }
       }
     }
     if (gi <= 0) continue;

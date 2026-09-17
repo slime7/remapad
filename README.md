@@ -62,7 +62,7 @@ remapad/
 │   ├── partitions.csv           # Flash 分区
 │   ├── components/              # 固定在本仓库的官方 ESP-IDF 组件与 S3 原生归档
 │   └── main/                    # 固件入口、PocketJS UI host（pocketjs_host.c）与产品模块
-├── pc/                          # PC 侧单工具 remapadctl.py：桥接转发 / 串口命令行 / 实机截图 / OTA
+├── pc/                          # PC 侧工具：remapadctl.py（桥接转发 / 命令行 / 截图 / OTA）与 remapadgui.py（图形界面）
 └── docs/                        # 愿景、架构、抽象和上手文档
 ```
 
@@ -71,7 +71,7 @@ remapad/
 - Node.js 18 或更高版本；pnpm 管理工作区依赖，Bun 执行 PocketJS 官方脚本与 Web 开发主机。
 - ESP-IDF `>=6.0,<6.2`（官方 PocketJS ESP-IDF 组件要求，已在 6.1 验证）。
 - Xtensa Rust 工具链：`esp-rs/rust-build` 的 `v1.97.0.0`，仅升级组件、重建原生归档时需要。
-- [uv](https://docs.astral.sh/uv/) 与 Python ≥ 3.10：PC 侧工具（`pc/`）需要。
+- [uv](https://docs.astral.sh/uv/) 与 Python ≥ 3.10：PC 侧工具（`pc/`）需要，第三方依赖是 `hidapi` 与 `customtkinter`。
 - 微雪 ESP32-S3-Touch-LCD-1.69 开发板。
 
 官方 ESP-IDF 组件与 ESP32-S3 原生归档固定在 `firmware/components/`，编译器与框架固定在 `ui/vendor/pocketjs/` 快照内；
@@ -105,6 +105,9 @@ idf.py -p COM3 flash monitor
 
 先执行 `pnpm run build` 再 `idf.py build`：有 `remapad-ui.pocket` 时 CMake 走官方 `pocketjs_embed_package`，不需要 Bun。
 升级 `firmware/components/` 中的组件后，按 [patches/README.md](patches/README.md) 核对 QuickJS 校验值并重建原生归档。
+
+PC 侧连接工具在 `pc/` 下由 uv 运行：`uv run python remapadctl.py -p COM3` 是命令行与桥接，
+`uv run python remapadgui.py` 是同一套会话的图形界面（细节见 [pc/README.md](pc/README.md)）。
 
 ## 分区与内存
 

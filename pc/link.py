@@ -12,6 +12,9 @@ CRC-16/CCITT-FALSE 覆盖除末尾两字节外的整帧（含同步字）。
 
 同一套帧格式还承载 OTA 升级（固件侧 ota_proto.c）：类型 0x30-0x33，数据帧
 载荷到 202 字节，因此编码入口允许显式放宽载荷上限（OTA_MAX_PAYLOAD）。
+
+串口枚举（list_serial_ports）读 HKLM 的 SERIALCOMM 键，不引入 pyserial；
+打开失败的提示文案由 open_hint 统一给出，命令行与图形界面共用一份。
 """
 
 from __future__ import annotations
@@ -465,12 +468,51 @@ def open_port(port: str, baud: int = 115200) -> SerialLink:
     try:
         return SerialLink(port, baud)
     except OSError as exc:
-        code = exc.errno or 0
-        if code in (5, 32):
-            hint = "端口被占用，先结束占用进程（idf.py monitor、桥接程序等）"
-        elif code == 2:
-            hint = "端口不存在，确认设备已插好（Get-PnpDevice -Class Ports）"
-        else:
-            hint = "打开端口失败"
-        print(f"{port}: {hint}", file=sys.stderr)
+        print(f"{port}: {open_hint(exc)}", file=sys.stderr)
         raise SystemExit(2)
+
+
+def open_hint(exc: OSError) -> str:
+    """把打开端口失败映射成一句可读原因（图形界面直接显示这句）。"""
+    code = exc.errno or 0
+    if code in (5, 32):
+        return "端口被占用，先结束占用进程（idf.py monitor、桥接程序等）"
+    if code == 2:
+        return "端口不存在，确认设备已插好（Get-PnpDevice -Class Ports）"
+    return "打开端口失败"
+
+
+def port_sort_key(name: str) -> tuple[str, int]:
+    """COM 口按编号排序；不叫 COM<n> 的名字排在后面并按名字序。"""
+    digits = name[3:]
+    return ("", int(digits)) if name.upper().startswith("COM") and digits.isdigit() else (name, 0)
+
+
+def serial_port_names(values: list[tuple[str, str]]) -> list[str]:
+    """注册表里的 (设备名, 端口名) 列表 → 去重排序后的端口名列表。"""
+    return sorted({port for _device, port in values if port.upper().startswith("COM")},
+                  key=port_sort_key)
+
+
+def list_serial_ports() -> list[str]:
+    """枚举本机串口：读注册表的 SERIALCOMM 键，读不到就返回空表。
+
+    命令行与图形界面都只用这份列表挑口（USB-Serial/JTAG、蓝牙调制解调器、
+    虚拟串口都会出现，用哪一个是用户的选择）。
+    """
+    import winreg  # 仅在 Windows 上存在，延迟导入保证非 Windows 先走上面的平台检查。
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DEVICEMAP\SERIALCOMM") as key:
+            values: list[tuple[str, str]] = []
+            index = 0
+            while True:
+                try:
+                    device, port, _kind = winreg.EnumValue(key, index)
+                except OSError:
+                    break
+                values.append((device, port))
+                index += 1
+    except OSError:
+        return []
+    return serial_port_names(values)

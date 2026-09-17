@@ -1,34 +1,24 @@
 /**
- * 调试页：分区承载各类测试工具，当前只有「按键指令」区——把单次按键
- * 注入数据面（保持后自动释放），经合成输入源叠加进 BLE 输入报文，
- * 用于实机手动验证上报链路；HOME 键模拟实体手柄按 HOME——主机在线时就是
- * 主页键，未连接时叫醒/连上主机（实体手柄按 HOME 是同一条路径），按钮文案
- * 跟着当前状态走；「手柄操控屏幕」注入操控组合键，不插手柄也能进出手柄控屏模式
- * （进入后用其余按键名操作界面）。后续测试区在滚动列里继续向下追加。
+ * 调试页（第 6 页）：
+ * 位于四叶草中心区域 (130 × 130)。
+ * 条件编译页面：仅在构建传入 dev 选项时编入。
+ * 布局：
+ * - 第一行：A 键与 HOME 键注入测试按钮；
+ * - 第二行：手柄控屏模式注入开关。
+ * 注入成功后提供 150ms 短亮反馈。
  */
 import { ref } from 'vue';
 import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { Text, View } from '@pocketjs/framework/vue-vapor/components';
-import { usePageScroll } from '../hooks/usePageScroll';
 import { COLOR, STYLE } from '../theme';
 import { hw, sendDebugKey } from '../hooks/useHardware';
-import { BottomPlaceholder, BOTTOM_PAD_H } from '../components/BottomPlaceholder';
 import { ticksForMs } from '../tick';
 import type { DebugKey } from '../bridge/protocol';
-import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 
-/** 注入确认高亮的时长：150 ms，按公共帧节奏换算成帧数。 */
 const FLASH_TICKS = Math.max(1, Math.round(ticksForMs(150)));
-/** 按键指令卡高度：py-3 上下 24 + 两行按钮（第二行 mt-2 8 + 44）。 */
-const KEYS_CARD_H = 24 + 8 + 44 + 8 + 44;
-/** 两行按钮在内容坐标里的位置：说明文本 15 + 间距 8，卡内 py-3 再留 12。 */
-const CARD_TOP = 34 + 15 + 8;
-const FIRST_ROW_Y = CARD_TOP + 12;
-const ROW_STEP = 44 + 8;
 
 export function DebugPage(props: {
   active: () => boolean;
-  /** 页面在画面上且没有弹窗盖住时才为真：焦点遍历只看这个（见 App.tsx）。 */
   interactive: () => boolean;
 }) {
   const flashKey = ref<DebugKey | null>(null);
@@ -51,75 +41,50 @@ export function DebugPage(props: {
     }
   });
 
-  /* 可聚焦按钮的位置：卡片里两行，第二行带 mt-2。 */
-  const rowNodes: Array<NodeMirror | null> = [];
-  const focusRows = () => [
-    { node: rowNodes[0] ?? null, y: FIRST_ROW_Y, h: 44 },
-    { node: rowNodes[1] ?? null, y: FIRST_ROW_Y, h: 44 },
-    { node: rowNodes[2] ?? null, y: FIRST_ROW_Y + ROW_STEP, h: 44 },
-  ];
-  const contentRef = usePageScroll(
-    props.active,
-    true,
-    () => 34 + 15 + 8 + KEYS_CARD_H + BOTTOM_PAD_H,
-    focusRows,
-  );
-  const keyBtnClass = (key: DebugKey, base: 'fixed' | 'grow' | 'full') => {
-    const on = flashKey.value === key;
-    if (base === 'grow') {
-      return on ? STYLE.keyBtnGrowOn : STYLE.keyBtnGrow;
-    }
-    if (base === 'full') {
-      return on ? STYLE.keyBtnFullOn : STYLE.keyBtnFull;
-    }
-    return on ? STYLE.keyBtnOn : STYLE.keyBtn;
-  };
-  const keyTextColor = (key: DebugKey) =>
+  const btnClass = (key: DebugKey) => (flashKey.value === key ? STYLE.dbgBtnOn : STYLE.dbgBtn);
+  const fullBtnClass = (key: DebugKey) => (flashKey.value === key ? STYLE.dbgFullBtnOn : STYLE.dbgFullBtn);
+  const textColor = (key: DebugKey) =>
     flashKey.value === key ? COLOR.onPrimaryContainer : COLOR.onSurface;
 
+  const homeLabel = () => (hw.pairing === 'connected' ? 'HOME' : '唤醒');
+
   return (
-    <View class={props.active() ? 'w-full h-full overflow-hidden' : 'hidden'}>
-      <View nodeRef={contentRef} class="w-full flex-col px-4 pt-[34] gap-2">
-        <Text class="text-xs shrink-0" style={{ textColor: COLOR.onSurfaceVariant }}>
-          按键指令
-        </Text>
-        <View class={STYLE.actionCard}>
-          <View class="w-full flex-row gap-2">
-            <View
-              nodeRef={(node: NodeMirror | null) => (rowNodes[0] = node)}
-              focusable={props.interactive()}
-              onPress={() => press('a')}
-              class={keyBtnClass('a', 'fixed')}
-            >
-              <Text class="text-sm font-bold" style={{ textColor: keyTextColor('a') }}>
-                A
-              </Text>
-            </View>
-            <View
-              nodeRef={(node: NodeMirror | null) => (rowNodes[1] = node)}
-              focusable={props.interactive()}
-              onPress={() => press('home')}
-              class={keyBtnClass('home', 'grow')}
-            >
-              <Text class="text-sm font-bold" style={{ textColor: keyTextColor('home') }}>
-                {hw.pairing === 'connected' ? 'HOME' : '唤醒 HOME'}
-              </Text>
-            </View>
-          </View>
-          {/* 手柄操控屏幕的组合键：不插手柄也能进模式，随后用 up/down/left/right
-              与 a（圆圈键）注入的按键操作界面，再点一次本键退出。 */}
-          <View
-            nodeRef={(node: NodeMirror | null) => (rowNodes[2] = node)}
-            focusable={props.interactive()}
-            onPress={() => press('ui')}
-            class={keyBtnClass('ui', 'full')}
-          >
-            <Text class="text-sm font-bold" style={{ textColor: keyTextColor('ui') }}>
-              手柄操控屏幕
-            </Text>
-          </View>
+    <View class={props.active() ? 'w-full h-full flex-col items-center justify-center p-2 gap-2' : 'hidden'}>
+      <Text class="text-xs font-bold shrink-0" style={{ textColor: COLOR.onPrimaryContainer }}>
+        调试指令
+      </Text>
+
+      {/* 第一行：A 键与 HOME/唤醒 键 */}
+      <View class="flex-row items-center gap-2 shrink-0">
+        <View
+          focusable={props.interactive()}
+          onPress={() => press('a')}
+          class={btnClass('a')}
+        >
+          <Text class="text-xs font-bold" style={{ textColor: textColor('a') }}>
+            A键
+          </Text>
         </View>
-        <BottomPlaceholder />
+        <View
+          focusable={props.interactive()}
+          onPress={() => press('home')}
+          class={btnClass('home')}
+        >
+          <Text class="text-xs font-bold" style={{ textColor: textColor('home') }}>
+            {homeLabel()}
+          </Text>
+        </View>
+      </View>
+
+      {/* 第二行：手柄操控屏幕组合键注入 */}
+      <View
+        focusable={props.interactive()}
+        onPress={() => press('ui')}
+        class={fullBtnClass('ui')}
+      >
+        <Text class="text-xs font-bold" style={{ textColor: textColor('ui') }}>
+          {hw.padUiMode ? '退出控屏' : '手柄控屏'}
+        </Text>
       </View>
     </View>
   );
