@@ -51,7 +51,16 @@ test('已配对后按断开回到静默，按连接重新连上', async ({ app }
 
   // 未配对时按连接走配对流程，主机配上后凭证落到这一身份。
   await app.tapText('连接');
+  // 连接中会展示 Braille spinner 动画字符
+  await expect.poll(async () => {
+    const texts = await app.visibleTexts();
+    return texts.some((t) => ['⠁', '⠂', '⠄', '⡀', '⢀', '⠠', '⠐', '⠈'].includes(t));
+  }, { timeout: 10_000 }).toBe(true);
   await expect.poll(() => app.hasVisibleText('已连接'), { timeout: 20_000 }).toBe(true);
+
+  // 连上主机后 spinner 应当隐藏，不再显示任何 loading 字符
+  const connectedTexts = await app.visibleTexts();
+  expect(connectedTexts.some((t) => ['⠁', '⠂', '⠄', '⡀', '⢀', '⠠', '⠐', '⠈'].includes(t))).toBe(false);
 
   // 断开：链路放下、广播收掉，凭证还在，屏幕回到「已配对」静默态。
   await app.tapText('断开');

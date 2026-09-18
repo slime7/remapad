@@ -1,6 +1,7 @@
 {
   "fallback": [
     "../assets/fonts/NotoSansSC-Regular.otf",
-    "../assets/fonts/MaterialIcons-Regular.ttf"
+    "../assets/fonts/MaterialIcons-Regular.ttf",
+    "../assets/fonts/seguisym.ttf"
   ]
 }

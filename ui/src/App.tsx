@@ -1,7 +1,7 @@
 /**
  * Remapad 屏幕应用主界面：
- * - 上半部分：四叶草菜单区域 (x:0, y:0, w:240, h:200)，支持左右跟手滑动与平滑过渡动画，
- *   三槽位联动显示左、中、右相邻页面（滑动不露白），左右无限循环切换（阈值 80px），
+ * - 上半部分：四叶草菜单区域 (x:0, y:0, w:240, h:200)，单卡片居中展示，取消边缘露出提示以消除横向撕裂；
+ *   切页时旧卡片原地淡出缩放至 95%，新卡片从 95% 尺寸一边放大至 100% 一边淡入；
  *   方向键/肩键左右翻页、上下选择；
  * - 下半部分：底部圆角状态卡片 (w:224, h:64)，集成物理手柄状态、主机连接（玩家指示灯/HOME触控）、
  *   电池电量，优先级支持 OTA 进度和手柄控屏按键提示；
@@ -30,9 +30,9 @@ import { ticksForMs } from './tick';
 // 构建期字符集锚点：确保动态字符被扫描烘焙进字体图集
 void CHARSET_ANCHOR;
 
-const SWIPE_THRESHOLD = 40;
-const SLOT_DISTANCE = 200;
-const ANIM_DUR_MS = 120;
+const SWIPE_THRESHOLD = 50;
+const SWIPE_SPAN = 100;
+const ANIM_DUR_MS = 160;
 const REBOUND_DUR_MS = 100;
 const BTN_CROSS = 0x4000;
 
@@ -41,6 +41,8 @@ export default function App() {
 
   // 当前页索引（默认开机为第 0 页：亮度调节）
   const pageIndex = ref(0);
+  // 过渡中目标页（-1 为静止态无过渡）
+  const transitionTarget = ref(-1);
   const rebootAsk = ref(false);
   const powerOffAsk = ref(false);
 
@@ -58,52 +60,81 @@ export default function App() {
   };
 
   const dialogOpen = () => rebootAsk.value || powerOffAsk.value;
-  const interactive = (index: number) => () => pageIndex.value === index && !dialogOpen();
+  const isCardVisible = (index: number) => pageIndex.value === index || transitionTarget.value === index;
+  const isPageActive = (index: number) => pageIndex.value === index || transitionTarget.value === index;
+  const interactive = (index: number) => () => pageIndex.value === index && !dialogOpen() && !isAnimating;
 
-  // 四叶草动画与跟手位移控制器
-  let carouselNode: NodeMirror | null = null;
-  let currentAnimId = -1;
+  // 卡片节点与交叉缩放淡入淡出控制器
+  const cardNodes: (NodeMirror | null)[] = [null, null, null, null, null, null];
+  let fromIndex = -1;
   let isAnimating = false;
-  let pendingSlideFrames = 0;
-  let pendingSlideTarget = -1;
+  let isDragging = false;
+  let animIds: number[] = [];
+  let pendingAnimFrames = 0;
   let pendingReboundFrames = 0;
 
-  const setCarouselRef = (node: NodeMirror | null) => {
-    carouselNode = node;
+  const setCardRef = (index: number) => (node: NodeMirror | null) => {
+    cardNodes[index] = node;
   };
 
   const clearTransition = () => {
-    if (currentAnimId >= 0) {
-      cancelAnim(currentAnimId);
-      currentAnimId = -1;
+    for (const id of animIds) {
+      if (id >= 0) {
+        cancelAnim(id);
+      }
     }
-    pendingSlideFrames = 0;
-    pendingSlideTarget = -1;
+    animIds = [];
+    pendingAnimFrames = 0;
     pendingReboundFrames = 0;
     isAnimating = false;
+    isDragging = false;
   };
 
-  // 动画到达终点后原子归位：位移复位至 0、切换目标页码，杜绝跳帧与二次闪烁
-  const finishSlide = (targetPageIndex: number) => {
+  // 动画终点结算：原子切换活跃页码并复位卡片变换状态
+  const finishTransition = () => {
+    const target = transitionTarget.value;
+    const from = fromIndex;
     clearTransition();
-    if (carouselNode) {
-      jump(carouselNode, 'translateX', 0);
+    if (target >= 0) {
+      pageIndex.value = target;
     }
-    pageIndex.value = targetPageIndex;
+    transitionTarget.value = -1;
+    fromIndex = -1;
+    const oldNode = from >= 0 ? cardNodes[from] : null;
+    const newNode = target >= 0 ? cardNodes[target] : null;
+    if (oldNode) {
+      jump(oldNode, 'opacity', 1);
+      jump(oldNode, 'scale', 1.0);
+    }
+    if (newNode) {
+      jump(newNode, 'opacity', 1);
+      jump(newNode, 'scale', 1.0);
+    }
   };
 
   const finishRebound = () => {
+    const from = fromIndex;
+    const target = transitionTarget.value;
     clearTransition();
-    if (carouselNode) {
-      jump(carouselNode, 'translateX', 0);
+    transitionTarget.value = -1;
+    fromIndex = -1;
+    const oldNode = from >= 0 ? cardNodes[from] : null;
+    const newNode = target >= 0 ? cardNodes[target] : null;
+    if (oldNode) {
+      jump(oldNode, 'opacity', 1);
+      jump(oldNode, 'scale', 1.0);
+    }
+    if (newNode) {
+      jump(newNode, 'opacity', 0);
+      jump(newNode, 'scale', 0.95);
     }
   };
 
   onFrame(() => {
-    if (pendingSlideFrames > 0) {
-      pendingSlideFrames -= 1;
-      if (pendingSlideFrames <= 0) {
-        finishSlide(pendingSlideTarget);
+    if (pendingAnimFrames > 0) {
+      pendingAnimFrames -= 1;
+      if (pendingAnimFrames <= 0) {
+        finishTransition();
       }
     } else if (pendingReboundFrames > 0) {
       pendingReboundFrames -= 1;
@@ -113,93 +144,119 @@ export default function App() {
     }
   });
 
-  const slideToNext = (fromX = 0) => {
-    if (!carouselNode) {
-      pageIndex.value = nextPageIndex();
-      return;
-    }
-    clearTransition();
-    isAnimating = true;
-    jump(carouselNode, 'translateX', fromX);
-    currentAnimId = animate(carouselNode, 'translateX', -SLOT_DISTANCE, {
-      dur: ANIM_DUR_MS,
-      easing: 'out',
-    });
-    pendingSlideTarget = nextPageIndex();
-    pendingSlideFrames = Math.max(1, Math.round(ticksForMs(ANIM_DUR_MS)));
-  };
-
-  const slideToPrev = (fromX = 0) => {
-    if (!carouselNode) {
-      pageIndex.value = prevPageIndex();
-      return;
-    }
-    clearTransition();
-    isAnimating = true;
-    jump(carouselNode, 'translateX', fromX);
-    currentAnimId = animate(carouselNode, 'translateX', SLOT_DISTANCE, {
-      dur: ANIM_DUR_MS,
-      easing: 'out',
-    });
-    pendingSlideTarget = prevPageIndex();
-    pendingSlideFrames = Math.max(1, Math.round(ticksForMs(ANIM_DUR_MS)));
-  };
-
-  const rebound = (fromX: number) => {
-    if (!carouselNode) {
-      return;
-    }
-    clearTransition();
-    isAnimating = true;
-    jump(carouselNode, 'translateX', fromX);
-    currentAnimId = animate(carouselNode, 'translateX', 0, {
-      dur: REBOUND_DUR_MS,
-      easing: 'out',
-    });
-    pendingReboundFrames = Math.max(1, Math.round(ticksForMs(REBOUND_DUR_MS)));
-  };
-
-  const nextPage = (withAnim = true) => {
+  const startTransition = (to: number) => {
     if (dialogOpen() || isAnimating) {
       return;
     }
-    if (!withAnim || !carouselNode) {
-      pageIndex.value = nextPageIndex();
+    const from = pageIndex.value;
+    if (from === to) {
       return;
     }
-    slideToNext(0);
+
+    const oldNode = cardNodes[from];
+    const newNode = cardNodes[to];
+    if (!oldNode || !newNode) {
+      pageIndex.value = to;
+      transitionTarget.value = -1;
+      return;
+    }
+
+    clearTransition();
+    isAnimating = true;
+    fromIndex = from;
+    transitionTarget.value = to;
+
+    // 旧卡片以 1.0 满尺寸与不透明起始
+    jump(oldNode, 'opacity', 1);
+    jump(oldNode, 'scale', 1.0);
+
+    // 新卡片以 0.95 尺寸与完全透明起始
+    jump(newNode, 'opacity', 0);
+    jump(newNode, 'scale', 0.95);
+
+    // 旧卡片在原地淡出并微缩至 95%，新卡片从 95% 放大至 100% 并淡入
+    animIds = [
+      animate(oldNode, 'opacity', 0, { dur: ANIM_DUR_MS, easing: 'out' }),
+      animate(oldNode, 'scale', 0.95, { dur: ANIM_DUR_MS, easing: 'out' }),
+      animate(newNode, 'opacity', 1, { dur: ANIM_DUR_MS, easing: 'out' }),
+      animate(newNode, 'scale', 1.0, { dur: ANIM_DUR_MS, easing: 'out' }),
+    ];
+    pendingAnimFrames = Math.max(1, Math.round(ticksForMs(ANIM_DUR_MS)));
   };
 
-  const prevPage = (withAnim = true) => {
-    if (dialogOpen() || isAnimating) {
-      return;
-    }
-    if (!withAnim || !carouselNode) {
-      pageIndex.value = prevPageIndex();
-      return;
-    }
-    slideToPrev(0);
+  const nextPage = () => {
+    startTransition(nextPageIndex());
   };
 
-  // 手势接管上半区域 (240 × 200)，支持实时跟手与阈值翻页（弹窗时阻断手势）
+  const prevPage = () => {
+    startTransition(prevPageIndex());
+  };
+
+  // 手势接管上半区域 (240 × 200)，支持拖动实时微缩淡出跟手与平滑回弹/顺应切页
   attachGesture({
     axis: 'x',
     region: { rect: () => (dialogOpen() ? null : { x: 0, y: 0, w: 240, h: 200 }) },
     onPanStart: () => {
+      if (dialogOpen() || isAnimating) {
+        return;
+      }
       clearTransition();
+      fromIndex = pageIndex.value;
+      isDragging = true;
     },
     onPanMove: (contact) => {
-      if (carouselNode) {
-        jump(carouselNode, 'translateX', contact.dx);
+      if (!isDragging || dialogOpen()) {
+        return;
+      }
+      const target = contact.dx < 0 ? nextPageIndex() : prevPageIndex();
+      if (transitionTarget.value !== target) {
+        transitionTarget.value = target;
+      }
+      const oldNode = cardNodes[pageIndex.value];
+      const newNode = cardNodes[target];
+      const progress = Math.min(1.0, Math.abs(contact.dx) / SWIPE_SPAN);
+      if (oldNode) {
+        jump(oldNode, 'scale', 1.0 - 0.05 * progress);
+        jump(oldNode, 'opacity', 1.0 - progress);
+      }
+      if (newNode) {
+        jump(newNode, 'scale', 0.95 + 0.05 * progress);
+        jump(newNode, 'opacity', progress);
       }
     },
     onPanEnd: (contact) => {
-      if (contact.dx < -SWIPE_THRESHOLD) {
-        slideToNext(contact.dx);
-      } else if (contact.dx > SWIPE_THRESHOLD) {
-        slideToPrev(contact.dx);
+      if (!isDragging) {
+        return;
+      }
+      isDragging = false;
+      const target = transitionTarget.value;
+      const oldNode = cardNodes[pageIndex.value];
+      const newNode = target >= 0 ? cardNodes[target] : null;
+
+      if (Math.abs(contact.dx) >= SWIPE_THRESHOLD && target >= 0 && oldNode && newNode) {
+        // 超过阈值：顺应当前进度平滑过渡到终点
+        isAnimating = true;
+        const progress = Math.min(1.0, Math.abs(contact.dx) / SWIPE_SPAN);
+        const remMs = Math.max(80, Math.round(ANIM_DUR_MS * (1 - progress * 0.4)));
+        animIds = [
+          animate(oldNode, 'scale', 0.95, { dur: remMs, easing: 'out' }),
+          animate(oldNode, 'opacity', 0, { dur: remMs, easing: 'out' }),
+          animate(newNode, 'scale', 1.0, { dur: remMs, easing: 'out' }),
+          animate(newNode, 'opacity', 1, { dur: remMs, easing: 'out' }),
+        ];
+        pendingAnimFrames = Math.max(1, Math.round(ticksForMs(remMs)));
+      } else if (target >= 0 && oldNode && newNode) {
+        // 未超阈值：平滑回弹复原
+        isAnimating = true;
+        animIds = [
+          animate(oldNode, 'scale', 1.0, { dur: REBOUND_DUR_MS, easing: 'out' }),
+          animate(oldNode, 'opacity', 1, { dur: REBOUND_DUR_MS, easing: 'out' }),
+          animate(newNode, 'scale', 0.95, { dur: REBOUND_DUR_MS, easing: 'out' }),
+          animate(newNode, 'opacity', 0, { dur: REBOUND_DUR_MS, easing: 'out' }),
+        ];
+        pendingReboundFrames = Math.max(1, Math.round(ticksForMs(REBOUND_DUR_MS)));
       } else {
-        rebound(contact.dx);
+        clearTransition();
       }
     },
   });
@@ -221,8 +278,8 @@ export default function App() {
   usePadControl({
     firmwareMode: () => hw.padUiMode,
     pageRoot: () => pageRoot,
-    onPrevPage: () => prevPage(true),
-    onNextPage: () => nextPage(true),
+    onPrevPage: () => prevPage(),
+    onNextPage: () => nextPage(),
   });
 
   const confirmReboot = () => {
@@ -237,90 +294,83 @@ export default function App() {
 
   return (
     <View class={STYLE.appRoot}>
-      {/* 上半部分：四叶草菜单区域 (y: 0 ~ 200) */}
-      <View class="absolute top-0 left-0 w-full h-[200] overflow-hidden">
+      {/* 上半部分：四叶草单卡片区域 (y: 0 ~ 200)，取消边缘露出 */}
+      <View
+        nodeRef={padPageRef}
+        class="absolute top-0 left-0 w-full h-[200] overflow-hidden"
+      >
+        {/* 第 1 页：亮度调节 (几何中心 x: 120, y: 104) */}
         <View
-          nodeRef={setCarouselRef}
-          class="w-full h-full relative"
+          nodeRef={setCardRef(0)}
+          class={isCardVisible(0) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
-          {/* 中间主四叶草外框背景 (几何中心 x: 120, y: 104) */}
-          <Image
-            src="main.svg"
-            class="absolute left-[-8] top-[-24] w-[256] h-[256]"
-          />
+          <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+            <BrightnessPage active={() => isPageActive(0)} interactive={interactive(0)} />
+          </View>
+        </View>
 
-          {/* 远左侧相邻四叶草背景 (几何中心 x: -280, y: 104，滑动向右时无缝衔接) */}
-          <Image
-            src="main.svg"
-            class="absolute left-[-408] top-[-24] w-[256] h-[256]"
-          />
+        {/* 第 2 页：手柄设置 (几何中心 x: 120, y: 104) */}
+        <View
+          nodeRef={setCardRef(1)}
+          class={isCardVisible(1) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
+        >
+          <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+            <ControllerSettingsPage active={() => isPageActive(1)} interactive={interactive(1)} />
+          </View>
+        </View>
 
-          {/* 左侧相邻四叶草背景 (几何中心 x: -80, y: 104) */}
-          <Image
-            src="main.svg"
-            class="absolute left-[-208] top-[-24] w-[256] h-[256]"
-          />
+        {/* 第 3 页：手柄配对 (几何中心 x: 120, y: 104) */}
+        <View
+          nodeRef={setCardRef(2)}
+          class={isCardVisible(2) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
+        >
+          <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+            <PairingPage active={() => isPageActive(2)} interactive={interactive(2)} />
+          </View>
+        </View>
 
-          {/* 右侧相邻四叶草背景 (几何中心 x: 320, y: 104) */}
-          <Image
-            src="main.svg"
-            class="absolute left-[192] top-[-24] w-[256] h-[256]"
-          />
-
-          {/* 远右侧相邻四叶草背景 (几何中心 x: 520, y: 104，滑动向左时无缝衔接) */}
-          <Image
-            src="main.svg"
-            class="absolute left-[392] top-[-24] w-[256] h-[256]"
-          />
-
-          {/* 中间主槽位内容区：当前激活页（优先挂载、优先交互、优先焦点命中） */}
-          <View
-            nodeRef={padPageRef}
-            class="absolute left-[42] top-[30] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
-          >
-            <BrightnessPage active={() => pageIndex.value === 0} interactive={interactive(0)} />
-            <ControllerSettingsPage active={() => pageIndex.value === 1} interactive={interactive(1)} />
-            <PairingPage active={() => pageIndex.value === 2} interactive={interactive(2)} />
+        {/* 第 4 页：电源管理 (几何中心 x: 120, y: 104) */}
+        <View
+          nodeRef={setCardRef(3)}
+          class={isCardVisible(3) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
+        >
+          <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
             <PowerPage
-              active={() => pageIndex.value === 3}
+              active={() => isPageActive(3)}
               interactive={interactive(3)}
               onAskReboot={() => { rebootAsk.value = true; }}
               onAskPowerOff={() => { powerOffAsk.value = true; }}
             />
-            <SystemInfoPage active={() => pageIndex.value === 4} interactive={interactive(4)} />
-            {IS_DEV ? <DebugPage active={() => pageIndex.value === 5} interactive={interactive(5)} /> : null}
-          </View>
-
-          {/* 左侧槽位内容区：实时呈现前一页，滑动时不留白 (几何中心 x: -80, y: 104, 尺寸 156 × 148) */}
-          <View class='absolute left-[-158] top-[30] w-[156] h-[148] flex-col items-center justify-center overflow-hidden'>
-            <BrightnessPage active={() => prevPageIndex() === 0} interactive={() => false} />
-            <ControllerSettingsPage active={() => prevPageIndex() === 1} interactive={() => false} />
-            <PairingPage active={() => prevPageIndex() === 2} interactive={() => false} />
-            <PowerPage
-              active={() => prevPageIndex() === 3}
-              interactive={() => false}
-              onAskReboot={() => { rebootAsk.value = true; }}
-              onAskPowerOff={() => { powerOffAsk.value = true; }}
-            />
-            <SystemInfoPage active={() => prevPageIndex() === 4} interactive={() => false} />
-            {IS_DEV ? <DebugPage active={() => prevPageIndex() === 5} interactive={() => false} /> : null}
-          </View>
-
-          {/* 右侧槽位内容区：实时呈现后一页，滑动时不留白 (几何中心 x: 320, y: 104, 尺寸 156 × 148) */}
-          <View class='absolute left-[242] top-[30] w-[156] h-[148] flex-col items-center justify-center overflow-hidden'>
-            <BrightnessPage active={() => nextPageIndex() === 0} interactive={() => false} />
-            <ControllerSettingsPage active={() => nextPageIndex() === 1} interactive={() => false} />
-            <PairingPage active={() => nextPageIndex() === 2} interactive={() => false} />
-            <PowerPage
-              active={() => nextPageIndex() === 3}
-              interactive={() => false}
-              onAskReboot={() => { rebootAsk.value = true; }}
-              onAskPowerOff={() => { powerOffAsk.value = true; }}
-            />
-            <SystemInfoPage active={() => nextPageIndex() === 4} interactive={() => false} />
-            {IS_DEV ? <DebugPage active={() => nextPageIndex() === 5} interactive={() => false} /> : null}
           </View>
         </View>
+
+        {/* 第 5 页：系统信息 (几何中心 x: 120, y: 104) */}
+        <View
+          nodeRef={setCardRef(4)}
+          class={isCardVisible(4) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
+        >
+          <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+            <SystemInfoPage active={() => isPageActive(4)} interactive={interactive(4)} />
+          </View>
+        </View>
+
+        {/* 第 6 页：调试指令 (开发模式) */}
+        {IS_DEV ? (
+          <View
+            nodeRef={setCardRef(5)}
+            class={isCardVisible(5) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
+          >
+            <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+            <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+              <DebugPage active={() => isPageActive(5)} interactive={interactive(5)} />
+            </View>
+          </View>
+        ) : null}
       </View>
 
       {/* 下半部分：底部三态圆角状态栏 (y: 208 ~ 272) */}

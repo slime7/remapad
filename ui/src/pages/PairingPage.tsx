@@ -7,19 +7,19 @@
  * - 下方：配对新主机按钮。
  * 上下方向键可在主副按钮间切换焦点。
  */
-import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
-import { createSpriteAnimation } from '@pocketjs/framework/vue-vapor/lifecycle';
+import { Text, View } from '@pocketjs/framework/vue-vapor/components';
 import { COLOR, STYLE } from '../theme';
 import { connect, disconnect, hw, startPairing } from '../hooks/useHardware';
-import { SPINNER_FRAMES, SPINNER_STEP } from '../spinner';
+import { createBrailleSpinner } from '../spinner';
 import { pairingLabel } from '../utils';
 
 export function PairingPage(props: {
   active: () => boolean;
   interactive: () => boolean;
 }) {
-  const spinnerSrc = createSpriteAnimation(SPINNER_FRAMES, { frameStep: SPINNER_STEP });
+  const spinnerChar = createBrailleSpinner();
   const broadcasting = () => hw.pairing === 'scanning' || hw.pairing === 'advertising';
+  const showSpinner = () => hw.pairing === 'scanning' || hw.pairing === 'advertising' || hw.pairing === 'pairing';
   const linkUp = () => hw.pairing === 'pairing' || hw.pairing === 'connected';
   const busy = () => broadcasting() || linkUp();
   const mainLabel = () => (linkUp() ? '断开' : broadcasting() ? '停止' : '连接');
@@ -31,8 +31,10 @@ export function PairingPage(props: {
       {/* 状态文字与 Spinner */}
       <View class="flex-col items-center justify-center shrink-0">
         <View class="flex-row items-center justify-center gap-1 shrink-0 h-[18]">
-          {props.active() && busy() ? (
-            <Image class="w-[14] h-[14] shrink-0" src={spinnerSrc.value} />
+          {props.active() && showSpinner() ? (
+            <Text class="text-xs font-bold shrink-0" style={{ textColor: COLOR.onPrimaryContainer }}>
+              {spinnerChar.value}
+            </Text>
           ) : null}
           <Text class="text-xs font-bold shrink-0" style={{ textColor: COLOR.onPrimaryContainer }}>
             {pairingLabel(hw.pairing)}

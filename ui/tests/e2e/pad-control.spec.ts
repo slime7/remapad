@@ -15,12 +15,12 @@ test('方向键左右切换四叶草页面', async ({ app }) => {
   // 按右键切换到第 2 页：手柄设置
   await app.pad.press('ArrowRight');
   await expect.poll(() => app.hasVisibleText('SN: HEJ71001123456')).toBe(true);
-  expect(await app.hasVisibleText('2')).toBe(false);
+  await expect.poll(() => app.hasVisibleText('2')).toBe(false);
 
   // 按左键切换回第 1 页：亮度调节
   await app.pad.press('ArrowLeft');
   await expect.poll(() => app.hasVisibleText('2')).toBe(true);
-  expect(await app.hasVisibleText('SN: HEJ71001123456')).toBe(false);
+  await expect.poll(() => app.hasVisibleText('SN: HEJ71001123456')).toBe(false);
 });
 
 test('上下方向键选择控件并回车激活：在亮度页调节背光', async ({ app }) => {

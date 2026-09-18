@@ -119,4 +119,4 @@ export const STYLE = {
 /**
  * 构建期字符集锚点：保证运行时动态拼接的数字、状态字符进入字体图集。
  */
-export const CHARSET_ANCHOR = '0123456789:.%-ABCDEF左右上下选择确认长按退出翻页未连接接收中';
+export const CHARSET_ANCHOR = '0123456789:.%-ABCDEF左右上下选择确认长按退出翻页未连接接收中⠁⠂⠄⡀⢀⠠⠐⠈';
