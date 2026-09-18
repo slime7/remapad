@@ -12,7 +12,7 @@ import { Image, Text, View } from '@pocketjs/framework/vue-vapor/components';
 import type { NodeMirror } from '@pocketjs/framework/vue-vapor/components';
 import { attachGesture } from '@pocketjs/framework/vue-vapor/gesture';
 import { animate, cancelAnim, jump } from '@pocketjs/framework/vue-vapor/animation';
-import { onButtonPress } from '@pocketjs/framework/vue-vapor/lifecycle';
+import { onButtonPress, onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { BottomBar } from './components/BottomBar';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { useHardware, hw, powerOffDevice, rebootDevice } from './hooks/useHardware';
@@ -25,11 +25,15 @@ import { SystemInfoPage } from './pages/SystemInfoPage';
 import { DebugPage } from './pages/DebugPage';
 import { IS_DEV } from './env.generated';
 import { CHARSET_ANCHOR, COLOR, STYLE } from './theme';
+import { ticksForMs } from './tick';
 
 // 构建期字符集锚点：确保动态字符被扫描烘焙进字体图集
 void CHARSET_ANCHOR;
 
-const SWIPE_THRESHOLD = 80;
+const SWIPE_THRESHOLD = 40;
+const SLOT_DISTANCE = 200;
+const ANIM_DUR_MS = 120;
+const REBOUND_DUR_MS = 100;
 const BTN_CROSS = 0x4000;
 
 export default function App() {
@@ -59,71 +63,122 @@ export default function App() {
   // 四叶草动画与跟手位移控制器
   let carouselNode: NodeMirror | null = null;
   let currentAnimId = -1;
+  let isAnimating = false;
+  let pendingSlideFrames = 0;
+  let pendingSlideTarget = -1;
+  let pendingReboundFrames = 0;
 
   const setCarouselRef = (node: NodeMirror | null) => {
     carouselNode = node;
   };
 
-  const stopAnim = () => {
+  const clearTransition = () => {
     if (currentAnimId >= 0) {
       cancelAnim(currentAnimId);
       currentAnimId = -1;
     }
+    pendingSlideFrames = 0;
+    pendingSlideTarget = -1;
+    pendingReboundFrames = 0;
+    isAnimating = false;
   };
 
-  // 只有在拖拽手势或动画切页过程中才显现左右相邻槽位，静止时保持 hidden 避免多余开销与干扰
-  const sliding = ref(false);
-  let slideTimer: any = null;
-
-  const setSliding = (active: boolean, delayMs = 0) => {
-    if (slideTimer) {
-      clearTimeout(slideTimer);
-      slideTimer = null;
+  // 动画到达终点后原子归位：位移复位至 0、切换目标页码，杜绝跳帧与二次闪烁
+  const finishSlide = (targetPageIndex: number) => {
+    clearTransition();
+    if (carouselNode) {
+      jump(carouselNode, 'translateX', 0);
     }
-    if (active) {
-      sliding.value = true;
-    } else if (delayMs > 0) {
-      slideTimer = setTimeout(() => {
-        sliding.value = false;
-        slideTimer = null;
-      }, delayMs);
-    } else {
-      sliding.value = false;
+    pageIndex.value = targetPageIndex;
+  };
+
+  const finishRebound = () => {
+    clearTransition();
+    if (carouselNode) {
+      jump(carouselNode, 'translateX', 0);
     }
   };
 
-  const slideIn = (direction: 'from-right' | 'from-left') => {
+  onFrame(() => {
+    if (pendingSlideFrames > 0) {
+      pendingSlideFrames -= 1;
+      if (pendingSlideFrames <= 0) {
+        finishSlide(pendingSlideTarget);
+      }
+    } else if (pendingReboundFrames > 0) {
+      pendingReboundFrames -= 1;
+      if (pendingReboundFrames <= 0) {
+        finishRebound();
+      }
+    }
+  });
+
+  const slideToNext = (fromX = 0) => {
+    if (!carouselNode) {
+      pageIndex.value = nextPageIndex();
+      return;
+    }
+    clearTransition();
+    isAnimating = true;
+    jump(carouselNode, 'translateX', fromX);
+    currentAnimId = animate(carouselNode, 'translateX', -SLOT_DISTANCE, {
+      dur: ANIM_DUR_MS,
+      easing: 'out',
+    });
+    pendingSlideTarget = nextPageIndex();
+    pendingSlideFrames = Math.max(1, Math.round(ticksForMs(ANIM_DUR_MS)));
+  };
+
+  const slideToPrev = (fromX = 0) => {
+    if (!carouselNode) {
+      pageIndex.value = prevPageIndex();
+      return;
+    }
+    clearTransition();
+    isAnimating = true;
+    jump(carouselNode, 'translateX', fromX);
+    currentAnimId = animate(carouselNode, 'translateX', SLOT_DISTANCE, {
+      dur: ANIM_DUR_MS,
+      easing: 'out',
+    });
+    pendingSlideTarget = prevPageIndex();
+    pendingSlideFrames = Math.max(1, Math.round(ticksForMs(ANIM_DUR_MS)));
+  };
+
+  const rebound = (fromX: number) => {
     if (!carouselNode) {
       return;
     }
-    stopAnim();
-    setSliding(true);
-    const startX = direction === 'from-right' ? 80 : -80;
-    jump(carouselNode, 'translateX', startX);
-    currentAnimId = animate(carouselNode, 'translateX', 0, { dur: 140, easing: 'out' });
-    setSliding(false, 160);
+    clearTransition();
+    isAnimating = true;
+    jump(carouselNode, 'translateX', fromX);
+    currentAnimId = animate(carouselNode, 'translateX', 0, {
+      dur: REBOUND_DUR_MS,
+      easing: 'out',
+    });
+    pendingReboundFrames = Math.max(1, Math.round(ticksForMs(REBOUND_DUR_MS)));
   };
 
   const nextPage = (withAnim = true) => {
-    if (dialogOpen()) {
+    if (dialogOpen() || isAnimating) {
       return;
     }
-    const total = pageCount();
-    pageIndex.value = (pageIndex.value + 1) % total;
-    if (withAnim) {
-      slideIn('from-right');
+    if (!withAnim || !carouselNode) {
+      pageIndex.value = nextPageIndex();
+      return;
     }
+    slideToNext(0);
   };
 
   const prevPage = (withAnim = true) => {
-    if (dialogOpen()) {
+    if (dialogOpen() || isAnimating) {
       return;
     }
-    const total = pageCount();
-    pageIndex.value = (pageIndex.value - 1 + total) % total;
-    if (withAnim) {
-      slideIn('from-left');
+    if (!withAnim || !carouselNode) {
+      pageIndex.value = prevPageIndex();
+      return;
     }
+    slideToPrev(0);
   };
 
   // 手势接管上半区域 (240 × 200)，支持实时跟手与阈值翻页（弹窗时阻断手势）
@@ -131,8 +186,7 @@ export default function App() {
     axis: 'x',
     region: { rect: () => (dialogOpen() ? null : { x: 0, y: 0, w: 240, h: 200 }) },
     onPanStart: () => {
-      stopAnim();
-      setSliding(true);
+      clearTransition();
     },
     onPanMove: (contact) => {
       if (carouselNode) {
@@ -141,18 +195,11 @@ export default function App() {
     },
     onPanEnd: (contact) => {
       if (contact.dx < -SWIPE_THRESHOLD) {
-        nextPage(true);
+        slideToNext(contact.dx);
       } else if (contact.dx > SWIPE_THRESHOLD) {
-        prevPage(true);
+        slideToPrev(contact.dx);
       } else {
-        // 未达到 80px 阈值，平滑回弹归位
-        if (carouselNode) {
-          stopAnim();
-          currentAnimId = animate(carouselNode, 'translateX', 0, { dur: 120, easing: 'out' });
-          setSliding(false, 140);
-        } else {
-          setSliding(false);
-        }
+        rebound(contact.dx);
       }
     },
   });
@@ -202,6 +249,12 @@ export default function App() {
             class="absolute left-[-8] top-[-24] w-[256] h-[256]"
           />
 
+          {/* 远左侧相邻四叶草背景 (几何中心 x: -280, y: 104，滑动向右时无缝衔接) */}
+          <Image
+            src="clover.svg"
+            class="absolute left-[-408] top-[-24] w-[256] h-[256]"
+          />
+
           {/* 左侧相邻四叶草背景 (几何中心 x: -80, y: 104) */}
           <Image
             src="clover.svg"
@@ -212,6 +265,12 @@ export default function App() {
           <Image
             src="clover.svg"
             class="absolute left-[192] top-[-24] w-[256] h-[256]"
+          />
+
+          {/* 远右侧相邻四叶草背景 (几何中心 x: 520, y: 104，滑动向左时无缝衔接) */}
+          <Image
+            src="clover.svg"
+            class="absolute left-[392] top-[-24] w-[256] h-[256]"
           />
 
           {/* 中间主槽位内容区：当前激活页（优先挂载、优先交互、优先焦点命中） */}
@@ -233,7 +292,7 @@ export default function App() {
           </View>
 
           {/* 左侧槽位内容区：实时呈现前一页，滑动时不留白 (几何中心 x: -80, y: 104, 尺寸 156 × 148) */}
-          <View class={sliding.value ? 'absolute left-[-158] top-[30] w-[156] h-[148] flex-col items-center justify-center overflow-hidden' : 'hidden'}>
+          <View class='absolute left-[-158] top-[30] w-[156] h-[148] flex-col items-center justify-center overflow-hidden'>
             <BrightnessPage active={() => prevPageIndex() === 0} interactive={() => false} />
             <ControllerSettingsPage active={() => prevPageIndex() === 1} interactive={() => false} />
             <PairingPage active={() => prevPageIndex() === 2} interactive={() => false} />
@@ -248,7 +307,7 @@ export default function App() {
           </View>
 
           {/* 右侧槽位内容区：实时呈现后一页，滑动时不留白 (几何中心 x: 320, y: 104, 尺寸 156 × 148) */}
-          <View class={sliding.value ? 'absolute left-[242] top-[30] w-[156] h-[148] flex-col items-center justify-center overflow-hidden' : 'hidden'}>
+          <View class='absolute left-[242] top-[30] w-[156] h-[148] flex-col items-center justify-center overflow-hidden'>
             <BrightnessPage active={() => nextPageIndex() === 0} interactive={() => false} />
             <ControllerSettingsPage active={() => nextPageIndex() === 1} interactive={() => false} />
             <PairingPage active={() => nextPageIndex() === 2} interactive={() => false} />

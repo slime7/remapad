@@ -219,7 +219,7 @@ function compileUi(compilerRoot, outdir) {
     `--plan=${PLAN_PATH}`,
     `--project-root=${UI_ROOT}`,
     `--outdir=${outdir}`,
-    '--hz=30',
+    '--hz=60',
     `--font-regular=${FONT_REGULAR}`,
     `--font-bold=${FONT_BOLD}`,
     ...backendArgs,

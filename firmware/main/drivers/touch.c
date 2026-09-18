@@ -74,6 +74,16 @@ esp_err_t touch_init(void)
     if (result != ESP_OK) {
         goto fail;
     }
+
+    /* 配置 CST816T 连续坐标模式：消除默认约 0.5s 的手势/长按仲裁等待，
+     * 允许手指移动时即时刷新坐标。0xFA: EnTouch (0x40) | EnChange (0x20)；
+     * 0xEC: 关闭内部手势过滤；0xFE: 禁用低功耗快速休眠。 */
+    const uint8_t irq_ctl = 0x60;
+    const uint8_t motion_mask = 0x00;
+    const uint8_t dis_autosleep = 0x01;
+    (void)esp_lcd_panel_io_tx_param(io, 0xFA, &irq_ctl, sizeof(irq_ctl));
+    (void)esp_lcd_panel_io_tx_param(io, 0xEC, &motion_mask, sizeof(motion_mask));
+    (void)esp_lcd_panel_io_tx_param(io, 0xFE, &dis_autosleep, sizeof(dis_autosleep));
     return ESP_OK;
 
 fail:
