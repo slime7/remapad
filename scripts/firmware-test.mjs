@@ -44,6 +44,8 @@ const FIRMWARE_SOURCES = [
   'firmware/main/dp/dp_source.c',
   'firmware/main/dp/dp_ui.c',
   'firmware/main/drivers/battery_curve.c',
+  'firmware/main/usb/usb_audio_parse.c',
+  'firmware/main/usb/haptic_synth.c',
 ];
 
 /** 测试自身的源码与替身。 */
@@ -69,6 +71,8 @@ const TEST_SOURCES = [
   'firmware/test/test_ota_proto.c',
   'firmware/test/test_target_ns2.c',
   'firmware/test/test_battery.c',
+  'firmware/test/test_usb_audio.c',
+  'firmware/test/test_haptic_synth.c',
 ];
 
 const INCLUDE_DIRS = [
@@ -81,6 +85,7 @@ const INCLUDE_DIRS = [
   'firmware/main/config',
   'firmware/main/dp',
   'firmware/main/drivers',
+  'firmware/main/usb',
   'firmware/components/pocketjs_render_rgb565/include',
   'firmware/test/support',
   'firmware/test/support/stubs',

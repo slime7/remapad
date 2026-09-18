@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "haptic_synth.h"
 #include "pad_state.h"
 
 #ifdef __cplusplus
@@ -34,6 +35,12 @@ uint32_t usb_input_output_count(void);
 
 /** 把编码好的输出报告交给 host 任务写进 OUT 端点；无设备或已在写时忽略。 */
 void usb_input_send_output(const uint8_t *report, size_t len);
+
+/** 音频触觉流是否在跑（USB 直插 DS5 时震动改走音频通道，HID 震动让位）。 */
+bool usb_input_audio_haptics(void);
+
+/** 更新音频触觉合成参数（usb_audio 的转发口，数据面调用）。 */
+void usb_input_haptic(const haptic_synth_params_t *params);
 
 /* --- 由 usb_host.c 的 host 任务调用 --- */
 

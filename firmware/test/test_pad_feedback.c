@@ -19,6 +19,15 @@ static pad_feedback_t feedback_default(void)
     return feedback;
 }
 
+/** 数据面的渲染步骤：主机只重发采样 ID，编码吃的采样字节是该采样音色在
+ *  当前时刻的幅度（dp_plane 每步替换后再编码）。 */
+static void render_haptic_envelope(pad_feedback_t *held, uint32_t age_ms)
+{
+    if (held->haptic_sample_valid && held->haptic_sample != 0) {
+        held->haptic_sample = pad_haptic_pulse_envelope(held->haptic_sample, age_ms);
+    }
+}
+
 /** 蓝牙输出报告尾部 CRC32 的黄金值（算法与来源见 dualsense 蓝牙用例）：
  *  依次对应「左 255 / 右 128 / 1P」「停止震动 / 1P」「无震动 2P」「DS4 左 64 / 2P」。
  *  DS5 的三组是灯条退出反馈通道后的取值（valid_flag1 只置玩家灯、灯条设置与
@@ -171,6 +180,93 @@ static void hf_band_strength_survives_into_held_frame(void)
     CHECK_EQ(out[3], 96); /* b3 右小马达：跟高频带 */
 }
 
+/** 两带驱动频率的落地值随震动事件进持续帧（apply 的拷贝清单陷阱同高频带
+ *  强度：漏拷会静默停在 0，音频触觉两侧——板上合成与桥接 FEEDBACK 帧——
+ *  就都回落到缺省频率）。 */
+static void rumble_frequencies_survive_into_held_frame(void)
+{
+    pad_feedback_t held = feedback_default();
+    pad_feedback_t event = feedback_default();
+    event.rumble_on[PAD_TRIGGER_L2] = true;
+    event.rumble_on[PAD_TRIGGER_R2] = true;
+    event.rumble_lf_freq[PAD_TRIGGER_L2] = 55;
+    event.rumble_hf_freq[PAD_TRIGGER_L2] = 190;
+    event.rumble_lf_freq[PAD_TRIGGER_R2] = 60;
+    event.rumble_hf_freq[PAD_TRIGGER_R2] = 200;
+
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
+    CHECK_EQ(held.rumble_lf_freq[PAD_TRIGGER_L2], 55);
+    CHECK_EQ(held.rumble_hf_freq[PAD_TRIGGER_L2], 190);
+    CHECK_EQ(held.rumble_lf_freq[PAD_TRIGGER_R2], 60);
+    CHECK_EQ(held.rumble_hf_freq[PAD_TRIGGER_R2], 200);
+
+    /* 玩家灯事件不带震动字段：频率沿用持续帧，不被顺手清掉。 */
+    pad_feedback_t led_event = feedback_default();
+    led_event.player_led = 0x01;
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_PLAYER_LED, &led_event);
+    CHECK_EQ(held.rumble_hf_freq[PAD_TRIGGER_R2], 200);
+}
+
+/** 主机只发采样 ID、不带播放形态（2026-09-18 实机抓包：重发同一 ID 约
+ *  18Hz），节奏由采样音色表给出——0x02（定位呼叫）是首个登记条目：强震、
+ *  停顿、两声蜂鸣、停顿，整周期循环；把恒定强度写马达会整段钉成「一直震」。
+ *  音色表是常规数据：新增采样只登记新条目，不改编码路径。 */
+static void registered_samples_play_their_own_rhythm(void)
+{
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 0), 0xC0);    /* 起手段：强震 */
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 219), 0xC0);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 220), 0x00);  /* 停顿段 */
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 400), 0x80);  /* 蜂鸣段 */
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 500), 0x00);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 600), 0x80);  /* 第二声蜂鸣 */
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 700), 0x00);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 1199), 0x00);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 1200), 0xC0); /* 整周期循环 */
+    CHECK_EQ(pad_haptic_pulse_envelope(0x02, 1300), 0xC0); /* 落回强震段 */
+}
+
+/** 未登记的采样回落缺省音色：一次短脉冲后静默、不循环——重发同一 ID 不
+ *  重启节奏，主机要重复播放就用 0x00 收掉再发，缺省不会把整段重发期
+ *  钉在震动上。 */
+static void unregistered_samples_fall_back_to_one_pulse(void)
+{
+    CHECK_EQ(pad_haptic_pulse_envelope(0x1A, 0), 0xC0);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x1A, 119), 0xC0);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x1A, 120), 0x00);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x1A, 1000), 0x00);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x1A, 1300), 0x00); /* 不循环 */
+}
+
+/** 协议清单里的 0x01（低频蜂鸣，约 1 秒）按文档时长登记为音色数据：
+ *  一段强震后静默、不循环；实机回填前先钉住数据契约。 */
+static void lf_beep_sample_plays_documented_duration(void)
+{
+    CHECK_EQ(pad_haptic_pulse_envelope(0x01, 0), 0xC0);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x01, 999), 0xC0);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x01, 1000), 0x00);
+    CHECK_EQ(pad_haptic_pulse_envelope(0x01, 3000), 0x00); /* 不循环 */
+}
+
+/** 编码侧的采样字节是数据面渲染出的脉冲幅度：音色走强它就强、走到停顿段
+ *  马达清零——不再用恒定 0xC0 把整段播放期钉成连续震动。 */
+static void sample_pulse_follows_envelope_amplitude(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.haptic_sample_valid = true;
+    feedback.haptic_sample = 0x40;
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &feedback, out, sizeof(out)),
+             32);
+    CHECK_EQ(out[4], 0x40);
+    CHECK_EQ(out[5], 0x40);
+
+    feedback.haptic_sample = 0; /* 音色停顿段：马达清零 */
+    pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &feedback, out, sizeof(out));
+    CHECK_EQ(out[4], 0x00);
+    CHECK_EQ(out[5], 0x00);
+}
+
 /** 「查找手柄」页的蜂鸣由 0x0A 采样流承载，同期的 LRA 参数包只是载波
  *  （高频 1-2/255，不判成在震）。载波包以接近输入上报的频率到达，持续帧
  *  合并若被非采样事件顺手清掉采样，脉冲会被切成 15ms 碎片、甚至在数据面
@@ -191,6 +287,8 @@ static void haptic_pulse_survives_rumble_carriers(void)
     pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
     pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_PLAYER_LED, &event);
     CHECK(held.haptic_sample_valid);
+    CHECK_EQ(held.haptic_sample, 0x02);
+    render_haptic_envelope(&held, 0);
     pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &held, out, sizeof(out));
     CHECK_EQ(out[4], 0xC0);
     CHECK_EQ(out[5], 0xC0);
@@ -202,6 +300,21 @@ static void haptic_pulse_survives_rumble_carriers(void)
     pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &held, out, sizeof(out));
     CHECK_EQ(out[4], 0x00);
     CHECK_EQ(out[5], 0x00);
+}
+
+/** DualSense 的 USB 音频接口后两路直连触觉音圈（PS5 同款用法），布局行的
+ *  audio_haptic 是 usb_audio 接管的依据——丢了标记只会安静地回落 HID 震动，
+ *  但板上合成整条通路再也不会启用，这里把标记钉住（Edge 的 PID 一起验）。 */
+static void dualsense_usb_row_marks_audio_haptic(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    uint8_t out[PAD_OUTPUT_MAX];
+    const size_t len = pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x0DF2, &feedback, out,
+                                           sizeof(out));
+    REQUIRE(len > 0);
+    const pad_layout_t *layout = pad_feedback_last_layout();
+    REQUIRE(layout != NULL);
+    CHECK(layout->out.audio_haptic);
 }
 
 /** 玩家指示灯按设备自己的灯位模式点亮：DualSense 的五颗灯是一组固定模式，
@@ -300,12 +413,14 @@ static void held_feedback_keeps_steady_state(void)
     event.haptic_sample = 0x02;
     pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_HAPTIC, &event);
     CHECK(held.haptic_sample_valid);
+    render_haptic_envelope(&held, 0);
     pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &held, out, sizeof(out));
     CHECK_EQ(out[5], 0xC0);
 
     event = feedback_default();
     pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
     CHECK(held.haptic_sample_valid); /* 载波不掐脉冲 */
+    render_haptic_envelope(&held, 0);
     pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &held, out, sizeof(out));
     CHECK_EQ(out[5], 0xC0);
 
@@ -355,6 +470,7 @@ static void haptic_sample_degrades_to_short_pulse(void)
     pad_feedback_t feedback = feedback_default();
     feedback.haptic_sample_valid = true;
     feedback.haptic_sample = 0x05;
+    render_haptic_envelope(&feedback, 0); /* 数据面渲染步骤：0x05 → 包络幅度 */
 
     uint8_t out[PAD_OUTPUT_MAX];
     CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &feedback, out, sizeof(out)),
@@ -474,8 +590,11 @@ HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"DS4 蓝牙的震动写回带上帧头与 CRC32", ds4_bt_encodes_framed_report},
                 {"NS2 手柄原样接收主机的 LRA 参数包", ns2_pad_relays_lra_payload_verbatim},
                 {"DualSense 大马达跟低频带、小马达跟高频带", dualsense_motors_follow_rumble_bands},
+                {"DualSense 有线行声明音频触觉能力（usb_audio 接管的依据）",
+                 dualsense_usb_row_marks_audio_haptic},
                 {"高频带强度随事件进持续帧，漏拷会把纹理震成全零",
                  hf_band_strength_survives_into_held_frame},
+                {"两带驱动频率随震动事件进持续帧", rumble_frequencies_survive_into_held_frame},
                 {"震动写回不改写 DualSense 灯条，玩家号只上白灯",
                  dualsense_rumble_leaves_lightbar_alone},
                 {"触觉采样在无采样能力的设备上退化成短震动",
@@ -483,6 +602,13 @@ HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"停止播放的采样不会把马达留在脉冲上", haptic_stop_sample_silences_motors},
                 {"持续帧保留玩家灯、采样脉冲不被载波掐断", held_feedback_keeps_steady_state},
                 {"查找手柄页的采样脉冲要撑住整个播放期", haptic_pulse_survives_rumble_carriers},
+                {"登记的采样音色按各自节奏渲染而不是恒定强度",
+                 registered_samples_play_their_own_rhythm},
+                {"未登记的采样回落缺省音色：一次短脉冲后静默",
+                 unregistered_samples_fall_back_to_one_pulse},
+                {"协议清单的 0x01 低频蜂鸣按文档时长登记", lf_beep_sample_plays_documented_duration},
+                {"编码的采样字节跟随音色幅度（停顿段清零）",
+                 sample_pulse_follows_envelope_amplitude},
                 {"NS1 的震动按固定头加振幅写入", ns1_rumble_uses_band_template},
                 {"未识别设备没有反馈通道", unknown_device_has_no_feedback_channel},
                 {"等价反馈帧按写回语义判定（原始参数包不算变化）",

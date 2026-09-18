@@ -54,7 +54,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - `input/`：输入通路接收段：桥接帧协议、USB-Serial/JTAG 唯一读取者、桥接输入源。
     三段边界见 [ADR 0021](docs/adr/0021-input-path-three-stage-layering.md)，
     同代透传规则见 [ADR 0026](docs/adr/0026-same-generation-input-passthrough.md)。
-  - `usb/`：USB host 直插：枚举与 HID 收发、输入源、运行时角色切换。
+  - `usb/`：USB host 直插：枚举与 HID 收发、输入源、运行时角色切换；DualSense 的音频触觉通道
+    （`usb_audio.c` 自写最小 UAC1 等时客户端 + `haptic_synth.c` 板上合成 PCM，[ADR 0042](docs/adr/0042-ds5-audio-haptics-onboard-synthesis.md)）也挂在这一层。
     方案与实机核对清单见 [docs/usb-input-plan.md](docs/usb-input-plan.md)，
     取舍见 [ADR 0027](docs/adr/0027-runtime-usb-role-switch.md)。
   - `ota/`：升级会话：非运行分区回写、窗口流控与回滚健康门槛（[ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)）。
@@ -65,7 +66,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - `drivers/`：panel / touch / backlight / pwr_key / buzzer / battery；
     显示通路条带划分与刷新取值见 [ADR 0017](docs/adr/0017-display-path-and-scroll-frame-budget.md)。
   - 顶层 `boot_splash.c`：UI 就绪前的启动画面，随面板启动点亮背光；`render_accel.c`：S3 上接管渲染器填充/掩码混合/直拷回调的本机实现。
-  - PC 侧程序在 `pc/`（`remapadctl.py`：转发 + 命令行 + 实机截图 + OTA；`remapadgui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
+  - PC 侧程序在 `pc/`（`remapadctl.py`：转发 + 命令行 + 实机截图 + OTA + DS5 音频触觉合成 `ds5_haptics.py`；`remapadgui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
   - 新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
 
 ## 项目核心操作命令

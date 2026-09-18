@@ -6,8 +6,82 @@
 #define PAD_NS2_OUT_REPORT_ID 0x02u
 #define PAD_NS2_OUT_LRA_LEN 42u
 
-/** 触觉采样退化成的短震动强度（0-255，按行内量程缩放后写入）。 */
+/** 采样音色里强震段的幅度（0-255，按行内量程缩放后写入马达）。 */
 #define PAD_HAPTIC_PULSE 0xC0u
+/** 采样音色里蜂鸣段的幅度：比强震轻，形成「震动、停顿、发声、停顿」的节奏。 */
+#define PAD_HAPTIC_BEEP 0x80u
+
+/** 采样音色的一个幅度段：段内幅度恒定，写马达只发生在段边界。 */
+typedef struct {
+    uint16_t until_ms;
+    uint8_t amp;
+} haptic_env_step_t;
+
+/** 一档采样音色：周期内按段渲染；loop 决定播完周期后循环还是停住。 */
+typedef struct {
+    uint8_t sample;
+    bool loop;
+    const haptic_env_step_t *steps;
+    size_t step_count;
+} haptic_sound_t;
+
+/** 定位呼叫（0x02，「搜索手柄」长按，2026-09-18 实机抓包建模）：强震、
+ *  停顿、两声蜂鸣、长停顿，整周期 1200ms 循环——主机长按期间持续重发，
+ *  节奏只能由设备侧给出，恒定强度会被钉成「一直震」。 */
+static const haptic_env_step_t s_snd_locate[] = {
+    {220, PAD_HAPTIC_PULSE},
+    {400, 0},
+    {500, PAD_HAPTIC_BEEP},
+    {600, 0},
+    {700, PAD_HAPTIC_BEEP},
+    {1200, 0},
+};
+
+/** 低频蜂鸣（0x01，子命令 0x02 的采样清单：约 1 秒低频蜂鸣）：一段强震
+ *  后静默、不循环；时长按协议文档登记，播放形态待实机回填。 */
+static const haptic_env_step_t s_snd_lf_beep[] = {
+    {1000, PAD_HAPTIC_PULSE},
+    {1100, 0},
+};
+
+/** 缺省音色：一次短脉冲后静默、不循环——未登记采样的兜底，重发同一 ID
+ *  不重启节奏，主机要重复播放就用 0x00 收掉再发。 */
+static const haptic_env_step_t s_snd_default[] = {
+    {120, PAD_HAPTIC_PULSE},
+    {300, 0},
+};
+
+/** 采样音色表：按 ID 登记，新增采样只加数据行。 */
+static const haptic_sound_t s_haptic_bank[] = {
+    {0x02, true, s_snd_locate, sizeof(s_snd_locate) / sizeof(s_snd_locate[0])},
+    {0x01, false, s_snd_lf_beep, sizeof(s_snd_lf_beep) / sizeof(s_snd_lf_beep[0])},
+};
+
+static uint8_t sound_amplitude(const haptic_env_step_t *steps, size_t step_count,
+                               uint32_t age_ms)
+{
+    for (size_t i = 0; i < step_count; i++) {
+        if (age_ms < steps[i].until_ms) {
+            return steps[i].amp;
+        }
+    }
+    return 0;
+}
+
+uint8_t pad_haptic_pulse_envelope(uint8_t sample, uint32_t age_ms)
+{
+    for (size_t i = 0; i < sizeof(s_haptic_bank) / sizeof(s_haptic_bank[0]); i++) {
+        const haptic_sound_t *sound = &s_haptic_bank[i];
+        if (sound->sample != sample) {
+            continue;
+        }
+        const uint32_t period = sound->steps[sound->step_count - 1].until_ms;
+        const uint32_t ms = sound->loop ? age_ms % period : age_ms;
+        return sound_amplitude(sound->steps, sound->step_count, ms);
+    }
+    return sound_amplitude(s_snd_default, sizeof(s_snd_default) / sizeof(s_snd_default[0]),
+                           age_ms);
+}
 
 /** PS 蓝牙输出报告的 CRC32 种子字节（Linux hid-playstation.c 的
  *  PS_OUTPUT_CRC32_SEED）：它是 hidp 传输头，参与 CRC 计算。 */
@@ -99,6 +173,8 @@ void pad_feedback_apply(pad_feedback_t *held, uint8_t fields, const pad_feedback
             held->rumble_on[side] = event->rumble_on[side];
             held->rumble_strength[side] = event->rumble_strength[side];
             held->rumble_hf_strength[side] = event->rumble_hf_strength[side];
+            held->rumble_lf_freq[side] = event->rumble_lf_freq[side];
+            held->rumble_hf_freq[side] = event->rumble_hf_freq[side];
             memcpy(held->rumble_raw[side], event->rumble_raw[side],
                    sizeof(held->rumble_raw[side]));
         }
@@ -201,10 +277,13 @@ size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
             strength = source;
         } else if (feedback->haptic_sample_valid && feedback->haptic_sample != 0 &&
                    desc->haptic == PAD_HAPTIC_AS_RUMBLE && !rumbling) {
-            /* 设备不能播采样：退化成一次短震动，主机已经在震时不动。
-             * 采样 ID 0x00 是「静音 / 停止播放」而不是一次播放——主机用它收掉
-             * 「寻找手柄」的提示音，照脉冲处理会把马达一直留在震动上。 */
-            strength = PAD_HAPTIC_PULSE;
+            /* 设备不能播采样：编码吃的采样字节是数据面渲染出的包络幅度
+             *  （pad_haptic_pulse_envelope，原始 ID 只表示「在播」）——主机
+             *  长按「搜索手柄」时马达跟着节奏走而不是恒定强度；主机已经在
+             *  震时不动。采样 ID 0x00 是「静音 / 停止播放」而不是一次播放
+             *  ——主机用它收掉「寻找手柄」的提示音，照脉冲处理会把马达一直
+             *  留在震动上。 */
+            strength = feedback->haptic_sample;
         }
         out[off] = (uint8_t)((uint16_t)strength * max / 255u);
     }

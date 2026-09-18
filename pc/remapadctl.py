@@ -73,6 +73,7 @@ from link import (
     device_id,
     encode,
     family_for_vendor,
+    feedback_params,
     open_port,
     ota_begin_payload,
     ota_data_payload,
@@ -81,6 +82,8 @@ from link import (
     parse_image_info,
     parse_ota_ack,
 )
+
+from ds5_haptics import Ds5HapticsAudio
 
 # 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码。
 for _stream in (sys.stdout, sys.stderr):
@@ -244,13 +247,19 @@ def identity_payload(info: dict, report_id: int, report_len: int) -> bytes:
 
 
 def format_feedback(payload: bytes) -> str:
-    if len(payload) < 6:
+    params = feedback_params(payload)
+    if params is None:
         return "反馈帧（载荷过短）"
-    line = (f"反馈 震动 L={'on' if payload[0] else 'off'} R={'on' if payload[1] else 'off'} "
-            f"强度 {payload[2]}/{payload[3]} 玩家灯 0x{payload[4]:02x} 触觉 0x{payload[5]:02x}")
-    if len(payload) >= 8:
-        # 高频带（纹理）：老固件的帧没有这两个字节，按长度判断。
-        line += f" 高频 {payload[6]}/{payload[7]}"
+    line = (f"反馈 震动 L={'on' if params['rumble_on'][0] else 'off'} "
+            f"R={'on' if params['rumble_on'][1] else 'off'} "
+            f"强度 {params['lf_amp'][0]}/{params['lf_amp'][1]} "
+            f"玩家灯 0x{params['player_led']:02x} 触觉 0x{params['sample']:02x}")
+    # 高频带（纹理）：解析里已按长度挡掉过短的老固件帧。
+    line += f" 高频 {params['hf_amp'][0]}/{params['hf_amp'][1]}"
+    if params["lf_freq"] is not None:
+        # 两带驱动频率落地值（Hz）：音频触觉合成按它选频。
+        line += (f" 频率 {params['lf_freq'][0]}/{params['lf_freq'][1]}"
+                 f"+{params['hf_freq'][0]}/{params['hf_freq'][1]}")
     return line
 
 
@@ -634,6 +643,12 @@ class Session:
         self.stop_code = 0
         # 反馈帧打印限频（不影响写回手柄，见 FeedbackThrottle）。
         self.feedback_gate = FeedbackThrottle()
+        # DS5 桥接时的 PC 侧音频触觉（attach 时按需启动）。
+        self.haptics: Ds5HapticsAudio | None = None
+        self._haptics_starting = False
+        # 音频流开好后待发的「haptic audio on」：串口只允许主循环一个写者，
+        # 后台线程只置这个标志。
+        self._haptics_notify = False
 
     # --- 手柄转发 --------------------------------------------------
 
@@ -648,8 +663,65 @@ class Session:
         description = describe(info)
         self.reporter.line(f"设备接入：{description}")
         self.reporter.event("pad_attached", describe=description)
+        self.maybe_start_haptics()
+
+    def maybe_start_haptics(self) -> None:
+        """DS5 有线接入时启用 PC 侧音频触觉：对它的 4ch 音频端点合成触觉波形
+        （通道 3/4），并告知固件把桥接写回的震动字段清零（haptic audio on）。
+        --no-audio-haptics / --no-rumble 或端点开不起来时静默回落 HID 震动。
+        WASAPI 开流要秒级、且不能占着桥接热路径，启动放后台线程。"""
+        if self.haptics is not None or self._haptics_starting:
+            return
+        if getattr(self.args, "no_audio_haptics", False) or self.args.no_rumble:
+            return
+        info = self.pad_info or {}
+        if (info.get("vendor_id") != 0x054C
+                or info.get("product_id") not in (0x0CE6, 0x0DF2)
+                or conn_for(info) != CONN_USB):
+            return
+        self._haptics_starting = True
+        threading.Thread(target=self._start_haptics_worker, daemon=True).start()
+
+    def _start_haptics_worker(self) -> None:
+        audio = Ds5HapticsAudio(self.reporter)
+        if not audio.start():
+            self._haptics_starting = False
+            return
+        if self.pad is None:
+            # 启动期间手柄已断开（会话收尾）：不留孤儿流。
+            audio.stop()
+            self._haptics_starting = False
+            return
+        self.haptics = audio
+        self._haptics_starting = False
+        # 「haptic audio on」由主循环发：串口句柄不跨线程写（worker 与主循环
+        # 并发写会把命令字节冲烂，2026-09-18 实机抓到 err unknown command）。
+        self._haptics_notify = True
+
+    def pump_haptics_notify(self) -> None:
+        if not self._haptics_notify or self.haptics is None:
+            return
+        self._haptics_notify = False
+        try:
+            self.send_cli("haptic audio on")
+            self.reporter.line("DS5 音频触觉已启用（通道 3/4 合成，HID 震动让位）")
+            self.reporter.event("haptics_audio", state="on")
+        except OSError:
+            self.stop_haptics()
+
+    def stop_haptics(self) -> None:
+        if self.haptics is None:
+            return
+        self.haptics.stop()
+        self.haptics = None
+        try:
+            self.send_cli("haptic audio off")
+            self.reporter.event("haptics_audio", state="off")
+        except OSError:
+            pass
 
     def detach_pad(self) -> None:
+        self.stop_haptics()
         if self.pad is None:
             return
         try:
@@ -710,6 +782,9 @@ class Session:
         for frame_type, _slot, _seq, payload in frames:
             self.frames += 1
             if frame_type == TYPE_FEEDBACK:
+                params = feedback_params(payload)
+                if params is not None and self.haptics is not None:
+                    self.haptics.set_params(params)
                 line = self.feedback_gate.feed(payload, now)
                 if line is not None:
                     self.reporter.line(line)
@@ -844,6 +919,7 @@ class Session:
         self.pump_pad(now)
         self.pump_link(now)
         self.pump_commands()
+        self.pump_haptics_notify()
         if self.ota is not None:
             self.ota.tick(now)
             if self.ota.finished:
@@ -999,6 +1075,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="转发上限帧率（0 表示不限制，默认 250）")
     parser.add_argument("--no-rumble", action="store_true",
                         help="不把主机的震动/玩家灯写回手柄")
+    parser.add_argument("--no-audio-haptics", action="store_true",
+                        help="DS5 桥接时不走 PC 侧音频触觉（回落 HID 震动写回）")
     parser.add_argument("--no-pad", action="store_true",
                         help="任何模式都不转发手柄（只用命令行 / 截图 / 日志 / 升级）")
     parser.add_argument("--pad", action="store_true",

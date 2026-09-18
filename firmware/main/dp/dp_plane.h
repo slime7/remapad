@@ -38,6 +38,17 @@ void dp_plane_inject_feedback(uint8_t fields, const pad_feedback_t *event);
 /** 读出当前持续反馈帧（串口回读用）：叠加后的震动、玩家灯与触觉采样。 */
 void dp_plane_feedback_held(pad_feedback_t *out);
 
+/**
+ * 桥接路径的音频触觉让位开关（PC 经 CLI `haptic audio on|off` 告知）：开时
+ * 数据面给桥接发的输出报告把震动字段清零——触觉由 PC 侧在 DS5 的音频端点上
+ * 合成，同一对音圈被 HID 与音频双驱动会叠成浑浊触感。桥接断开
+ * （input_source_attached 为假）时自动失效，PC 下次接入按最新告知生效。
+ */
+void dp_plane_bridge_audio_haptics(bool on);
+
+/** 让位开关的当前值（cli_feedback_state 回显用）。 */
+bool dp_plane_bridge_audio_active(void);
+
 #ifdef __cplusplus
 }
 #endif

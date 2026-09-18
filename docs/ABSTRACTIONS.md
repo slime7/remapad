@@ -22,7 +22,7 @@
 | **转换段（target/）** | 输入通路的第三段：目标编码器 `pad_target_t` 把私有格式编码成具体目标家族的报文，现役实现为 `target/ns2/`。 |
 | **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、输出报告帧（`0x11`，设备 → PC 的反馈写回）、截图帧（`0x21`-`0x23`，设备 → PC 的像素分块）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
 | **同代透传** | 设备自带的报告语言与目标语言一致时，把设备报文体原样交给目标发送（NS2 手柄 → NS2 主机），只重写由本机会话决定的状态字节；判定与取舍见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。 |
-| **输出报告（反馈）** | 主机下发的震动 / 玩家灯 / 触觉采样经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告，USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。 |
+| **输出报告（反馈）** | 主机下发的震动 / 玩家灯 / 触觉采样经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告，USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。触觉采样没有包络数据（主机只发采样 ID），按 `pad/feedback.c` 的采样音色表（按 ID 登记的幅度时间线）渲染成节奏幅度后进编码与两条合成通路。DualSense 直插另有音频触觉通道：分带震动包络在板上合成 4ch PCM 经等时端点驱动触觉音圈（[ADR 0042](adr/0042-ds5-audio-haptics-onboard-synthesis.md)）。 |
 | **OTA 会话（ota/）** | 升级通道的固件侧：`ota_session` 负责帧队列、非阻塞分派、flash 写入与重启，`ota_proto` 是纯逻辑的序号判定、窗口应答、4 KB 聚合与超时；镜像写进非运行分区，校验通过后切启动分区（见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)）。 |
 | **NS2 report encoder** | 将私有手柄状态（`pad_state_t`）编码为目标 NS2 手柄的 USB/BLE 报告，位于 `firmware/main/target/ns2/`。 |
 | **BLE controller peripheral** | 对 NS2 主机执行广播、GATT 服务、输入通知、输出命令和配对状态管理的 ESP32 外设角色。 |
@@ -193,6 +193,8 @@ flowchart TB
   主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析为结构化事件（`ns2_rumble_event_t` 等），在反馈监听者里叠加进 `pad_feedback_t` 持续帧
   （事件带哪些字段就覆盖哪些字段：震动与玩家灯是主机的持续状态，回落到默认值会把刚点亮的玩家灯写灭；
   触觉采样是事件式的，只在带它的事件里更新、0x00 是停止——载波包以高频到达，非采样事件清采样会把脉冲切碎，数据面再以 300ms 超时自灭兜底）；
+  采样的播放形态不在主机参数里（同一 ID 以十几 Hz 重发），节奏由 `pad/feedback.c` 的采样音色表给出——按 ID 登记幅度时间线、
+  未登记回落一次短脉冲，数据面按段步进把渲染幅度替换进编码、写回与 FEEDBACK 帧的采样字节；
   桥接反馈帧由数据面任务按「写回语义变化才发」投递（`pad_feedback_equal` 只比两带强度、使能、玩家灯与非零采样，
   原始参数包逐包都在抖、不参与比较），BLE 回调里不做任何串口/USB 传输——
   主机在游戏里以接近输入上报的频率刷震动，逐帧写串口会拖住 NimBLE 主机任务，输入通知随之停摆；
@@ -204,6 +206,8 @@ flowchart TB
 - USB host 直插的数据面：`usb/usb_transport.c` 装 host 栈、枚举、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口）。
   `usb/usb_input.c` 把 IN 报告组成 `pad_report_t` 交给同一份家族表并把反馈写回 OUT 端点。
   `usb/usb_role.c` 负责运行时切换角色（先迁日志到 UART0，再让出 USB-Serial/JTAG）。实机步骤与 VBUS 门禁见 [usb-input-plan.md](usb-input-plan.md)。
+  布局行声明音频触觉能力的设备（DualSense）另由 `usb/usb_audio.c` 认领 UAC1 音频流 OUT 接口：持续向等时端点送板上合成的 4ch PCM，
+  触觉走后两路、扬声器两路恒零；纯逻辑的描述符解析与 PCM 合成在 `usb_audio_parse.c` / `haptic_synth.c`（主机端可测）。
 - 反馈方向已投递到实体手柄：主机下发的震动 / 玩家 LED / 触觉采样经 ble_session 解析成结构化事件，在反馈监听者里归一到 `pad_feedback_t`。
   由 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告（DS4 / DualSense / Xbox / DS3 / NS1 各有一行描述，NS2 手柄原样吃主机的 LRA 参数包）。
   震动流是音频式连续包络：低频给冲击、高频给纹理，参数包逐带解析（`ns2_rumble_band_strengths`），
@@ -216,6 +220,10 @@ flowchart TB
   震动的「在震」判据是 LRA 状态字使能位且归一强度高过载波电平（>2/255，`ns2_rumble_parse`）：
   游戏里主机持续刷的零幅度保活包、查找手柄页的载波包都不算在震，不写给输入手柄——载波被判成在震会把采样退化出的短震动压掉。
   DualSense 的玩家号只落四颗白灯，灯条不驱动：反馈写回会连帧重写玩家色并带「淡出」设置，一震就变色、平时淡回默认白（2026-09-18 实机撤出）。
+  DualSense 直插时反馈优先走音频触觉通道（板上合成，见 USB host 一条与 [ADR 0042](adr/0042-ds5-audio-haptics-onboard-synthesis.md)）：
+  音频接手期间数据面给 USB 路发的 HID 报告把震动字段清零（玩家灯照常）。桥接路径在 PC 经
+  `haptic audio on` 告知时同样让位——PC 侧对 DS5 的 4ch 音频端点合成触觉（`pc/ds5_haptics.py`，
+  振幅与频率吃 FEEDBACK 帧的落地值，[ADR 0043](adr/0043-ds5-bridge-pc-side-audio-haptics.md)）。
 - 运动数据（陀螺仪与加速度）：布局行描述取样位置、样本数与轴映射（NS1 一次三份取最新一份），解析进 `pad_motion_t`；
   0x05 报文的 IMU 字段按 controller.md §5.1 的偏移填真值，0x09 的 40 字节运动块结构未公开。
   因此只提供 CLI `motion 3` 的实验填充档（默认关），真 NS2 手柄走同代透传时运动块原样到达主机。
@@ -316,7 +324,8 @@ classDiagram
 - 布局行现在分三组描述：输入字段（既有）、运动字段（`motion`）与输出（反馈）报告（`out`），外加设备自带的报告语言与期望身份（`native_lang` / `native_identity`）；
   同代透传的判定与状态字节重写见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。
   `out` 里的 `frame` 标出报告的收尾方式：PS 系的蓝牙形态要在末 4 字节补 CRC32（种子字节 0xA2 参与计算，见 `pad/feedback.c`），缺它的报告手柄整份都不接受（实机表现：写回成功、毫无反应）；
-  `led_mask_map` 把主机玩家灯掩码落到设备自己的灯位模式（DualSense 的五颗灯是固定模式，1P 只有中灯、2P 中灯加外灯，不能直写主机掩码）。
+  `led_mask_map` 把主机玩家灯掩码落到设备自己的灯位模式（DualSense 的五颗灯是固定模式，1P 只有中灯、2P 中灯加外灯，不能直写主机掩码）；
+  `audio_haptic` 声明设备带可驱动的 UAC 音频触觉通道（现只有 DualSense 有线行），USB 直插时由 `usb/usb_audio.c` 接管震动与采样退化。
   DualSense 的灯条不参与反馈：玩家号只上四颗白灯，灯条颜色留给 PC 侧管理——写条会连帧重写玩家色并带「淡出」设置，一震就变色、平时淡回默认白（2026-09-18 撤出）；
   若真要在蓝牙上写灯条，设置与颜色必须同一帧（主机的连接动画会一直盖着灯），这条实机结论留档备用。
 - 未登记的 VID/PID 仍回落 Xbox 有线布局并置 `PAD_CAP_FALLBACK_LAYOUT`；
@@ -329,7 +338,7 @@ classDiagram
 | `0x01` ATTACH / `0x02` DETACH | PC → 设备 | 8 字节设备标识（家族 / 连接方式 / VID:PID / Report ID / 报告长度） |
 | `0x10` REPORT | PC → 设备 | 设备标识 + 原始报告（最多 64 字节） |
 | `0x11` OUT_REPORT | 设备 → PC | 要写回手柄的输出报告原始字节（首字节是 Report ID，最多 78 字节） |
-| `0x20` FEEDBACK | 设备 → PC | 左右震动使能与强度、玩家灯、触觉采样 |
+| `0x20` FEEDBACK | 设备 → PC | 左右震动使能与两带强度、玩家灯、触觉采样（音色表渲染出的当前幅度）；16 字节版再带两带驱动频率落地值（u16 小端 ×4，PC 侧音频触觉合成用） |
 | `0x30` OTA_BEGIN | PC → 设备 | `ROM1` + 镜像字节数（u32 小端） |
 | `0x31` OTA_DATA | PC → 设备 | 块序号（u16 小端）+ 最多 200 字节镜像数据；帧内 `slot=1` 标记该窗口的末帧 |
 | `0x32` OTA_END | PC → 设备 | 空 |
@@ -366,7 +375,7 @@ sequenceDiagram
         TGT->>HOST: ns2_output_send() → BLE 输入通知
     end
     HOST->>DP: 主机反馈（震动 / 玩家 LED / 触觉采样）
-    DP->>PC: FEEDBACK 桥接帧（本轮只打印）
+    DP->>PC: FEEDBACK 桥接帧（写回语义变化才发；DS5 桥接时驱动 PC 侧音频触觉合成）
     PC->>RECV: DETACH 帧（拔线或退出）
     RECV->>SRC: 状态回静置，按键不卡住
 ```

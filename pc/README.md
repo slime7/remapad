@@ -192,7 +192,9 @@ OTA 升级用的 `OTA_BEGIN`（0x30）、`OTA_DATA`（0x31，载荷到 202 字�
 完整性由偏移覆盖满整幅画面判定，不再另做校验和。
 
 设备在主机下发 NS2 反馈（震动 / 玩家灯 / 触觉采样）时回发两种帧：
-`FEEDBACK` 是归一化状态（打印与对账用），`OUT_REPORT` 是已经编码好的手柄输出报告——
+`FEEDBACK` 是归一化状态（打印与对账用，DS5 桥接时还驱动 PC 侧音频触觉合成；
+其中触觉采样字节是固件音色表渲染出的当前幅度——主机只发采样 ID、不带播放形态，节奏在固件里生成），
+`OUT_REPORT` 是已经编码好的手柄输出报告——
 震动与玩家灯的字段布局只在固件里有一份（`firmware/main/pad/feedback.c` 按设备布局行编码）。
 PC 侧只把它交给 `hid.write()`，不参与任何映射（PS 系蓝牙形态的帧头与尾部 CRC32 也由固件算好）。
 输出报告的字节数按设备布局行的 `out` 描述来，最长的两行是 DualSense 与 DualShock 4 的蓝牙形态
@@ -201,6 +203,23 @@ PC 侧只把它交给 `hid.write()`，不参与任何映射（PS 系蓝牙形态
 `FEEDBACK` 帧的打印按秒合并（`FeedbackThrottle`）：震动效果的包络逐帧在变，
 逐条打印会把日志区刷爆（游戏内实测每秒上百条）；窗口内只打第一条，
 下一条带「已合并 N 条」。写回手柄与帧计数不受限频影响。
+
+## DS5 音频触觉（桥接路径，--no-audio-haptics 关闭）
+
+DualSense 插在 PC 上时，音频接口由 Windows 持有，板卡够不着——触觉波形改由 PC 侧送：
+`remapadctl` 检测到 DS5（`054C:0CE6/0DF2`，有线）接入后，对它的 4ch 扬声器端点开
+WASAPI 共享流，通道 3/4（RL/RR，直连左右触觉音圈）放合成正弦、扬声器两路恒零；
+振幅与频率来自 `FEEDBACK` 帧（频率落地值由固件算好，PC 只做哑渲染），刻度与固件
+`haptic_synth.c` 一致；触觉采样同样按 FEEDBACK 的采样字节幅度驱动（固件音色表
+渲染出的节奏，PC 不自己生成包络）。同时 PC 发固件 CLI `haptic audio on`，设备据此把桥接写回的
+HID 震动字段清零（同一对音圈不双驱动）；会话退出或手柄拔出时发 `haptic audio off`
+复位，端点开不起来则静默回落 HID 震动。桥接断开时让位自动失效（设备侧按
+`input_source_attached` 门控），不会卡在无震动状态。
+
+实现细节（`pc/ds5_haptics.py`）：音频流用 `RawOutputStream`（int16 字节回调），
+不用 `OutputStream`——后者的回调强制 numpy 数组，而 numpy 的原生扩展在会话
+进程里首载入会卡死（2026-09-18 faulthandler 抓栈定位）；开流在后台线程
+（WASAPI 要秒级），串口只允许主循环一个写者，后台线程只置通知标志。
 
 ## 固件 OTA（--upgrade）
 

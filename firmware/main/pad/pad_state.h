@@ -202,6 +202,11 @@ typedef struct {
     uint8_t rumble_hf_strength[PAD_TRIGGER_COUNT];
     /** 目标侧原始参数包（NS2 为 2×16 字节 LRA 参数），供目标能力二次编码。 */
     uint8_t rumble_raw[PAD_TRIGGER_COUNT][16];
+    /** 两带驱动频率的落地值（Hz，合成侧语义：0 回落缺省、越界夹取，见
+     *  haptic_synth_band_freq）。反馈监听者从原始参数包解出，USB 音频触觉
+     *  与桥接 FEEDBACK 帧共用；不参与写回等价判定（频率字段逐包在抖）。 */
+    uint16_t rumble_lf_freq[PAD_TRIGGER_COUNT];
+    uint16_t rumble_hf_freq[PAD_TRIGGER_COUNT];
     uint8_t player_led; /**< 玩家灯掩码 bit0-3。 */
     bool haptic_sample_valid;
     uint8_t haptic_sample;

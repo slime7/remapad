@@ -82,7 +82,8 @@ static void cli_help(void)
     cli_print("  relay [0|1]         same-generation passthrough (default on, no arg = current)");
     cli_print("  rumble [off|l r]    manual rumble 0-255 per side (no arg = held state)");
     cli_print("  lamp [0x0-0xF]      manual player lamp mask (no arg = held state)");
-    cli_print("  haptic [0xNN]       manual haptic sample byte (no arg = held state)");
+    cli_print("  haptic [0xNN|audio on|off]");
+    cli_print("                      manual sample byte; audio = PC drives DS5 haptics");
     cli_print("  fwver [a.b.c]       handset fw version reported to the host");
     cli_print("  fwack [hex bytes]   ack body for the host update frame (default empty)");
     cli_print("  fwpost [a.b.c]      version reported after a host update (default 9.9.9)");
@@ -685,12 +686,15 @@ static void cli_feedback_state(void)
     } else {
         snprintf(haptic, sizeof(haptic), "none");
     }
-    char line[128];
+    char line[144];
     snprintf(line, sizeof(line),
-             "feedback rumble l=%u r=%u lamp=0x%x haptic=%s",
+             "feedback rumble l=%u r=%u hf l=%u r=%u lamp=0x%x haptic=%s bridge-audio=%s",
              (unsigned)held.rumble_strength[PAD_TRIGGER_L2],
              (unsigned)held.rumble_strength[PAD_TRIGGER_R2],
-             (unsigned)held.player_led, haptic);
+             (unsigned)held.rumble_hf_strength[PAD_TRIGGER_L2],
+             (unsigned)held.rumble_hf_strength[PAD_TRIGGER_R2],
+             (unsigned)held.player_led, haptic,
+             dp_plane_bridge_audio_active() ? "on" : "off");
     cli_print(line);
 }
 
@@ -763,17 +767,25 @@ static void cli_lamp(const char *arg)
     cli_print(line);
 }
 
-/** 触觉采样手动注入：0x00 合法（主机用它收掉提示音）。 */
+/** 触觉采样手动注入（0x00 合法：主机用它收掉提示音）；`audio on|off` 是
+ *  桥接路径的音频触觉让位开关——PC 侧在 DS5 音频端点上接管触觉时告知固件
+ *  把桥接写回的震动字段清零，PC 不接管时保持 HID 震动。 */
 static void cli_haptic(const char *arg)
 {
     if (arg[0] == '\0') {
         cli_feedback_state();
         return;
     }
+    if (strcmp(arg, "audio on") == 0 || strcmp(arg, "audio off") == 0) {
+        const bool on = arg[6] == 'o' && arg[7] == 'n';
+        dp_plane_bridge_audio_haptics(on);
+        cli_print(on ? "ok haptic audio on" : "ok haptic audio off");
+        return;
+    }
     char *end = NULL;
     const unsigned long sample = strtoul(arg, &end, 0);
     if (end == arg || *end != '\0' || sample > 0xFF) {
-        cli_print("err usage: haptic [0xNN]");
+        cli_print("err usage: haptic [0xNN|audio on|off]");
         return;
     }
     pad_feedback_t event;

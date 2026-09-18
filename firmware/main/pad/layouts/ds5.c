@@ -50,6 +50,7 @@ static const pad_layout_t s_rows[] = {
             .led_rgb_off = PAD_OFF_NONE,
             .led_style = PAD_LED_PLAYER_MASK,
             .haptic = PAD_HAPTIC_AS_RUMBLE,
+            .audio_haptic = 1,
             .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},
         },
     },

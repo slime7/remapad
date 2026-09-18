@@ -257,8 +257,10 @@ void input_link_send_feedback(const pad_feedback_t *feedback)
         return;
     }
     /* 反馈载荷：左右震动使能、两带强度（低频冲击 + 高频纹理）、玩家灯与
-     * 触觉采样，其余位保留。 */
-    uint8_t payload[12] = {0};
+     * 触觉采样；字节 8-15 是两带驱动频率的落地值（Hz，小端 u16 ×4：低频
+     * L/R、高频 L/R，PC 侧音频触觉合成按它选频，夹取与回落已在反馈监听者
+     * 完成）。老固件的帧只有前 12 字节，PC 按长度判断。 */
+    uint8_t payload[16] = {0};
     payload[0] = feedback->rumble_on[PAD_TRIGGER_L2] ? 1u : 0u;
     payload[1] = feedback->rumble_on[PAD_TRIGGER_R2] ? 1u : 0u;
     payload[2] = feedback->rumble_strength[PAD_TRIGGER_L2];
@@ -267,6 +269,14 @@ void input_link_send_feedback(const pad_feedback_t *feedback)
     payload[5] = feedback->haptic_sample_valid ? feedback->haptic_sample : 0u;
     payload[6] = feedback->rumble_hf_strength[PAD_TRIGGER_L2];
     payload[7] = feedback->rumble_hf_strength[PAD_TRIGGER_R2];
+    payload[8] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_L2] & 0xFFu);
+    payload[9] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_L2] >> 8);
+    payload[10] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_R2] & 0xFFu);
+    payload[11] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_R2] >> 8);
+    payload[12] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_L2] & 0xFFu);
+    payload[13] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_L2] >> 8);
+    payload[14] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_R2] & 0xFFu);
+    payload[15] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_R2] >> 8);
     input_link_send_frame(INPUT_FRAME_TYPE_FEEDBACK, 0, payload, sizeof(payload));
 }
 

@@ -20,6 +20,7 @@ CRC-16/CCITT-FALSE 覆盖除末尾两字节外的整帧（含同步字）。
 from __future__ import annotations
 
 import ctypes
+import struct
 import sys
 import time
 from ctypes import wintypes
@@ -214,6 +215,37 @@ def device_id(family: int, conn: int, vid: int, pid: int, report_id: int, report
 
 def family_for_vendor(vid: int) -> int:
     return VENDOR_FAMILY.get(vid, FAMILY_UNKNOWN)
+
+
+#: FEEDBACK 载荷里两带频率落地值（字节 8-15，小端 u16 ×4）的偏移；
+#: 12 字节 = 老固件（无频率字段），PC 按长度判断。
+FEEDBACK_FREQ_OFF = 8
+FEEDBACK_LEN = 16
+
+
+def feedback_params(payload: bytes) -> dict | None:
+    """FEEDBACK 帧载荷 → 参数字典（音频触觉合成与打印共用）。
+
+    与固件 input_link.c 的载荷布局一致：[0]/[1] 左右使能、[2]/[3] 低频强度、
+    [4] 玩家灯、[5] 触觉采样（0 = 无）、[6]/[7] 高频强度；16 字节版本再带
+    [8:16] 两带驱动频率落地值（低频 L/R、高频 L/R，Hz）。载荷过短返回 None。
+    """
+    if len(payload) < 8:
+        return None
+    params = {
+        "rumble_on": (bool(payload[0]), bool(payload[1])),
+        "lf_amp": (payload[2], payload[3]),
+        "player_led": payload[4],
+        "sample": payload[5],
+        "hf_amp": (payload[6], payload[7]),
+        "lf_freq": None,
+        "hf_freq": None,
+    }
+    if len(payload) >= FEEDBACK_LEN:
+        lf_l, lf_r, hf_l, hf_r = struct.unpack_from("<4H", payload, FEEDBACK_FREQ_OFF)
+        params["lf_freq"] = (lf_l, lf_r)
+        params["hf_freq"] = (hf_l, hf_r)
+    return params
 
 
 class FrameDecoder:

@@ -21,6 +21,8 @@ extern const host_test_suite_t suite_input_frame;
 extern const host_test_suite_t suite_ota_proto;
 extern const host_test_suite_t suite_target_ns2;
 extern const host_test_suite_t suite_battery;
+extern const host_test_suite_t suite_usb_audio;
+extern const host_test_suite_t suite_haptic_synth;
 
 static const host_test_suite_t *const s_suites[] = {
     &suite_ns2_report,
@@ -40,6 +42,8 @@ static const host_test_suite_t *const s_suites[] = {
     &suite_ota_proto,
     &suite_target_ns2,
     &suite_battery,
+    &suite_usb_audio,
+    &suite_haptic_synth,
     NULL,
 };
 

@@ -342,6 +342,35 @@ static void rumble_amplitudes_come_out_per_band(void)
     CHECK_EQ(hf, 0);
 }
 
+/** LRA 参数包里的 9 位频率字段（组内位 0-8 低频、位 19-27 高频）：音频触觉
+ *  合成按它选驱动频率，这里钉住字段位与「三组取最大」的语义。 */
+static void rumble_frequencies_decode_per_band(void)
+{
+    uint8_t raw[16];
+    memset(raw, 0, sizeof(raw));
+    raw[0] = 0x40;
+    /* 第 0 组 v = 55 | 180<<19 = 0x05A00037：低频频率 55Hz、高频频率 180Hz。
+     * 5 字节小端 -> 字节 1..5 = 37 00 A0 05 00。 */
+    raw[1] = 0x37;
+    raw[3] = 0xA0;
+    raw[4] = 0x05;
+    /* 第 2 组（字节 11-15）给更大的低频频率 90（位 0-8 落在字节 11），
+     * 三组取最大后低频应报 90。 */
+    raw[11] = 0x5A;
+
+    uint16_t lf_hz = 0;
+    uint16_t hf_hz = 0;
+    ns2_rumble_band_frequencies(raw, &lf_hz, &hf_hz);
+    CHECK_EQ(lf_hz, 90);
+    CHECK_EQ(hf_hz, 180);
+
+    /* 空包（频率字段全 0）原样报 0：回落缺省值是消费侧（合成）的事。 */
+    memset(raw, 0, sizeof(raw));
+    ns2_rumble_band_frequencies(raw, &lf_hz, &hf_hz);
+    CHECK_EQ(lf_hz, 0);
+    CHECK_EQ(hf_hz, 0);
+}
+
 /** 游戏里主机会以接近输入上报的频率持续刷「保活包」：状态字使能位为 1、
  *  三组振幅全 0。真机手柄收到同样的包毫无动静（同一场游戏里实体 JoyCon
  *  不震），把使能位直接当成「在震」转发给输入手柄，就成了一场主机根本没有
@@ -543,6 +572,7 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"未识别型号兜底后仍照常上报", unknown_model_still_reports_keys},
                 {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form},
                 {"LRA 参数包按低频/高频频带分别给出振幅", rumble_amplitudes_come_out_per_band},
+                {"LRA 参数包按频带解出 9 位驱动频率", rumble_frequencies_decode_per_band},
                 {"零幅度的使能保活包不算在震", zero_amplitude_enable_is_not_rumbling},
                 {"查找手柄页的载波电平不算在震（高频 1-2/255）",
                  carrier_level_envelope_is_not_rumbling},

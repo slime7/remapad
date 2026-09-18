@@ -9,6 +9,7 @@
 #include "freertos/task.h"
 #include "usb/usb_host.h"
 
+#include "usb_audio.h"
 #include "usb_input.h"
 
 static const char *TAG = "remapad_usbhost";
@@ -250,6 +251,8 @@ static void close_device(void)
         return;
     }
     s_host.dev_open = false;
+    /* 音频触觉先收（自己的接口与传输），再等 HID 的在途传输收尾。 */
+    usb_audio_detach();
     /* 等在途传输收尾（拔线时由 host 栈以 NO_DEVICE 结束），再释放传输与接口。 */
     for (int i = 0; i < 50 && (s_host.in_inflight || s_host.out_inflight); i++) {
         vTaskDelay(pdMS_TO_TICKS(2));
@@ -326,6 +329,9 @@ static void open_device(uint8_t addr)
     ESP_LOGI(TAG, "hid interface %u claimed (ep in=0x%02x out=0x%02x)", (unsigned)s_host.iface_num,
              (unsigned)s_host.ep_in, (unsigned)s_host.ep_out);
     usb_input_note_device(true, dev_desc->idVendor, dev_desc->idProduct);
+    /* 音频触觉通道（DS5 一类带 UAC 触觉的设备）：不成就只是没有音频触觉，
+     * HID 反馈照常。 */
+    usb_audio_attach(s_host.client, dev, cfg, dev_desc->idVendor, dev_desc->idProduct);
     submit_in();
 }
 

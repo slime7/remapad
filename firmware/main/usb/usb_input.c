@@ -9,6 +9,7 @@
 
 #include "dp_source.h"
 #include "pad_device.h"
+#include "usb_audio.h"
 #include "usb_transport.h"
 
 static const char *TAG = "remapad_usb_src";
@@ -153,4 +154,14 @@ void usb_input_send_output(const uint8_t *report, size_t len)
     }
     usb_host_queue_output(report, len);
     s_usb.outputs++;
+}
+
+bool usb_input_audio_haptics(void)
+{
+    return usb_audio_streaming();
+}
+
+void usb_input_haptic(const haptic_synth_params_t *params)
+{
+    usb_audio_haptic(params);
 }

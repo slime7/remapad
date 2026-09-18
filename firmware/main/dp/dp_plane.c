@@ -30,7 +30,7 @@ static const char *TAG = "remapad_dp";
 #define DP_TICK_MS 5
 
 /** 采样脉冲的自灭时限：主机正常会用 0x00 采样收掉提示音，但忘了发或丢包时
- *  不能把马达钉在脉冲上；主机以 4-12Hz 重发采样时脉冲自然续上。 */
+ *  不能把马达钉在脉冲上；主机以十几 Hz 重发采样时脉冲自然续上。 */
 #define DP_HAPTIC_HOLD_US 300000LL
 
 /** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告（ADR 0023 的取值）。
@@ -116,8 +116,13 @@ static portMUX_TYPE s_feedback_mux = portMUX_INITIALIZER_UNLOCKED;
 /** 最近一次触觉采样事件的时刻（feedback_commit 里刷新），采样脉冲的超时
  *  自灭按它算。 */
 static volatile int64_t s_haptic_last_us;
+/** 当前这段采样的起播时刻（effective 采样从无到有的那一刻），包络相位按它算。 */
+static volatile int64_t s_haptic_start_us;
 static pad_feedback_t s_feedback;
 static volatile bool s_feedback_pending;
+
+/** 桥接路径的音频触觉让位开关（PC 经 `haptic audio on|off` 告知）。 */
+static volatile bool s_bridge_audio_haptics;
 
 /**
  * 主机反馈监听：事件叠加进持续帧（pad_feedback_apply：事件带哪些字段就覆盖
@@ -134,10 +139,16 @@ static void feedback_commit(uint8_t fields, const pad_feedback_t *event)
     const int64_t haptic_now_us =
         (fields & PAD_FEEDBACK_FIELD_HAPTIC) != 0 ? esp_timer_get_time() : 0;
     portENTER_CRITICAL(&s_feedback_mux);
+    const bool was_active =
+        s_feedback.haptic_sample_valid && s_feedback.haptic_sample != 0;
     if ((fields & PAD_FEEDBACK_FIELD_HAPTIC) != 0) {
         s_haptic_last_us = haptic_now_us;
     }
     pad_feedback_apply(&s_feedback, fields, event);
+    if (!was_active && s_feedback.haptic_sample_valid && s_feedback.haptic_sample != 0) {
+        /* 起播时刻：包络相位从这一拍算起，重发同一采样只续命、不重启节奏。 */
+        s_haptic_start_us = haptic_now_us;
+    }
     s_feedback_pending = true;
     portEXIT_CRITICAL(&s_feedback_mux);
 }
@@ -153,6 +164,8 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
         const ns2_rumble_event_t *rumble = payload;
         uint8_t lf = 0;
         uint8_t hf = 0;
+        uint16_t lf_hz = 0;
+        uint16_t hf_hz = 0;
         event.rumble_on[PAD_TRIGGER_L2] = rumble->left_on;
         event.rumble_on[PAD_TRIGGER_R2] = rumble->right_on;
         ns2_rumble_band_strengths(rumble->raw, &lf, &hf);
@@ -161,6 +174,14 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
         ns2_rumble_band_strengths(&rumble->raw[16], &lf, &hf);
         event.rumble_strength[PAD_TRIGGER_R2] = rumble->right_on ? lf : 0;
         event.rumble_hf_strength[PAD_TRIGGER_R2] = rumble->right_on ? hf : 0;
+        /* 驱动频率的落地值（合成侧语义：0 回落缺省、越界夹取）：USB 音频触觉
+         *  与桥接 FEEDBACK 帧共用这一份，PC 不重复落地规则。 */
+        ns2_rumble_band_frequencies(rumble->raw, &lf_hz, &hf_hz);
+        event.rumble_lf_freq[PAD_TRIGGER_L2] = haptic_synth_band_freq(lf_hz, false);
+        event.rumble_hf_freq[PAD_TRIGGER_L2] = haptic_synth_band_freq(hf_hz, true);
+        ns2_rumble_band_frequencies(&rumble->raw[16], &lf_hz, &hf_hz);
+        event.rumble_lf_freq[PAD_TRIGGER_R2] = haptic_synth_band_freq(lf_hz, false);
+        event.rumble_hf_freq[PAD_TRIGGER_R2] = haptic_synth_band_freq(hf_hz, true);
         memcpy(event.rumble_raw[PAD_TRIGGER_L2], rumble->raw, 16);
         memcpy(event.rumble_raw[PAD_TRIGGER_R2], &rumble->raw[16], 16);
         fields = PAD_FEEDBACK_FIELD_RUMBLE;
@@ -206,6 +227,21 @@ void dp_plane_feedback_held(pad_feedback_t *out)
     portEXIT_CRITICAL(&s_feedback_mux);
 }
 
+void dp_plane_bridge_audio_haptics(bool on)
+{
+    s_bridge_audio_haptics = on;
+    /* 让位切换后立即补一帧：正震着的时候切开关，两侧写回要尽快对齐新语义。 */
+    portENTER_CRITICAL(&s_feedback_mux);
+    s_feedback_pending = true;
+    portEXIT_CRITICAL(&s_feedback_mux);
+    ESP_LOGI(TAG, "bridge audio haptics %s", on ? "on" : "off");
+}
+
+bool dp_plane_bridge_audio_active(void)
+{
+    return s_bridge_audio_haptics;
+}
+
 /**
  * 把持续帧按输入设备的布局编码成输出报告（USB host 直插与桥接共用这一份
  * 字节）。返回编码长度，设备没有反馈通道时返回 0。编码与发送分开：调用方
@@ -223,22 +259,14 @@ static size_t encode_feedback_report(const pad_feedback_t *feedback, uint8_t *ou
     return pad_feedback_encode(conn, vid, pid, feedback, out, cap);
 }
 
-/** 把编码好的输出报告交给传输侧：USB host 直插走 OUT 端点，桥接路径把
- *  原始输出报告交给 PC（PC 只负责写手柄）。 */
-static void send_feedback_report(const uint8_t *out, size_t len)
+/** 「震动让位」版本的输出报告：马达字节全零、玩家灯照常——音频触觉接手的
+ *  那条通路拿它写回，同一对音圈不再被 HID 与音频双驱动。 */
+static size_t encode_quiet_feedback(const pad_feedback_t *feedback, uint8_t *out, size_t cap)
 {
-    if (len == 0) {
-        return;
-    }
-    const pad_layout_t *layout = pad_feedback_last_layout();
-    ESP_LOGD(TAG, "feedback -> %u bytes (%s)", (unsigned)len,
-             layout != NULL ? pad_family_name(layout->family) : "-");
-    if (usb_input_attached()) {
-        usb_input_send_output(out, len);
-    }
-    if (input_source_attached()) {
-        input_link_send_out_report(out, len);
-    }
+    pad_feedback_t quiet;
+    pad_feedback_defaults(&quiet);
+    quiet.player_led = feedback->player_led;
+    return encode_feedback_report(&quiet, out, cap);
 }
 
 /**
@@ -264,6 +292,25 @@ static void send_neutral_report(const pad_state_t *pad)
     target_send_pad(&neutral);
 }
 
+/** 采样音色的当前渲染幅度：持续帧的采样有效且没到超时自灭才给值，否则 0。
+ *  幅度只按音色表的段边界变化（几百毫秒一档），数据面据此步进重编码——这
+ *  也是主机停止重发后超时自灭能走进编码路径的入口（持续帧自己不会再置
+ *  pending）。 */
+static uint8_t held_haptic_envelope(int64_t now_us)
+{
+    portENTER_CRITICAL(&s_feedback_mux);
+    const bool active =
+        s_feedback.haptic_sample_valid && s_feedback.haptic_sample != 0;
+    const uint8_t sample = s_feedback.haptic_sample;
+    const int64_t start = s_haptic_start_us;
+    const int64_t last = s_haptic_last_us;
+    portEXIT_CRITICAL(&s_feedback_mux);
+    if (!active || now_us - last > DP_HAPTIC_HOLD_US) {
+        return 0;
+    }
+    return pad_haptic_pulse_envelope(sample, (uint32_t)((now_us - start) / 1000));
+}
+
 static void dp_task(void *param)
 {
     (void)param;
@@ -279,9 +326,15 @@ static void dp_task(void *param)
     pad_feedback_t feedback_sent;
     pad_feedback_defaults(&feedback_sent);
     bool feedback_sent_valid = false;
-    uint8_t feedback_out_sent[PAD_OUTPUT_MAX];
-    size_t feedback_out_sent_len = 0;
-    bool feedback_out_valid = false;
+    /* 上次编码用到的采样音色幅度：只在音色段边界变化，值变了才走一遍
+     * 编码与写回（反馈事件与音色步进共用同一条路径）。 */
+    uint8_t haptic_env_last = 0;
+    uint8_t bridge_out_sent[PAD_OUTPUT_MAX];
+    size_t bridge_out_sent_len = 0;
+    bool bridge_out_valid = false;
+    uint8_t usb_out_sent[PAD_OUTPUT_MAX];
+    size_t usb_out_sent_len = 0;
+    bool usb_out_valid = false;
 
     ESP_LOGI(TAG, "data plane task running, tick=%dms, target=%s", DP_TICK_MS,
              target_name());
@@ -297,7 +350,11 @@ static void dp_task(void *param)
             ESP_LOGI(TAG, "home key: opening the wake window");
             ns2_session_wake_request();
         }
-        if (s_feedback_pending) {
+        /* 采样音色的当前幅度：主机只重发采样 ID，播放形态由音色表给出；
+         *  音色步进与反馈事件共用下面这一条编码与写回路径。 */
+        const uint8_t haptic_env = held_haptic_envelope(esp_timer_get_time());
+        if (s_feedback_pending || haptic_env != haptic_env_last) {
+            haptic_env_last = haptic_env;
             pad_feedback_t feedback;
             portENTER_CRITICAL(&s_feedback_mux);
             feedback = s_feedback;
@@ -310,6 +367,15 @@ static void dp_task(void *param)
                 feedback.haptic_sample_valid = false;
                 feedback.haptic_sample = 0;
             }
+            /* 采样渲染副本：编码、写回与 FEEDBACK 帧吃的是音色渲染幅度
+             *  （原始采样 ID 只表示「在播哪一档」），两条触觉通路因此跟着
+             *  音色节奏走，而不是被恒定强度钉成「一直震」。 */
+            pad_feedback_t render = feedback;
+            const bool sample_active =
+                feedback.haptic_sample_valid && feedback.haptic_sample != 0;
+            if (sample_active) {
+                render.haptic_sample = haptic_env;
+            }
             /* 写回（USB OUT / 桥接 OUT_REPORT）按「编码后的报告字节变了才发」：
              *  主机的震动流是音频式连续包络，原始参数包逐包都在抖，但真正落到
              *  马达/灯字节的值常常几十包不变——只有字节变化的帧才值得占一次
@@ -317,20 +383,85 @@ static void dp_task(void *param)
              *  参数包原样在编码字节里，逐包纹理照常透传。 */
             uint8_t feedback_out[PAD_OUTPUT_MAX];
             const size_t feedback_out_len =
-                encode_feedback_report(&feedback, feedback_out, sizeof(feedback_out));
-            if (feedback_out_len > 0 &&
-                (!feedback_out_valid || feedback_out_len != feedback_out_sent_len ||
-                 memcmp(feedback_out_sent, feedback_out, feedback_out_len) != 0)) {
-                send_feedback_report(feedback_out, feedback_out_len);
-                memcpy(feedback_out_sent, feedback_out, feedback_out_len);
-                feedback_out_sent_len = feedback_out_len;
-                feedback_out_valid = true;
+                encode_feedback_report(&render, feedback_out, sizeof(feedback_out));
+            const pad_layout_t *feedback_layout =
+                feedback_out_len > 0 ? pad_feedback_last_layout() : NULL;
+
+            /* 音频触觉让位（USB 直插走板上合成、桥接走 PC 侧合成）：两颗音圈
+             *  被 HID 与音频同时驱动会叠成浑浊触感，接手的一条通路拿到的 HID
+             *  报告把震动字段清零。频率落地值随持续帧走，两侧合成同一份数值
+             *  （PC 只做哑渲染，落地规则只在固件里有一份）。 */
+            const bool usb_audio_engaged = usb_input_attached() && feedback_layout != NULL &&
+                                           feedback_layout->out.audio_haptic &&
+                                           usb_input_audio_haptics();
+            const bool bridge_audio_engaged = input_source_attached() && feedback_layout != NULL &&
+                                              feedback_layout->out.audio_haptic &&
+                                              s_bridge_audio_haptics;
+            if (usb_audio_engaged) {
+                haptic_synth_params_t haptic;
+                memset(&haptic, 0, sizeof(haptic));
+                for (size_t side = 0; side < PAD_TRIGGER_COUNT; side++) {
+                    haptic.lf_amp[side] = feedback.rumble_strength[side];
+                    haptic.hf_amp[side] = feedback.rumble_hf_strength[side];
+                    haptic.lf_freq[side] = feedback.rumble_lf_freq[side];
+                    haptic.hf_freq[side] = feedback.rumble_hf_freq[side];
+                }
+                haptic.pulse = sample_active ? haptic_env : 0;
+                usb_input_haptic(&haptic);
             }
-            /* 桥接的反馈状态帧（PC 日志展示用）按写回语义变化才发：原始字节
-             * 的抖动不产生新帧。 */
-            if (!feedback_sent_valid || !pad_feedback_equal(&feedback_sent, &feedback)) {
-                input_link_send_feedback(&feedback);
-                feedback_sent = feedback;
+
+            /* USB 直插写回：让位时发清了震动字节的报告（玩家灯照常）。 */
+            if (usb_input_attached() && feedback_out_len > 0) {
+                uint8_t usb_out[PAD_OUTPUT_MAX];
+                size_t usb_out_len = feedback_out_len;
+                memcpy(usb_out, feedback_out, feedback_out_len);
+                if (usb_audio_engaged) {
+                    usb_out_len = encode_quiet_feedback(&render, usb_out, sizeof(usb_out));
+                }
+                if (usb_out_len > 0 &&
+                    (!usb_out_valid || usb_out_len != usb_out_sent_len ||
+                     memcmp(usb_out_sent, usb_out, usb_out_len) != 0)) {
+                    ESP_LOGD(TAG, "feedback(usb) -> %u bytes%s", (unsigned)usb_out_len,
+                             usb_audio_engaged ? " (haptics on audio)" : "");
+                    usb_input_send_output(usb_out, usb_out_len);
+                    memcpy(usb_out_sent, usb_out, usb_out_len);
+                    usb_out_sent_len = usb_out_len;
+                    usb_out_valid = true;
+                }
+            } else {
+                usb_out_valid = false;
+            }
+
+            /* 桥接写回：PC 只负责把报告写给手柄；它自己接管音频触觉时拿让位
+             *  版本，否则完整报告。 */
+            if (input_source_attached() && feedback_out_len > 0) {
+                uint8_t bridge_out[PAD_OUTPUT_MAX];
+                size_t bridge_out_len = feedback_out_len;
+                memcpy(bridge_out, feedback_out, feedback_out_len);
+                if (bridge_audio_engaged) {
+                    bridge_out_len = encode_quiet_feedback(&render, bridge_out,
+                                                           sizeof(bridge_out));
+                }
+                if (bridge_out_len > 0 &&
+                    (!bridge_out_valid || bridge_out_len != bridge_out_sent_len ||
+                     memcmp(bridge_out_sent, bridge_out, bridge_out_len) != 0)) {
+                    ESP_LOGD(TAG, "feedback(bridge) -> %u bytes (%s)%s",
+                             (unsigned)bridge_out_len,
+                             feedback_layout != NULL
+                                 ? pad_family_name(feedback_layout->family)
+                                 : "-",
+                             bridge_audio_engaged ? " (haptics on pc audio)" : "");
+                    input_link_send_out_report(bridge_out, bridge_out_len);
+                    memcpy(bridge_out_sent, bridge_out, bridge_out_len);
+                    bridge_out_sent_len = bridge_out_len;
+                    bridge_out_valid = true;
+                }
+            }
+            /* 桥接的反馈状态帧（PC 日志展示与音频触觉输入）按写回语义变化才发：
+             *  原始字节的抖动不产生新帧，采样字节是包络渲染值（PC 只做哑渲染）。 */
+            if (!feedback_sent_valid || !pad_feedback_equal(&feedback_sent, &render)) {
+                input_link_send_feedback(&render);
+                feedback_sent = render;
                 feedback_sent_valid = true;
             }
         }

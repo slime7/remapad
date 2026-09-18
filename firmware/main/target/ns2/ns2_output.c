@@ -292,6 +292,44 @@ uint8_t ns2_rumble_strength(const uint8_t raw[16])
     return hf > lf ? hf : lf;
 }
 
+void ns2_rumble_band_frequencies(const uint8_t raw[16], uint16_t *lf_hz, uint16_t *hf_hz)
+{
+    if (lf_hz != NULL) {
+        *lf_hz = 0;
+    }
+    if (hf_hz != NULL) {
+        *hf_hz = 0;
+    }
+    if (raw == NULL) {
+        return;
+    }
+    /* 频率字段与振幅同处一组 5 字节小端位串：低频在位 0-8、高频在位 19-27，
+     * 同样逐组取最大。 */
+    uint16_t best_lf = 0;
+    uint16_t best_hf = 0;
+    for (size_t g = 0; g < 3; g++) {
+        const uint8_t *p = &raw[1 + g * 5];
+        uint64_t v = 0;
+        for (size_t i = 0; i < 5; i++) {
+            v |= (uint64_t)p[i] << (8 * i);
+        }
+        const uint16_t group_lf = (uint16_t)(v & 0x1FFu);
+        const uint16_t group_hf = (uint16_t)((v >> 19) & 0x1FFu);
+        if (group_lf > best_lf) {
+            best_lf = group_lf;
+        }
+        if (group_hf > best_hf) {
+            best_hf = group_hf;
+        }
+    }
+    if (lf_hz != NULL) {
+        *lf_hz = best_lf;
+    }
+    if (hf_hz != NULL) {
+        *hf_hz = best_hf;
+    }
+}
+
 bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
 {
     if (data == NULL || out == NULL) {

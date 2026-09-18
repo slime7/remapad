@@ -103,6 +103,10 @@ typedef struct {
     uint8_t led_rgb_off;
     uint8_t led_style; /**< pad_led_style_t。 */
     uint8_t haptic;    /**< pad_haptic_style_t。 */
+    /** 音频触觉：设备带可驱动的 UAC 音频触觉通道（DualSense 的 4ch PCM，
+     *  后两路直连左右触觉音圈）。USB 直插时震动与采样退化改走板上合成，
+     *  HID 震动字节让位；桥接路径（PC 持有音频接口）不受影响。 */
+    uint8_t audio_haptic;
     uint8_t frame;     /**< pad_out_frame_t。 */
     /** 玩家灯落地值：四项依次对应主机掩码 bit0-3（1P-4P），0 表示原样写主机
      *  掩码。DualSense 的五颗灯是一组固定模式（1P 中灯、2P 中加外），不能直写

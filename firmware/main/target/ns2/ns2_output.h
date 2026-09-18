@@ -75,6 +75,13 @@ bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out);
 void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf);
 
 /**
+ * 从 16 字节 LRA 参数包按频带取驱动频率：三组操作数据各带低频与高频 9 位
+ * 频率字段（组内位 0-8 / 位 19-27），逐带取最大。字段单位未经实机核对，
+ * 消费侧（音频触觉合成）自行夹取与回落，这里只报原始刻度。
+ */
+void ns2_rumble_band_frequencies(const uint8_t raw[16], uint16_t *lf_hz, uint16_t *hf_hz);
+
+/**
  * 从 16 字节 LRA 参数包估一个 0-255 强度：两带振幅取大，供「在震」判定与
  * 不分带的设备使用（= ns2_rumble_band_strengths 结果的较大者）。
  */

@@ -69,6 +69,9 @@ idf_component_register(
         "usb/usb_input.c"
         "usb/usb_role.c"
         "usb/usb_transport.c"
+        "usb/usb_audio.c"
+        "usb/usb_audio_parse.c"
+        "usb/haptic_synth.c"
     INCLUDE_DIRS
         "."
         "bridge"
