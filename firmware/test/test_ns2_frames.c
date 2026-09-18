@@ -91,7 +91,7 @@ static void version_body(void)
 
 static void pairing_public_key(void)
 {
-    /* 配对指令里的固定公钥（controller.md §3.2）：LTK = A1 XOR B1，
+    /* 配对指令里的固定公钥（controller.md「密码学计算详细算法」）：LTK = A1 XOR B1，
      * 写错一位主机就配不上，因此逐字节固定在这里。 */
     static const uint8_t expected[NS2_PAIR_PUBKEY_LEN] = {
         0x5C, 0xF6, 0xEE, 0x79, 0x2C, 0xDF, 0x05, 0xE1,

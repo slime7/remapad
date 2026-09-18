@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 /**
- * BLE 手柄会话：广播策略、连接初始化时序与指令分发（controller.md §6/§10.2）。
+ * BLE 手柄会话：广播策略、连接初始化时序与指令分发（controller.md「控制指令系统」/「通信交互与报告上报时序」）。
  * 传输细节（NimBLE、GATT 表、notify）由 ble_controller 承载，本模块只面对协议。
  * 设备对外只有一台 Pro Controller 2：单身份、单报告格式（0x09）、单条会话。
  *

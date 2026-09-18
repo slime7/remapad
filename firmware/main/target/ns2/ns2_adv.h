@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 /**
- * NS2 手柄广播载荷（controller.md §2.1，纯逻辑，可主机端测试）：
+ * NS2 手柄广播载荷（controller.md「Bluetooth LE 广播帧规范」，纯逻辑，可主机端测试）：
  * 31 字节 = BLE Flags 3B + 厂商数据 28B。三种形态只差两处——厂商数据
  * 偏移 0x0B 的状态字节与偏移 0x0C-0x11 的目标主机地址（反序）：
  *

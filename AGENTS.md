@@ -54,10 +54,11 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - `input/`：输入通路接收段：桥接帧协议、USB-Serial/JTAG 唯一读取者、桥接输入源。
     三段边界见 [ADR 0021](docs/adr/0021-input-path-three-stage-layering.md)，
     同代透传规则见 [ADR 0026](docs/adr/0026-same-generation-input-passthrough.md)。
-  - `usb/`：USB host 直插：枚举与 HID 收发、输入源、运行时角色切换；DualSense 的音频触觉通道
-    （`usb_audio.c` 自写最小 UAC1 等时客户端 + `haptic_synth.c` 板上合成 PCM，[ADR 0042](docs/adr/0042-ds5-audio-haptics-onboard-synthesis.md)）也挂在这一层。
+  - `usb/`：USB host 直插：枚举与 HID 收发、输入源、运行时角色切换；DualSense 的音频触觉通道也挂在这一层
+    （`usb_audio.c` 自写最小 UAC1 等时客户端、`haptic_synth.c` 板上合成 PCM），
+    取舍见 [ADR 0042](docs/adr/0042-ds5-audio-haptics-onboard-synthesis.md)。
     方案与实机核对清单见 [docs/usb-input-plan.md](docs/usb-input-plan.md)，
-    取舍见 [ADR 0027](docs/adr/0027-runtime-usb-role-switch.md)。
+    运行时角色切换见 [ADR 0027](docs/adr/0027-runtime-usb-role-switch.md)。
   - `ota/`：升级会话：非运行分区回写、窗口流控与回滚健康门槛（[ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)）。
   - `pad/`：处理段：私有格式 `pad_state_t`、解析与归一、按布局行编码的反馈；
     家族布局表按系列拆在 `pad/layouts/`，契约与注册表是 `pad/layout.h` / `pad/layout.c`。
@@ -66,7 +67,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - `drivers/`：panel / touch / backlight / pwr_key / buzzer / battery；
     显示通路条带划分与刷新取值见 [ADR 0017](docs/adr/0017-display-path-and-scroll-frame-budget.md)。
   - 顶层 `boot_splash.c`：UI 就绪前的启动画面，随面板启动点亮背光；`render_accel.c`：S3 上接管渲染器填充/掩码混合/直拷回调的本机实现。
-  - PC 侧程序在 `pc/`（`remapadctl.py`：转发 + 命令行 + 实机截图 + OTA + DS5 音频触觉合成 `ds5_haptics.py`；`remapadgui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
+  - PC 侧程序在 `pc/`（`remapadctl.py`：转发 + 命令行 + 实机截图 + OTA + DS5 音频触觉合成 `ds5_haptics.py`；
+    `remapadgui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
   - 新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
 
 ## 项目核心操作命令
@@ -107,7 +109,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 
 ## 项目特有约束
 
-- **连接由用户发起**：上电与断连（主机睡下）都静默，只有连接键（配对页「连接」、PWR 长按 3 秒）打开连接窗口、
+- **连接由用户发起**：上电静默，只有连接键（配对页「连接」、PWR 长按 3 秒）打开连接窗口；
+  主机主动断开后自动开 30 秒回连窗口（只发回连形态、不带唤醒突发），到期静默；
   未连接时按手柄 HOME（实体手柄按下去或调试页注入）打开唤醒窗口把休眠主机叫起来；窗口到期或主机连上即收窗。
   改这条策略前先读 [ADR 0038](docs/adr/0038-user-initiated-connection-window.md)。
 - **缺陷修复先写用例**：改 UI 的 bug 先在 `ui/tests/e2e/` 加一条能复现的红用例，改完 `ui/src` 后转绿才算修完；
@@ -127,7 +130,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - 只在运行时动态拼接、从未出现在字面量里的字符不会被烘焙；字体未映射的码点（如 emoji）渲染为 tofu 方框。
   - 界面文案必须写在 `ui/src` 里：固件经 bridge 回发的文本不会被烘焙，直接上屏显示成豆腐块。
 - **PocketJS 组件、归档与脚本入口**：
-  - 仓库自包含：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，前端通过 `@pocketjs/framework` 与 `@pocketjs/cli` npm 依赖获得官方编译器与浏览器运行时。
+  - 仓库自包含：`firmware/components/` 固定官方 ESP-IDF 组件与 ESP32-S3 原生归档，
+    前端通过 `@pocketjs/framework` 与 `@pocketjs/cli` npm 依赖获得官方编译器与浏览器运行时。
   - `POCKETJS_ROOT` 只在对照官方源码 checkout 或重建原生归档时用作路径覆盖，日常构建不依赖它。
   - 触摸预览一律用 `ui/preview/`（浏览器触摸事件 → PocketJS 触摸帧，官方 playground 无触摸输入）。
   - 升级 `firmware/components/` 后必须核对 QuickJS 校验值并重新生成原生归档，见 [patches/README.md](patches/README.md)。

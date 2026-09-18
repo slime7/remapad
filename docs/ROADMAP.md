@@ -21,15 +21,17 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
 ### M2/M3 — 实机验收　状态：未开始
 
 - **广播与 GATT**：
-  nRF Connect 可见广播且厂商数据逐字节一致（Company ID `0x0553`、VID `0x057E`、PID `0x2069`），服务与句柄表符合 [controller.md](controller.md) §4。
+  nRF Connect 可见广播且厂商数据逐字节一致（Company ID `0x0553`、VID `0x057E`、PID `0x2069`），
+  服务与句柄表符合 [controller.md](controller.md)「GATT 属性表与服务架构」。
 - **连接时序**：Switch 2「更改 Grip/顺序」界面能发现并连接。
-  握手应答符合 §10.2 时序（0x001B CCCD → 0x07/0x01 握手 → 版本/出厂信息/校准应答 → LED → 0x0C 特性配置 → 0x000F CCCD → notify 循环）。
+  握手应答符合 controller.md「通信交互与报告上报时序」的时序
+  （0x001B CCCD → 0x07/0x01 握手 → 版本/出厂信息/校准应答 → LED → 0x0C 特性配置 → 0x000F CCCD → notify 循环）。
 - **输入上报**：调试页注入的按键在主机侧可见变化，摇杆与按键连续上报不丢帧。
 - **配对与回连**：Command 0x15 四步配对在实机完成且不触发 SMP；设备上电静默，按连接键（配对页「连接」或 PWR 长按 3 秒）后主机在首页 / 握把顺序页 / 从待机醒来三种情况下都连回来，注入按键主机可见；
   主机睡下后广播收掉（睡眠观察窗口内没有连接动作），需要主动唤醒时按调试页 HOME（未连接时）或发串口 `wake`；
   想把设备留给 2P 时先按「断开」再在握把/顺序页按连接（[ADR 0038](adr/0038-user-initiated-connection-window.md)）。
 - **JoyCon 组合**：本硬件上不可行（一台控制器只有一个 public 地址，主机也只接受 public 地址的广播），形态已移除，见 [ADR 0039](adr/0039-pro-controller-only.md)；
-  验收项改为「配新主机」：设备已配对过的情况下按「配对 新主机」→ 主机 Grip/顺序页搜索并连上来 → 屏幕回到「已连接」（凭证与注册证据见 [controller.md](controller.md) §12）。
+  验收项改为「配新主机」：设备已配对过的情况下按「配对 新主机」→ 主机 Grip/顺序页搜索并连上来 → 屏幕回到「已连接」（凭证与注册证据见 [controller.md](controller.md)「广播过滤与配对记录」）。
 - **震动输出**：Output Report 0x02 解析正确（板卡无马达，最终转发给 USB 源手柄，属 M5）。
 - **UI 观感**：启动画面时序、切页与滚动观感在实机确认。
 
@@ -134,7 +136,7 @@ UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重�
 - **协议精度风险**：controller.md 全部为逆向结论，广播/GATT/配对/时序均需实机迭代；预留真机调试窗口，不符处在 controller.md 增补勘误小节。
 - **内存预算**：NimBLE host + BLE controller 与 QuickJS guest（6.5 MB JS 堆）共存；
   内部 RAM 当前约 360 KB 空闲，必要时 NimBLE 堆切 PSRAM（ADR 0010）。
-- **连接间隔主导权在主机**：5–10 ms 区间由 Switch 2 作为 central 发起，外设侧需确保接受且上报循环跟上节奏（§11）。
+- **连接间隔主导权在主机**：5–10 ms 区间由 Switch 2 作为 central 发起，外设侧需确保接受且上报循环跟上节奏（见 controller.md「常见问题排查与注意事项」）。
 - **VBUS 供电未知（M5 门禁）**：板卡唯一 Type-C 兼任烧录/日志/输入，host 模式下 PHY 切换会失去 COM 口，且 VBUS 5V 供电路径待原理图确认；M5 起步前先完成两项硬件确认。
 - **实机条件**：Switch 2 主机、NS2 手柄（Pro Controller 2）、USB-C 数据线/OTG 转接、UART 串口适配器均已具备。
 

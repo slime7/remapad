@@ -559,7 +559,7 @@ static void haptic_sample_degrades_to_short_pulse(void)
     CHECK_EQ(out[4], 0x00); /* 主机已经在震：采样不叠加到另一侧 */
 }
 
-/** 采样 ID 0x00 是「静音 / 停止播放」（controller.md §6.2），不是一次播放：
+/** 采样 ID 0x00 是「静音 / 停止播放」（controller.md「控制指令系统」），不是一次播放：
  *  主机用它收掉「寻找手柄」的提示音时，马达必须停，不能停在脉冲值上。 */
 static void haptic_stop_sample_silences_motors(void)
 {

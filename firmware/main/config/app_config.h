@@ -44,7 +44,7 @@ typedef struct {
     /** USB 角色（app_config_usb_role_t）：仅本次运行有效。 */
     uint8_t usb_role;
     /** 机身 / 按键 / 高光 / 握把配色 0xRRGGBB，0 表示未设置（沿用出厂占位）。
-     *  四段与出厂块 0x13019 起的布局一一对应（见 controller.md §12）。 */
+     *  四段与出厂块 0x13019 起的布局一一对应（见 controller.md「出厂数据区定义」）。 */
     uint32_t body_color;
     uint32_t button_color;
     uint32_t accent_color;
@@ -52,7 +52,7 @@ typedef struct {
     /**
      * 上报给主机的手柄固件版本（主.次.修订），0x10 版本查询、0x7E40 与
      * 0x13000 出厂块的版本字段共用。出厂值见 CONFIG_DEFAULT_FW_VERSION_*；
-     * 主机的固件更新推送由假升级会话接收并逐帧应答（见 controller.md §12），
+     * 主机的固件更新推送由假升级会话接收并逐帧应答（见 controller.md「Command 0x0D - 手柄固件更新推送」），
      * 是否重启伪装成「已升级」由串口 fwapply 一次性武装。
      */
     uint8_t fw_version[3];

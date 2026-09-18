@@ -1,5 +1,5 @@
 /**
- * NS2 序列号命名规则（ns2_serial.c，controller.md §7.2）：14 位 = 3 字母
+ * NS2 序列号命名规则（ns2_serial.c，controller.md「出厂数据区定义」）：14 位 = 3 字母
  * 前缀 + 10 位数字 + 校验位，校验位 = (10 − S mod 10) mod 10，
  * S = 偶位和 + 3 × 奇位和（0 基）。
  *

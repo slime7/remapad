@@ -85,7 +85,7 @@ static struct {
 
 /** 当前手柄身份集合：设备只模拟 Pro Controller 2，因此只有一个身份。
  *  真机手柄一律用 public 地址，而主机只接受 public 地址的广播（controller.md
- *  §12 勘误，2026-09-16 实机对账），一台控制器只有一个 public 地址。 */
+ *  「广播过滤与配对记录」，实机对账），一台控制器只有一个 public 地址。 */
 static size_t mode_identities(ns2_identity_t *out)
 {
     out[0] = NS2_ID_PRO;
@@ -98,7 +98,7 @@ static size_t mode_identities(ns2_identity_t *out)
 static uint8_t s_adv_addr_form;
 
 /** 是否用公共伪装地址广播：auto 与 public 都用公共地址——主机的芯片过滤只
- *  接受 public 地址的广播（§12 勘误），派生的静态随机地址在主机侧完全看不见，
+ *  接受 public 地址的广播（见 controller.md「广播过滤与配对记录」），派生的静态随机地址在主机侧完全看不见，
  *  因此派生形态只留作实机对账开关。 */
 static bool adv_uses_public_addr(void)
 {
@@ -120,7 +120,7 @@ static const uint8_t *adv_addr_for(void)
 #define NS2_PRO_PID 0x2069u
 
 /** Pro Controller 2 的序列号（3 字母前缀 + 10 位数字，末位校验位由
- *  ns2_serial_build 补齐，命名规则见 controller.md §7.2）。 */
+ *  ns2_serial_build 补齐，命名规则见 controller.md「出厂数据区定义」）。 */
 #define NS2_PRO_SERIAL_PREFIX "HEJ"
 #define NS2_PRO_SERIAL_DIGITS "7100112345"
 
@@ -154,7 +154,7 @@ static const uint8_t s_mem_calc0[64] = {
     0xff, 0xff, 0xff, 0xff,
 };
 
-/** 帧内字节序列整体反转（MAC、AES 挑战与注入 LTK 的字节序变换，controller.md §3.2）。 */
+/** 帧内字节序列整体反转（MAC、AES 挑战与注入 LTK 的字节序变换，controller.md「密码学计算详细算法」）。 */
 static void reverse_bytes(const uint8_t *in, uint8_t *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
@@ -188,7 +188,7 @@ static bool aes_ecb_block(const uint8_t key[16], const uint8_t in[16], uint8_t o
     return status == PSA_SUCCESS && olen == 16;
 }
 
-/** 出厂数据区（序列号、VID/PID、机身配色与摇杆校准，controller.md §7.2）。
+/** 出厂数据区（序列号、VID/PID、机身配色与摇杆校准，controller.md「出厂数据区定义」）。
  * 校准取中位 2048、行程 ±2047/2048，与编码器 0-4095 直发语义保持 1:1。
  * 序列号、版本与配色按当前模式的每个身份各生成一份。 */
 static void factory_init(void)
@@ -832,7 +832,7 @@ static size_t handle_flash_cmd(uint8_t identity, const uint8_t *req, size_t len,
     return NS2_FRAME_HEADER_LEN + 8 + rlen;
 }
 
-/** Command 0x03 初始化与连接建立（controller.md §6.2）。 */
+/** Command 0x03 初始化与连接建立（controller.md「控制指令系统」）。 */
 static size_t handle_init_cmd(session_slot_t *ses, const uint8_t *req, size_t len,
                               uint8_t subcmd, uint8_t *resp)
 {
@@ -956,7 +956,7 @@ static size_t handle_feature_cmd(session_slot_t *ses, const uint8_t *req, size_t
     return NS2_FRAME_HEADER_LEN + 4;
 }
 
-/** Command 0x15 私有配对四步（controller.md §3）：MAC 交换 -> 公钥交换 ->
+/** Command 0x15 私有配对四步（controller.md「自定义安全配对与密钥协商协议」）：MAC 交换 -> 公钥交换 ->
  * AES-128-ECB 挑战 -> 确认保存；全程不涉及标准 SMP。请求体以 0x00 前缀、
  * 应答体以 0x01 前缀（实机抓包，ndeadly/switch2_controller_research）。 */
 static size_t handle_pairing_cmd(session_slot_t *ses, const uint8_t *req, size_t len,
@@ -1111,7 +1111,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     size_t resp_len;
     switch (cmd) {
     case 0x07:
-        /* 初始握手（§10.2 阶段 1）：应答体 1 字节 0x00。 */
+        /* 初始握手（controller.md「通信交互与报告上报时序」阶段 1）：应答体 1 字节 0x00。 */
         frame[8] = 0x00;
         resp_len = NS2_FRAME_HEADER_LEN + 1;
         break;
@@ -1180,7 +1180,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     case 0x13:
         /* 0x13/0x01：回空体时主机不发 0x0c/0x04、也不订阅输入通道；回 4 字节
          *  `01 00 00 00` 后主机立刻启用特性并开始收输入（实机 2026-09-16）。
-         *  语义与长度未知，`01 00 00 00` 是实测能走通的形态（controller.md §12）。 */
+         *  语义与长度未知，`01 00 00 00` 是实测能走通的形态（controller.md「Command 0x13 / 0x18」）。 */
         {
             static const uint8_t body[4] = {0x01, 0x00, 0x00, 0x00};
             memcpy(&frame[8], body, sizeof(body));
@@ -1189,7 +1189,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         break;
     case 0x18:
         /* 主机在会话中每约 10 秒轮询一次 0x18/0x01，期望 8 字节应答体
-         * （controller.md §6 与已验证实现一致）。不回这个体，主机不会把
+         * （controller.md「控制指令系统」与已验证实现一致）。不回这个体，主机不会把
          * 这台手柄当成可用输入源——「连上、订阅了、上报也在发，但按键没
          * 反应」正是这个现象。0x18/0x03 只回显请求里的那一字节。 */
         if (subcmd == 0x01) {
@@ -1238,7 +1238,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
 
 void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle)
 {
-    /* Output Report 0x02：2x16B LRA 参数包（§5.4）。板卡无震动马达：
+    /* Output Report 0x02：2x16B LRA 参数包（controller.md「输出报告格式」）。板卡无震动马达：
      * 解析为结构化震动事件经 ns2_output 分发给监听者（当前记录日志，
      * M5 起转发给 USB 源手柄 / 桥接 PC）。 */
     (void)conn_handle;

@@ -14,7 +14,7 @@ extern "C" {
 /**
  * NimBLE 手柄外设传输层（ADR 0010）：NimBLE 生命周期、GATT 表、原始广播与通知发送。
  * 协议语义（广播内容、指令应答、会话状态）由 ble_session 决策，本模块只负责收发。
- * GATT 表按 controller.md §4 的句柄布局注册（含占位描述符对齐，见源内注释）。
+ * GATT 表按 controller.md「GATT 属性表与服务架构」的句柄布局注册（含占位描述符对齐，见源内注释）。
  *
  * 设备对外只有一台 Pro Controller 2：单身份、单条链路。广播实例 0/1 可分别
  * 携带独立地址（advaddr 对账开关的派生形态），默认 legacy PDU

@@ -58,7 +58,7 @@ void ns2_unpack_stick(const uint8_t in[3], uint16_t *x, uint16_t *y)
     *y = (uint16_t)((in[1] >> 4) | (in[2] << 4));
 }
 
-/** Report 0x09 三字节按键位图（controller.md §5.2 Pro Controller 2 表）。 */
+/** Report 0x09 三字节按键位图（controller.md「专用输入报告」Pro Controller 2 表）。 */
 static void buttons_09(const ns2_controller_state_t *state, uint8_t out[3])
 {
     const uint32_t b = state->buttons;
@@ -85,7 +85,7 @@ static void buttons_09(const ns2_controller_state_t *state, uint8_t out[3])
                        btn_bit(b, NS2_BTN_HOME, 0));
 }
 
-/** Report 0x05 四字节按键位图（controller.md §5.1 按键表）。 */
+/** Report 0x05 四字节按键位图（controller.md「Input Report 0x05」按键表）。 */
 static void buttons_05(const ns2_controller_state_t *state, uint8_t out[4])
 {
     const uint32_t b = state->buttons;

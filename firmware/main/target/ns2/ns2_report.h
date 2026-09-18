@@ -38,7 +38,7 @@ extern "C" {
 /** 实验模式一次填入的样本份数（余下字节补 0）。 */
 #define NS2_09_MOTION_SAMPLES 3
 
-/** 摇杆 12 位紧凑打包（controller.md §5.3）：3 字节承载 X、Y 各 12 位。 */
+/** 摇杆 12 位紧凑打包（controller.md「模拟摇杆 12 位紧凑打包」）：3 字节承载 X、Y 各 12 位。 */
 void ns2_pack_stick(uint16_t x, uint16_t y, uint8_t out[3]);
 
 /** 摇杆 12 位紧凑解包，与 ns2_pack_stick 互逆。 */

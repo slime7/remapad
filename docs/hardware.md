@@ -164,7 +164,7 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 此外 `pwr_key.c` 负责 PWR 按键（GPIO40 采样，短按息屏 / 长按是连接键），并在 `app_main` 入口把 SYS_EN（GPIO41）拉高锁存电池供电，USB 供电下该锁存被旁路。
 软件关机走系统页「关机」按钮：电池供电下释放锁存即断电；USB 供电下锁存被旁路、系统仍在运行，固件会重新锁存并回报，界面提示关不掉。
 `buzzer.c` 负责蜂鸣器（GPIO42 LEDC tone，长按 3 秒提示音）。
-BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md) §10）也已接入；
+BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md](controller.md)「ESP32 硬件模拟 Switch 2 手柄实战指南」）也已接入；
 `battery.c` 走 BAT_ADC（GPIO1 / ADC1_CH0），按「12 dB 衰减 + 曲线拟合校准 + 过采样平均 + 分压还原」采样出 VBAT。
 百分比由 `battery_curve.c` 的静置电压—容量表折算，实测工作范围为 2.87V - 4.07V（插电时抬升至 4.15V），
 选型与限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。

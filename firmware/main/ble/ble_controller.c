@@ -422,7 +422,7 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     return 0;
 }
 
-/** 注册回调：捕获关键特征值句柄并打印整表，供与 controller.md §4 句柄比对。 */
+/** 注册回调：捕获关键特征值句柄并打印整表，供与 controller.md「GATT 属性表与服务架构」句柄比对。 */
 static void gatt_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
 {
     if (ctxt->op == BLE_GATT_REGISTER_OP_CHR) {
@@ -580,7 +580,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "MTU -> %u", event->mtu.value);
         break;
     case BLE_GAP_EVENT_REPEAT_PAIRING:
-        /* NS2 禁用标准 SMP（controller.md §3）：忽略重复配对请求。 */
+        /* NS2 禁用标准 SMP（controller.md「自定义安全配对与密钥协商协议」）：忽略重复配对请求。 */
         ESP_LOGW(TAG, "repeat pairing ignored");
         return BLE_GAP_REPEAT_PAIRING_IGNORE;
     default:
@@ -600,7 +600,7 @@ static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t p
         ble_gap_ext_adv_stop(instance);
     }
     struct ble_gap_ext_adv_params params = {0};
-    /* legacy PDU 才是主机看得见、也认得住的形式（controller.md §2.2：真机
+    /* legacy PDU 才是主机看得见、也认得住的形式（controller.md「Bluetooth LE 广播帧规范」：真机
      * ADV_IND 可连接可扫描、附空 SCAN_RSP，广播间隔 30 ms）；扩展 PDU 按
      * 规范不可同时置可连接与可扫描，主机侧实测完全看不见。 */
     params.legacy_pdu = legacy_pdu;
@@ -676,7 +676,7 @@ void ble_controller_adv_start(uint8_t instance, uint8_t identity,
      * 沿用公共伪装地址。 */
     s_adv_identity[instance] = identity;
     ESP_LOG_BUFFER_HEX(TAG, payload, 31);
-    /* 默认形态是 legacy PDU（controller.md §2.2：真机发现广播是可连接 + 可
+    /* 默认形态是 legacy PDU（controller.md「Bluetooth LE 广播帧规范」：真机发现广播是可连接 + 可
      * 扫描的 ADV_IND）：实机对账（2026-09-16）里扩展 PDU 的实例在主机侧完全
      * 看不见——同一份载荷、同一个 public 地址，切成 legacy PDU 后主机立刻
      * 连接并跑完 0x15 配对。对账开关可强制扩展形态做反向验证。 */

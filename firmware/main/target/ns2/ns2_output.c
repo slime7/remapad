@@ -342,7 +342,7 @@ bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
         return false;
     }
     memcpy(out->raw, &data[body], sizeof(out->raw));
-    /* LRA 状态字 bit6 = 启用标志（controller.md §5.4）。游戏里主机以接近输入
+    /* LRA 状态字 bit6 = 启用标志（controller.md「输出报告格式」）。游戏里主机以接近输入
      * 上报的频率持续刷「保活包」：使能位为 1、三组振幅全 0，真机收到同样毫无
      * 动静。「在震」必须是使能且归一强度非零——把使能位直接当在震，输入手柄
      * 会被写上一场主机根本没有的震动。非零的门槛还要高过载波电平：「查找

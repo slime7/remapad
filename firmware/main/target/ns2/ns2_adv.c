@@ -99,7 +99,7 @@ const uint8_t *ns2_adv_choose_host_mac(const uint8_t *recorded,
     return NULL;
 }
 
-/** 广播载荷骨架：厂商数据字段布局见 controller.md §2.1；[12]/[13] 为 PID
+/** 广播载荷骨架：厂商数据字段布局见 controller.md「Bluetooth LE 广播帧规范」；[12]/[13] 为 PID
  *  占位，[16] 为状态位，[17..22] 为主机地址，[23] 为尾部标志 0x0F。 */
 static const uint8_t s_template[NS2_ADV_PAYLOAD_LEN] = {
     0x02, 0x01, 0x06,
