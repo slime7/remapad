@@ -5,12 +5,14 @@
  * 状态优先级：
  * 1. OTA 数据接收进度条（最高）
  * 2. 手柄操控屏幕提示模式（两行提示文本）
- * 3. 三等分状态栏（默认）：物理手柄状态、主机连接状态（带玩家指示灯，点击触发 HOME 动作）、电池电量。
+ * 3. 三等分状态栏（默认）：物理手柄状态、主机连接状态（带玩家指示灯，未连接点击触发信号搜索）、电池电量。
  */
+import { ref } from 'vue';
 import { View, Text, Image } from '@pocketjs/framework/vue-vapor/components';
+import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { COLOR, STYLE } from '../theme';
 import { ICON, Icon } from '../icons';
-import { hw, sendDebugKey } from '../hooks/useHardware';
+import { connect, hw } from '../hooks/useHardware';
 
 const OTA_TRACK_W = 192;
 
@@ -38,7 +40,25 @@ export function BottomBar() {
 
   // 主机连接状态
   const hostConnected = () => hw.pairing === 'connected';
+  const isSearching = () => hw.pairing === 'advertising' || hw.pairing === 'scanning';
   const hostColor = () => (hostConnected() ? COLOR.onTertiary : COLOR.onTertiaryContainer);
+
+  const hostIconOpacity = ref(1);
+  let breathTick = 0;
+  const BREATH_CYCLE = 36; // 30Hz 下 1.2 秒一个呼吸周期
+
+  onFrame(() => {
+    if (isSearching()) {
+      breathTick = (breathTick + 1) % BREATH_CYCLE;
+      // 0..1..0 平滑正弦波
+      const wave = (1 - Math.cos((2 * Math.PI * breathTick) / BREATH_CYCLE)) * 0.5;
+      // 呼吸透明度在 0.25 到 1.0 之间渐变
+      hostIconOpacity.value = Math.round((0.25 + wave * 0.75) * 100) / 100;
+    } else if (hostIconOpacity.value !== 1) {
+      hostIconOpacity.value = 1;
+      breathTick = 0;
+    }
+  });
 
   // 电池电量状态
   const batteryPct = () => hw.battery.percentage;
@@ -61,7 +81,9 @@ export function BottomBar() {
   };
 
   const onHostClick = () => {
-    sendDebugKey('home');
+    if (hw.pairing === 'idle' || hw.pairing === 'paired') {
+      connect();
+    }
   };
 
   return (
@@ -121,10 +143,14 @@ export function BottomBar() {
 
         {/* 中区：主机连接 + 玩家指示灯（仅供点击触发，不参与手柄焦点导航） */}
         <View
+          focusable
           onPress={onHostClick}
           class="grow basis-0 h-full flex-col items-center justify-center gap-1 rounded-[8] active:bg-[#1a8552] transition-colors duration-150"
         >
-          <View class="h-[24] flex-row items-center justify-center">
+          <View
+            class="h-[24] flex-row items-center justify-center"
+            style={{ opacity: hostIconOpacity.value }}
+          >
             <Icon glyph={ICON.missingController} class="text-xl shrink-0" color={hostColor()} />
           </View>
           <View class="h-[18] flex-row items-center justify-center">

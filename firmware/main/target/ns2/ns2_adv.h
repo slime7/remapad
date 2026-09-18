@@ -49,11 +49,15 @@ typedef enum {
 /** 广播窗口：设备只在被显式请求后的一段时间内广播，真机不开机不发信号。 */
 typedef struct {
     ns2_adv_request_t request; /**< 最近一次打开窗口的请求。 */
+    int64_t opened_at_us;      /**< 窗口开启时刻（微秒）；0 = 没有窗口。 */
     int64_t until_us;          /**< 到期时刻（本机时基微秒）；0 = 没有窗口。 */
 } ns2_adv_window_t;
 
 /** 连接键窗口时长：主机没在这段时间内连上就静默，想重试再按一次。 */
 #define NS2_ADV_CONNECT_WINDOW_US (30 * 1000 * 1000LL)
+
+/** 唤醒突发时长（3秒）：信号搜索启动时前 3 秒发 0x81 唤醒休眠主机，随后切为 0x00 回连。 */
+#define NS2_ADV_WAKE_BURST_US (3 * 1000 * 1000LL)
 
 /** 唤醒窗口时长：真机唤醒突发只有约 2 秒，主机扫描窗口远长于它，太短会错过。 */
 #define NS2_ADV_WAKE_WINDOW_US (10 * 1000 * 1000LL)

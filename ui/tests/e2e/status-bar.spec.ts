@@ -3,6 +3,7 @@
  * 验证三等分状态栏、手柄操控提示与 OTA 进度条优先级展示。
  */
 import { test, expect } from './fixtures';
+import { openPairing } from './pages';
 
 test('默认状态展示物理手柄、主机连接与电量读数', async ({ app }) => {
   await app.goto();
@@ -38,4 +39,14 @@ test('OTA 数据接收模式优先级最高，展示进度条', async ({ app }) 
   // OTA 结束回到手柄控屏提示
   await app.emitBridge({ t: 'otaProgress', phase: 'idle', percentage: 100 });
   await expect.poll(() => app.hasVisibleText('翻页')).toBe(true);
+});
+
+test('未连接状态下点击底栏中区触发连接搜索', async ({ app }) => {
+  await app.goto();
+  await openPairing(app);
+  expect(await app.hasVisibleText('未配对')).toBe(true);
+
+  // 点击底栏中区（x: 120, y: 240）触发信号搜索
+  await app.touch.tap(120, 240);
+  await expect.poll(() => app.hasVisibleText('扫描中…') || app.hasVisibleText('连接中…')).toBe(true);
 });

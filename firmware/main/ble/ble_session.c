@@ -265,6 +265,9 @@ static uint8_t s_dormant_drops;
  *  连接时）开窗，主机连上或窗口到期收窗。设备只在窗口开着或配对流程里广播
  *  ——上电与断连都静默，与真机「不按键就不发信号」一致（见 ADR 0038）。 */
 static ns2_adv_window_t s_adv_win;
+static int64_t s_pairing_until_us;
+static bool s_user_explicit_disconnect;
+static ns2_adv_mode_t s_last_applied_adv_mode = NS2_ADV_OFF;
 
 /** 窗口内形态的实机对账开关（串口 `adv auto|wake|reconnect`）：钉住一种形态
  *  做 A/B 对账，auto 时按窗口来源决策。 */
@@ -358,6 +361,7 @@ static void apply_advertising(void)
         uint8_t adv[NS2_ADV_PAYLOAD_LEN];
         const uint8_t *mac = NULL;
         const ns2_adv_mode_t mode = adv_mode_for(ids[i], &mac);
+        s_last_applied_adv_mode = mode;
         if (mode == NS2_ADV_OFF) {
             if (ble_controller_adv_running(ids[i])) {
                 ble_controller_adv_stop_identity(ids[i]);
@@ -402,7 +406,9 @@ void ns2_session_disconnect(void)
      * 没有窗口与配对流程就是静默。 */
     ns2_adv_window_close(&s_adv_win);
     s_ses.pairing_mode = false;
+    s_pairing_until_us = 0;
     if (ble_controller_connected()) {
+        s_user_explicit_disconnect = true;
         ESP_LOGI(TAG, "disconnect: dropping the current link");
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
         return;
@@ -443,8 +449,9 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     memcpy(s_ses.own_mac, own_mac, 6);
     ESP_LOGI(TAG, "host synced, own MAC %02x:%02x:%02x:%02x:%02x:%02x",
              own_mac[0], own_mac[1], own_mac[2], own_mac[3], own_mac[4], own_mac[5]);
-    /* 上电不主动发信号（真机不按键就不广播）：等用户按连接键（屏幕「连接」
-     * 或 PWR 长按 3 秒）打开连接窗口，或按 HOME 唤醒键去叫醒主机。 */
+    /* 开机自动触发 30 秒信号搜索：类似手柄搜索模式，已配对则唤醒+回连，未配对则发发现广播，
+     * 超时未建立连接自动关闭 BLE 发射，彻底静默省电。 */
+    ns2_session_connect();
 }
 
 /** 连接空闲超时（微秒）：主机连上后会立刻跑初始化序列（毫秒级到达），
@@ -712,10 +719,20 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
     }
     /* 在线状态被打破，下次连上时再打印一次。 */
     s_ses.pair_online_logged = false;
-    /* 主机睡下或移开：不再保持信号（真机断开后也不广播），只有窗口还开着
-     * （连接请求还没达成）或配对流程还在跑时才继续发。 */
-    ESP_LOGI(TAG, "disconnected (conn=%u, identity=%s, advertising=%u)", conn_handle,
-             ns2_identity_name(identity), (unsigned)ns2_session_advertising());
+    if (s_user_explicit_disconnect) {
+        s_user_explicit_disconnect = false;
+        ESP_LOGI(TAG, "disconnected (user requested): silent");
+        apply_advertising();
+        return;
+    }
+    /* 主机断开连接（主机休眠或移开）：启动 30 秒回连搜索窗口，
+     * 30 秒内未重新连上则彻底关闭发射进入静默，需要用户主动重开。 */
+    if (!s_ses.pairing_mode) {
+        const int64_t now = esp_timer_get_time();
+        ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, now);
+        ESP_LOGI(TAG, "disconnected (conn=%u, identity=%s): opening 30s reconnect window",
+                 conn_handle, ns2_identity_name(identity));
+    }
     apply_advertising();
 }
 
@@ -1239,12 +1256,14 @@ void ns2_session_start_pairing_mode(void)
      * 等新主机搜索——目标是配一台新主机，不能带着旧主机的地址广播。
      * 设备只有一台 Pro，直接进发现广播。 */
     s_ses.pairing_mode = true;
+    s_pairing_until_us = esp_timer_get_time() + NS2_ADV_CONNECT_WINDOW_US;
     s_dormant_drops = 0;
     const bool was_connected = ble_controller_connected();
     if (was_connected) {
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
     }
-    ESP_LOGI(TAG, "pairing request accepted (dropped link=%u)", (unsigned)was_connected);
+    ESP_LOGI(TAG, "pairing request accepted (dropped link=%u, timeout=%llds)",
+             (unsigned)was_connected, (long long)(NS2_ADV_CONNECT_WINDOW_US / 1000000LL));
     if (was_connected) {
         return; /* 断连事件里按配对流程起广播 */
     }
@@ -1291,6 +1310,7 @@ void ns2_session_unpair(void)
     /* 凭证清空后回连与唤醒都失去目标：按「从未配过」处理——静默，等用户按
      * 连接键重新配对（未配对的连接键进配对流程）。 */
     s_ses.pairing_mode = false;
+    s_pairing_until_us = 0;
     ns2_adv_window_close(&s_adv_win);
     if (!ble_controller_connected()) {
         apply_advertising();
@@ -1517,11 +1537,30 @@ void ns2_session_tick(void)
         esp_restart();
     }
 
+    const int64_t now = esp_timer_get_time();
+
     /* 广播窗口到期（连接窗口 / 唤醒窗口）：设备回到静默——真机不会一直发
      * 信号，想再连一次就再按一次连接键或 HOME。 */
-    if (s_adv_win.until_us != 0 && !ns2_adv_window_active(&s_adv_win, esp_timer_get_time())) {
+    if (s_adv_win.until_us != 0 && !ns2_adv_window_active(&s_adv_win, now)) {
         ns2_adv_window_close(&s_adv_win);
         ESP_LOGI(TAG, "advertising window expired: silent");
+        if (!ble_controller_connected()) {
+            apply_advertising();
+        }
+    } else if (ns2_adv_window_active(&s_adv_win, now) && !ble_controller_connected()) {
+        /* 窗口内分时形态检测：如前 3 秒唤醒突发结束，切回 0x00 回连广播。 */
+        const uint8_t *mac = NULL;
+        const ns2_adv_mode_t cur_mode = adv_mode_for(NS2_ID_PRO, &mac);
+        if (cur_mode != s_last_applied_adv_mode) {
+            apply_advertising();
+        }
+    }
+
+    /* 配对流程超时收尾：30 秒未配对成功，自动退出配对流程并停发广播。 */
+    if (s_ses.pairing_mode && s_pairing_until_us != 0 && now >= s_pairing_until_us) {
+        s_ses.pairing_mode = false;
+        s_pairing_until_us = 0;
+        ESP_LOGI(TAG, "pairing flow timed out: silent");
         if (!ble_controller_connected()) {
             apply_advertising();
         }
@@ -1532,6 +1571,7 @@ void ns2_session_tick(void)
      * 没有主机来配就一直挂着发现广播，等用户按停止或主机来配。 */
     if (s_ses.pairing_mode && pairing_flow_done()) {
         s_ses.pairing_mode = false;
+        s_pairing_until_us = 0;
         ESP_LOGI(TAG, "pairing flow finished (host registered)");
         if (!ble_controller_connected()) {
             apply_advertising();
@@ -1681,6 +1721,7 @@ static bool apply_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent
          * 形态自己连回来，读到的就是新颜色（用户不必再按一次连接键）。
          * 未配对时没有主机可回连，保持静默：设备不被请求连接就不发信号。 */
         s_ses.pairing_mode = false;
+        s_pairing_until_us = 0;
         factory_init();
         if (ns2_session_paired()) {
             ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, esp_timer_get_time());

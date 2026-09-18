@@ -109,10 +109,20 @@ static void mode_choice_follows_window(void)
     CHECK_EQ(ns2_adv_choose_mode(true, true, &win, t0), NS2_ADV_DISCOVERY);
     CHECK_EQ(ns2_adv_choose_mode(false, true, &win, t0), NS2_ADV_DISCOVERY);
 
-    /* 连接窗口：已配对发回连形态（醒着的主机自己会连回来），未配对发发现
-     * 广播等主机来搜。 */
-    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0), NS2_ADV_RECONNECT);
+    /* 连接窗口（信号搜索）：已配对在 0~3 秒发唤醒形态（叫醒休眠主机），3 秒后发回连形态（等主机连回）；
+     * 未配对发发现广播等主机来搜。 */
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0), NS2_ADV_WAKE);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_WAKE_BURST_US - 1),
+             NS2_ADV_WAKE);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_WAKE_BURST_US),
+             NS2_ADV_RECONNECT);
     CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0), NS2_ADV_DISCOVERY);
+    CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0 + NS2_ADV_WAKE_BURST_US),
+             NS2_ADV_DISCOVERY);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_CONNECT_WINDOW_US),
+             NS2_ADV_OFF);
+    CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0 + NS2_ADV_CONNECT_WINDOW_US),
+             NS2_ADV_OFF);
 
     /* 唤醒窗口：已配对发唤醒形态把休眠主机叫起来；未配对没有主机可唤醒，
      * 退化为发现广播。 */

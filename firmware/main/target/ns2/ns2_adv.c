@@ -15,7 +15,15 @@ ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
         /* 没有凭证就没有主机可回连或唤醒：发发现广播等主机来配。 */
         return NS2_ADV_DISCOVERY;
     }
-    return window->request == NS2_ADV_REQ_WAKE ? NS2_ADV_WAKE : NS2_ADV_RECONNECT;
+    if (window->request == NS2_ADV_REQ_WAKE) {
+        return NS2_ADV_WAKE;
+    }
+    /* 连接窗口（信号搜索）：已配对身份前 3 秒发 0x81 唤醒突发叫醒休眠主机，
+     * 随后转为 0x00 回连形态等主机连回来。 */
+    if (now_us - window->opened_at_us < NS2_ADV_WAKE_BURST_US) {
+        return NS2_ADV_WAKE;
+    }
+    return NS2_ADV_RECONNECT;
 }
 
 void ns2_adv_window_open(ns2_adv_window_t *win, ns2_adv_request_t request,
@@ -24,12 +32,16 @@ void ns2_adv_window_open(ns2_adv_window_t *win, ns2_adv_request_t request,
     const int64_t duration = request == NS2_ADV_REQ_WAKE ? NS2_ADV_WAKE_WINDOW_US
                                                          : NS2_ADV_CONNECT_WINDOW_US;
     win->request = request;
+    win->opened_at_us = now_us;
     win->until_us = now_us + duration;
 }
 
 void ns2_adv_window_close(ns2_adv_window_t *win)
 {
-    win->until_us = 0;
+    if (win != NULL) {
+        win->opened_at_us = 0;
+        win->until_us = 0;
+    }
 }
 
 bool ns2_adv_window_active(const ns2_adv_window_t *win, int64_t now_us)
