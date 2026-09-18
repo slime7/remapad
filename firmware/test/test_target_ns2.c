@@ -253,6 +253,7 @@ static void rumble_payload_accepts_ble_form(void)
     uint8_t ble[32];
     memset(ble, 0, sizeof(ble));
     ble[0] = 0x40;  /* 左 LRA 状态字 bit6：启用 */
+    ble[2] = 0x20;  /* 左路低频振幅非零（归一 4，越过载波电平）：真的在震 */
     ble[16] = 0x00; /* 右 LRA 状态字：未启用 */
 
     ns2_rumble_event_t event;
@@ -270,9 +271,11 @@ static void rumble_payload_accepts_ble_form(void)
     CHECK(event.left_on);
     CHECK_EQ(event.raw[16], 0x00);
 
-    /* 右路启用、左路关闭：两路状态字分别判定。 */
+    /* 右路启用且在震、左路关闭：两路状态字分别判定。 */
     ble[0] = 0x00;
+    ble[2] = 0x00;
     ble[16] = 0x40;
+    ble[18] = 0x20;
     REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
     CHECK(!event.left_on);
     CHECK(event.right_on);
@@ -281,6 +284,118 @@ static void rumble_payload_accepts_ble_form(void)
     CHECK(!ns2_rumble_parse(ble, 31, &event));
     CHECK(!ns2_rumble_parse(NULL, sizeof(ble), &event));
     CHECK(!ns2_rumble_parse(ble, sizeof(ble), NULL));
+}
+
+/** 主机的震动流是连续包络：低频给冲击、高频给纹理，两颗马达各跟一个频带。
+ *  把两带压成单一归一值写进两颗马达，高频纹理会被低频冲掉、手感糊成一片。
+ *  LRA 参数包三组操作数据各带低频 10 位与高频 8 位振幅，逐带取三组最大值、
+ *  低频压到 8 位刻度（5 字节小端 v：低频振幅在 bit9 起、高频在 bit28 起）。 */
+static void rumble_amplitudes_come_out_per_band(void)
+{
+    uint8_t raw[16];
+    memset(raw, 0, sizeof(raw));
+    raw[0] = 0x40; /* 状态字 bit6：启用 */
+    /* 第 0 组：低频 10 位 = 400（压 8 位 = 100）、高频 = 20。
+     * v = 400<<9 | 20<<28 = 0x1_4003_2000。 */
+    raw[1] = 0x00;
+    raw[2] = 0x20;
+    raw[3] = 0x03;
+    raw[4] = 0x40;
+    raw[5] = 0x01;
+    /* 第 1 组：高频 = 50（v = 50<<28 = 0x3_2000_0000），三组取最大后高频应为
+     * 50。 */
+    raw[9] = 0x20;
+    raw[10] = 0x03;
+
+    uint8_t lf = 0;
+    uint8_t hf = 0;
+    ns2_rumble_band_strengths(raw, &lf, &hf);
+    CHECK_EQ(lf, 100);
+    CHECK_EQ(hf, 50);
+    /* 原有的归一强度 = 两带取大，供「在震」判定与不分带的设备继续使用。 */
+    CHECK_EQ(ns2_rumble_strength(raw), 100);
+
+    /* 右路参数包单独解析：低频 10 位 = 800（压 8 位 = 200）。单独给一个
+     * 16 字节数组——把 16 字节形参的指针偏到数组外会让 MSVC 的 RTC 检查
+     * 误报越界（C4789）。 */
+    uint8_t right[16];
+    memset(right, 0, sizeof(right));
+    right[0] = 0x40;
+    right[2] = 0x40; /* v = 800<<9 = 0x64000 -> 字节 1 = 0x40、字节 2 = 0x06 */
+    right[3] = 0x06;
+    ns2_rumble_band_strengths(right, &lf, &hf);
+    CHECK_EQ(lf, 200);
+    CHECK_EQ(hf, 0);
+}
+
+/** 游戏里主机会以接近输入上报的频率持续刷「保活包」：状态字使能位为 1、
+ *  三组振幅全 0。真机手柄收到同样的包毫无动静（同一场游戏里实体 JoyCon
+ *  不震），把使能位直接当成「在震」转发给输入手柄，就成了一场主机根本没有
+ *  的震动。「在震」必须是使能且该路振幅非零。 */
+static void zero_amplitude_enable_is_not_rumbling(void)
+{
+    uint8_t ble[32];
+    memset(ble, 0, sizeof(ble));
+    ble[0] = 0x40;  /* 左路使能位为 1，但三组振幅全 0 */
+    ble[16] = 0x40; /* 右路同样使能但零幅度 */
+
+    ns2_rumble_event_t event;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(!event.left_on);
+    CHECK(!event.right_on);
+
+    /* 左路来一点低频振幅（字节 2 的 0x20，8 位刻度下归一为 4，越过载波电平）：
+     * 左路在震，零幅度的右路保持安静。 */
+    ble[2] = 0x20;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(event.left_on);
+    CHECK(!event.right_on);
+
+    /* 使能位撤掉后即使带振幅也不算在震：状态字仍是第一道闸。 */
+    ble[0] = 0x00;
+    ble[16] = 0x00;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(!event.left_on);
+    CHECK(!event.right_on);
+}
+
+/** 「查找手柄」页的蜂鸣由 0x0A 采样流承载（0x02 播放 / 0x00 停止），LRA 参数包
+ *  只带载波电平：状态字使能、低频全 0、高频振幅 1-2/255（2026-09-18 实机：反馈
+ *  帧高频 1/1）。这种电平在任何马达上都感知不到，真机手柄同样不震——若判成
+ *  「在震」，采样退化成的短震动会被「主机已经在震时不动」的闸门压住，查找
+ *  手柄页点击手柄就毫无动静。 */
+static void carrier_level_envelope_is_not_rumbling(void)
+{
+    uint8_t ble[32];
+    memset(ble, 0, sizeof(ble));
+    ble[0] = 0x52; /* 实机载波包状态字：使能位为 1 */
+    ble[4] = 0x10; /* 第 0 组高频振幅 = 1（1<<28 落在字节 4 的高半） */
+    ble[16] = 0x52;
+    ble[20] = 0x10;
+
+    ns2_rumble_event_t event;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(!event.left_on);
+    CHECK(!event.right_on);
+    uint8_t lf = 1;
+    uint8_t hf = 1;
+    ns2_rumble_band_strengths(event.raw, &lf, &hf);
+    CHECK_EQ(lf, 0);
+    CHECK_EQ(hf, 1); /* 强度照常解出：只是不当作在震 */
+
+    /* 载波上限（2/255）之内都不算在震。 */
+    ble[4] = 0x20;
+    ble[20] = 0x20;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(!event.left_on);
+    CHECK(!event.right_on);
+
+    /* 到 3/255（马达上可感知）才算在震。 */
+    ble[4] = 0x30;
+    ble[20] = 0x30;
+    REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
+    CHECK(event.left_on);
+    CHECK(event.right_on);
 }
 
 /**
@@ -411,6 +526,10 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"NS2 吃不下能力位也不改报文", unconsumed_caps_do_not_change_the_report},
                 {"未识别型号兜底后仍照常上报", unknown_model_still_reports_keys},
                 {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form},
+                {"LRA 参数包按低频/高频频带分别给出振幅", rumble_amplitudes_come_out_per_band},
+                {"零幅度的使能保活包不算在震", zero_amplitude_enable_is_not_rumbling},
+                {"查找手柄页的载波电平不算在震（高频 1-2/255）",
+                 carrier_level_envelope_is_not_rumbling},
                 {"耳机状态按输入设备的 3.5mm 状态派生（0x09 的 0x0D，只报插入）",
                  headset_state_follows_the_input_device},
                 {"0x05 报告带耳机插入位", headset_bit_rides_report_05_too},

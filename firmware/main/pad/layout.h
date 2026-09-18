@@ -48,6 +48,17 @@ typedef enum {
     PAD_HAPTIC_VERBATIM,    /**< 设备自己能播采样（NS2 手柄透传，参数原样写回）。 */
 } pad_haptic_style_t;
 
+/**
+ * 马达跟哪条频带：主机的震动流是连续包络（NS2 参数包低频给冲击、高频给
+ * 纹理），每颗马达按 rumble_band 选自己跟的带，振幅再按 rumble_max 缩放。
+ * 惯例是重击马达（DS5 大马达、NS1 低频马达、Xbox 左马达）跟低频、纹理
+ * 马达（DS5 小马达、NS1 高频马达）跟高频；0 值 = 低频（旧行不填也是这个）。
+ */
+typedef enum {
+    PAD_RUMBLE_LF = 0, /**< 低频带（rumble_strength）。 */
+    PAD_RUMBLE_HF,     /**< 高频带（rumble_hf_strength）。 */
+} pad_rumble_band_t;
+
 /** 输出报告的收尾方式：字段写完之后的补字节动作。 */
 typedef enum {
     PAD_OUT_FRAME_NONE = 0, /**< 写完即可发送（有线形态）。 */
@@ -86,6 +97,8 @@ typedef struct {
     uint8_t presets[PAD_OUT_PRESET_MAX][2];
     uint8_t rumble_off[PAD_TRIGGER_COUNT];
     uint8_t rumble_max[PAD_TRIGGER_COUNT];
+    /** 每颗马达跟的频带（pad_rumble_band_t）；未填按低频。 */
+    uint8_t rumble_band[PAD_TRIGGER_COUNT];
     uint8_t led_mask_off;
     uint8_t led_rgb_off;
     uint8_t led_style; /**< pad_led_style_t。 */

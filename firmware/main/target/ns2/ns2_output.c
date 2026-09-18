@@ -240,6 +240,58 @@ void ns2_output_emit_rumble(const ns2_rumble_event_t *event)
     }
 }
 
+/** 「在震」的载波电平上限（8 位刻度）：主机在「查找手柄」页会用 1-2/255 的
+ *  高频振幅维持 LRA 通路（蜂鸣本体由 0x0A 采样流承载），这种电平在任何
+ *  马达上都感知不到。归一强度不超过它的参数包不算在震。 */
+#define NS2_RUMBLE_CARRIER_MAX 2u
+
+void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf)
+{
+    if (lf != NULL) {
+        *lf = 0;
+    }
+    if (hf != NULL) {
+        *hf = 0;
+    }
+    if (raw == NULL) {
+        return;
+    }
+    /* 参数包：字节 0 是状态字，其后三组各 5 字节（低频频率 9 位 + 低频振幅
+     * 10 位 + 高频频率 9 位 + 高频振幅 8 位，小端位序）。逐带取三组最大振幅，
+     * 低频 10 位右移两位压到 8 位刻度，与私有的 0-255 强度对齐。 */
+    uint8_t best_lf = 0;
+    uint8_t best_hf = 0;
+    for (size_t g = 0; g < 3; g++) {
+        const uint8_t *p = &raw[1 + g * 5];
+        uint64_t v = 0;
+        for (size_t i = 0; i < 5; i++) {
+            v |= (uint64_t)p[i] << (8 * i);
+        }
+        const uint8_t group_lf = (uint8_t)(((v >> 9) & 0x3FFu) >> 2);
+        const uint8_t group_hf = (uint8_t)((v >> 28) & 0xFFu);
+        if (group_lf > best_lf) {
+            best_lf = group_lf;
+        }
+        if (group_hf > best_hf) {
+            best_hf = group_hf;
+        }
+    }
+    if (lf != NULL) {
+        *lf = best_lf;
+    }
+    if (hf != NULL) {
+        *hf = best_hf;
+    }
+}
+
+uint8_t ns2_rumble_strength(const uint8_t raw[16])
+{
+    uint8_t lf = 0;
+    uint8_t hf = 0;
+    ns2_rumble_band_strengths(raw, &lf, &hf);
+    return hf > lf ? hf : lf;
+}
+
 bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
 {
     if (data == NULL || out == NULL) {
@@ -252,35 +304,18 @@ bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
         return false;
     }
     memcpy(out->raw, &data[body], sizeof(out->raw));
-    /* LRA 状态字 bit6 = 启用标志（controller.md §5.4）。 */
-    out->left_on = (out->raw[0] & 0x40) != 0;
-    out->right_on = (out->raw[16] & 0x40) != 0;
+    /* LRA 状态字 bit6 = 启用标志（controller.md §5.4）。游戏里主机以接近输入
+     * 上报的频率持续刷「保活包」：使能位为 1、三组振幅全 0，真机收到同样毫无
+     * 动静。「在震」必须是使能且归一强度非零——把使能位直接当在震，输入手柄
+     * 会被写上一场主机根本没有的震动。非零的门槛还要高过载波电平：「查找
+     * 手柄」页的参数包带着 1-2/255 的高频振幅维持 LRA 通路（蜂鸣本体走 0x0A
+     * 采样流），这种电平任何马达都感知不到，判成在震会把采样退化出的短震动
+     * 压掉（2026-09-18 实机：高频 1/1、点击手柄毫无动静）。 */
+    out->left_on = (out->raw[0] & 0x40) != 0 &&
+                   ns2_rumble_strength(out->raw) > NS2_RUMBLE_CARRIER_MAX;
+    out->right_on = (out->raw[16] & 0x40) != 0 &&
+                    ns2_rumble_strength(&out->raw[16]) > NS2_RUMBLE_CARRIER_MAX;
     return true;
-}
-
-uint8_t ns2_rumble_strength(const uint8_t raw[16])
-{
-    if (raw == NULL) {
-        return 0;
-    }
-    /* 参数包：字节 0 是状态字，其后三组各 5 字节（低频频率 9 位 + 低频振幅
-     * 10 位 + 高频频率 9 位 + 高频振幅 8 位，小端位序）。取三组里最大的振幅，
-     * 低频 10 位右移两位压到 8 位刻度，与私有的 0-255 强度对齐。 */
-    uint8_t best = 0;
-    for (size_t g = 0; g < 3; g++) {
-        const uint8_t *p = &raw[1 + g * 5];
-        uint64_t v = 0;
-        for (size_t i = 0; i < 5; i++) {
-            v |= (uint64_t)p[i] << (8 * i);
-        }
-        const uint8_t lf_amp = (uint8_t)(((v >> 9) & 0x3FFu) >> 2);
-        const uint8_t hf_amp = (uint8_t)((v >> 28) & 0xFFu);
-        const uint8_t amp = hf_amp > lf_amp ? hf_amp : lf_amp;
-        if (amp > best) {
-            best = amp;
-        }
-    }
-    return best;
 }
 
 void ns2_output_emit_player_led(uint8_t led_mask)

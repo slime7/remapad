@@ -29,6 +29,10 @@ static const char *TAG = "remapad_dp";
 
 #define DP_TICK_MS 5
 
+/** 采样脉冲的自灭时限：主机正常会用 0x00 采样收掉提示音，但忘了发或丢包时
+ *  不能把马达钉在脉冲上；主机以 4-12Hz 重发采样时脉冲自然续上。 */
+#define DP_HAPTIC_HOLD_US 300000LL
+
 /** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告（ADR 0023 的取值）。
  *
  *  主机在初始化末尾用报告率描述符（0x0010 写 `85 00`）点的就是这一量级，
@@ -108,25 +112,34 @@ static void refresh_target_facts(const pad_state_t *pad)
 
 /** 主机反馈的持续帧：BLE 回调只更新这一帧，编码与投递由数据面任务做。 */
 static portMUX_TYPE s_feedback_mux = portMUX_INITIALIZER_UNLOCKED;
+
+/** 最近一次触觉采样事件的时刻（feedback_commit 里刷新），采样脉冲的超时
+ *  自灭按它算。 */
+static volatile int64_t s_haptic_last_us;
 static pad_feedback_t s_feedback;
 static volatile bool s_feedback_pending;
 
 /**
  * 主机反馈监听：事件叠加进持续帧（pad_feedback_apply：事件带哪些字段就覆盖
- * 哪些字段，其余沿用上一帧），随后由数据面任务按设备布局编码并投递，绝不在
- * BLE 回调里碰 USB 传输。持续帧是必需的——每个事件都从默认值重建，会把刚
- * 点亮的玩家灯被随后的震动帧写灭，马达强度也在主机不更新时来回跳。
+ * 哪些字段，其余沿用上一帧），编码与投递由数据面任务做，绝不在 BLE 回调里碰
+ * USB/串口传输——震动写入跑在 NimBLE 主机任务里，游戏内主机的震动流接近输入
+ * 上报的频率，任何阻塞 IO 都会拖住输入通知（主机侧操作变卡）。持续帧是必需
+ * 的——每个事件都从默认值重建，会把刚点亮的玩家灯被随后的震动帧写灭，马达
+ * 强度也在主机不更新时来回跳。
  */
-/** 叠加进持续帧并标记待投递；PC 侧收叠加后的状态（打印与对账用）。 */
 static void feedback_commit(uint8_t fields, const pad_feedback_t *event)
 {
-    pad_feedback_t merged;
+    /* 最近一次采样事件的时间戳：脉冲的超时自灭按它算（esp_timer 读寄存器，
+     * 放临界区外读，先后差一拍不影响语义）。 */
+    const int64_t haptic_now_us =
+        (fields & PAD_FEEDBACK_FIELD_HAPTIC) != 0 ? esp_timer_get_time() : 0;
     portENTER_CRITICAL(&s_feedback_mux);
+    if ((fields & PAD_FEEDBACK_FIELD_HAPTIC) != 0) {
+        s_haptic_last_us = haptic_now_us;
+    }
     pad_feedback_apply(&s_feedback, fields, event);
     s_feedback_pending = true;
-    merged = s_feedback;
     portEXIT_CRITICAL(&s_feedback_mux);
-    input_link_send_feedback(&merged);
 }
 
 static void feedback_listener(ns2_feedback_type_t type, const void *payload, void *user)
@@ -138,12 +151,16 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
     switch (type) {
     case NS2_FEEDBACK_RUMBLE: {
         const ns2_rumble_event_t *rumble = payload;
+        uint8_t lf = 0;
+        uint8_t hf = 0;
         event.rumble_on[PAD_TRIGGER_L2] = rumble->left_on;
         event.rumble_on[PAD_TRIGGER_R2] = rumble->right_on;
-        event.rumble_strength[PAD_TRIGGER_L2] =
-            rumble->left_on ? ns2_rumble_strength(rumble->raw) : 0;
-        event.rumble_strength[PAD_TRIGGER_R2] =
-            rumble->right_on ? ns2_rumble_strength(&rumble->raw[16]) : 0;
+        ns2_rumble_band_strengths(rumble->raw, &lf, &hf);
+        event.rumble_strength[PAD_TRIGGER_L2] = rumble->left_on ? lf : 0;
+        event.rumble_hf_strength[PAD_TRIGGER_L2] = rumble->left_on ? hf : 0;
+        ns2_rumble_band_strengths(&rumble->raw[16], &lf, &hf);
+        event.rumble_strength[PAD_TRIGGER_R2] = rumble->right_on ? lf : 0;
+        event.rumble_hf_strength[PAD_TRIGGER_R2] = rumble->right_on ? hf : 0;
         memcpy(event.rumble_raw[PAD_TRIGGER_L2], rumble->raw, 16);
         memcpy(event.rumble_raw[PAD_TRIGGER_R2], &rumble->raw[16], 16);
         fields = PAD_FEEDBACK_FIELD_RUMBLE;
@@ -190,27 +207,33 @@ void dp_plane_feedback_held(pad_feedback_t *out)
 }
 
 /**
- * 反馈投递：按来源设备的布局把反馈编码成该设备的输出报告。USB host 直插
- * 走 OUT 端点，桥接路径把原始输出报告交给 PC（PC 只负责写手柄）。
+ * 把持续帧按输入设备的布局编码成输出报告（USB host 直插与桥接共用这一份
+ * 字节）。返回编码长度，设备没有反馈通道时返回 0。编码与发送分开：调用方
+ * 要先拿编码字节做变化判定，再决定发不发。
  */
-static void deliver_feedback(const pad_feedback_t *feedback)
+static size_t encode_feedback_report(const pad_feedback_t *feedback, uint8_t *out, size_t cap)
 {
     uint16_t vid = 0;
     uint16_t pid = 0;
     pad_conn_t conn = PAD_CONN_UNKNOWN;
-    const bool usb = usb_input_device_ids(&vid, &pid, &conn);
-    if (!usb && !input_source_device_ids(&vid, &pid, &conn)) {
-        return;
+    if (!usb_input_device_ids(&vid, &pid, &conn) &&
+        !input_source_device_ids(&vid, &pid, &conn)) {
+        return 0;
     }
-    uint8_t out[PAD_OUTPUT_MAX];
-    const size_t len = pad_feedback_encode(conn, vid, pid, feedback, out, sizeof(out));
+    return pad_feedback_encode(conn, vid, pid, feedback, out, cap);
+}
+
+/** 把编码好的输出报告交给传输侧：USB host 直插走 OUT 端点，桥接路径把
+ *  原始输出报告交给 PC（PC 只负责写手柄）。 */
+static void send_feedback_report(const uint8_t *out, size_t len)
+{
     if (len == 0) {
         return;
     }
     const pad_layout_t *layout = pad_feedback_last_layout();
-    ESP_LOGD(TAG, "feedback -> %04x:%04x %u bytes (%s)", (unsigned)vid, (unsigned)pid,
-             (unsigned)len, layout != NULL ? pad_family_name(layout->family) : "-");
-    if (usb) {
+    ESP_LOGD(TAG, "feedback -> %u bytes (%s)", (unsigned)len,
+             layout != NULL ? pad_family_name(layout->family) : "-");
+    if (usb_input_attached()) {
         usb_input_send_output(out, len);
     }
     if (input_source_attached()) {
@@ -251,6 +274,14 @@ static void dp_task(void *param)
     int64_t last_button_log_us = 0;
     uint32_t send_div = 0;
     bool output_paused = false;
+    /* 上次发往桥接/USB 的反馈帧与编码报告：等价帧不再重复占传输（分别见
+     * pad_feedback_equal 与下面的编码字节比较）。 */
+    pad_feedback_t feedback_sent;
+    pad_feedback_defaults(&feedback_sent);
+    bool feedback_sent_valid = false;
+    uint8_t feedback_out_sent[PAD_OUTPUT_MAX];
+    size_t feedback_out_sent_len = 0;
+    bool feedback_out_valid = false;
 
     ESP_LOGI(TAG, "data plane task running, tick=%dms, target=%s", DP_TICK_MS,
              target_name());
@@ -272,7 +303,36 @@ static void dp_task(void *param)
             feedback = s_feedback;
             s_feedback_pending = false;
             portEXIT_CRITICAL(&s_feedback_mux);
-            deliver_feedback(&feedback);
+            /* 采样脉冲超时自灭：只在本地副本上清，不动持续帧——新采样事件
+             *  会刷新时戳并重新触发。 */
+            if (feedback.haptic_sample_valid &&
+                esp_timer_get_time() - s_haptic_last_us > DP_HAPTIC_HOLD_US) {
+                feedback.haptic_sample_valid = false;
+                feedback.haptic_sample = 0;
+            }
+            /* 写回（USB OUT / 桥接 OUT_REPORT）按「编码后的报告字节变了才发」：
+             *  主机的震动流是音频式连续包络，原始参数包逐包都在抖，但真正落到
+             *  马达/灯字节的值常常几十包不变——只有字节变化的帧才值得占一次
+             *  传输，PC 会话循环才腾得出手转发输入。同代透传（NS2 手柄）的
+             *  参数包原样在编码字节里，逐包纹理照常透传。 */
+            uint8_t feedback_out[PAD_OUTPUT_MAX];
+            const size_t feedback_out_len =
+                encode_feedback_report(&feedback, feedback_out, sizeof(feedback_out));
+            if (feedback_out_len > 0 &&
+                (!feedback_out_valid || feedback_out_len != feedback_out_sent_len ||
+                 memcmp(feedback_out_sent, feedback_out, feedback_out_len) != 0)) {
+                send_feedback_report(feedback_out, feedback_out_len);
+                memcpy(feedback_out_sent, feedback_out, feedback_out_len);
+                feedback_out_sent_len = feedback_out_len;
+                feedback_out_valid = true;
+            }
+            /* 桥接的反馈状态帧（PC 日志展示用）按写回语义变化才发：原始字节
+             * 的抖动不产生新帧。 */
+            if (!feedback_sent_valid || !pad_feedback_equal(&feedback_sent, &feedback)) {
+                input_link_send_feedback(&feedback);
+                feedback_sent = feedback;
+                feedback_sent_valid = true;
+            }
         }
         /* 主机断开后没人再更新反馈：持续帧会把手柄悬在最后一次震动上（手柄自己
          * 不知道主机走了），断开时补一帧把震动与一次性采样清掉。 */
@@ -283,7 +343,9 @@ static void dp_task(void *param)
                 s_feedback.haptic_sample_valid) {
                 pad_feedback_t cleared;
                 pad_feedback_defaults(&cleared);
-                pad_feedback_apply(&s_feedback, PAD_FEEDBACK_FIELD_RUMBLE, &cleared);
+                pad_feedback_apply(&s_feedback,
+                                   PAD_FEEDBACK_FIELD_RUMBLE | PAD_FEEDBACK_FIELD_HAPTIC,
+                                   &cleared);
                 s_feedback_pending = true;
                 stale = true;
             }

@@ -1052,7 +1052,7 @@ static const char *hex_prefix(const uint8_t *data, size_t len, char *out, size_t
     return out;
 }
 
-/** 按 16 字节一行留痕一段字节（上限 max），供升级等协议的实机对账。 */
+/** 按帧 16 字节一行留痕一段字节（上限 max），供升级等协议的实机对账。 */
 static void log_hex_block(const char *what, const uint8_t *data, size_t len, size_t max)
 {
     const size_t n = len < max ? len : max;
@@ -1065,6 +1065,12 @@ static void log_hex_block(const char *what, const uint8_t *data, size_t len, siz
     if (len > n) {
         ESP_LOGI(TAG, "%s .. %u more bytes", what, (unsigned)(len - n));
     }
+}
+
+/** 运行期热路径命令：日志按秒聚合，不做逐包留痕（见 ns2_session_on_command）。 */
+static bool cmd_is_hot_path(uint8_t cmd)
+{
+    return cmd == 0x0A; /* 触觉采样 */
 }
 
 void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
@@ -1083,12 +1089,18 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     char rsp_hex[3 * 16 + 4];
     /* 主机初始化与运行期的每一步命令都留痕：真机排查「连上但没输入」时，
      * 对不上抓包的握手步骤一眼可见。应答体同样留前 16 字节，用于对照
-     * 主机重复轮询某条命令（重复轮询说明该应答没被主机接受）。 */
-    ESP_LOGI(TAG, "cmd 0x%02x/0x%02x (%uB) %s", data[0], data[3], (unsigned)len,
-             hex_prefix(data, len, resp_hex, sizeof(resp_hex)));
-    if (len > 16) {
-        /* 长指令（升级推送若走指令通道就是这种形态）逐字节留痕。 */
-        log_hex_block("cmd", data, len, 128);
+     * 主机重复轮询某条命令（重复轮询说明该应答没被主机接受）。
+     * 例外是 0x0A 触觉采样：运行期热路径（游戏里接近输入上报的频率），
+     * 逐包日志会把发送环灌满、拖住输入通知（2026-09-18 实机现场），只按
+     * 秒聚合。 */
+    const bool hot_path = cmd_is_hot_path(data[0]);
+    if (!hot_path) {
+        ESP_LOGI(TAG, "cmd 0x%02x/0x%02x (%uB) %s", data[0], data[3], (unsigned)len,
+                 hex_prefix(data, len, resp_hex, sizeof(resp_hex)));
+        if (len > 16) {
+            /* 长指令（升级推送若走指令通道就是这种形态）逐字节留痕。 */
+            log_hex_block("cmd", data, len, 128);
+        }
     }
     const uint8_t cmd = data[0];
     const uint8_t subcmd = data[3];
@@ -1115,7 +1127,17 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         break;
     case 0x0A: {
         const uint8_t sample = subcmd == 0x02 && len >= 9 ? data[8] : subcmd;
-        ESP_LOGI(TAG, "haptic sample 0x%02x", sample);
+        /* 触觉采样按秒聚合（热路径，见上面的 cmd 留痕例外）：逐包三条日志
+         * 在发送环吃紧时会把 NimBLE 主机任务拖住，输入通知随之停摆。 */
+        static int64_t s_haptic_log_us;
+        static uint32_t s_haptic_count;
+        s_haptic_count++;
+        const int64_t now_us = esp_timer_get_time();
+        if (now_us - s_haptic_log_us >= 1000000LL) {
+            ESP_LOGI(TAG, "haptic x%u/s: sample 0x%02x", (unsigned)s_haptic_count, sample);
+            s_haptic_log_us = now_us;
+            s_haptic_count = 0;
+        }
         ns2_output_emit_haptic_sample(sample);
         resp_len = NS2_FRAME_HEADER_LEN;
         break;
@@ -1207,9 +1229,11 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     }
     ns2_frame_response_header(frame, cmd, transport, subcmd);
     ble_controller_notify_answer(conn_handle, resp, ANSWER_PREFIX_LEN + resp_len);
-    ESP_LOGI(TAG, "rsp 0x%02x/0x%02x (%uB) %s", cmd, subcmd,
-             (unsigned)(ANSWER_PREFIX_LEN + resp_len),
-             hex_prefix(resp, ANSWER_PREFIX_LEN + resp_len, rsp_hex, sizeof(rsp_hex)));
+    if (!hot_path) {
+        ESP_LOGI(TAG, "rsp 0x%02x/0x%02x (%uB) %s", cmd, subcmd,
+                 (unsigned)(ANSWER_PREFIX_LEN + resp_len),
+                 hex_prefix(resp, ANSWER_PREFIX_LEN + resp_len, rsp_hex, sizeof(rsp_hex)));
+    }
 }
 
 void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle)
@@ -1223,9 +1247,20 @@ void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle
         ESP_LOGW(TAG, "output report too short (%u)", (unsigned)len);
         return;
     }
-    ESP_LOGI(TAG, "rumble: L=%u R=%u (0x%02x/0x%02x)",
-             (unsigned)event.left_on, (unsigned)event.right_on,
-             event.raw[0], event.raw[16]);
+    /* 游戏里主机的震动流接近输入上报的频率（约 66 Hz），这条回调跑在 NimBLE
+     * 主机任务里：逐包日志的串口写在发送缓冲没人读时会阻塞，输入通知随之
+     * 停摆，主机侧就是「操作明显变卡」。改为每秒一条汇总。 */
+    static int64_t s_last_log_us;
+    static uint32_t s_since_log;
+    s_since_log++;
+    const int64_t now = esp_timer_get_time();
+    if (now - s_last_log_us >= 1000000LL) {
+        ESP_LOGI(TAG, "rumble x%u/s: L=%u R=%u (0x%02x/0x%02x)", (unsigned)s_since_log,
+                 (unsigned)event.left_on, (unsigned)event.right_on, event.raw[0],
+                 event.raw[16]);
+        s_last_log_us = now;
+        s_since_log = 0;
+    }
     ns2_output_emit_rumble(&event);
 }
 

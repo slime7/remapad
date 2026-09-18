@@ -246,8 +246,33 @@ def identity_payload(info: dict, report_id: int, report_len: int) -> bytes:
 def format_feedback(payload: bytes) -> str:
     if len(payload) < 6:
         return "反馈帧（载荷过短）"
-    return (f"反馈 震动 L={'on' if payload[0] else 'off'} R={'on' if payload[1] else 'off'} "
+    line = (f"反馈 震动 L={'on' if payload[0] else 'off'} R={'on' if payload[1] else 'off'} "
             f"强度 {payload[2]}/{payload[3]} 玩家灯 0x{payload[4]:02x} 触觉 0x{payload[5]:02x}")
+    if len(payload) >= 8:
+        # 高频带（纹理）：老固件的帧没有这两个字节，按长度判断。
+        line += f" 高频 {payload[6]}/{payload[7]}"
+    return line
+
+
+class FeedbackThrottle:
+    """反馈帧打印限频：震动效果包络里强度逐帧在变，逐条打印会把日志区刷爆
+    （GUI 的 Tk 文本控件尤其扛不住每秒上百条）。窗口内只放行第一条，其余
+    合并计数；窗口过后的下一条带上「已合并 N 条」。数据面（写回手柄）不受
+    影响，这里只管打印。"""
+
+    def __init__(self, window_s: float = 1.0) -> None:
+        self.window_s = window_s
+        self.next_ok = 0.0
+        self.suppressed = 0
+
+    def feed(self, payload: bytes, now: float) -> str | None:
+        line = format_feedback(payload)
+        if now < self.next_ok:
+            self.suppressed += 1
+            return None
+        merged, self.suppressed = self.suppressed, 0
+        self.next_ok = now + self.window_s
+        return f"（已合并 {merged} 条）{line}" if merged else line
 
 
 def run_list(hid) -> int:
@@ -604,6 +629,8 @@ class Session:
         self.ota: OtaJob | None = None
         self.stop = False
         self.stop_code = 0
+        # 反馈帧打印限频（不影响写回手柄，见 FeedbackThrottle）。
+        self.feedback_gate = FeedbackThrottle()
 
     # --- 手柄转发 --------------------------------------------------
 
@@ -680,7 +707,9 @@ class Session:
         for frame_type, _slot, _seq, payload in frames:
             self.frames += 1
             if frame_type == TYPE_FEEDBACK:
-                self.reporter.line(format_feedback(payload))
+                line = self.feedback_gate.feed(payload, now)
+                if line is not None:
+                    self.reporter.line(line)
             elif frame_type == TYPE_OUT_REPORT:
                 if self.write_output_report(payload):
                     self.outputs += 1

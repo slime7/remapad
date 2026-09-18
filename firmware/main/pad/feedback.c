@@ -98,6 +98,7 @@ void pad_feedback_apply(pad_feedback_t *held, uint8_t fields, const pad_feedback
         for (size_t side = 0; side < PAD_TRIGGER_COUNT; side++) {
             held->rumble_on[side] = event->rumble_on[side];
             held->rumble_strength[side] = event->rumble_strength[side];
+            held->rumble_hf_strength[side] = event->rumble_hf_strength[side];
             memcpy(held->rumble_raw[side], event->rumble_raw[side],
                    sizeof(held->rumble_raw[side]));
         }
@@ -105,9 +106,39 @@ void pad_feedback_apply(pad_feedback_t *held, uint8_t fields, const pad_feedback
     if ((fields & PAD_FEEDBACK_FIELD_PLAYER_LED) != 0) {
         held->player_led = event->player_led;
     }
-    /* 采样是一次性的：带采样的事件置位，其它事件把上一帧的采样清掉。 */
-    held->haptic_sample_valid = (fields & PAD_FEEDBACK_FIELD_HAPTIC) != 0;
-    held->haptic_sample = held->haptic_sample_valid ? event->haptic_sample : 0;
+    /* 采样只在带它的事件里更新：载波包以接近输入上报的频率到达，非采样事件
+     * 顺手清会把脉冲切成碎片、甚至在编码前就把它覆盖掉（查找手柄页的蜂鸣
+     * 时有时无）；收尾交给 0x00 的「停止播放」与数据面的超时自灭。 */
+    if ((fields & PAD_FEEDBACK_FIELD_HAPTIC) != 0) {
+        held->haptic_sample_valid = event->haptic_sample_valid;
+        held->haptic_sample = event->haptic_sample_valid ? event->haptic_sample : 0;
+    }
+}
+
+/** 触觉采样的写回语义：0x00 是「停止播放」，带不带它的标志位不改变任何
+ *  马达字节，等价判定要按这个有效值算。 */
+static uint8_t effective_haptic(const pad_feedback_t *f)
+{
+    return f->haptic_sample_valid && f->haptic_sample != 0 ? f->haptic_sample : 0;
+}
+
+bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b)
+{
+    if (a == b) {
+        return true;
+    }
+    if (a == NULL || b == NULL) {
+        return false;
+    }
+    /* 只比会改变写回内容的语义字段。主机的震动流是音频式连续包络，原始 LRA
+     * 参数包逐包都在抖（低有效位、频率扫描），拿它当变化判据会把等价帧全部
+     * 判成变化、以接近输入上报的频率把串口灌爆（2026-09-18 实机：稳态强度
+     * 9/9 每秒重发上百条帧，PC 会话循环被拖到输入转发卡顿）。 */
+    return memcmp(a->rumble_on, b->rumble_on, sizeof(a->rumble_on)) == 0 &&
+           memcmp(a->rumble_strength, b->rumble_strength, sizeof(a->rumble_strength)) == 0 &&
+           memcmp(a->rumble_hf_strength, b->rumble_hf_strength,
+                  sizeof(a->rumble_hf_strength)) == 0 &&
+           a->player_led == b->player_led && effective_haptic(a) == effective_haptic(b);
 }
 
 size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
@@ -160,9 +191,14 @@ size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
             continue;
         }
         const uint16_t max = desc->rumble_max[side] == 0 ? 255u : desc->rumble_max[side];
+        /* 这颗马达跟哪条频带：主机震动流的低频给冲击、高频给纹理，两带分开
+         * 映射（DS5 大马达跟低频、小马达跟高频），不把同一个值写两颗马达。 */
+        const uint8_t source = desc->rumble_band[side] == PAD_RUMBLE_HF
+                                   ? feedback->rumble_hf_strength[side]
+                                   : feedback->rumble_strength[side];
         uint8_t strength = 0;
         if (feedback->rumble_on[side]) {
-            strength = feedback->rumble_strength[side];
+            strength = source;
         } else if (feedback->haptic_sample_valid && feedback->haptic_sample != 0 &&
                    desc->haptic == PAD_HAPTIC_AS_RUMBLE && !rumbling) {
             /* 设备不能播采样：退化成一次短震动，主机已经在震时不动。

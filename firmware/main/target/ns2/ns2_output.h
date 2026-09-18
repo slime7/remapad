@@ -68,8 +68,15 @@ typedef void (*ns2_feedback_fn)(ns2_feedback_type_t type, const void *payload, v
 bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out);
 
 /**
- * 从 16 字节 LRA 参数包估一个 0-255 强度：取三组操作数据里最大的振幅
- * （低频 10 位压到 8 位、高频 8 位），供无法原样吃 LRA 目标的设备使用。
+ * 从 16 字节 LRA 参数包按频带取振幅：三组操作数据各带低频 10 位与高频 8 位
+ * 振幅，逐带取最大值、低频压到 8 位刻度（0-255）。主机的震动流是连续包络
+ * （低频给冲击、高频给纹理），映射设备的马达前先按带拆开。
+ */
+void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf);
+
+/**
+ * 从 16 字节 LRA 参数包估一个 0-255 强度：两带振幅取大，供「在震」判定与
+ * 不分带的设备使用（= ns2_rumble_band_strengths 结果的较大者）。
  */
 uint8_t ns2_rumble_strength(const uint8_t raw[16]);
 

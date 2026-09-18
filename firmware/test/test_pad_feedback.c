@@ -20,10 +20,12 @@ static pad_feedback_t feedback_default(void)
 }
 
 /** 蓝牙输出报告尾部 CRC32 的黄金值（算法与来源见 dualsense 蓝牙用例）：
- *  依次对应「左 255 / 右 128 / 1P」「停止震动 / 1P」「无震动 2P」「DS4 左 64 / 2P」。 */
-static const uint8_t s_crc_ds5_rumble[4] = {0xcb, 0x4c, 0x00, 0x6d};
-static const uint8_t s_crc_ds5_stop[4] = {0x33, 0xa9, 0x65, 0xb1};
-static const uint8_t s_crc_ds5_2p[4] = {0xff, 0x75, 0x4c, 0x6b};
+ *  依次对应「左 255 / 右 128 / 1P」「停止震动 / 1P」「无震动 2P」「DS4 左 64 / 2P」。
+ *  DS5 的三组是灯条退出反馈通道后的取值（valid_flag1 只置玩家灯、灯条设置与
+ *  RGB 字节全零，2026-09-18 重算）。 */
+static const uint8_t s_crc_ds5_rumble[4] = {0x37, 0xe0, 0xa8, 0xda};
+static const uint8_t s_crc_ds5_stop[4] = {0xcf, 0x05, 0xcd, 0x06};
+static const uint8_t s_crc_ds5_2p[4] = {0x69, 0xe3, 0xde, 0x0e};
 static const uint8_t s_crc_ds4_bt[4] = {0xbc, 0xb2, 0x30, 0x41};
 
 static void dualsense_usb_encodes_rumble_and_led(void)
@@ -33,6 +35,8 @@ static void dualsense_usb_encodes_rumble_and_led(void)
     feedback.rumble_strength[PAD_TRIGGER_L2] = 255;
     feedback.rumble_on[PAD_TRIGGER_R2] = true;
     feedback.rumble_strength[PAD_TRIGGER_R2] = 128;
+    /* 小马达跟高频带：右路的高频振幅单独给。 */
+    feedback.rumble_hf_strength[PAD_TRIGGER_R2] = 128;
     feedback.player_led = 0x01;
 
     uint8_t out[PAD_OUTPUT_MAX];
@@ -41,15 +45,15 @@ static void dualsense_usb_encodes_rumble_and_led(void)
     CHECK_EQ(len, 48);
     CHECK_EQ(out[0], 0x02); /* 报告 ID */
     CHECK_EQ(out[1], 0x03); /* valid_flag0：兼容震动 + 关音频触觉 */
-    CHECK_EQ(out[2], 0x14); /* valid_flag1：灯条 + 玩家指示灯 */
+    CHECK_EQ(out[2], 0x10); /* valid_flag1：只置玩家指示灯，灯条不声明有效 */
     CHECK_EQ(out[3], 128);  /* 右小马达 */
     CHECK_EQ(out[4], 255);  /* 左大马达 */
-    CHECK_EQ(out[39], 0x02); /* valid_flag2：灯条设置控制 */
-    CHECK_EQ(out[42], 0x02); /* 灯条设置值：淡出 */
+    CHECK_EQ(out[39], 0x00); /* 不写灯条设置控制 */
+    CHECK_EQ(out[42], 0x00); /* 不写灯条设置值 */
     CHECK_EQ(out[44], 0x04); /* 1P 灯位：只有中间一颗 */
-    CHECK_EQ(out[45], 0x00); /* 灯条蓝（bit0） */
+    CHECK_EQ(out[45], 0x00); /* 灯条 RGB 不声明有效，手柄保持自己的颜色 */
     CHECK_EQ(out[46], 0x00);
-    CHECK_EQ(out[47], 0xFF);
+    CHECK_EQ(out[47], 0x00);
 
     /* 震动关掉后强度写 0，其余字段照发。 */
     feedback.rumble_on[PAD_TRIGGER_L2] = false;
@@ -91,6 +95,8 @@ static void dualsense_bt_encodes_framed_report(void)
     feedback.rumble_strength[PAD_TRIGGER_L2] = 255;
     feedback.rumble_on[PAD_TRIGGER_R2] = true;
     feedback.rumble_strength[PAD_TRIGGER_R2] = 128;
+    /* 小马达跟高频带：右路的高频振幅单独给。 */
+    feedback.rumble_hf_strength[PAD_TRIGGER_R2] = 128;
     feedback.player_led = 0x01;
 
     uint8_t out[PAD_OUTPUT_MAX];
@@ -101,15 +107,15 @@ static void dualsense_bt_encodes_framed_report(void)
     CHECK_EQ(out[1], 0x00); /* 序号与标签半字节 */
     CHECK_EQ(out[2], 0x10); /* 固定魔数 */
     CHECK_EQ(out[3], 0x03);
-    CHECK_EQ(out[4], 0x14);
+    CHECK_EQ(out[4], 0x10); /* 只置玩家指示灯 */
     CHECK_EQ(out[5], 128); /* 右小马达 */
     CHECK_EQ(out[6], 255); /* 左大马达 */
-    CHECK_EQ(out[41], 0x02); /* valid_flag2：灯条设置控制 */
-    CHECK_EQ(out[44], 0x02); /* 灯条设置值：淡出（主机连接动画会一直盖着灯） */
+    CHECK_EQ(out[41], 0x00); /* 不写灯条设置控制 */
+    CHECK_EQ(out[44], 0x00); /* 不写灯条设置值 */
     CHECK_EQ(out[46], 0x04); /* 1P 灯位 */
-    CHECK_EQ(out[47], 0x00); /* 灯条蓝 */
+    CHECK_EQ(out[47], 0x00); /* 灯条 RGB 不声明有效 */
     CHECK_EQ(out[48], 0x00);
-    CHECK_EQ(out[49], 0xFF);
+    CHECK_EQ(out[49], 0x00);
     CHECK_BYTES(&out[74], s_crc_ds5_rumble, sizeof(s_crc_ds5_rumble));
 
     /* 停止震动：马达清零，CRC 跟着报告体一起变。 */
@@ -120,6 +126,82 @@ static void dualsense_bt_encodes_framed_report(void)
     CHECK_EQ(out[5], 0);
     CHECK_EQ(out[6], 0);
     CHECK_BYTES(&out[74], s_crc_ds5_stop, sizeof(s_crc_ds5_stop));
+}
+
+/** 主机的震动流是连续包络（低频给出冲击、高频给出纹理）：DualSense 的两颗
+ *  马达各跟一个频带——大马达跟低频、小马达跟高频，而不是把同一个归一值
+ *  写进两颗马达。只来高频纹理时大马达必须不动。 */
+static void dualsense_motors_follow_rumble_bands(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 200;    /* 左路低频带振幅 */
+    feedback.rumble_on[PAD_TRIGGER_R2] = true;
+    feedback.rumble_hf_strength[PAD_TRIGGER_R2] = 40;  /* 右路高频带振幅 */
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x0CE6, &feedback, out, sizeof(out)), 48);
+    CHECK_EQ(out[4], 200); /* b4 左大马达：跟低频带 */
+    CHECK_EQ(out[3], 40);  /* b3 右小马达：跟高频带 */
+
+    /* 低频撤掉、只剩高频纹理时大马达不动。 */
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 0;
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x0CE6, &feedback, out, sizeof(out)), 48);
+    CHECK_EQ(out[4], 0);
+    CHECK_EQ(out[3], 40);
+}
+
+/** 监听者按两带解出强度后要经持续帧合并（pad_feedback_apply）才到编码——
+ *  合并漏拷高频带会把高频纹理编码成全零马达字节，写回层按「字节没变」一帧
+ *  都不发（2026-09-18 实机曾表现：反馈帧 L=on 而两带强度印成 0/0 自相矛盾）。 */
+static void hf_band_strength_survives_into_held_frame(void)
+{
+    pad_feedback_t held = feedback_default();
+    pad_feedback_t event = feedback_default();
+    event.rumble_on[PAD_TRIGGER_L2] = true;
+    event.rumble_on[PAD_TRIGGER_R2] = true;
+    event.rumble_hf_strength[PAD_TRIGGER_L2] = 96;
+    event.rumble_hf_strength[PAD_TRIGGER_R2] = 96;
+
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x0CE6, &held, out, sizeof(out)), 48);
+    CHECK_EQ(out[4], 0);  /* b4 左大马达：低频带为 0，不补震 */
+    CHECK_EQ(out[3], 96); /* b3 右小马达：跟高频带 */
+}
+
+/** 「查找手柄」页的蜂鸣由 0x0A 采样流承载，同期的 LRA 参数包只是载波
+ *  （高频 1-2/255，不判成在震）。载波包以接近输入上报的频率到达，持续帧
+ *  合并若被非采样事件顺手清掉采样，脉冲会被切成 15ms 碎片、甚至在数据面
+ *  编码前就被覆盖——实机表现：查找手柄页的震动时有时无（2026-09-18）。
+ *  采样只在带它的事件里更新，0x00 是「停止播放」。 */
+static void haptic_pulse_survives_rumble_carriers(void)
+{
+    pad_feedback_t held = feedback_default();
+    pad_feedback_t event = feedback_default();
+    uint8_t out[PAD_OUTPUT_MAX];
+
+    event.haptic_sample_valid = true;
+    event.haptic_sample = 0x02;
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_HAPTIC, &event);
+
+    /* 载波包（未判成在震）与玩家灯事件都不能掐掉脉冲。 */
+    event = feedback_default();
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_PLAYER_LED, &event);
+    CHECK(held.haptic_sample_valid);
+    pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &held, out, sizeof(out));
+    CHECK_EQ(out[4], 0xC0);
+    CHECK_EQ(out[5], 0xC0);
+
+    /* 停止采样（0x00）把马达收掉。 */
+    event.haptic_sample_valid = true;
+    event.haptic_sample = 0x00;
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_HAPTIC, &event);
+    pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &held, out, sizeof(out));
+    CHECK_EQ(out[4], 0x00);
+    CHECK_EQ(out[5], 0x00);
 }
 
 /** 玩家指示灯按设备自己的灯位模式点亮：DualSense 的五颗灯是一组固定模式，
@@ -133,7 +215,7 @@ static void dualsense_player_led_follows_pattern(void)
     CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)),
              78);
     CHECK_EQ(out[46], 0x0A);
-    CHECK_EQ(out[47], 0xFF); /* 2P 灯条红 */
+    CHECK_EQ(out[47], 0x00); /* 灯条不驱动：玩家号只上四颗白灯 */
     CHECK_EQ(out[48], 0x00);
     CHECK_EQ(out[49], 0x00);
     CHECK_BYTES(&out[74], s_crc_ds5_2p, sizeof(s_crc_ds5_2p));
@@ -142,6 +224,39 @@ static void dualsense_player_led_follows_pattern(void)
     feedback.player_led = 0x00;
     pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out));
     CHECK_EQ(out[46], 0x00);
+}
+
+/** 震动写回不能改灯条颜色（2026-09-18 实机：玩家灯 0x01 时每次震动写回都把
+ *  灯条钉成玩家蓝并带「淡出」设置，平时淡回默认白、一震就变深蓝）。DualSense
+ *  的玩家号只落四颗白灯，灯条留给 PC 侧管理：valid_flag1 不置灯条位，灯条
+ *  设置与 RGB 字节全零。 */
+static void dualsense_rumble_leaves_lightbar_alone(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 255;
+    feedback.player_led = 0x01;
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x0CE6, &feedback, out, sizeof(out)),
+             48);
+    CHECK_EQ(out[2], 0x10);  /* valid_flag1：只置玩家指示灯 */
+    CHECK_EQ(out[39], 0x00); /* 不写灯条设置控制 */
+    CHECK_EQ(out[42], 0x00); /* 不写灯条设置值 */
+    CHECK_EQ(out[44], 0x04); /* 1P 灯位仍点亮 */
+    CHECK_EQ(out[45], 0x00); /* 灯条 RGB 未声明有效 */
+    CHECK_EQ(out[46], 0x00);
+    CHECK_EQ(out[47], 0x00);
+
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)),
+             78);
+    CHECK_EQ(out[4], 0x10);
+    CHECK_EQ(out[41], 0x00);
+    CHECK_EQ(out[44], 0x00);
+    CHECK_EQ(out[46], 0x04);
+    CHECK_EQ(out[47], 0x00);
+    CHECK_EQ(out[48], 0x00);
+    CHECK_EQ(out[49], 0x00);
 }
 
 /** DS4 蓝牙同样带 hw_control 头与尾部 CRC32：公共段从 b3 起，灯条在 b8-b10。 */
@@ -179,7 +294,7 @@ static void held_feedback_keeps_steady_state(void)
     pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_PLAYER_LED, &event);
     CHECK_EQ(held.player_led, 0x02);
 
-    /* 采样事件当次出脉冲，下一次事件把它清掉。 */
+    /* 采样事件出脉冲；载波包不清它——查找手柄页的蜂鸣要靠脉冲撑住。 */
     event = feedback_default();
     event.haptic_sample_valid = true;
     event.haptic_sample = 0x02;
@@ -190,7 +305,15 @@ static void held_feedback_keeps_steady_state(void)
 
     event = feedback_default();
     pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
-    CHECK(!held.haptic_sample_valid);
+    CHECK(held.haptic_sample_valid); /* 载波不掐脉冲 */
+    pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &held, out, sizeof(out));
+    CHECK_EQ(out[5], 0xC0);
+
+    /* 停止采样（0x00）收掉脉冲，玩家灯仍然保留。 */
+    event = feedback_default();
+    event.haptic_sample_valid = true;
+    event.haptic_sample = 0x00;
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_HAPTIC, &event);
     pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &held, out, sizeof(out));
     CHECK_EQ(out[5], 0x00);
     CHECK_EQ(out[46], 0x0A); /* 玩家灯仍然保留 */
@@ -291,6 +414,58 @@ static void unknown_device_has_no_feedback_channel(void)
     CHECK(pad_feedback_last_layout() == NULL);
 }
 
+/** 游戏里主机以接近输入上报的频率刷震动流，内容常常只差原始参数包的低有效位
+ *  （音频式包络逐包都在抖），写回的字节却一模一样：桥接反馈按「写回语义变了
+ *  才发」判定——2026-09-18 实机稳态 `强度 9/9` 每秒重发上百条帧、写回风暴把
+ *  PC 会话循环拖到转发卡顿，就是拿原始字节当变化判据的结果。等价判定跟两带
+ *  强度、使能、玩家灯与「非零」触觉采样走，原始 LRA 参数包不参与。 */
+static void equal_frames_follow_writeback_semantics(void)
+{
+    pad_feedback_t a;
+    pad_feedback_t b;
+    pad_feedback_defaults(&a);
+    pad_feedback_defaults(&b);
+    CHECK(pad_feedback_equal(&a, &b));
+
+    /* 只差原始参数包字节：写回内容不变，视为等价。 */
+    a.rumble_raw[PAD_TRIGGER_L2][0] = 0x40;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    /* 触觉采样 0x00 是「停止播放」：带不带它的标志位不改变马达字节。 */
+    a.haptic_sample_valid = true;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    /* 真正的语义变化仍要投递：使能、两带强度、玩家灯与非零采样。 */
+    a.rumble_on[PAD_TRIGGER_L2] = true;
+    CHECK(!pad_feedback_equal(&a, &b));
+    b = a;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    a.rumble_strength[PAD_TRIGGER_L2] = 64; /* 低频带变了 */
+    CHECK(!pad_feedback_equal(&a, &b));
+    b = a;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    a.rumble_hf_strength[PAD_TRIGGER_R2] = 32; /* 高频带变了 */
+    CHECK(!pad_feedback_equal(&a, &b));
+    b = a;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    a.player_led = 0x01;
+    CHECK(!pad_feedback_equal(&a, &b));
+    b = a;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    a.haptic_sample = 0x03; /* 非零采样：一次真实的播放事件 */
+    CHECK(!pad_feedback_equal(&a, &b));
+    b = a;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    CHECK(!pad_feedback_equal(NULL, &b));
+    CHECK(!pad_feedback_equal(&a, NULL));
+    CHECK(pad_feedback_equal(NULL, NULL));
+}
+
 HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"DualSense 有线的震动、玩家灯与灯条编码", dualsense_usb_encodes_rumble_and_led},
                 {"DS4 有线的震动与灯条颜色编码", ds4_usb_encodes_rumble_and_lightbar},
@@ -298,9 +473,17 @@ HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"玩家指示灯按设备灯位模式点亮", dualsense_player_led_follows_pattern},
                 {"DS4 蓝牙的震动写回带上帧头与 CRC32", ds4_bt_encodes_framed_report},
                 {"NS2 手柄原样接收主机的 LRA 参数包", ns2_pad_relays_lra_payload_verbatim},
+                {"DualSense 大马达跟低频带、小马达跟高频带", dualsense_motors_follow_rumble_bands},
+                {"高频带强度随事件进持续帧，漏拷会把纹理震成全零",
+                 hf_band_strength_survives_into_held_frame},
+                {"震动写回不改写 DualSense 灯条，玩家号只上白灯",
+                 dualsense_rumble_leaves_lightbar_alone},
                 {"触觉采样在无采样能力的设备上退化成短震动",
                  haptic_sample_degrades_to_short_pulse},
                 {"停止播放的采样不会把马达留在脉冲上", haptic_stop_sample_silences_motors},
-                {"持续帧保留玩家灯、采样只在当次事件生效", held_feedback_keeps_steady_state},
+                {"持续帧保留玩家灯、采样脉冲不被载波掐断", held_feedback_keeps_steady_state},
+                {"查找手柄页的采样脉冲要撑住整个播放期", haptic_pulse_survives_rumble_carriers},
                 {"NS1 的震动按固定头加振幅写入", ns1_rumble_uses_band_template},
-                {"未识别设备没有反馈通道", unknown_device_has_no_feedback_channel});
+                {"未识别设备没有反馈通道", unknown_device_has_no_feedback_channel},
+                {"等价反馈帧按写回语义判定（原始参数包不算变化）",
+                 equal_frames_follow_writeback_semantics});

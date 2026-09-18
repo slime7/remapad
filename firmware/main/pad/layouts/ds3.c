@@ -45,6 +45,7 @@ static const pad_layout_t s_rows[] = {
             .presets = {{2, 0xFF}, {4, 0xFF}},
             .rumble_off = {5, 3},
             .rumble_max = {255, 255},
+            .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
             .led_style = PAD_LED_NONE,
             .haptic = PAD_HAPTIC_AS_RUMBLE,
         },

@@ -192,7 +192,13 @@ typedef struct {
  */
 typedef struct {
     bool rumble_on[PAD_TRIGGER_COUNT];
-    uint8_t rumble_strength[PAD_TRIGGER_COUNT]; /**< 0-255，归一强度。 */
+    /** 低频带归一强度（0-255）：NS2 参数包三组操作数据里最大的低频振幅，
+     *  压到 8 位刻度。设备的「重击」马达（DS5 大马达、NS1 低频马达）跟它。 */
+    uint8_t rumble_strength[PAD_TRIGGER_COUNT];
+    /** 高频带归一强度（0-255）：三组里最大的高频振幅。设备的「纹理」马达
+     *  （DS5 小马达、NS1 高频马达）跟它；主机的震动流是连续包络，低频给
+     *  冲击、高频给质感，两带分开才不会把高频糊进低频里。 */
+    uint8_t rumble_hf_strength[PAD_TRIGGER_COUNT];
     /** 目标侧原始参数包（NS2 为 2×16 字节 LRA 参数），供目标能力二次编码。 */
     uint8_t rumble_raw[PAD_TRIGGER_COUNT][16];
     uint8_t player_led; /**< 玩家灯掩码 bit0-3。 */
