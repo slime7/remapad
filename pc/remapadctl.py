@@ -287,11 +287,14 @@ def run_list(hid) -> int:
 
 def run_dump(args, hid) -> int:
     """只打印原始报告：用来核对固件家族表里的字段偏移与位序。"""
-    candidates = list_candidates(hid)
-    if not candidates:
-        print("没有找到手柄接口（--list 可以看到全部候选）", file=sys.stderr)
+    info = pick_device(args, hid)
+    if info is None:
+        if not list_candidates(hid):
+            print("没有找到手柄接口（--list 可以看到全部候选）", file=sys.stderr)
+        else:
+            print("--vid/--pid 没有匹配到任何手柄接口（--list 可以看到全部候选）",
+                  file=sys.stderr)
         return 1
-    info = candidates[0]
     print(f"dump: {describe(info)}")
     dev = hid.device()
     dev.open_path(info["path"])
