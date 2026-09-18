@@ -1,132 +1,123 @@
-# Remapad ESP32-S3 手柄网关
+# Remapad
 
-Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器工程：接收 USB 输入，转换为 NS2 手柄报告，再通过 BLE 对外提供手柄服务。
-屏幕 UI 使用 PocketJS（Vue Vapor 语法），设备端使用 PocketJS 官方 ESP-IDF host 组件与 ESP-IDF 固件，构建目标由 `firmware/pocket.host.json` 描述。
-板卡规格、引脚和接线注意事项见 [hardware.md](docs/hardware.md)；USB→NS2→BLE 的协议、广播、GATT 与配对细节见 [controller.md](docs/controller.md)。
+Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统：
+接收 USB 手柄输入，转换为 NS2 控制器报告，并通过 BLE 对外提供手柄服务，同时在板载屏幕上呈现运行状态与交互 UI。
+
+屏幕 UI 基于 PocketJS 框架与 Vue 3 Vapor 语法；
+固件运行于 ESP-IDF，通过官方 ESP-IDF host 组件驱动屏幕显示，并在原生任务与队列中承载控制器数据面。
 
 ## 硬件规格
 
-| 硬件项 | 参数 |
+| 硬件项 | 规格参数 |
 | :--- | :--- |
-| 主控 | ESP32-S3R8，Xtensa LX7 双核，240 MHz |
-| Flash | 16 MB（W25Q128JVSIQ） |
-| PSRAM | 8 MB Octal PSRAM，叠封在 SoC 内 |
-| 屏幕 | ST7789V2，240 × 280，RGB565，4-wire SPI |
-| 触摸 | CST816T 电容触摸（I2C `0x15`） |
+| 主控芯片 | ESP32-S3R8（Xtensa LX7 双核，最高 240 MHz） |
+| 存储配置 | 16 MB Flash（W25Q128JVSIQ）+ 8 MB Octal PSRAM（片内叠封） |
+| 显示屏幕 | 1.69 英寸 ST7789V2 液晶屏（240 × 280，RGB565，4-wire SPI） |
+| 触摸面板 | CST816T 电容式触摸芯片（I2C `0x15`） |
+| 板载外设 | PWR 按键、蜂鸣器、锂电池充放电管理、RTC 时钟与陀螺仪 |
 
-## 架构
+完整引脚分配、外设地址及供电细节参见 [目标硬件参考 (docs/hardware.md)](docs/hardware.md)。
+
+## 系统架构
 
 ```mermaid
 flowchart LR
-    UI[ui/pocket.json + JSX] --> CLI[官方 PocketJS CLI]
+    UI[ui/：Vue Vapor JSX] --> CLI[PocketJS CLI]
     Profile[firmware/pocket.host.json] --> CLI
-    CLI --> Artifacts[remapad-ui.js + remapad-ui.pak + remapad-ui.pocket]
+    CLI --> Artifacts[remapad-ui.pocket]
     Artifacts --> CMake[ESP-IDF CMake]
-    CMake --> Embed[官方 pocketjs_embed_package<br/>或 pocketjs_compile_app]
+    CMake --> Embed[pocketjs_embed_package]
     Embed --> Host[pocketjs_host.c]
-    Host --> Package[pocketjs_package]
-    Package --> Guest[pocketjs_guest]
-    Guest --> Binding[pocketjs_ui_qjs + ui_core]
-    Binding --> OwnerTask[remapad-pjs owner task]
-    OwnerTask --> Renderer[pocketjs_render_rgb565]
-    Renderer --> Strip[RGB565 damage strip]
-    Strip --> BSP[产品 BSP：面板 / 触摸 / 背光]
-    USB[USB 输入] --> DataPlane[产品数据面]
-    DataPlane --> NS2[NS2 报告转换]
-    NS2 --> BLE[BLE 广播 / GATT / 配对]
-    DataPlane -.控制状态.-> Bridge[bridge 控制面]
+    Host --> Guest[PocketJS 运行时]
+    Guest --> Renderer[RGB565 渲染器]
+    Renderer --> BSP[屏幕与触摸驱动]
+    USB[USB 输入] --> DataPlane[控制器数据面]
+    DataPlane --> NS2[NS2 报告编码]
+    NS2 --> BLE[BLE 手柄服务]
+    DataPlane -.状态同步.-> Bridge[Bridge 控制面]
+    Bridge -.状态反馈.-> Guest
 ```
 
-职责边界：
+系统核心分工与边界：
 
-- `ui/` 只描述应用、样式和资源，由官方 PocketJS 编译器生成包。
-- `firmware/pocket.host.json` 是目标设备的事实源，描述视口、tick、presentation 和实际能力。
-- `firmware/main/` 承载 PocketJS UI host 与产品数据面：UI runtime 负责渲染；
-  USB 接收、规范化、NS2 编码、BLE 广播/GATT 与配对状态机在 ESP-IDF 原生任务与队列里实现，UI bridge 只承载低频控制消息。
-- 板卡引脚与外设见 [docs/hardware.md](docs/hardware.md)。
+- 前端工作区（`ui/`）负责视图层、交互样式与静态资源，由 PocketJS 编译器在构建期光栅化为资源包。
+- 固件工作区（`firmware/`）承载 PocketJS 宿主运行时与原生数据面：
+  高频控制器接收、规范化、协议编码及 BLE 广播/GATT 状态机均在 ESP-IDF 原生任务中运行；
+  Bridge 控制面仅用于传递低频设备状态和交互指令。
+- 通信协议细节与规范参见 [控制器协议参考 (docs/controller.md)](docs/controller.md)。
 
 ## 目录结构
 
 ```text
 remapad/
-├── scripts/                     # PocketJS 工具链入口、触摸预览服务、原生归档与固件测试
-├── patches/                     # 上游 PocketJS 组件对账记录
-├── ui/
-│   ├── pocket.json              # PocketJS 应用清单
-│   ├── preview/                 # 触摸屏预览页（浏览器触摸事件 → PocketJS 触摸帧）
-│   └── src/                     # Vue Vapor JSX UI（pages / components / hooks / bridge）
-├── firmware/
-│   ├── pocket.host.json         # ESP32-S3 host profile
-│   ├── sdkconfig.defaults       # Flash/PSRAM、CPU 频率与 FreeRTOS 预设
-│   ├── partitions.csv           # Flash 分区
-│   ├── components/              # 固定在本仓库的官方 ESP-IDF 组件与 S3 原生归档
-│   └── main/                    # 固件入口、PocketJS UI host（pocketjs_host.c）与产品模块
-├── pc/                          # PC 侧工具：remapadctl.py（桥接转发 / 命令行 / 截图 / OTA）与 remapadgui.py（图形界面）
-└── docs/                        # 愿景、架构、抽象和上手文档
+├── ui/                          # 前端工作区：Vue Vapor JSX 界面、样式与预览
+│   ├── src/                     # UI 源码（页面、组件、状态与 Bridge 契约）
+│   ├── preview/                 # 触摸预览服务页面（浏览器触控模拟）
+│   └── pocket.json              # PocketJS 应用清单
+├── firmware/                    # 固件工作区：ESP-IDF 嵌入式工程
+│   ├── main/                    # 固件业务源码（PocketJS 宿主、控制器数据面、驱动等）
+│   ├── components/              # 随仓库固定的官方 ESP-IDF 组件与 S3 原生归档
+│   ├── pocket.host.json         # 宿主设备契约（视口、时钟与硬件能力配置）
+│   ├── sdkconfig.defaults       # 芯片架构、CPU 频率、Flash/PSRAM 预设
+│   └── partitions.csv           # 双应用 OTA 与存储分区表
+├── pc/                          # PC 侧辅助工具（USB 桥接、命令行控制台、实机截图、OTA）
+├── scripts/                     # 构建调度、触摸预览与测试辅助脚本
+├── patches/                     # 上游 PocketJS 组件对账与补丁记录
+└── docs/                        # 项目设计、技术抽象与开发文档
 ```
 
-## 环境要求
+## 开发快速上手
 
-- Node.js 18 或更高版本；pnpm 管理工作区依赖，Bun 执行 PocketJS 官方脚本与 Web 开发主机。
-- ESP-IDF `>=6.0,<6.2`（官方 PocketJS ESP-IDF 组件要求，已在 6.1 验证）。
-- Xtensa Rust 工具链：`esp-rs/rust-build` 的 `v1.97.0.0`，仅升级组件、重建原生归档时需要。
-- [uv](https://docs.astral.sh/uv/) 与 Python ≥ 3.10：PC 侧工具（`pc/`）需要，第三方依赖是 `hidapi` 与 `customtkinter`。
-- 微雪 ESP32-S3-Touch-LCD-1.69 开发板。
+环境要求：Node.js 18+、pnpm、Bun、ESP-IDF（>=6.0,<6.2）、Python 3.10+ 与 uv。
 
-官方 ESP-IDF 组件与 ESP32-S3 原生归档固定在 `firmware/components/`，编译器与框架固定在 `ui/vendor/pocketjs/` 快照内；
-日常构建不下载组件、不需要 Rust、不依赖外部 checkout（`POCKETJS_ROOT` 仅在重建快照或原生归档时作对照路径）。
-
-## 开发与构建
-
-在仓库根目录执行：
+### 1. 前端 UI 开发与预览
 
 ```powershell
+# 安装依赖
 pnpm install
-pnpm run lint
+
+# 契约检查与编译
 pnpm run check
 pnpm run compile
-pnpm run build
+
+# 启动本地触摸预览（访问 http://127.0.0.1:8130）
 pnpm run dev
 ```
 
-`check`、`compile`、`build` 调用官方 `@pocketjs/framework` 的 `tools/pocket.ts` 并自动传入 `firmware/pocket.host.json`；
-`dev` 编译后启动触摸预览页（`ui/preview/`，240 × 280，触摸输入）。
-输出位于 `ui/dist/`（`remapad-ui.js`、`remapad-ui.pak`、`remapad-ui.pocket`），都是生成产物，不手动编辑或提交。
-
-载入 ESP-IDF 环境后构建固件：
+### 2. 固件编译与烧录
 
 ```powershell
+# 打包前端应用为 .pocket 镜像
+pnpm run build
+
+# 进入固件目录并构建
 cd firmware
 idf.py set-target esp32s3
 idf.py build
-idf.py -p COM3 flash monitor
+
+# 烧录并打开串口监视器
+idf.py -p COMx flash monitor
 ```
 
-先执行 `pnpm run build` 再 `idf.py build`：有 `remapad-ui.pocket` 时 CMake 走官方 `pocketjs_embed_package`，不需要 Bun。
-升级 `firmware/components/` 中的组件后，按 [patches/README.md](patches/README.md) 核对 QuickJS 校验值并重建原生归档。
+### 3. PC 侧辅助工具
 
-PC 侧连接工具在 `pc/` 下由 uv 运行：`uv run python remapadctl.py -p COM3` 是命令行与桥接，
-`uv run python remapadgui.py` 是同一套会话的图形界面（细节见 [pc/README.md](pc/README.md)）。
+```powershell
+cd pc
+# 运行命令行桥接控制台
+uv run python remapadctl.py -p COMx
+# 运行图形化操作界面
+uv run python remapadgui.py
+```
 
-## 分区与内存
+更多环境搭建、调试排错与详细开发流程参见 [新手上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)。
 
-`firmware/partitions.csv` 为 OTA 预留终局布局（[ADR 0009](docs/adr/0009-ota-storage-flash-layout.md)）：
-NVS、PHY 初始化、4 MB `ota_0`/`ota_1` 双应用分区、`otadata` 和约 7.9 MB `storage` 通用存储区；
-`.pocket` 嵌入应用镜像，不需要独立资源分区。
+## 文档索引
 
-OTA 升级经 USB-Serial/JTAG 把 `firmware/build/remapad_firmware.bin` 写进非运行分区，校验通过后切启动分区并重启；
-新镜像要过「UI 首帧成功 + 开机 30 秒」的健康门槛才被确认，否则下次重启回退旧镜像（[ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)）。
-操作步骤见 [GETTING-STARTED.md](docs/GETTING-STARTED.md)。
-
-8 MB Octal PSRAM 用于 PocketJS guest 与渲染暂存。
-
-## 进一步阅读
-
-- [产品愿景](docs/VISION.md)
-- [系统架构](docs/ARCHITECTURE.md)
-- [核心抽象](docs/ABSTRACTIONS.md)
-- [上手指南](docs/GETTING-STARTED.md)
-- [目标硬件](docs/hardware.md)
-- [架构决策记录](docs/adr/README.md)
-- [PocketJS ESP-IDF 官方指南](https://pocketjs.dev/docs/esp-idf/)
-- [PocketJS 官方 ESP-IDF README](https://github.com/pocket-stack/pocketjs/blob/main/hosts/esp-idf/README.md)
+- [产品愿景与系统边界 (docs/VISION.md)](docs/VISION.md)：项目定位与设计目标
+- [系统架构与技术实现 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)：双工作区数据流与设计方案
+- [核心概念与领域抽象 (docs/ABSTRACTIONS.md)](docs/ABSTRACTIONS.md)：渲染模型与软硬件契约
+- [新手开发与上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)：开发环境与常见问题排查
+- [控制器协议规范 (docs/controller.md)](docs/controller.md)：USB、NS2 报告与 BLE 细节
+- [目标硬件技术参考 (docs/hardware.md)](docs/hardware.md)：芯片引脚、外设与电气特性
+- [测试策略与回归规则 (docs/TESTING.md)](docs/TESTING.md)：自动化测试与用例规范
+- [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：历史架构决策与选型取舍
