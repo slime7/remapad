@@ -89,7 +89,7 @@ export function BottomBar() {
   return (
     <View class="absolute left-[8] right-[8] bottom-[8] h-[64] z-40 overflow-hidden">
       {/* 底部异形圆角矢量背景贴图（256×64，两边各留 16px 透明边距，背景为 tertiary #4eb079） */}
-      <Image src="bottom-bar.svg" class="absolute left-[-16] top-0 w-[256] h-[64]" />
+      <Image src="dock.svg" class="absolute left-[-16] top-0 w-[256] h-[64]" />
 
       {/* 优先级 1：OTA 进度条 */}
       <View class={isOta() ? 'w-full h-full flex-col items-center justify-center px-4 gap-2' : 'hidden'}>

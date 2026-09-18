@@ -245,31 +245,31 @@ export default function App() {
         >
           {/* 中间主四叶草外框背景 (几何中心 x: 120, y: 104) */}
           <Image
-            src="clover.svg"
+            src="main.svg"
             class="absolute left-[-8] top-[-24] w-[256] h-[256]"
           />
 
           {/* 远左侧相邻四叶草背景 (几何中心 x: -280, y: 104，滑动向右时无缝衔接) */}
           <Image
-            src="clover.svg"
+            src="main.svg"
             class="absolute left-[-408] top-[-24] w-[256] h-[256]"
           />
 
           {/* 左侧相邻四叶草背景 (几何中心 x: -80, y: 104) */}
           <Image
-            src="clover.svg"
+            src="main.svg"
             class="absolute left-[-208] top-[-24] w-[256] h-[256]"
           />
 
           {/* 右侧相邻四叶草背景 (几何中心 x: 320, y: 104) */}
           <Image
-            src="clover.svg"
+            src="main.svg"
             class="absolute left-[192] top-[-24] w-[256] h-[256]"
           />
 
           {/* 远右侧相邻四叶草背景 (几何中心 x: 520, y: 104，滑动向左时无缝衔接) */}
           <Image
-            src="clover.svg"
+            src="main.svg"
             class="absolute left-[392] top-[-24] w-[256] h-[256]"
           />
 
