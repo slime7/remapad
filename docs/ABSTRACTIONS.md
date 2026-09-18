@@ -381,15 +381,19 @@ sequenceDiagram
 | `PAD_BTN_SQUARE`（□ 左） | X | Square | `NS2_BTN_Y` |
 | `PAD_BTN_L1` / `PAD_BTN_R1` | LB / RB | L1 / R1 | `NS2_BTN_L` / `NS2_BTN_R` |
 | `PAD_BTN_L3` / `PAD_BTN_R3` | 左右摇杆按下 | L3 / R3 | `NS2_BTN_LSTICK` / `NS2_BTN_RSTICK` |
-| `PAD_BTN_TOUCHPAD`（触摸板按下） | View（select） | 触摸板按下 | `NS2_BTN_MINUS`（减号） |
+| `PAD_BTN_TOUCHPAD`（左侧小键） | View（select） | SHARE / Create | `NS2_BTN_MINUS`（减号） |
 | `PAD_BTN_OPT`（选项） | Menu | Options | `NS2_BTN_PLUS`（加号） |
 | `PAD_BTN_HOME`（主页） | 西瓜键 | PS 键 | `NS2_BTN_HOME` |
-| `PAD_BTN_SHARE`（分享） | 分享键（Series 手柄） | Create / 分享 | `NS2_BTN_CAPTURE`（截图） |
+| `PAD_BTN_SHARE`（分享类） | 分享键（Series 手柄） | 触摸板按下 | `NS2_BTN_CAPTURE`（截图） |
 | `PAD_BTN_MUTE`（静音） | 无 | DualSense 静音键 | `NS2_BTN_C`（C 键） |
 | `PAD_BTN_DPAD_*` | 十字键 | 十字键（帽子开关展开） | `NS2_BTN_DPAD_*` |
 | `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键 / 背键 | DualSense Edge 背键（L4 / R4） | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
 | `PAD_TRIGGER_L2` / `PAD_TRIGGER_R2` 模拟量 ≥ 2048（50%） | LT / RT | L2 / R2 | `NS2_BTN_ZL` / `NS2_BTN_ZR` |
 | `PAD_AXIS_LX` / `LY` / `RX` / `RY`（0-4095，中位 2048） | 左右摇杆（有符号 16 位） | 左右摇杆（单字节） | 12 位打包的摇杆字段 |
+
+左侧小键与分享类两颗位同帧双置时只出减号（`ns2_from_pad` 折掉截图位）：串流虚拟手柄
+（Sunshine/Moonlight）把一颗 View 键双写成 SHARE+触摸板按下以兼容 PC 游戏，直译会让
+一次按键在主机侧同时点亮减号与截图。
 
 家族表按系列拆在 `firmware/main/pad/layouts/` 下，契约与注册表是 `pad/layout.h` / `pad/layout.c`。
 取舍见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)。表按（家族、Report ID、连接方式、PID）定位偏移，同一个 Report ID 下的不同型号按 PID 分行：

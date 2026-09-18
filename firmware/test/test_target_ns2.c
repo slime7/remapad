@@ -137,6 +137,20 @@ static void back_buttons_fold_into_gl_and_gr(void)
     expect_buttons(PAD_BTN_R5, 0x04, 2);
 }
 
+/** 串流虚拟手柄（Sunshine/Moonlight）把一颗 View 键双写成 SHARE+触摸板按下
+ *  两个 DS 按钮（PC 游戏兼容做法），直译到 NS2 会让一次按键同时点亮减号与
+ *  截图。同帧双置按位置语义只出减号。 */
+static void share_and_touchpad_in_one_frame_only_minus(void)
+{
+    prepare();
+    pad_state_t pad;
+    pad_state_defaults(&pad);
+    pad.buttons = PAD_BTN_SHARE | PAD_BTN_TOUCHPAD;
+    target_send_pad(&pad);
+    CHECK_EQ(s_capture.body[0x03], 1u << 6); /* 减号亮 */
+    CHECK_EQ(s_capture.body[0x04], 0x00);    /* 截图不亮 */
+}
+
 static void analog_triggers_digitize_at_half(void)
 {
     pad_state_t pad;
@@ -518,6 +532,8 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                  face_buttons_keep_position_semantics},
                 {"肩键、方向键、选择类与系统键", shoulders_dpad_and_system_keys},
                 {"四颗背键按侧折进 GL / GR", back_buttons_fold_into_gl_and_gr},
+                {"SHARE 与触摸板同帧双置只出减号（串流一颗键双写）",
+                 share_and_touchpad_in_one_frame_only_minus},
                 {"扳机按 50% 阈值数字化成 ZL / ZR", analog_triggers_digitize_at_half},
                 {"摇杆原样进报文且中位正确", sticks_keep_values_and_center},
                 {"目标事实折进电量字节", target_facts_fold_into_power_byte},

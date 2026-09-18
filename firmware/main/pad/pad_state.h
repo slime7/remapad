@@ -78,14 +78,15 @@ enum {
     PAD_BTN_R1 = 1u << 5,
     PAD_BTN_L3 = 1u << 6,
     PAD_BTN_R3 = 1u << 7,
-    /** 触摸板按下：Xbox 的 View（select）与 PS 的触摸板按下都落在这里，
-     *  目标侧作减号。 */
+    /** 左侧小键（View 类）：Xbox 的 View、DS3 的 Select 与 DS4/DS5 的
+     *  SHARE/Create 都落在这里，目标侧作减号。 */
     PAD_BTN_TOUCHPAD = 1u << 8,
     /** 选项键：Xbox 的 Menu 与 PS 的 Options 都落在这里，目标侧作加号。 */
     PAD_BTN_OPT = 1u << 9,
     /** 主页键：Xbox 的西瓜键与 PS 的 PS 键都落在这里。 */
     PAD_BTN_HOME = 1u << 10,
-    /** 分享键：Xbox 的分享键与 PS 的 Create 都落在这里，目标侧作截图。 */
+    /** 分享类：DS4/DS5 的触摸板按下与 Xbox Series 的分享键都落在这里，
+     *  目标侧作截图。 */
     PAD_BTN_SHARE = 1u << 11,
     PAD_BTN_DPAD_UP = 1u << 12,
     PAD_BTN_DPAD_DOWN = 1u << 13,

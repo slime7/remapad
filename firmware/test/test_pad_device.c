@@ -115,7 +115,7 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     CHECK_EQ(state.family, PAD_FAMILY_PS);
     CHECK_EQ(state.buttons,
              (uint32_t)(PAD_BTN_CROSS | PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_OPT | PAD_BTN_HOME |
-                        PAD_BTN_TOUCHPAD));
+                        PAD_BTN_SHARE));
     CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_CENTER);
     CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
     CHECK_EQ(state.trigger[PAD_TRIGGER_R2], PAD_AXIS_MIN);
@@ -129,8 +129,8 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     /* DualSense 在 PS 键与触摸板按下之外还多一个静音位（byte7 bit2）。 */
     report.data[7] = 0x07;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.buttons & (PAD_BTN_HOME | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE),
-             (uint32_t)(PAD_BTN_HOME | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
+    CHECK_EQ(state.buttons & (PAD_BTN_HOME | PAD_BTN_SHARE | PAD_BTN_MUTE),
+             (uint32_t)(PAD_BTN_HOME | PAD_BTN_SHARE | PAD_BTN_MUTE));
     report.data[7] = 0x03;
 
     /* 帽子开关：向上时只出方向键上。 */
@@ -369,7 +369,7 @@ static void dualsense_usb_parses_by_pid(void)
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons,
              (uint32_t)(PAD_BTN_CROSS | PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_OPT | PAD_BTN_HOME |
-                        PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
+                        PAD_BTN_SHARE | PAD_BTN_MUTE));
 
     /* 摇杆从第 2 字节、扳机从第 6 字节起（序号字节在扳机之后）。 */
     report.data[1] = 0x00; /* LX 全左 */
@@ -461,7 +461,7 @@ static void dualsense_bt_buttons_map_by_position(void)
     report.data[10] = 0x73;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_SHARE | PAD_BTN_OPT | PAD_BTN_L3));
+             (uint32_t)(PAD_BTN_L1 | PAD_BTN_R1 | PAD_BTN_TOUCHPAD | PAD_BTN_OPT | PAD_BTN_L3));
     report.data[10] = 0x80;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_R3);
@@ -470,7 +470,7 @@ static void dualsense_bt_buttons_map_by_position(void)
     report.data[10] = 0x00;
     report.data[11] = 0x07;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_HOME | PAD_BTN_TOUCHPAD | PAD_BTN_MUTE));
+    CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_HOME | PAD_BTN_SHARE | PAD_BTN_MUTE));
 
     /* 帽子开关：向上只出方向键上，右上同时置两位。 */
     report.data[11] = 0x00;
@@ -533,13 +533,73 @@ static void dualsense_edge_back_buttons_map_to_gl_gr(void)
     report.data[11] = 0xC7;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_L4 | PAD_BTN_R4 | PAD_BTN_HOME | PAD_BTN_TOUCHPAD |
+             (uint32_t)(PAD_BTN_L4 | PAD_BTN_R4 | PAD_BTN_HOME | PAD_BTN_SHARE |
                         PAD_BTN_MUTE));
 
     /* Fn 键（bit4 / bit5）本轮不映射：按住不出任何按键位。 */
     report.data[11] = 0x30;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons, 0);
+}
+
+/** DS4 的 SHARE 与 DS5 的 Create 是左侧小键，与 Xbox 的 View、DS3 的 Select
+ *  同位：按位置语义归一为减号位（PAD_BTN_TOUCHPAD）；触摸板按下作为中央
+ *  额外键归一为截图位（PAD_BTN_SHARE）。此前 SHARE 按功能语义落在截图位，
+ *  串流链路（Sunshine 把一颗 View 键双写成 SHARE+触摸板按下）转发到主机时
+ *  一次按键同时点亮减号与截图，且没有触摸板动作的源手柄在主机侧按不出减号。
+ *  有线与蓝牙、DS4 与 DS5 共用一张位图，四个形态逐一锁位。 */
+static void ps_share_and_touchpad_map_by_position(void)
+{
+    pad_report_t report;
+    pad_state_t state;
+
+    /* DS4 有线（0x05C4）：按钮区从 b5 起，SHARE 在 b6 bit4、触摸板在 b7 bit1。 */
+    memset(&report, 0, sizeof(report));
+    report.family = PAD_FAMILY_PS;
+    report.conn = PAD_CONN_USB;
+    report.vid = 0x054C;
+    report.pid = 0x05C4;
+    report.report_id = 0x01;
+    report.len = 64;
+    report.data[0] = 0x01;
+    report.data[5] = 0x08; /* 帽子开关松开 */
+    report.data[6] = 0x10; /* SHARE */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_TOUCHPAD);
+    report.data[6] = 0x00;
+    report.data[7] = 0x02; /* 触摸板按下 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_SHARE);
+
+    /* DS4 蓝牙（0x11）：按钮区整体后移两位（b8 bit4 / b9 bit1）。 */
+    report = dualshock4_bt_report();
+    report.data[8] = 0x10;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_TOUCHPAD);
+    report.data[8] = 0x00;
+    report.data[9] = 0x02;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_SHARE);
+
+    /* DualSense 有线：按钮区从 b8 起（b9 bit4 = Create、b10 bit1 = 触摸板）。 */
+    report = dualsense_usb_report();
+    report.data[9] = 0x10;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_TOUCHPAD);
+    report.data[9] = 0x00;
+    report.data[10] = 0x02;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_SHARE);
+
+    /* DualSense 蓝牙（0x31）：整体再后移一字节（b10 bit4 / b11 bit1）。 */
+    report = dualsense_bt_report();
+    report.data[10] = 0x10;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_TOUCHPAD);
+    report.data[10] = 0x00;
+    report.data[11] = 0x02;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_SHARE);
 }
 
 /**
@@ -641,6 +701,8 @@ HOST_TEST_SUITE(suite_pad_device, "pad_device",
                  dualsense_bt_sticks_triggers_and_motion},
                 {"DualSense Edge 背键能当 GL / GR 用",
                  dualsense_edge_back_buttons_map_to_gl_gr},
+                {"PS 的 SHARE/Create 与触摸板按位置归一（左小键 → 减号、触摸板 → 截图）",
+                 ps_share_and_touchpad_map_by_position},
                 {"未登记耳机偏移的行不上报耳机状态",
                  unregistered_headset_row_reports_nothing},
                 {"DualSense 蓝牙耳机状态按第 55 字节解析",

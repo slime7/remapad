@@ -29,10 +29,10 @@ static const struct {
     {PAD_BTN_R1, NS2_BTN_R},
     {PAD_BTN_L3, NS2_BTN_LSTICK},
     {PAD_BTN_R3, NS2_BTN_RSTICK},
-    {PAD_BTN_TOUCHPAD, NS2_BTN_MINUS}, /* 触摸板按下 / View → 减号 */
+    {PAD_BTN_TOUCHPAD, NS2_BTN_MINUS}, /* 左侧小键（View / Select / SHARE / Create）→ 减号 */
     {PAD_BTN_OPT, NS2_BTN_PLUS},       /* Options / Menu → 加号 */
     {PAD_BTN_HOME, NS2_BTN_HOME},      /* PS 键 / 西瓜键 → Home */
-    {PAD_BTN_SHARE, NS2_BTN_CAPTURE},  /* 分享 / Create → 截图 */
+    {PAD_BTN_SHARE, NS2_BTN_CAPTURE},  /* 分享类（触摸板按下 / Series 分享键）→ 截图 */
     {PAD_BTN_DPAD_UP, NS2_BTN_DPAD_UP},
     {PAD_BTN_DPAD_DOWN, NS2_BTN_DPAD_DOWN},
     {PAD_BTN_DPAD_LEFT, NS2_BTN_DPAD_LEFT},
@@ -61,8 +61,15 @@ static void ns2_set_facts(const pad_target_facts_t *facts)
 static void ns2_from_pad(const pad_state_t *pad, ns2_controller_state_t *out)
 {
     ns2_state_defaults(out);
+    /* SHARE 与触摸板同帧双置：串流虚拟手柄（Sunshine/Moonlight）把一颗 View
+     * 键双写成 SHARE+触摸板按下以兼容 PC 游戏，直译到 NS2 会让一次按键同时
+     * 点亮减号与截图——按位置语义只保留减号。 */
+    uint32_t buttons = pad->buttons;
+    if ((buttons & (PAD_BTN_SHARE | PAD_BTN_TOUCHPAD)) == (PAD_BTN_SHARE | PAD_BTN_TOUCHPAD)) {
+        buttons &= ~PAD_BTN_SHARE;
+    }
     for (size_t i = 0; i < sizeof(s_button_map) / sizeof(s_button_map[0]); i++) {
-        if ((pad->buttons & s_button_map[i].pad) != 0) {
+        if ((buttons & s_button_map[i].pad) != 0) {
             out->buttons |= s_button_map[i].ns2;
         }
     }

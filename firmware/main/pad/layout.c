@@ -12,12 +12,16 @@ const uint32_t pad_xbox_btn_map[16] = {
     PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_SQUARE, PAD_BTN_TRIANGLE,
 };
 
+/** PS 家族位图（DS4/DS5 各形态共用，DS3 另表）：DS4 的 SHARE 与 DS5 的 Create
+ *  是左侧小键，与 Xbox 的 View、DS3 的 Select 同位，按位置语义归一为减号位；
+ *  触摸板按下作为中央额外键归一为截图位——跨家族一致，减号的使用频率高于
+ *  截图，交给每只手柄都有的物理小键。 */
 const uint32_t pad_ps_btn_map[24] = {
     0, 0, 0, 0,
     PAD_BTN_SQUARE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_TRIANGLE,
     PAD_BTN_L1, PAD_BTN_R1, 0, 0,
-    PAD_BTN_SHARE, PAD_BTN_OPT, PAD_BTN_L3, PAD_BTN_R3,
-    PAD_BTN_HOME, PAD_BTN_TOUCHPAD, PAD_BTN_MUTE, 0,
+    PAD_BTN_TOUCHPAD, PAD_BTN_OPT, PAD_BTN_L3, PAD_BTN_R3,
+    PAD_BTN_HOME, PAD_BTN_SHARE, PAD_BTN_MUTE, 0,
     0, 0, PAD_BTN_L4, PAD_BTN_R4,
 };
 
