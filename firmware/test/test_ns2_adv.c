@@ -2,8 +2,9 @@
  * NS2 广播载荷与广播策略（ns2_adv.c）：厂商数据里的状态位是主机唯一的唤醒
  * 判据。三种形态的字节在这里钉死——状态位或主机地址写错一位，主机就认不出
  * 这台手柄；策略部分——没有被请求连接就静默（上电与主机睡下都不发信号）、
- * 配对流程发发现广播、连接窗口内已配对发回连形态、唤醒窗口内已配对发唤醒
- * 形态、调试页 HOME 按键按主机是否在线分流、主机注册证据的判定——同样在这里定死。
+ * 配对流程发发现广播、窗口形态按组装参数分时（信号搜索先 3 秒唤醒突发随后
+ * 回连、断连回连全程回连形态不带突发、HOME 唤醒窗口全程唤醒）、调试页 HOME
+ * 按键按主机是否在线分流、主机注册证据的判定——同样在这里定死。
  *
  * 期望值取自真机 Pro Controller 2 抓包（ndeadly/switch2_controller_research
  * 的 reconnect / wake 录制）：回连状态位 0x00，唤醒状态位 0x81，两者都
@@ -105,7 +106,7 @@ static void mode_choice_follows_window(void)
     CHECK_EQ(ns2_adv_choose_mode(true, false, NULL, t0), NS2_ADV_OFF);
 
     /* 配对流程优先：要配的是新主机，发现广播不带旧主机的地址。 */
-    ns2_adv_window_open(&win, NS2_ADV_REQ_CONNECT, t0);
+    ns2_adv_window_open(&win, &NS2_ADV_SIGNAL_SEARCH, t0);
     CHECK_EQ(ns2_adv_choose_mode(true, true, &win, t0), NS2_ADV_DISCOVERY);
     CHECK_EQ(ns2_adv_choose_mode(false, true, &win, t0), NS2_ADV_DISCOVERY);
 
@@ -124,15 +125,38 @@ static void mode_choice_follows_window(void)
     CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0 + NS2_ADV_CONNECT_WINDOW_US),
              NS2_ADV_OFF);
 
-    /* 唤醒窗口：已配对发唤醒形态把休眠主机叫起来；未配对没有主机可唤醒，
-     * 退化为发现广播。 */
-    ns2_adv_window_open(&win, NS2_ADV_REQ_WAKE, t0);
+    /* 唤醒窗口（全程唤醒突发）：已配对发唤醒形态把休眠主机叫起来；未配对
+     * 没有主机可唤醒，退化为发现广播。 */
+    ns2_adv_window_open(&win, &NS2_ADV_SIGNAL_WAKE, t0);
     CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0), NS2_ADV_WAKE);
     CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0), NS2_ADV_DISCOVERY);
 
     /* 窗口到期即静默。 */
     CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_WAKE_WINDOW_US),
              NS2_ADV_OFF);
+}
+
+/** 断连回连信号（组装参数不带唤醒突发）：窗口内全程回连形态，绝不发 0x81
+ *  ——用户主动休眠主机后链路断开，设备自动回连不能把它立刻叫醒。 */
+static void reconnect_signal_never_wakes(void)
+{
+    ns2_adv_window_t win = {0};
+    const int64_t t0 = 2 * 1000 * 1000LL;
+    ns2_adv_window_open(&win, &NS2_ADV_SIGNAL_RECONNECT, t0);
+
+    CHECK_EQ(win.burst_us, 0);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0), NS2_ADV_RECONNECT);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_WAKE_BURST_US - 1),
+             NS2_ADV_RECONNECT);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_CONNECT_WINDOW_US / 2),
+             NS2_ADV_RECONNECT);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_CONNECT_WINDOW_US - 1),
+             NS2_ADV_RECONNECT);
+    CHECK_EQ(ns2_adv_choose_mode(true, false, &win, t0 + NS2_ADV_CONNECT_WINDOW_US),
+             NS2_ADV_OFF);
+
+    /* 未配对身份没有主机可回连，窗口内照旧退化为发现广播等搜索。 */
+    CHECK_EQ(ns2_adv_choose_mode(false, false, &win, t0), NS2_ADV_DISCOVERY);
 }
 
 static void manufacturer_data_offsets(void)
@@ -197,35 +221,39 @@ static void host_mac_prefers_last_connected_address(void)
     CHECK(ns2_adv_choose_host_mac(NULL, NULL, 0) == NULL);
 }
 
-/** 广播窗口的有效期：连接键与唤醒键各自取自己的时长，末微秒仍算窗口内，
- *  到期与「主机连上就收窗」都立刻失效——主机随后睡下时不能再被叫醒。 */
-static void window_lifetime_follows_request(void)
+/** 广播窗口的有效期与分时参数都来自组装信号：各标准信号各取自己的时长，
+ *  末微秒仍算窗口内，到期与「主机连上就收窗」都立刻失效——主机随后睡下时
+ *  不能再被叫醒。 */
+static void window_lifetime_follows_signal(void)
 {
     ns2_adv_window_t win = {0};
     const int64_t t0 = 5 * 1000 * 1000LL;
 
-    /* 收窗状态：没有窗口，也没有请求来源。 */
+    /* 收窗状态：没有窗口。 */
     CHECK(!ns2_adv_window_active(&win, t0));
     CHECK(!ns2_adv_window_active(NULL, t0));
 
-    /* 连接键开窗：30 秒。 */
-    ns2_adv_window_open(&win, NS2_ADV_REQ_CONNECT, t0);
-    CHECK_EQ(win.request, NS2_ADV_REQ_CONNECT);
+    /* 连接键信号搜索：30 秒，前 3 秒唤醒突发。 */
+    ns2_adv_window_open(&win, &NS2_ADV_SIGNAL_SEARCH, t0);
+    CHECK_EQ(win.until_us - win.opened_at_us, NS2_ADV_CONNECT_WINDOW_US);
+    CHECK_EQ(win.burst_us, NS2_ADV_WAKE_BURST_US);
     CHECK(ns2_adv_window_active(&win, t0));
     CHECK(ns2_adv_window_active(&win, t0 + NS2_ADV_CONNECT_WINDOW_US - 1));
     CHECK(!ns2_adv_window_active(&win, t0 + NS2_ADV_CONNECT_WINDOW_US));
 
-    /* HOME 开窗：10 秒，比连接窗口短。 */
-    ns2_adv_window_open(&win, NS2_ADV_REQ_WAKE, t0);
-    CHECK_EQ(win.request, NS2_ADV_REQ_WAKE);
+    /* HOME 唤醒：10 秒全程唤醒突发，比连接窗口短。 */
+    ns2_adv_window_open(&win, &NS2_ADV_SIGNAL_WAKE, t0);
+    CHECK_EQ(win.until_us - win.opened_at_us, NS2_ADV_WAKE_WINDOW_US);
+    CHECK_EQ(win.burst_us, NS2_ADV_WAKE_WINDOW_US);
     CHECK(ns2_adv_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US - 1));
     CHECK(!ns2_adv_window_active(&win, t0 + NS2_ADV_WAKE_WINDOW_US));
 
-    /* 再按一次连接键：按新请求重新计时（到期时刻从再按的时刻往后算 30 秒），
-     * 并把窗口时长换成连接键的。 */
+    /* 断连回连：同为 30 秒但不带唤醒突发；重新开窗按新信号换算并重新计时
+     * （到期时刻从再开的时刻往后算 30 秒）。 */
     const int64_t t1 = t0 + NS2_ADV_WAKE_WINDOW_US;
-    ns2_adv_window_open(&win, NS2_ADV_REQ_CONNECT, t1);
-    CHECK_EQ(win.request, NS2_ADV_REQ_CONNECT);
+    ns2_adv_window_open(&win, &NS2_ADV_SIGNAL_RECONNECT, t1);
+    CHECK_EQ(win.until_us - win.opened_at_us, NS2_ADV_CONNECT_WINDOW_US);
+    CHECK_EQ(win.burst_us, 0);
     CHECK(ns2_adv_window_active(&win, t0 + NS2_ADV_CONNECT_WINDOW_US));
     CHECK(ns2_adv_window_active(&win, t1 + NS2_ADV_WAKE_WINDOW_US));
     CHECK(!ns2_adv_window_active(&win, t1 + NS2_ADV_CONNECT_WINDOW_US));
@@ -265,8 +293,9 @@ HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"没被请求连接就静默，窗口内才发对应形态", mode_choice_follows_window},
                 {"休眠链路按特性启用判定", dormant_link_follows_feature_enable},
                 {"主机注册按地址、配对握手或特性启用判定", host_registration_follows_evidence},
+                {"断连回连窗口全程回连形态不发唤醒", reconnect_signal_never_wakes},
                 {"回连广播用主机最近一次连接的地址", host_mac_prefers_last_connected_address},
-                {"连接窗口与唤醒窗口各按自己的时长收窗", window_lifetime_follows_request},
+                {"窗口时长与唤醒突发随组装信号而定", window_lifetime_follows_signal},
                 {"HOME 按键按主机在线与否分流", home_key_follows_link_state},
                 {"按住 HOME 只触发一次唤醒", home_key_fires_on_press_edge},
                 {"厂商数据偏移与尾部标志", manufacturer_data_offsets});

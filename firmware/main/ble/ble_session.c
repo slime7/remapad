@@ -261,9 +261,10 @@ static void factory_init(void)
 /** 本次上电已执行的休眠断开次数（上限 NS2_DORMANT_MAX_DROPS）。 */
 static uint8_t s_dormant_drops;
 
-/** 广播窗口：连接键（屏幕「连接」、PWR 长按）与唤醒键（调试页 HOME 在未
- *  连接时）开窗，主机连上或窗口到期收窗。设备只在窗口开着或配对流程里广播
- *  ——上电与断连都静默，与真机「不按键就不发信号」一致（见 ADR 0038）。 */
+/** 广播窗口：各情况按组装信号开窗（连接键与开机/Dock 的信号搜索带唤醒突发、
+ *  断连回连与休眠看门狗重连只发回连形态、HOME 唤醒窗口全程唤醒），主机连上
+ *  或窗口到期收窗。设备只在窗口开着或配对流程里广播——不被请求就静默
+ *  （见 ADR 0038）。 */
 static ns2_adv_window_t s_adv_win;
 static int64_t s_pairing_until_us;
 static bool s_user_explicit_disconnect;
@@ -394,7 +395,7 @@ void ns2_session_connect(void)
         ns2_session_start_pairing_mode();
         return;
     }
-    ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, esp_timer_get_time());
+    ns2_adv_window_open(&s_adv_win, &NS2_ADV_SIGNAL_SEARCH, esp_timer_get_time());
     ESP_LOGI(TAG, "connect: advertising for %llds",
              (long long)(NS2_ADV_CONNECT_WINDOW_US / 1000000LL));
     apply_advertising();
@@ -431,7 +432,7 @@ void ns2_session_wake_request(void)
     /* 唤醒是显式请求：开窗发唤醒形态 0x81（窗口到期即静默，主机随后睡下不会
      * 再被叫醒）；已连接就断开，让主机按唤醒广播重新连上来（从握把/顺序页
      * 连上来的会话不采用输入报文，靠这次重连纠正）。 */
-    ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_WAKE, esp_timer_get_time());
+    ns2_adv_window_open(&s_adv_win, &NS2_ADV_SIGNAL_WAKE, esp_timer_get_time());
     if (ble_controller_connected()) {
         ESP_LOGI(TAG, "wake: dropping current link to force a reconnect");
         ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
@@ -725,11 +726,13 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
         apply_advertising();
         return;
     }
-    /* 主机断开连接（主机休眠或移开）：启动 30 秒回连搜索窗口，
-     * 30 秒内未重新连上则彻底关闭发射进入静默，需要用户主动重开。 */
+    /* 主机断开连接（主机休眠或移开）：组装断连回连信号开窗——30 秒内只发
+     * 0x00 回连形态、不带唤醒突发，链路断开可能正是用户主动休眠主机，回连
+     * 不得把它立刻叫起来；30 秒未重新连上则彻底关闭发射进入静默，需要用户
+     * 主动重开。 */
     if (!s_ses.pairing_mode) {
         const int64_t now = esp_timer_get_time();
-        ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, now);
+        ns2_adv_window_open(&s_adv_win, &NS2_ADV_SIGNAL_RECONNECT, now);
         ESP_LOGI(TAG, "disconnected (conn=%u, identity=%s): opening 30s reconnect window",
                  conn_handle, ns2_identity_name(identity));
     }
@@ -1580,10 +1583,9 @@ void ns2_session_tick(void)
 
     /* 休眠看门狗：已订阅输入却始终没启用特性（ns2_adv_dormant_link）持续
      * NS2_DORMANT_TICKS 秒的连接，主机永远不会采用它的输入——断开并开一次
-     * 连接窗口，逼主机按会启用特性的回连路径重连。主机此刻就在线（它是醒
-     * 着的），因此用回连形态而不是唤醒形态，免得把可能刚睡下的主机叫醒。
-     * 手动配对模式下不干预
-     * （此时由用户主导流程）。 */
+     * 断连回连信号窗口（只发回连形态），逼主机按会启用特性的回连路径重连。
+     * 主机此刻就在线（它是醒着的），不带唤醒突发，免得把可能刚睡下的主机
+     * 叫醒。手动配对模式下不干预（此时由用户主导流程）。 */
     if (!s_ses.pairing_mode) {
         for (size_t i = 0; i < SESSION_MAX; i++) {
             session_slot_t *ses = &s_ses.sess[i];
@@ -1605,7 +1607,7 @@ void ns2_session_tick(void)
             ESP_LOGW(TAG, "dormant link (conn=%u, features not enabled) -> drop + reconnect "
                      "(attempt %u/%u)", ses->conn_handle,
                      (unsigned)s_dormant_drops, (unsigned)NS2_DORMANT_MAX_DROPS);
-            ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, esp_timer_get_time());
+            ns2_adv_window_open(&s_adv_win, &NS2_ADV_SIGNAL_RECONNECT, esp_timer_get_time());
             ble_controller_disconnect(BLE_CTL_DISCONNECT_USER_TERM);
             break;
         }
@@ -1717,14 +1719,14 @@ static bool apply_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent
     s_ses.pair_online_logged = false;
     s_dormant_drops = 0;
     if (s_ses.synced) {
-        /* 等价于手柄断电再上电：重算出厂块，并直接打开连接窗口——主机照回连
-         * 形态自己连回来，读到的就是新颜色（用户不必再按一次连接键）。
+        /* 等价于手柄断电再上电：重算出厂块，并组装信号搜索信号开窗——主机
+         * 连回来读到的就是新颜色（用户不必再按一次连接键）。
          * 未配对时没有主机可回连，保持静默：设备不被请求连接就不发信号。 */
         s_ses.pairing_mode = false;
         s_pairing_until_us = 0;
         factory_init();
         if (ns2_session_paired()) {
-            ns2_adv_window_open(&s_adv_win, NS2_ADV_REQ_CONNECT, esp_timer_get_time());
+            ns2_adv_window_open(&s_adv_win, &NS2_ADV_SIGNAL_SEARCH, esp_timer_get_time());
         } else {
             ns2_adv_window_close(&s_adv_win);
         }

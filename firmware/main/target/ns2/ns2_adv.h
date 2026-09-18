@@ -18,11 +18,11 @@ extern "C" {
  *   - 唤醒广播：带主机地址，状态位 0x81。
  *
  * 状态位是主机唯一的唤醒判据：0x81 会把休眠中的主机叫起来，0x00 不会。
- * 设备与真机一样不主动发信号：上电、断连（主机睡下）都回到静默，只有用户
- * 按连接键打开连接窗口、或按 HOME 打开唤醒窗口时才广播——连接窗口内已配对
- * 身份发回连形态（主机醒着会自己按它连回来，实机：停在首页、顺序页或刚从
- * 待机醒来都会连），未配对身份发发现广播等主机搜索；唤醒窗口内才发唤醒形态，
- * 把睡下的主机叫起来。策略与取舍见 ADR 0038。
+ * 设备只在被请求后按组装信号广播（ns2_adv_signal_t：窗口时长 + 唤醒突发
+ * 时长）：连接键/开机/Dock 的信号搜索窗口先发 3 秒唤醒突发再转回连形态，
+ * 断连后的自动回连窗口全程回连形态（主机可能刚被用户休眠，不叫醒），HOME
+ * 唤醒窗口全程唤醒形态；窗口内未配对身份一律发发现广播等主机搜索。
+ * 策略与取舍见 ADR 0038。
  */
 
 #define NS2_ADV_PAYLOAD_LEN 31
@@ -40,20 +40,14 @@ typedef enum {
     NS2_ADV_WAKE = 3,      /**< 唤醒广播：请休眠中的主机立即醒来。 */
 } ns2_adv_mode_t;
 
-/** 广播窗口的打开来源：决定窗口内已配对身份发哪一种形态。 */
-typedef enum {
-    NS2_ADV_REQ_CONNECT = 0, /**< 连接键：屏幕「连接」按钮、PWR 长按 3 秒。 */
-    NS2_ADV_REQ_WAKE = 1,    /**< 唤醒键：调试页 HOME 在未连接时按下。 */
-} ns2_adv_request_t;
-
 /** 广播窗口：设备只在被显式请求后的一段时间内广播，真机不开机不发信号。 */
 typedef struct {
-    ns2_adv_request_t request; /**< 最近一次打开窗口的请求。 */
-    int64_t opened_at_us;      /**< 窗口开启时刻（微秒）；0 = 没有窗口。 */
-    int64_t until_us;          /**< 到期时刻（本机时基微秒）；0 = 没有窗口。 */
+    int64_t opened_at_us; /**< 窗口开启时刻（微秒）；0 = 没有窗口。 */
+    int64_t until_us;     /**< 到期时刻（本机时基微秒）；0 = 没有窗口。 */
+    int64_t burst_us;     /**< 开窗后先发唤醒形态的时长（0 = 全程回连形态）。 */
 } ns2_adv_window_t;
 
-/** 连接键窗口时长：主机没在这段时间内连上就静默，想重试再按一次。 */
+/** 连接窗口时长：主机没在这段时间内连上就静默，想重试再按一次。 */
 #define NS2_ADV_CONNECT_WINDOW_US (30 * 1000 * 1000LL)
 
 /** 唤醒突发时长（3秒）：信号搜索启动时前 3 秒发 0x81 唤醒休眠主机，随后切为 0x00 回连。 */
@@ -62,8 +56,34 @@ typedef struct {
 /** 唤醒窗口时长：真机唤醒突发只有约 2 秒，主机扫描窗口远长于它，太短会错过。 */
 #define NS2_ADV_WAKE_WINDOW_US (10 * 1000 * 1000LL)
 
-/** 开窗（重新计时）：重复请求不会把窗口算短，按请求来源取对应时长。 */
-void ns2_adv_window_open(ns2_adv_window_t *win, ns2_adv_request_t request,
+/** 广播信号组装参数：一次「发什么、发多久」的全部决策点。各种信号情况不再
+ *  各设入口，按情况填参数经 ns2_adv_window_open 组装开窗；以后新增信号情况
+ *  只需组合参数调用，不改形态决策逻辑。 */
+typedef struct {
+    int64_t duration_us; /**< 窗口总时长：到期静默。 */
+    int64_t burst_us;    /**< 前置唤醒突发时长：开窗后先发 0x81 叫醒休眠主机，
+                          *  随后转 0x00 回连；0 = 不带突发，全程回连形态。 */
+} ns2_adv_signal_t;
+
+/** 信号搜索：窗口前段发唤醒突发叫醒休眠主机，随后回连等醒着的主机连回来。
+ *  连接键、开机信号搜索与 Dock 点击共用。 */
+#define NS2_ADV_SIGNAL_SEARCH \
+    ((const ns2_adv_signal_t){.duration_us = NS2_ADV_CONNECT_WINDOW_US, \
+                              .burst_us = NS2_ADV_WAKE_BURST_US})
+
+/** 断连回连：主机睡下链路断开后自动开的回连窗口，全程回连形态不带唤醒突发
+ *  ——链路断开可能正是用户主动休眠主机，回连不得把它立刻叫醒。 */
+#define NS2_ADV_SIGNAL_RECONNECT \
+    ((const ns2_adv_signal_t){.duration_us = NS2_ADV_CONNECT_WINDOW_US, .burst_us = 0})
+
+/** 唤醒：HOME 唤醒窗口，整窗发唤醒形态把休眠主机叫起来。 */
+#define NS2_ADV_SIGNAL_WAKE \
+    ((const ns2_adv_signal_t){.duration_us = NS2_ADV_WAKE_WINDOW_US, \
+                              .burst_us = NS2_ADV_WAKE_WINDOW_US})
+
+/** 开窗（重新计时）：按组装信号设定窗口时长与唤醒突发，重复开窗按新信号
+ *  换算并重新计时。 */
+void ns2_adv_window_open(ns2_adv_window_t *win, const ns2_adv_signal_t *signal,
                          int64_t now_us);
 
 /** 收窗：主机连上、用户停止广播、或窗口到期后调用。已收窗时无副作用。 */
@@ -75,10 +95,9 @@ bool ns2_adv_window_active(const ns2_adv_window_t *win, int64_t now_us);
 /** 当前该发的广播形态（纯逻辑，主机端用例钉住）：
  *  - 配对流程中恒发发现广播——要配的是新主机，不能带着旧主机的地址广播；
  *  - 没有窗口就静默（NS2_ADV_OFF），设备不被请求连接时不发信号；
- *  - 连接窗口内：已配对发回连形态（醒着的主机自己连回来），未配对发发现
- *    广播（配对键语义，等主机搜索）；
- *  - 唤醒窗口内：已配对发唤醒形态把休眠主机叫起来；未配对没有主机可唤醒，
- *    退化为发现广播等主机来配。 */
+ *  - 窗口内未配对发发现广播（配对键语义，等主机搜索）；已配对按开窗组装
+ *    参数分时：唤醒突发时长内发唤醒形态（0x81 叫醒休眠主机），之后与不带
+ *    突发的窗口（断连回连）全程发回连形态（醒着的主机自己连回来）。 */
 ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
                                    const ns2_adv_window_t *window, int64_t now_us);
 

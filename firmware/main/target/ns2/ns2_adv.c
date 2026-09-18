@@ -15,25 +15,20 @@ ns2_adv_mode_t ns2_adv_choose_mode(bool paired, bool pairing_requested,
         /* 没有凭证就没有主机可回连或唤醒：发发现广播等主机来配。 */
         return NS2_ADV_DISCOVERY;
     }
-    if (window->request == NS2_ADV_REQ_WAKE) {
-        return NS2_ADV_WAKE;
-    }
-    /* 连接窗口（信号搜索）：已配对身份前 3 秒发 0x81 唤醒突发叫醒休眠主机，
-     * 随后转为 0x00 回连形态等主机连回来。 */
-    if (now_us - window->opened_at_us < NS2_ADV_WAKE_BURST_US) {
+    /* 组装参数的分时：突发时长内发唤醒形态叫醒休眠主机；之后与不带突发
+     * 的窗口（断连回连）全程发回连形态，等醒着的主机自己连回来。 */
+    if (window->burst_us != 0 && now_us - window->opened_at_us < window->burst_us) {
         return NS2_ADV_WAKE;
     }
     return NS2_ADV_RECONNECT;
 }
 
-void ns2_adv_window_open(ns2_adv_window_t *win, ns2_adv_request_t request,
+void ns2_adv_window_open(ns2_adv_window_t *win, const ns2_adv_signal_t *signal,
                          int64_t now_us)
 {
-    const int64_t duration = request == NS2_ADV_REQ_WAKE ? NS2_ADV_WAKE_WINDOW_US
-                                                         : NS2_ADV_CONNECT_WINDOW_US;
-    win->request = request;
     win->opened_at_us = now_us;
-    win->until_us = now_us + duration;
+    win->until_us = now_us + signal->duration_us;
+    win->burst_us = signal->burst_us;
 }
 
 void ns2_adv_window_close(ns2_adv_window_t *win)
