@@ -21,21 +21,18 @@ extern "C" {
 #define HAPTIC_SYNTH_FREQ_DEFAULT_HF 190u
 
 /** 合成参数：两侧（左/右触觉通道）各带低频与高频的振幅（0-255，与私有反馈
- *  的归一强度同刻度）和驱动频率。pulse 是触觉采样的渲染幅度（0-255，0 =
- *  无）：采样按固件里的音色表渲染成节奏幅度后送到这里，两侧叠加高频蜂鸣，
- *  超时自灭收尾。 */
+ *  的归一强度同刻度）和驱动频率。只渲染 0x30 震动载波的两带——触觉采样
+ *  （0x0A 采样流）是主机点播的声音，由板载蜂鸣器发声，不进音圈。 */
 typedef struct {
     uint8_t lf_amp[2];
     uint16_t lf_freq[2];
     uint8_t hf_amp[2];
     uint16_t hf_freq[2];
-    uint8_t pulse;
 } haptic_synth_params_t;
 
 /** 振荡器相位（跨块连续，换参数不重置相位，避免拼接处跳变）。 */
 typedef struct {
     uint32_t phase[2][2];
-    uint32_t pulse_phase;
 } haptic_synth_state_t;
 
 /** 频率落地值：0 取该带缺省，再夹到 [HAPTIC_SYNTH_FREQ_MIN, MAX]。 */

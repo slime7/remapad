@@ -5,7 +5,8 @@ DualSense 插在 PC 上时音频接口由 Windows 持有（usbaudio.sys），触
 后两路（RL/RR，直连左右触觉音圈）放合成正弦——PS5 驱动触觉用的正是这对
 通道。参数来自设备的 FEEDBACK 帧：两带振幅与频率落地值都在固件里算好
 （haptic_synth 同一套刻度），这里只做哑渲染；端点开不起来就回落 HID 震动。
-2026-09-18 实测：共享流 4ch 独立可控、扬声器不漏音。
+触觉采样（0x0A 采样流）不进合成——固件不向桥接渲染采样，FEEDBACK 帧的
+采样字节只供日志展示。2026-09-18 实测：共享流 4ch 独立可控、扬声器不漏音。
 
 用 RawOutputStream 而不是 OutputStream：后者的回调走 numpy 数组，而 numpy
 的原生扩展在会话进程里加载会卡死（cffi/PortAudio 都正常，仅 numpy 如此，
@@ -18,10 +19,8 @@ import math
 import struct
 import threading
 
-#: 与固件 haptic_synth.c 同刻度：amp 255 的 int16 峰值与采样脉冲峰值。
+#: 与固件 haptic_synth.c 同刻度：amp 255 的 int16 峰值。
 AMP_MAX = 24000
-PULSE_AMP = 20000
-PULSE_FREQ = 190.0
 RATE = 48000
 CHANNELS = 4
 #: 频率缺省值（设备发的落地值理论上不为 0，这里兜底）。
@@ -44,11 +43,9 @@ class Ds5HapticsAudio:
             "hf_amp": (0, 0),
             "lf_freq": (FREQ_DEFAULTS[0], FREQ_DEFAULTS[0]),
             "hf_freq": (FREQ_DEFAULTS[1], FREQ_DEFAULTS[1]),
-            "pulse": 0,
         }
         # 每侧两带的振荡器相位（弧度，按 2π 取模防精度漂移）。
         self._phase = [[0.0, 0.0], [0.0, 0.0]]
-        self._pulse_phase = 0.0
         self._stream = None
 
     @property
@@ -87,10 +84,10 @@ class Ds5HapticsAudio:
             self._stream = None
 
     def set_params(self, params: dict) -> None:
-        """吃 link.feedback_params 的解析结果：振幅随两带、频率落地值、采样脉冲。
+        """吃 link.feedback_params 的解析结果：振幅随两带、频率落地值。
 
-        sample 是固件音色表渲染出的当前幅度（0-255，0 = 停顿段）——采样的
-        播放节奏在固件里生成，这里只按幅度哑渲染。"""
+        FEEDBACK 帧的采样字节带原始采样 ID，只供日志展示——固件不向桥接
+        渲染采样，这里不消费它。"""
         lf_freq = params.get("lf_freq") or (FREQ_DEFAULTS[0], FREQ_DEFAULTS[0])
         hf_freq = params.get("hf_freq") or (FREQ_DEFAULTS[1], FREQ_DEFAULTS[1])
         with self._lock:
@@ -99,7 +96,6 @@ class Ds5HapticsAudio:
                 "hf_amp": tuple(params.get("hf_amp") or (0, 0)),
                 "lf_freq": tuple(float(f) or FREQ_DEFAULTS[0] for f in lf_freq),
                 "hf_freq": tuple(float(f) or FREQ_DEFAULTS[1] for f in hf_freq),
-                "pulse": int(params.get("sample") or 0),
             }
 
     @staticmethod
@@ -131,8 +127,6 @@ class Ds5HapticsAudio:
         hf_amp = params["hf_amp"]
         lf_freq = params["lf_freq"]
         hf_freq = params["hf_freq"]
-        pulse_gain = params["pulse"] * PULSE_AMP // 255
-        pulse_step = _TAU * PULSE_FREQ / RATE
         # 每侧两带的增益（int16）与角步进先算好，循环里只剩乘加。
         gains = [[lf_amp[s] * AMP_MAX // 255, hf_amp[s] * AMP_MAX // 255] for s in (0, 1)]
         steps = [[_TAU * lf_freq[s] / RATE, _TAU * hf_freq[s] / RATE] for s in (0, 1)]
@@ -148,9 +142,6 @@ class Ds5HapticsAudio:
                     if gains[side][band] > 0:
                         total += int(gains[side][band] * math.sin(self._phase[side][band]))
                     self._phase[side][band] = (self._phase[side][band] + steps[side][band]) % _TAU
-                if pulse_gain > 0:
-                    total += int(pulse_gain * math.sin(self._pulse_phase))
-                    self._pulse_phase = (self._pulse_phase + pulse_step) % _TAU
                 if total > 32767:
                     total = 32767
                 elif total < -32768:

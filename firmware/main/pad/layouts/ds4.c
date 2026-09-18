@@ -41,7 +41,6 @@ static const pad_layout_t s_rows[] = {
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
             .led_rgb_off = 6,
             .led_style = PAD_LED_LIGHTBAR,
-            .haptic = PAD_HAPTIC_AS_RUMBLE,
         },
     },
     {
@@ -79,7 +78,6 @@ static const pad_layout_t s_rows[] = {
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
             .led_rgb_off = 8,
             .led_style = PAD_LED_LIGHTBAR,
-            .haptic = PAD_HAPTIC_AS_RUMBLE,
             .frame = PAD_OUT_FRAME_PS_BT,
         },
     },

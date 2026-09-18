@@ -365,6 +365,38 @@ class FeedbackThrottle:
         return f"（已合并 {merged} 条）{line}" if merged else line
 
 
+class WriteBackGate:
+    """桥接写回限速：游戏内震动包络逐包都变，设备侧「字节变了才发」压不住
+    写回量，蓝牙 HID 写回又慢（实机 2026-09-19：蓝牙手柄游戏内约 100 条/秒，
+    会话循环被拖到输入转发卡顿无法操作）。把写回钉在 min_interval_s 上限：
+    窗口内只放行第一条，被挡下的帧不丢、留作最新待写帧，窗口到期由 poll
+    放行——收尾状态（比如停震的最后一帧）因此一定落地，马达不会被钉住。"""
+
+    def __init__(self, min_interval_s: float = 0.03) -> None:
+        self._min = min_interval_s
+        self._next_ok = 0.0
+        self._pending: bytes | None = None
+
+    def admit(self, payload: bytes, now: float) -> bool:
+        """会话循环收到 OUT_REPORT 时调用：True 表示这一帧现在就写。"""
+        if not payload:
+            return False
+        if now >= self._next_ok:
+            self._next_ok = now + self._min
+            self._pending = None
+            return True
+        self._pending = payload
+        return False
+
+    def poll(self, now: float) -> bytes | None:
+        """窗口到期后放行最新待写帧；会话循环每轮调用一次。"""
+        if self._pending is not None and now >= self._next_ok:
+            payload, self._pending = self._pending, None
+            self._next_ok = now + self._min
+            return payload
+        return None
+
+
 def run_list(hid) -> int:
     candidates = list_candidates(hid)
     virtual = list_virtual_pads(hid)
@@ -727,6 +759,8 @@ class Session:
         self.stop_code = 0
         # 反馈帧打印限频（不影响写回手柄，见 FeedbackThrottle）。
         self.feedback_gate = FeedbackThrottle()
+        # 写回手柄的限速门（蓝牙 HID 写回慢，见 WriteBackGate）。
+        self.write_gate = WriteBackGate()
         # DS5 桥接时的 PC 侧音频触觉（attach 时按需启动）。
         self.haptics: Ds5HapticsAudio | None = None
         self._haptics_starting = False
@@ -846,9 +880,16 @@ class Session:
             self.next_send = now + self.interval
 
     def write_output_report(self, payload: bytes) -> bool:
-        """把设备编码好的输出报告写回手柄：布局知识只在固件里有一份。"""
+        """把设备编码好的输出报告写回手柄：布局知识只在固件里有一份。
+        写回经 WriteBackGate 限速——蓝牙 HID 写回慢，逐条写会把会话循环
+        拖到输入转发卡顿；被挡下的帧由 pump 在窗口到期后放行最新一帧。"""
         if self.args.no_rumble or self.pad is None or not payload:
             return False
+        if not self.write_gate.admit(payload, time.monotonic()):
+            return False
+        return self.send_output_report(payload)
+
+    def send_output_report(self, payload: bytes) -> bool:
         try:
             self.pad.write(payload)
         except OSError as exc:
@@ -1004,6 +1045,12 @@ class Session:
         self.pump_link(now)
         self.pump_commands()
         self.pump_haptics_notify()
+        # 写回限速门的待写帧放行：窗口到期后把最新一帧补写出去，
+        # 停震的收尾帧不因限速丢失。
+        pending = self.write_gate.poll(now)
+        if pending is not None and self.pad is not None and not self.args.no_rumble:
+            if self.send_output_report(pending):
+                self.outputs += 1
         if self.ota is not None:
             self.ota.tick(now)
             if self.ota.finished:

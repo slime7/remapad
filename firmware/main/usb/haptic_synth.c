@@ -4,8 +4,6 @@
 
 /** 满幅强度（amp 255）在 16 位 PCM 上的峰值：留出两带叠加的余量。 */
 #define HAPTIC_SYNTH_AMP_MAX 24000
-/** 0x0A 采样脉冲的蜂鸣峰值与驱动频率（缺省高频值，单位 Hz）。 */
-#define HAPTIC_SYNTH_PULSE_AMP 20000
 
 /** 256 点 Q15 正弦表（sin(2πi/256) × 32767），线性插值后误差远小于音圈
  *  的可分辨度；定点查表让完成回调里的合成只有几十次整数运算。 */
@@ -96,9 +94,6 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
         gain[side][0] = ((int32_t)params->lf_amp[side] * HAPTIC_SYNTH_AMP_MAX) / 255;
         gain[side][1] = ((int32_t)params->hf_amp[side] * HAPTIC_SYNTH_AMP_MAX) / 255;
     }
-    const uint32_t pulse_step = phase_step(haptic_synth_band_freq(0, true));
-    const int32_t pulse_gain = ((int32_t)params->pulse * HAPTIC_SYNTH_PULSE_AMP) / 255;
-
     for (size_t i = 0; i < frames; i++) {
         int16_t *frame = &pcm[i * HAPTIC_SYNTH_CHANNELS];
         frame[0] = 0;
@@ -109,18 +104,12 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
                 sample += (sine_q15(state->phase[side][band]) * gain[side][band]) >> 15;
                 state->phase[side][band] += step[side][band];
             }
-            if (pulse_gain != 0) {
-                sample += (sine_q15(state->pulse_phase) * pulse_gain) >> 15;
-            }
             if (sample > 32767) {
                 sample = 32767;
             } else if (sample < -32768) {
                 sample = -32768;
             }
             frame[2 + side] = (int16_t)sample;
-        }
-        if (pulse_gain != 0) {
-            state->pulse_phase += pulse_step;
         }
     }
 }

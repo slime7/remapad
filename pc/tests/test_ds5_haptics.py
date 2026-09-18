@@ -1,4 +1,4 @@
-"""ds5_haptics 的参数映射：FEEDBACK 采样字节（固件包络渲染出的幅度）进合成参数。"""
+"""ds5_haptics 的参数映射：只吃 0x30 震动载波的两带，采样不进合成。"""
 
 import sys
 import unittest
@@ -10,21 +10,19 @@ import ds5_haptics  # noqa: E402  （先把 pc/ 放进来再导入）
 
 
 class SetParamsTest(unittest.TestCase):
-    def test_pulse_follows_envelope_amplitude(self):
-        """固件把「搜索手柄」的持续采样渲染成节奏：PC 侧按幅度驱动，不是开关。"""
+    def test_sample_field_does_not_enter_synthesis(self):
+        """触觉采样（0x0A 采样流）是主机点播的声音：固件不再渲染给桥接路径，
+        FEEDBACK 帧的采样字节只供日志展示——合成参数里不能出现采样派生项。"""
         audio = ds5_haptics.Ds5HapticsAudio()
-        audio.set_params({"sample": 0xC0, "lf_amp": (0, 0), "hf_amp": (0, 0)})
-        self.assertEqual(audio._params["pulse"], 0xC0)
-        audio.set_params({"sample": 0x80})
-        self.assertEqual(audio._params["pulse"], 0x80)
+        audio.set_params({"sample": 0x02, "lf_amp": (0, 0), "hf_amp": (0, 0)})
+        self.assertNotIn("pulse", audio._params)
 
-    def test_pulse_zero_means_silence(self):
-        """包络停顿段（sample 0）必须静默，不是恒定蜂鸣。"""
+    def test_band_amplitudes_pass_through(self):
+        """两带振幅照常进参数，合成仍由 0x30 震动载波驱动。"""
         audio = ds5_haptics.Ds5HapticsAudio()
-        audio.set_params({"sample": 0})
-        self.assertEqual(audio._params["pulse"], 0)
-        audio.set_params({})
-        self.assertEqual(audio._params["pulse"], 0)
+        audio.set_params({"lf_amp": (64, 32), "hf_amp": (16, 8)})
+        self.assertEqual(audio._params["lf_amp"], (64, 32))
+        self.assertEqual(audio._params["hf_amp"], (16, 8))
 
 
 if __name__ == "__main__":

@@ -135,41 +135,6 @@ static void waveform_stays_continuous_across_fills(void)
     CHECK(max_jump <= 400);
 }
 
-static void sample_pulse_buzzes_without_rumble(void)
-{
-    haptic_synth_state_t state;
-    haptic_synth_reset(&state);
-    haptic_synth_params_t params = params_default();
-    params.pulse = 255;
-
-    int16_t pcm[600 * HAPTIC_SYNTH_CHANNELS];
-    haptic_synth_fill(&state, &params, pcm, 600);
-    CHECK(peak_of(pcm, 600, 2) > 15000);
-    CHECK(peak_of(pcm, 600, 3) > 15000);
-    CHECK(channel_is_silent(pcm, 600, 0));
-    CHECK(channel_is_silent(pcm, 600, 1));
-}
-
-/** 采样脉冲按包络幅度缩放：数据面把「搜索手柄」的持续采样渲染成节奏，
- *  合成侧只吃 0-255 幅度（0 = 停顿段静默），满幅与刻度上界一致。 */
-static void sample_pulse_scales_with_amplitude(void)
-{
-    haptic_synth_state_t state;
-    haptic_synth_reset(&state);
-    haptic_synth_params_t params = params_default();
-    params.pulse = 128;
-
-    int16_t pcm[600 * HAPTIC_SYNTH_CHANNELS];
-    haptic_synth_fill(&state, &params, pcm, 600);
-    const int peak = peak_of(pcm, 600, 2);
-    CHECK(peak >= 9900); /* 20000 × 128 / 255 ≈ 10039 */
-    CHECK(peak <= 10200);
-
-    params.pulse = 0;
-    haptic_synth_fill(&state, &params, pcm, 600);
-    CHECK(channel_is_silent(pcm, 600, 2));
-}
-
 static void band_freq_falls_back_and_clamps(void)
 {
     CHECK_EQ(haptic_synth_band_freq(0, false), HAPTIC_SYNTH_FREQ_DEFAULT_LF);
@@ -185,6 +150,4 @@ HOST_TEST_SUITE(suite_haptic_synth, "haptic_synth",
                 {"左右触觉通道各跟各的参数", sides_follow_their_own_params},
                 {"满幅强度钉在刻度上界（24000 附近）", full_amplitude_caps_at_scale},
                 {"逐块补数据相位连续，换强度不跳变", waveform_stays_continuous_across_fills},
-                {"采样脉冲在没有震动时也能蜂鸣", sample_pulse_buzzes_without_rumble},
-                {"采样脉冲按包络幅度缩放（0 为静默）", sample_pulse_scales_with_amplitude},
                 {"频率字段零回落缺省、越界夹取", band_freq_falls_back_and_clamps});

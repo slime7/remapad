@@ -41,13 +41,6 @@ typedef enum {
     PAD_LED_LIGHTBAR,    /**< 灯条：掩码换算成一组颜色写进 RGB 三字节。 */
 } pad_led_style_t;
 
-/** 触觉采样（NS2 的 0x0A 采样回放）在目标设备上的处理方式。 */
-typedef enum {
-    PAD_HAPTIC_IGNORE = 0,  /**< 没有等价能力，只记日志。 */
-    PAD_HAPTIC_AS_RUMBLE,   /**< 退化成一次短震动。 */
-    PAD_HAPTIC_VERBATIM,    /**< 设备自己能播采样（NS2 手柄透传，参数原样写回）。 */
-} pad_haptic_style_t;
-
 /**
  * 马达跟哪条频带：主机的震动流是连续包络（NS2 参数包低频给冲击、高频给
  * 纹理），每颗马达按 rumble_band 选自己跟的带，振幅再按 rumble_max 缩放。
@@ -83,11 +76,12 @@ typedef struct {
 } pad_motion_layout_t;
 
 /**
- * 输出（反馈）报告描述：把主机下发的震动 / 玩家灯 / 触觉采样编码成该设备
- * 能吃的输出报告。presets 是发送前写入的常量字节（偏移 + 值，偏移
- * PAD_OFF_NONE 表示结束），用来点亮 DS4 的 flags 或 DualSense 的两个
- * valid_flag。震动的两路强度按 rumble_max 缩放后写进 rumble_off；玩家灯按
- * led_style 写掩码或 RGB。report_id 为 0 表示该设备没有可写的反馈通道。
+ * 输出（反馈）报告描述：把主机下发的震动 / 玩家灯编码成该设备能吃的输出
+ * 报告（触觉采样不进输出报告，由板载蜂鸣器或丢弃处置）。presets 是发送前
+ * 写入的常量字节（偏移 + 值，偏移 PAD_OFF_NONE 表示结束），用来点亮 DS4 的
+ * flags 或 DualSense 的两个 valid_flag。震动的两路强度按 rumble_max 缩放后
+ * 写进 rumble_off；玩家灯按 led_style 写掩码或 RGB。report_id 为 0 表示该
+ * 设备没有可写的反馈通道。
  */
 #define PAD_OUT_PRESET_MAX 8
 
@@ -102,10 +96,10 @@ typedef struct {
     uint8_t led_mask_off;
     uint8_t led_rgb_off;
     uint8_t led_style; /**< pad_led_style_t。 */
-    uint8_t haptic;    /**< pad_haptic_style_t。 */
     /** 音频触觉：设备带可驱动的 UAC 音频触觉通道（DualSense 的 4ch PCM，
-     *  后两路直连左右触觉音圈）。USB 直插时震动与采样退化改走板上合成，
-     *  HID 震动字节让位；桥接路径（PC 持有音频接口）不受影响。 */
+     *  后两路直连左右触觉音圈）。USB 直插时震动改走板上合成，HID 震动字节
+     *  让位；桥接路径（PC 持有音频接口）不受影响。触觉采样不进任何渲染
+     *  通路（板载蜂鸣器发声 / 蓝牙桥接丢弃），与音频触觉标记无关。 */
     uint8_t audio_haptic;
     uint8_t frame;     /**< pad_out_frame_t。 */
     /** PS 蓝牙形态的序号字节偏移（高半字节逐报递增、低半字节 tag 保持 0，

@@ -91,7 +91,6 @@ static const pad_layout_t s_rows[] = {
             .rumble_max = {PAD_NS1_RUMBLE_MAX, PAD_NS1_RUMBLE_MAX},
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_IGNORE,
         },
         .native_lang = PAD_LANG_NS1,
         .native_identity = PAD_IDENTITY_PRO,
@@ -125,7 +124,6 @@ static const pad_layout_t s_rows[] = {
             .rumble_max = {PAD_NS1_RUMBLE_MAX, PAD_NS1_RUMBLE_MAX},
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_IGNORE,
         },
         .native_lang = PAD_LANG_NS1,
         .native_identity = PAD_IDENTITY_JOYCON_L,
@@ -158,7 +156,6 @@ static const pad_layout_t s_rows[] = {
             .rumble_max = {PAD_NS1_RUMBLE_MAX, PAD_NS1_RUMBLE_MAX},
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_IGNORE,
         },
         .native_lang = PAD_LANG_NS1,
         .native_identity = PAD_IDENTITY_JOYCON_R,
@@ -188,7 +185,6 @@ static const pad_layout_t s_rows[] = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
             /* 同代透传：主机下发的 32 字节 LRA 参数包按 USB 形态原样写回。 */
-            .haptic = PAD_HAPTIC_VERBATIM,
         },
         .native_lang = PAD_LANG_NS2,
         .native_identity = PAD_IDENTITY_PRO,
@@ -215,7 +211,6 @@ static const pad_layout_t s_rows[] = {
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_VERBATIM,
         },
         .native_lang = PAD_LANG_NS2,
         .native_identity = PAD_IDENTITY_JOYCON_L,
@@ -242,7 +237,6 @@ static const pad_layout_t s_rows[] = {
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_VERBATIM,
         },
         .native_lang = PAD_LANG_NS2,
         .native_identity = PAD_IDENTITY_JOYCON_R,
@@ -269,7 +263,6 @@ static const pad_layout_t s_rows[] = {
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_VERBATIM,
         },
         .native_lang = PAD_LANG_NS2,
         .native_identity = PAD_IDENTITY_PRO,
@@ -296,7 +289,6 @@ static const pad_layout_t s_rows[] = {
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_VERBATIM,
         },
         .native_lang = PAD_LANG_NS2,
         .native_identity = PAD_IDENTITY_JOYCON_L,
@@ -323,7 +315,6 @@ static const pad_layout_t s_rows[] = {
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
-            .haptic = PAD_HAPTIC_VERBATIM,
         },
         .native_lang = PAD_LANG_NS2,
         .native_identity = PAD_IDENTITY_JOYCON_R,

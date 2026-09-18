@@ -70,14 +70,18 @@ uint8_t pad_rumble_perceived(uint8_t amp);
 void pad_feedback_bt_seq_reset(void);
 
 /**
- * 触觉采样当前时刻的渲染幅度：主机只发采样 ID、不带播放形态（实机抓包确认
- * 它以十几 Hz 重发同一 ID），真手柄的节奏由其内部音色库给出——本设备对应
- * 的就是这里的采样音色表：按 ID 登记各自的幅度时间线（段边界毫秒 → 段内
+ * 采样音色在 age_ms 的当前段：返回段内幅度（0 = 停顿），remain_ms（可空）
+ * 给出距下一段段边界的毫秒数。主机只发采样 ID、不带播放形态（实机抓包确认
+ * 它以十几 Hz 重发同一 ID），真手柄的节奏由其内部音色库给出——本设备对应的
+ * 就是这里的采样音色表：按 ID 登记各自的响/停时间线（段边界毫秒 → 段内
  * 幅度），未登记的采样回落缺省音色（一次短脉冲后静默）。登记条目按各自
  * 周期循环播放，缺省音色不循环（主机要重复播放就用 0x00 收掉再发）。
- * age_ms 是自采样起播（effective 值从无到有）起的毫秒数；数据面每步用它
- * 替换编码用的采样字节（编码与两条触觉渲染通路吃的都是这个幅度）。
+ * age_ms 是自采样起播（effective 值从无到有）起的毫秒数；数据面据此驱动
+ * 板载蜂鸣器按段发声（USB 直插），蓝牙桥接路径不渲染采样。
  */
+uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_ms);
+
+/** 采样音色当前时刻的渲染幅度（pad_haptic_pulse_step 的只取幅度形态）。 */
 uint8_t pad_haptic_pulse_envelope(uint8_t sample, uint32_t age_ms);
 
 #ifdef __cplusplus

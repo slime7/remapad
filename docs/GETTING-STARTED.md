@@ -345,7 +345,8 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 - [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按是连接键）。
 - [firmware/main/dp/dp_source.c](../firmware/main/dp/dp_source.c)：数据面输入源抽象（注册制；桥接源在 `input/`，USB host 源在 `usb/`）。
 - [firmware/main/usb/](../firmware/main/usb)：USB host 直插（枚举与 HID 收发、输入源、运行时角色切换）与主机反馈写回。
-- [firmware/main/pad/feedback.c](../firmware/main/pad/feedback.c)：反馈编码（按设备布局行把震动 / 玩家灯 / 触觉采样编码成该手柄的输出报告）。
+- [firmware/main/pad/feedback.c](../firmware/main/pad/feedback.c)：反馈编码（按设备布局行把震动 / 玩家灯编码成该手柄的输出报告）；
+  采样音色表按音色段驱动板载蜂鸣器发声（USB 直插），蓝牙桥接路径直接丢弃采样。
 - [firmware/main/input/input_link.c](../firmware/main/input/input_link.c)：桥接链路的设备侧（USB-Serial/JTAG 唯一读取者、桥接帧与 CLI 文本分流）。
 - [firmware/main/pad/pad_device.c](../firmware/main/pad/pad_device.c)：私有手柄格式与解析（按键位置映射、轴归一、死区）；
   家族布局表按系列拆在 [firmware/main/pad/layouts/](../firmware/main/pad/layouts)。
