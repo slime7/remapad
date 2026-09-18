@@ -83,16 +83,18 @@ static const pad_layout_t s_rows[] = {
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
-        /* 蓝牙形态报告 0x31（78 字节）：b1 是序号/标签字节、b2 是固定魔数
-         * 0x10、公共段从 b3 起，末 4 字节是 CRC32——缺这段主机整份报告都不
-         * 认（实机表现：写回成功而手柄毫无反应）。b46 是玩家灯、b47-b49 是
-         * 灯条 RGB，偏移取 Linux dualsense_output_report_bt。灯条不驱动
-         * （同有线行，2026-09-18 实机把灯条钉成玩家蓝 + 淡出设置，一震就
+        /* 蓝牙形态报告 0x31（78 字节）：b1 是序号/标签字节（高半字节逐报
+         *  递增、低半字节 tag 保持 0，内核 hid-playstation.c 注明「每份报告
+         *  都要递增」，恒值会被手柄按重复包处理——seq_off 交给编码器递增）、
+         * b2 是固定魔数 0x10、公共段从 b3 起，末 4 字节是 CRC32——缺这段主机
+         * 整份报告都不认（实机表现：写回成功而手柄毫无反应）。b46 是玩家灯、
+         * b47-b49 是灯条 RGB，偏移取 Linux dualsense_output_report_bt。灯条不
+         * 驱动（同有线行，2026-09-18 实机把灯条钉成玩家蓝 + 淡出设置，一震就
          * 变色）：valid_flag1 只置玩家灯位，灯条字节全零。 */
         .out = {
             .report_id = 0x31,
             .len = 78,
-            .presets = {{1, 0x00}, {2, 0x10}, {3, 0x03}, {4, 0x10}},
+            .presets = {{2, 0x10}, {3, 0x03}, {4, 0x10}},
             .rumble_off = {6, 5},
             .rumble_max = {255, 255},
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
@@ -101,6 +103,7 @@ static const pad_layout_t s_rows[] = {
             .led_style = PAD_LED_PLAYER_MASK,
             .haptic = PAD_HAPTIC_AS_RUMBLE,
             .frame = PAD_OUT_FRAME_PS_BT,
+            .seq_off = 1,
             .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},
         },
     },

@@ -108,6 +108,10 @@ typedef struct {
      *  HID 震动字节让位；桥接路径（PC 持有音频接口）不受影响。 */
     uint8_t audio_haptic;
     uint8_t frame;     /**< pad_out_frame_t。 */
+    /** PS 蓝牙形态的序号字节偏移（高半字节逐报递增、低半字节 tag 保持 0，
+     *  内核 DS_OUTPUT_SEQ_NO 的语义）；0 表示没有序号字节——DualShock 4 的
+     *  蓝牙报告头是静态的（b1 hw_control、b2 音频控制），DualSense 才有它。 */
+    uint8_t seq_off;
     /** 玩家灯落地值：四项依次对应主机掩码 bit0-3（1P-4P），0 表示原样写主机
      *  掩码。DualSense 的五颗灯是一组固定模式（1P 中灯、2P 中加外），不能直写
      *  主机掩码，需要这张表。 */

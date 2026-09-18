@@ -37,12 +37,14 @@ rumble/lamp/haptic、屏幕 ui/backlight/screen、模式 mode（固件侧 help �
 from __future__ import annotations
 
 import argparse
+import ctypes
 import queue
 import struct
 import sys
 import threading
 import time
 import zlib
+from ctypes import wintypes
 from pathlib import Path
 
 from link import (
@@ -193,16 +195,95 @@ def load_hid():
     return hid
 
 
+_MAX_DEVICE_ID_LEN = 200
+_cfgmgr32 = ctypes.WinDLL("cfgmgr32", use_last_error=True)
+_cfgmgr32.CM_Locate_DevNodeW.argtypes = [
+    ctypes.POINTER(wintypes.DWORD), wintypes.LPCWSTR, wintypes.ULONG]
+_cfgmgr32.CM_Get_Parent.argtypes = [
+    ctypes.POINTER(wintypes.DWORD), wintypes.DWORD, wintypes.ULONG]
+_cfgmgr32.CM_Get_Device_IDW.argtypes = [
+    wintypes.DWORD, wintypes.LPWSTR, wintypes.ULONG, wintypes.ULONG]
+
+
+def instance_id_of_hid_path(path: str | bytes) -> str | None:
+    r"""hidapi 设备接口路径 → 设备树实例 ID。
+
+    路径形如 \\?\HID#VID_054C&PID_0DF2&MI_03#8&2f3d4f&0&0000#{接口 GUID}，
+    实例 ID 是前三段的 # 换 \：HID\VID_054C&PID_0DF2&MI_03\8&2f3d4f&0&0000。
+    hidapi 给的 path 是 bytes，先按 UTF-8 解码。
+    """
+    if isinstance(path, bytes):
+        path = path.decode("utf-8", "replace")
+    if not path.startswith("\\\\?\\"):
+        return None
+    parts = path[4:].split("#")
+    # 末段是接口 GUID，缺它就不是完整的设备接口路径。
+    if len(parts) < 4 or not all(parts[:3]):
+        return None
+    return "\\".join(parts[:3])
+
+
+def is_virtual_pad(path: str) -> bool:
+    """按设备树判断是不是 ViGEm 之类的虚拟手柄。
+
+    Moonlight/Sunshine 串流时会在主机上虚拟一块 DS4（ViGEmBus 总线），hidapi
+    把它枚举成普通 USB 手柄，按顺序选柄会把它当桥接目标抓走——输入转发与震动
+    写回全进虚拟设备，真手柄反而时有时无。hidapi 的路径里看不出虚拟与否，这里
+    沿设备树向上查祖先的设备 ID，任一代以 VIGEM 开头即虚拟；查不到实例或祖先
+    （非常规设备树）一律按真实手柄处理，绝不静默丢设备。
+    """
+    instance = instance_id_of_hid_path(path)
+    if instance is None:
+        return False
+    devinst = wintypes.DWORD()
+    if _cfgmgr32.CM_Locate_DevNodeW(ctypes.byref(devinst), instance, 0) != 0:
+        return False
+    for _ in range(8):
+        parent = wintypes.DWORD()
+        if _cfgmgr32.CM_Get_Parent(ctypes.byref(parent), devinst, 0) != 0:
+            return False
+        device_id = ctypes.create_unicode_buffer(_MAX_DEVICE_ID_LEN)
+        if _cfgmgr32.CM_Get_Device_IDW(parent, device_id, _MAX_DEVICE_ID_LEN, 0) != 0:
+            return False
+        if device_id.value.upper().startswith("VIGEM"):
+            return True
+        devinst = parent
+    return False
+
+
 def list_candidates(hid) -> list[dict]:
-    """枚举候选手柄接口：同一只手柄可能有多个 HID 接口，这里只留手柄用途的。"""
-    found = []
+    """枚举候选手柄接口：同一只手柄可能有多个 HID 接口，这里只留手柄用途的；
+    ViGEm 之类的虚拟手柄排除在外（见 partition_virtual）。"""
+    real, _virtual = partition_virtual(_gamepad_usages(hid))
+    return real
+
+
+def list_virtual_pads(hid) -> list[dict]:
+    """被候选清单排除的虚拟手柄（--list 里标注展示）。"""
+    return partition_virtual(_gamepad_usages(hid))[1]
+
+
+def _gamepad_usages(hid):
+    """枚举手柄用途的 HID 接口（Generic Desktop / Joystick 与 Game Pad）。"""
     for info in hid.enumerate():
         if info.get("usage_page", 0) != GAMEPAD_USAGE_PAGE:
             continue
-        if info.get("usage", 0) not in GAMEPAD_USAGES:
-            continue
-        found.append(info)
-    return found
+        if info.get("usage", 0) in GAMEPAD_USAGES:
+            yield info
+
+
+def partition_virtual(infos, is_virtual=None) -> tuple[list[dict], list[dict]]:
+    """按设备树把候选拆成真实与虚拟两份（is_virtual 可注入便于测试）。"""
+    if is_virtual is None:
+        is_virtual = is_virtual_pad
+    real: list[dict] = []
+    virtual: list[dict] = []
+    for info in infos:
+        if is_virtual(info["path"]):
+            virtual.append(info)
+        else:
+            real.append(info)
+    return real, virtual
 
 
 def conn_for(info: dict) -> int:
@@ -286,11 +367,14 @@ class FeedbackThrottle:
 
 def run_list(hid) -> int:
     candidates = list_candidates(hid)
-    if not candidates:
+    virtual = list_virtual_pads(hid)
+    if not candidates and not virtual:
         print("没有找到手柄接口")
         return 1
     for info in candidates:
         print(describe(info))
+    for info in virtual:
+        print(describe(info) + "（虚拟手柄，不参与转发）")
     return 0
 
 

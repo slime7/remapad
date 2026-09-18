@@ -109,6 +109,8 @@ static void dualsense_bt_encodes_framed_report(void)
     feedback.player_led = 0x01;
 
     uint8_t out[PAD_OUTPUT_MAX];
+    /* 黄金 CRC 按序号 0 的报告体复算，先回零。 */
+    pad_feedback_bt_seq_reset();
     const size_t len = pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out,
                                            sizeof(out));
     CHECK_EQ(len, 78);
@@ -130,6 +132,7 @@ static void dualsense_bt_encodes_framed_report(void)
     /* 停止震动：马达清零，CRC 跟着报告体一起变。 */
     feedback.rumble_on[PAD_TRIGGER_L2] = false;
     feedback.rumble_on[PAD_TRIGGER_R2] = false;
+    pad_feedback_bt_seq_reset();
     CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)),
              78);
     CHECK_EQ(out[5], 0);
@@ -325,6 +328,7 @@ static void dualsense_player_led_follows_pattern(void)
     feedback.player_led = 0x02;
 
     uint8_t out[PAD_OUTPUT_MAX];
+    pad_feedback_bt_seq_reset();
     CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)),
              78);
     CHECK_EQ(out[46], 0x0A);
@@ -335,6 +339,7 @@ static void dualsense_player_led_follows_pattern(void)
 
     /* 没有分配玩家号时五颗全灭。 */
     feedback.player_led = 0x00;
+    pad_feedback_bt_seq_reset();
     pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out));
     CHECK_EQ(out[46], 0x00);
 }
@@ -361,6 +366,7 @@ static void dualsense_rumble_leaves_lightbar_alone(void)
     CHECK_EQ(out[46], 0x00);
     CHECK_EQ(out[47], 0x00);
 
+    pad_feedback_bt_seq_reset();
     CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)),
              78);
     CHECK_EQ(out[4], 0x10);
@@ -445,6 +451,73 @@ static void held_feedback_keeps_steady_state(void)
     CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &held, out, sizeof(out)), 78);
     CHECK_EQ(out[46], 0x0A);
     CHECK_EQ(out[6], 64);
+}
+
+/** DualSense 蓝牙输出报告 b1 的高半字节是序号，每份报告都要递增、低半字节
+ *  是 tag 保持 0（Linux hid-playstation.c 的 DS_OUTPUT_SEQ_NO：「needs to be
+ *  increased every report」）。恒 0 的报告会被手柄按重复包处理——2026-09-19
+ *  蓝牙震动不稳定的头号嫌疑。 */
+static void bt_reports_increment_seq_nibble(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 64;
+    uint8_t out[PAD_OUTPUT_MAX];
+
+    pad_feedback_bt_seq_reset();
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)), 78);
+    CHECK_EQ(out[1], 0x00);
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)), 78);
+    CHECK_EQ(out[1], 0x10);
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)), 78);
+    CHECK_EQ(out[1], 0x20);
+
+    /* 16 份后回绕（序号只有 4 位）。 */
+    pad_feedback_bt_seq_reset();
+    for (int i = 0; i < 16; i++) {
+        pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out));
+    }
+    CHECK_EQ(out[1], 0xF0);
+    pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out));
+    CHECK_EQ(out[1], 0x00);
+}
+
+/** DualShock 4 的蓝牙形态没有序号字节（b1 是 hw_control、b2 是音频控制，
+ *  内核 dualshock4_output_report_bt 原样）：序号递增只落在 DualSense 上。 */
+static void ds4_bt_keeps_static_header(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 64;
+    uint8_t out[PAD_OUTPUT_MAX];
+
+    pad_feedback_bt_seq_reset();
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x09CC, &feedback, out, sizeof(out)), 78);
+    CHECK_EQ(out[1], 0xC0);
+    pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x09CC, &feedback, out, sizeof(out));
+    CHECK_EQ(out[1], 0xC0);
+    CHECK_EQ(out[2], 0x00);
+}
+
+/** 主机下发的振幅是 NS2 LRA 的线性档位（共振上小档位也摸得到），ERM 马达
+ *  （DS5/DS4/Xbox）低占空比整段落在死区——线性直迁让游戏里中低强度的震动
+ *  几乎无感（2026-09-19 实机：USB 直插游戏震动非常轻）。感知重映射把非零档
+ *  抬出死区（下限约 40）、压平顶端、保持单调。 */
+static void host_rumble_amp_is_remapped_perceptually(void)
+{
+    CHECK_EQ(pad_rumble_perceived(0), 0);
+    CHECK_EQ(pad_rumble_perceived(3), 63);
+    CHECK_EQ(pad_rumble_perceived(9), 80);
+    CHECK_EQ(pad_rumble_perceived(32), 116);
+    CHECK_EQ(pad_rumble_perceived(255), 255);
+
+    uint8_t prev = pad_rumble_perceived(1);
+    for (uint32_t amp = 2; amp <= 255; amp++) {
+        const uint8_t now = pad_rumble_perceived((uint8_t)amp);
+        CHECK(now >= prev);
+        CHECK(now >= 40);
+        prev = now;
+    }
 }
 
 static void ns2_pad_relays_lra_payload_verbatim(void)
@@ -607,6 +680,9 @@ HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"未登记的采样回落缺省音色：一次短脉冲后静默",
                  unregistered_samples_fall_back_to_one_pulse},
                 {"协议清单的 0x01 低频蜂鸣按文档时长登记", lf_beep_sample_plays_documented_duration},
+                {"DualSense 蓝牙输出报告的序号逐报递增", bt_reports_increment_seq_nibble},
+                {"DualShock 4 蓝牙报告头保持静态（没有序号字节）", ds4_bt_keeps_static_header},
+                {"主机震动振幅按感知曲线重映射", host_rumble_amp_is_remapped_perceptually},
                 {"编码的采样字节跟随音色幅度（停顿段清零）",
                  sample_pulse_follows_envelope_amplitude},
                 {"NS1 的震动按固定头加振幅写入", ns1_rumble_uses_band_template},

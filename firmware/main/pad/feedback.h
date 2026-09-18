@@ -56,6 +56,20 @@ void pad_feedback_apply(pad_feedback_t *held, uint8_t fields, const pad_feedback
 bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b);
 
 /**
+ * 主机震动振幅的感知重映射（0-255 → 0-255）：NS2 的振幅是 LRA 线性驱动档位，
+ * 小档位在共振频点上也能摸到；ERM 偏心马达（DualSense / DualShock / Xbox）
+ * 低占空比整段落在死区里，线性直迁会让游戏里中低强度的震动几乎无感
+ * （2026-09-19 实机：USB 直插游戏震动非常轻）。按 out = 40 + 215·√(amp/255)
+ * （amp > 0）抬低端、压顶端，0 仍映射 0。采样音色与 CLI 注入写的是设备刻度，
+ * 不经过本表。
+ */
+uint8_t pad_rumble_perceived(uint8_t amp);
+
+/** 蓝牙序号回零（测试与诊断入口）：下一条 DualSense 蓝牙输出报告的序号
+ *  半字节从 0 重新开始，黄金 CRC 用例据此复算。 */
+void pad_feedback_bt_seq_reset(void);
+
+/**
  * 触觉采样当前时刻的渲染幅度：主机只发采样 ID、不带播放形态（实机抓包确认
  * 它以十几 Hz 重发同一 ID），真手柄的节奏由其内部音色库给出——本设备对应
  * 的就是这里的采样音色表：按 ID 登记各自的幅度时间线（段边界毫秒 → 段内

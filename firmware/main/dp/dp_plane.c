@@ -169,9 +169,15 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
         event.rumble_on[PAD_TRIGGER_L2] = rumble->left_on;
         event.rumble_on[PAD_TRIGGER_R2] = rumble->right_on;
         ns2_rumble_band_strengths(rumble->raw, &lf, &hf);
+        /* NS2 的线性档位直写 ERM 马达落在死区：归一时按感知曲线重映射，
+         * 马达编码、板上合成与 PC 合成吃的都是这份值。 */
+        lf = pad_rumble_perceived(lf);
+        hf = pad_rumble_perceived(hf);
         event.rumble_strength[PAD_TRIGGER_L2] = rumble->left_on ? lf : 0;
         event.rumble_hf_strength[PAD_TRIGGER_L2] = rumble->left_on ? hf : 0;
         ns2_rumble_band_strengths(&rumble->raw[16], &lf, &hf);
+        lf = pad_rumble_perceived(lf);
+        hf = pad_rumble_perceived(hf);
         event.rumble_strength[PAD_TRIGGER_R2] = rumble->right_on ? lf : 0;
         event.rumble_hf_strength[PAD_TRIGGER_R2] = rumble->right_on ? hf : 0;
         /* 驱动频率的落地值（合成侧语义：0 回落缺省、越界夹取）：USB 音频触觉
