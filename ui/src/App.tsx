@@ -41,7 +41,8 @@ const FLING_MIN_TRAVEL = 12;
 // 过渡缩放下限：新卡从 75% 放大进场，拖动预览把当前卡按进度缩到 75%。
 // 过渡全程不做透明度混合——S3 软件渲染器的逐像素混合是过渡期最大的单帧开销。
 const TRANSITION_SCALE = 0.75;
-const ANIM_DUR_MS = 160;
+// 新卡 75%→100% 的进场时长；旧卡的「淡出」是拖动跟手缩放，无固定时长，回弹复原见 REBOUND_DUR_MS。
+const ANIM_DUR_MS = 80;
 const REBOUND_DUR_MS = 100;
 const BTN_CROSS = 0x4000;
 
