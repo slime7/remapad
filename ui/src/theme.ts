@@ -106,14 +106,15 @@ export const STYLE = {
   miniPlayerLedOn: 'w-[8] h-[8] rounded-[2] shrink-0 bg-[#a6c8ff]',
   miniPlayerLedOff: 'w-[8] h-[8] rounded-[2] shrink-0 bg-[#002613]',
 
-  /** 进度轨与填充（OTA 数据接收进度条）。 */
-  track: 'grow h-[8] rounded-[4] bg-[#1a8552] overflow-hidden',
+  /** 进度轨与填充（OTA 数据接收进度条）：轨道给显式宽度并压暗——
+   *  items-center 的列容器里 grow 撑不开宽度，轨道会塌成填充的尺寸。 */
+  track: 'w-[192] h-[8] rounded-[4] bg-[#00261359] overflow-hidden',
   trackFill: 'h-[8] rounded-[4] bg-[#002613]',
 
   /** 垂直亮度控制相关（四叶草 primaryContainer 背景上的嵌套组件）。 */
-  vSliderTrack: 'w-[20] h-[96] rounded-[10] bg-[#1b416f] flex-col justify-end p-1 overflow-hidden',
-  vSliderFill: 'w-full rounded-[6] bg-[#ffffff]',
-  brightnessBtn: 'w-[38] h-[38] rounded-[12] bg-[#0d1a2c] flex-row items-center justify-center active:bg-[#15263e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  vSliderTrack: 'w-[24] h-[120] rounded-[12] bg-[#1b416f] flex-col justify-end p-1 overflow-hidden',
+  vSliderFill: 'w-full rounded-[8] bg-[#ffffff]',
+  brightnessBtn: 'w-[42] h-[42] rounded-[12] bg-[#0d1a2c] flex-row items-center justify-center active:bg-[#15263e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 } as const;
 
 /**

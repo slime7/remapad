@@ -1,5 +1,6 @@
 #include "ota_session.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_app_desc.h"
@@ -14,6 +15,7 @@
 #include "freertos/task.h"
 
 #include "input_link.h"
+#include "bridge/js_bridge.h"
 #include "ota_proto.h"
 
 static const char *TAG = "remapad_ota";
@@ -60,6 +62,8 @@ static struct {
     volatile bool ui_ready;
     bool health_confirmed;
     ota_phase_t phase;
+    /** 上次向 UI 广播的整数百分比：数据帧按 1% 粒度限频，不逐帧刷事件队列。 */
+    uint32_t reported_pct;
 } s_ota;
 
 static const char *phase_name(ota_phase_t phase)
@@ -76,6 +80,32 @@ static const char *phase_name(ota_phase_t phase)
     default:
         return "idle";
     }
+}
+
+/** 向 UI 广播 OTA 进度：事件经外部队列由 owner task 回发，任意任务上下文可调。 */
+static void notify_ui(ota_phase_t phase, uint32_t received, uint32_t total)
+{
+    char event[128];
+    const uint32_t pct = total > 0u ? (uint32_t)((uint64_t)received * 100u / total) : 0u;
+    const int len = snprintf(event, sizeof(event),
+                             "{\"t\":\"otaProgress\",\"phase\":\"%s\",\"received\":%u,"
+                             "\"total\":%u,\"percentage\":%u}",
+                             phase_name(phase), (unsigned)received, (unsigned)total,
+                             (unsigned)pct);
+    if (len > 0 && (size_t)len < sizeof(event)) {
+        js_bridge_post_event(event);
+    }
+}
+
+/** 接收进度按整数百分比限频广播：同一百分比的数据帧不重复进事件队列。 */
+static void notify_receiving(uint32_t received, uint32_t total)
+{
+    const uint32_t pct = total > 0u ? (uint32_t)((uint64_t)received * 100u / total) : 0u;
+    if (pct == s_ota.reported_pct) {
+        return;
+    }
+    s_ota.reported_pct = pct;
+    notify_ui(OTA_PHASE_RECEIVING, received, total);
 }
 
 const char *ota_session_state_name(void)
@@ -168,6 +198,7 @@ static void handle_begin(const uint8_t *payload, size_t len)
         const ota_proto_result_t bad = ota_proto_fail(&s_ota.proto, OTA_CODE_BAD_HEADER);
         reply(&bad, true);
         s_ota.phase = OTA_PHASE_FAILED;
+        notify_ui(OTA_PHASE_FAILED, 0, 0);
         ESP_LOGW(TAG, "ota begin rejected: bad header");
         return;
     }
@@ -176,6 +207,7 @@ static void handle_begin(const uint8_t *payload, size_t len)
         const ota_proto_result_t result = ota_proto_fail(&s_ota.proto, OTA_CODE_BUSY);
         reply(&result, true);
         s_ota.phase = OTA_PHASE_FAILED;
+        notify_ui(OTA_PHASE_FAILED, 0, 0);
         ESP_LOGE(TAG, "no update partition available");
         return;
     }
@@ -185,6 +217,7 @@ static void handle_begin(const uint8_t *payload, size_t len)
         reply(&result, true);
         if (result.code != OTA_CODE_BUSY) {
             s_ota.phase = OTA_PHASE_FAILED;
+            notify_ui(OTA_PHASE_FAILED, 0, image_size);
         }
         ESP_LOGW(TAG, "ota begin refused (code=%d, image=%u, partition=%s %u bytes)",
                  (int)result.code, (unsigned)image_size, target->label,
@@ -202,6 +235,7 @@ static void handle_begin(const uint8_t *payload, size_t len)
         reply(&result, true);
         if (code != OTA_CODE_BUSY) {
             s_ota.phase = OTA_PHASE_FAILED;
+            notify_ui(OTA_PHASE_FAILED, 0, image_size);
         }
         ESP_LOGE(TAG, "esp_ota_begin failed: %s (image=%u)", esp_err_to_name(err),
                  (unsigned)image_size);
@@ -211,6 +245,8 @@ static void handle_begin(const uint8_t *payload, size_t len)
     s_ota.handle_open = true;
     s_ota.target = target;
     s_ota.phase = OTA_PHASE_RECEIVING;
+    s_ota.reported_pct = 0;
+    notify_ui(OTA_PHASE_RECEIVING, 0, image_size);
     reply(&result, true);
     ESP_LOGI(TAG, "ota begin: %u bytes -> %s (running %s %s)", (unsigned)image_size,
              target->label, ota_session_running_partition(), ota_session_running_version());
@@ -227,8 +263,13 @@ static void handle_data(const uint8_t *payload, size_t len, bool window_end)
     if (result.state == OTA_STATE_FAILED) {
         abort_flash_session();
         s_ota.phase = OTA_PHASE_FAILED;
+        notify_ui(OTA_PHASE_FAILED, result.received, s_ota.proto.image_size);
         ESP_LOGE(TAG, "ota data failed: code=%d received=%u/%u", (int)result.code,
                  (unsigned)result.received, (unsigned)s_ota.proto.image_size);
+        return;
+    }
+    if (s_ota.phase == OTA_PHASE_RECEIVING) {
+        notify_receiving(result.received, s_ota.proto.image_size);
     }
 }
 
@@ -240,12 +281,14 @@ static void handle_end(void)
         reply(&result, false);
         abort_flash_session();
         s_ota.phase = OTA_PHASE_FAILED;
+        notify_ui(OTA_PHASE_FAILED, result.received, s_ota.proto.image_size);
         ESP_LOGE(TAG, "ota end failed: code=%d received=%u/%u", (int)result.code,
                  (unsigned)result.received, (unsigned)s_ota.proto.image_size);
         return;
     }
 
     s_ota.phase = OTA_PHASE_VERIFYING;
+    notify_ui(OTA_PHASE_VERIFYING, s_ota.proto.image_size, s_ota.proto.image_size);
     /* esp_ota_end 整体校验镜像：应用描述符、芯片标识与尾部 SHA-256。 */
     esp_err_t err = esp_ota_end(s_ota.handle);
     s_ota.handle_open = false;
@@ -255,6 +298,7 @@ static void handle_end(void)
         result = ota_proto_fail(&s_ota.proto, code);
         reply(&result, false);
         s_ota.phase = OTA_PHASE_FAILED;
+        notify_ui(OTA_PHASE_FAILED, s_ota.proto.received, s_ota.proto.image_size);
         ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
         return;
     }
@@ -264,6 +308,7 @@ static void handle_end(void)
         result = ota_proto_fail(&s_ota.proto, OTA_CODE_FLASH_ERROR);
         reply(&result, false);
         s_ota.phase = OTA_PHASE_FAILED;
+        notify_ui(OTA_PHASE_FAILED, s_ota.proto.received, s_ota.proto.image_size);
         ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
         return;
     }
@@ -271,6 +316,7 @@ static void handle_end(void)
     result = ota_proto_done(&s_ota.proto);
     reply(&result, false);
     s_ota.phase = OTA_PHASE_REBOOTING;
+    notify_ui(OTA_PHASE_REBOOTING, s_ota.proto.image_size, s_ota.proto.image_size);
     ESP_LOGI(TAG, "ota done: %s is the boot partition, restarting in %d ms",
              s_ota.target != NULL ? s_ota.target->label : "?", OTA_REBOOT_DELAY_MS);
     vTaskDelay(pdMS_TO_TICKS(OTA_REBOOT_DELAY_MS));
@@ -304,6 +350,7 @@ static void check_timeout(void)
     reply(&result, false);
     abort_flash_session();
     s_ota.phase = OTA_PHASE_FAILED;
+    notify_ui(OTA_PHASE_FAILED, result.received, s_ota.proto.image_size);
     ESP_LOGW(TAG, "ota session timed out after %d ms without data",
              (int)(OTA_SESSION_TIMEOUT_US / 1000LL));
 }

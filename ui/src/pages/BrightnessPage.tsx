@@ -35,8 +35,8 @@ export function BrightnessPage(props: {
     setBacklight(next);
   };
 
-  // 垂直填充高度数值 (总槽高 96，上下内边距留白 4，总可填充高 88)
-  const fillHeight = () => Math.round((Math.max(16, Math.min(100, currentLevel())) / 100) * 88);
+  // 垂直填充高度数值 (总槽高 120，上下内边距留白 4，总可填充高 112)
+  const fillHeight = () => Math.round((Math.max(16, Math.min(100, currentLevel())) / 100) * 112);
 
   return (
     <View class={props.active() ? 'w-full h-full flex-row items-center justify-center gap-4' : 'hidden'}>
@@ -46,7 +46,7 @@ export function BrightnessPage(props: {
       </View>
 
       {/* 右侧上下加减按钮与读数 */}
-      <View class="flex-col items-center justify-between h-[96] py-[2]">
+      <View class="flex-col items-center justify-between h-[120] py-[2]">
         {/* 加号按钮（增加背光） */}
         <View
           focusable={props.interactive()}

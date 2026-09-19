@@ -36,6 +36,38 @@ test('左右无限循环滑动：第 1 页向右滑循环至末页，末页向�
   await expect.poll(() => app.hasVisibleText('2')).toBe(true);
   // expect(await app.hasVisibleText(lastPageLabel)).toBe(false);
 });
+test("短距快甩即可切页：30px 快速轻甩前进，反向快甩后退", async ({ app }) => {
+  await app.goto();
+  expect(await app.hasVisibleText("2")).toBe(true);
+
+  // 向左 30px 快速轻甩：单帧走完全程立即抬手（释放速度约 900 px/秒，
+  // 预览页逐帧采样触点，甩动用单帧位移钉住速度路径），总位移远小于
+  // 整幅屏宽也应切页。
+  await app.touch.drag({ x: 135, y: 100 }, { x: 105, y: 100 }, { steps: 1 });
+  await expect.poll(() => app.hasVisibleText("SN: HEJ71001123456")).toBe(true);
+  await app.waitSettled();
+
+  // 反向 30px 快速轻甩：切回第 1 页
+  await app.touch.drag({ x: 105, y: 100 }, { x: 135, y: 100 }, { steps: 1 });
+  await expect.poll(() => app.hasVisibleText("2")).toBe(true);
+});
+
+test("四叶草凹陷处的左右箭头点按即可翻页：左缘回退、右缘前进", async ({ app }) => {
+  await app.goto();
+  expect(await app.hasVisibleText("2")).toBe(true);
+
+  const lastPageLabel = IS_DEV ? "调试指令" : "设备信息";
+
+  // 点左缘箭头：从第 1 页循环回退到末页
+  await app.touch.tap(18, 104);
+  await expect.poll(() => app.hasVisibleText(lastPageLabel)).toBe(true);
+  await app.waitSettled();
+
+  // 点右缘箭头：前进循环回第 1 页
+  await app.touch.tap(222, 104);
+  await expect.poll(() => app.hasVisibleText("2")).toBe(true);
+});
+
 test("松开手势后顺应位移过渡切页，过渡期间右侧不跳变为下下页", async ({ app }) => {
   await app.goto();
   expect(await app.hasVisibleText("2")).toBe(true);

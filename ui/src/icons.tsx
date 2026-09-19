@@ -21,6 +21,9 @@ export const ICON = {
   computer: '\ue30a',
   gamepad: '\ue30f',
   chevronRight: '\ue5cc',
+  /** 翻页箭头（arrow_back / arrow_forward）：四叶草左右凹陷处的滑动提示。 */
+  arrowBack: '\ue5c4',
+  arrowForward: '\ue5c8',
   power: '\ue8ac',
   swapHoriz: '\ue8d4',
   bug: '\ue868',
