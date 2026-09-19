@@ -14,6 +14,8 @@
     uv run python remapadctl.py -p COM3 --all             # 拉取设备全部观测数据
     uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
     uv run python remapadctl.py -p COM3 --log --seconds 20
+    uv run python remapadctl.py -p COM3 --capture host.log --seconds 30 --pad
+                                          # 抓主机原始输出（布局转换前），手柄转发照常
     uv run python remapadctl.py -p COM3 --upgrade --wait
     uv run python remapadctl.py -p COM3 --amiibo Alm.bin  # 上传 amiibo 后退出
 
@@ -25,7 +27,7 @@ rumble/lamp/haptic、amiibo 槽位 list/select/del/poll、屏幕 ui/backlight/sc
 数据命令都由固件现场读数应答，不经过 UI 层——UI 冻结（截图期间、页面门控
 不取数）不影响 status/mem 等数据的实时性。
 `:` 开头的是本工具命令：
-    :help  :all  :shot [路径]  :log [秒]  :ota [镜像]  :amiibo <bin>  :quit
+    :help  :all  :shot [路径]  :log [秒]  :capture [路径|off]  :ota [镜像]  :amiibo <bin>  :quit
 
 手柄转发默认只在交互模式里开：一次性命令、截图、只读日志、升级与 amiibo 上传不碰手柄
 （否则主机会看到手柄闪一下），要在这些模式里也转发就加 --pad，任何模式下都用 --no-pad
@@ -78,6 +80,7 @@ from link import (
     TYPE_OTA_DATA,
     TYPE_OTA_END,
     TYPE_OUT_REPORT,
+    TYPE_HOST_RAW,
     TYPE_PING,
     TYPE_REPORT,
     WIRE_MAX_PAYLOAD,
@@ -93,6 +96,7 @@ from link import (
     ota_begin_payload,
     ota_data_payload,
     parse_amiibo_ack,
+    parse_host_raw,
     parse_image_chunk,
     parse_image_end,
     parse_image_info,
@@ -559,6 +563,55 @@ class ShotCollector:
         return ""
 
 
+class HostCaptureSink:
+    """主机原始输出采集的落盘器：一行一条记录（相对时间、通道、十六进制字节）。
+
+    数据是固件在解析与布局转换之前收到的主机输出（震动参数包、指令帧、
+    复合输出、固件更新记录流），经桥接帧 0x12 到这里。帧头 slot 是设备侧
+    记录号：跳号说明设备队列满、丢过包，按次数汇总不逐条打断。
+    """
+
+    def __init__(self, path: Path, started: float) -> None:
+        self.path = path
+        self.started = started
+        self.count = 0
+        self.gaps = 0
+        self._file = None
+        self._last_seq: int | None = None
+
+    def open(self) -> None:
+        if self.path.parent != Path(""):
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = self.path.open("w", encoding="utf-8", newline="\n")
+        self._file.write(
+            f"# remapad host raw capture {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            "# 列：<相对秒> <通道>[句柄] seq=<记录号> <字节数>B[ trunc] <十六进制字节>\n")
+
+    def write_record(self, parsed: dict, seq: int, now: float) -> None:
+        if self._file is None:
+            return
+        if self._last_seq is not None and seq != ((self._last_seq + 1) & 0xFF):
+            self.gaps += 1
+        self._last_seq = seq
+        self.count += 1
+        data = parsed["data"]
+        marker = " trunc" if parsed["truncated"] else ""
+        self._file.write(
+            f"{now - self.started:+8.3f}s {parsed['name']}[0x{parsed['channel']:02X}] "
+            f"seq={seq:03d} {len(data):3d}B{marker} {data.hex(' ')}\n")
+
+    def close(self) -> str | None:
+        """收口落盘器，返回总结一行（本来就没开过返回 None）。"""
+        if self._file is None:
+            return None
+        self._file.close()
+        self._file = None
+        summary = f"采集已保存：{self.path}（{self.count} 条"
+        if self.gaps:
+            summary += f"，{self.gaps} 处跳号（设备队列满丢包）"
+        return summary + "）"
+
+
 def describe_ack(ack: dict) -> str:
     version = f"，设备在跑 {ack['version']}" if ack.get("version") else ""
     return f"state={ack['state']} code={ack['code']}{version}"
@@ -904,6 +957,9 @@ class Session:
         self.shot_ready = False
         self.ota: OtaJob | None = None
         self.amiibo: AmiiboJob | None = None
+        # 主机原始输出采集（:capture / --capture 开启）：落盘器挂在会话上。
+        self.capture: HostCaptureSink | None = None
+        self.captured = 0
         self.stop = False
         self.stop_code = 0
         # 反馈帧打印限频（不影响写回手柄，见 FeedbackThrottle）。
@@ -1053,7 +1109,7 @@ class Session:
         if not chunk:
             return
         frames, text = self.decoder.feed(chunk)
-        for frame_type, _slot, _seq, payload in frames:
+        for frame_type, slot, _seq, payload in frames:
             self.frames += 1
             if frame_type == TYPE_FEEDBACK:
                 params = feedback_params(payload)
@@ -1065,6 +1121,12 @@ class Session:
             elif frame_type == TYPE_OUT_REPORT:
                 if self.write_output_report(payload):
                     self.outputs += 1
+            elif frame_type == TYPE_HOST_RAW:
+                # 主机输出的原始采集：有落盘器写文件，没有就只计数
+                # （设备端 `capture on` 后必须用 :capture <路径> 接住才有文件）。
+                self.captured += 1
+                if self.capture is not None:
+                    self.capture.write_record(parse_host_raw(payload), slot, now)
             elif frame_type == TYPE_PING:
                 self.reporter.line(f"设备在线（协议 v{payload[0] if payload else 0}）")
             elif frame_type == TYPE_IMAGE_INFO:
@@ -1161,10 +1223,64 @@ class Session:
                 self.request_amiibo_upload(arguments)
             except AmiiboError as exc:
                 self.reporter.error(str(exc))
+        elif name == "capture":
+            self.run_capture_command(arguments)
         elif name in ("quit", "q", "exit"):
             self.stop = True
         else:
             self.reporter.error(f"未知的工具命令：{name}（:help 看清单）")
+
+    def run_capture_command(self, arguments: str) -> None:
+        """:capture <路径> 开始落盘、:capture off 停止、无参看状态。"""
+        if arguments == "off":
+            if self.capture is None:
+                self.reporter.line("主机原始输出采集未开启")
+            else:
+                self.stop_capture()
+            return
+        if not arguments:
+            if self.capture is None:
+                self.reporter.line("主机原始输出采集未开启（:capture <文件路径> 开始，"
+                                   "文件存主机写进手柄/设备之前的原始字节）")
+            else:
+                self.reporter.line(f"采集中 → {self.capture.path}（已落盘 "
+                                   f"{self.capture.count} 条；:capture off 停止）")
+            return
+        if self.capture is not None:
+            self.stop_capture()
+        self.start_capture(arguments)
+
+    def start_capture(self, path_str: str) -> None:
+        """开一个采集落盘器并让固件开始上行（设备命令 capture on）。"""
+        try:
+            sink = HostCaptureSink(Path(path_str).expanduser(), time.monotonic())
+            sink.open()
+        except OSError as exc:
+            self.reporter.error(f"打不开采集文件：{exc}")
+            return
+        self.capture = sink
+        try:
+            self.send_cli("capture on")
+        except OSError:
+            self.capture = None
+            sink.close()
+            raise
+        self.reporter.line(f"主机原始输出采集已开启 → {sink.path}"
+                           f"（震动/玩家灯/指令等主机输出的原始字节，:capture off 停止）")
+        self.reporter.event("capture_started", path=str(sink.path))
+
+    def stop_capture(self) -> None:
+        if self.capture is None:
+            return
+        sink, self.capture = self.capture, None
+        try:
+            self.send_cli("capture off")
+        except OSError:
+            pass
+        summary = sink.close()
+        if summary:
+            self.reporter.line(summary)
+        self.reporter.event("capture_stopped", count=sink.count)
 
     def request_shot(self, path: str | None) -> None:
         self.shot_path = Path(path).expanduser() if path else default_shot_path()
@@ -1237,8 +1353,13 @@ class Session:
             self.reporter.line("日志透传结束")
         if self.interactive and now - self.last_stat >= 5.0:
             self.last_stat = now
-            self.reporter.line(f"已转发 {self.reports} 帧报告，收到设备帧 {self.frames} 个，"
-                               f"写回手柄 {self.outputs} 条")
+            stats = (f"已转发 {self.reports} 帧报告，收到设备帧 {self.frames} 个，"
+                     f"写回手柄 {self.outputs} 条")
+            if self.capture is not None:
+                stats += f"，采集已落盘 {self.capture.count} 条"
+            elif self.captured:
+                stats += f"，收到采集帧 {self.captured} 个（:capture <路径> 落盘）"
+            self.reporter.line(stats)
 
     def run_interactive(self, read_stdin: bool = True) -> int:
         """交互会话主循环；图形界面传 read_stdin=False，命令由界面塞进队列。"""
@@ -1361,6 +1482,21 @@ class Session:
             time.sleep(0.001)
         return self.stop_code
 
+    def run_capture(self, path: str, seconds: float) -> int:
+        """抓主机原始输出到文件：--seconds 控制时长（0 = 到 Ctrl+C），
+        手柄转发照常（--pad / 交互默认开）——实体手柄连着串口时同样能抓。"""
+        self.forward = self.args.pad and not self.args.no_pad
+        self.start_capture(path)
+        deadline = time.monotonic() + seconds if seconds > 0 else 0.0
+        while not self.stop:
+            now = time.monotonic()
+            if deadline and now >= deadline:
+                break
+            self.pump(now)
+            time.sleep(0.001)
+        self.stop_capture()
+        return 0
+
 
 def print_local_help(reporter: Reporter) -> None:
     for text in (
@@ -1371,6 +1507,7 @@ def print_local_help(reporter: Reporter) -> None:
         "  :log [秒|off]      透传设备日志（0 表示持续到 :log off）",
         "  :ota [镜像路径]    推固件镜像（默认 firmware/build/remapad_firmware.bin）",
         "  :amiibo <bin 路径> 上传 amiibo 镜像到设备（之后用固件命令 amiibo select 选用）",
+        "  :capture [路径|off] 抓主机原始输出到文件（震动/玩家灯/指令，布局转换前）",
         "  :quit              退出",
         "其余行按固件 CLI 原样发送。手柄功能的完整控制面都在固件 CLI 里：",
         "  输入注入 key/stick，身份 ctrl，连接 connect/pairing/wake/adv/drop，",
@@ -1411,6 +1548,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--shot-timeout", type=float, default=10.0,
                         help="等一次完整截图的秒数（默认 10）")
     parser.add_argument("--log", action="store_true", help="只读设备日志（--seconds 控制时长）")
+    parser.add_argument("--capture", metavar="FILE",
+                        help="抓主机原始输出（震动/玩家灯/指令，布局转换前）到文件后退出"
+                             "（--seconds 控制时长，0 = 到 Ctrl+C；--pad 可同时转发手柄）")
     parser.add_argument("--all", action="store_true",
                         help="拉取设备全部观测数据（status/mem/link/... 逐条轮询）后退出")
     parser.add_argument("--upgrade", action="store_true", help="推固件镜像后重启设备")
@@ -1479,6 +1619,8 @@ def _run(args, command) -> int:
                 code = session.run_all()
             elif args.log:
                 code = session.run_log(args.seconds, args.reset, args.raw)
+            elif args.capture:
+                code = session.run_capture(args.capture, args.seconds)
             elif command:
                 code = session.run_command(" ".join(command))
             else:
@@ -1487,6 +1629,7 @@ def _run(args, command) -> int:
             print("\n已中断", file=sys.stderr)
             code = 130
         finally:
+            session.stop_capture()
             session.detach_pad()
     if code != 0 or not args.wait or not args.upgrade:
         return code

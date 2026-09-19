@@ -20,9 +20,10 @@
 | **接收段（input/、usb/）** | 输入通路的第一段：桥接帧的编解码与串口分帧、USB-Serial/JTAG 的唯一读取者、USB host 枚举与 HID 收发，以及实现 `dp_source_t` 的桥接源与 USB 源。 |
 | **处理段（pad/）** | 输入通路的第二段：家族布局表把各家手柄报告解析成私有格式 `pad_state_t`（按键按位置语义、摇杆归一、能力位）。 |
 | **转换段（target/）** | 输入通路的第三段：目标编码器 `pad_target_t` 把私有格式编码成具体目标家族的报文，现役实现为 `target/ns2/`。 |
-| **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、输出报告帧（`0x11`，设备 → PC 的反馈写回）、截图帧（`0x21`-`0x23`，设备 → PC 的像素分块）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
+| **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、输出报告帧（`0x11`，设备 → PC 的反馈写回）、主机原始采集帧（`0x12`，设备 → PC 的主机输出原文）、反馈帧（`0x20`）、截图帧（`0x21`-`0x23`，设备 → PC 的像素分块）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
 | **同代透传** | 设备自带的报告语言与目标语言一致时，把设备报文体原样交给目标发送（NS2 手柄 → NS2 主机），只重写由本机会话决定的状态字节；判定与取舍见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。 |
 | **输出报告（反馈）** | 主机下发的震动 / 玩家灯经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告，USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。触觉采样不进输出报告：它是主机点播的声音（主机只发采样 ID、节奏来自手柄内部音色库），输入设备有线接入时由板载蜂鸣器按采样音色表发声、蓝牙手柄直接丢弃。DualSense 直插另有音频触觉通道：分带震动包络在板上合成 4ch PCM 经等时端点驱动触觉音圈（[ADR 0042](adr/0042-ds5-audio-haptics-onboard-synthesis.md)）。 |
+| **主机输出原始采集（capture）** | 诊断通道：主机写进输出特征值的原始字节（震动参数包 / 指令帧 / 复合输出 / 固件更新记录流 / 扩展通道）在解析成结构化事件、按布局编码之前的形态，经桥接帧 `0x12` 回传 PC 落盘。采集点在 `ble_controller` 的写分发入口，BLE 侧只入环、串口发送由数据面任务承担；默认关闭，串口 `capture on|off` 开关，PC 侧 `--capture` / `:capture` 接住（[ADR 0045](adr/0045-host-output-raw-capture.md)）。 |
 | **OTA 会话（ota/）** | 升级通道的固件侧：`ota_session` 负责帧队列、非阻塞分派、flash 写入与重启，`ota_proto` 是纯逻辑的序号判定、窗口应答、4 KB 聚合与超时；镜像写进非运行分区，校验通过后切启动分区（见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)）。 |
 | **NS2 report encoder** | 将私有手柄状态（`pad_state_t`）编码为目标 NS2 手柄的 USB/BLE 报告，位于 `firmware/main/target/ns2/`。 |
 | **BLE controller peripheral** | 对 NS2 主机执行广播、GATT 服务、输入通知、输出命令和配对状态管理的 ESP32 外设角色。 |
@@ -355,6 +356,7 @@ classDiagram
 | `0x01` ATTACH / `0x02` DETACH | PC → 设备 | 8 字节设备标识（家族 / 连接方式 / VID:PID / Report ID / 报告长度） |
 | `0x10` REPORT | PC → 设备 | 设备标识 + 原始报告（最多 64 字节） |
 | `0x11` OUT_REPORT | 设备 → PC | 要写回手柄的输出报告原始字节（首字节是 Report ID，最多 78 字节） |
+| `0x12` HOST_RAW | 设备 → PC | 主机输出原始采集：通道字节（GATT 句柄低字节）+ 标志/长度（bit7 截断、低 7 位数据长度）+ 原始字节（最多 253）；帧头 slot 是设备侧记录号，跳号即队列满丢包。默认关闭，串口 `capture on` 打开 |
 | `0x20` FEEDBACK | 设备 → PC | 左右震动使能与两带强度、玩家灯、触觉采样（原始采样 ID，仅日志展示——采样不向桥接渲染）；16 字节版再带两带驱动频率落地值（u16 小端 ×4，PC 侧音频触觉合成用） |
 | `0x30` OTA_BEGIN | PC → 设备 | `ROM1` + 镜像字节数（u32 小端） |
 | `0x31` OTA_DATA | PC → 设备 | 块序号（u16 小端）+ 最多 200 字节镜像数据；帧内 `slot=1` 标记该窗口的末帧 |

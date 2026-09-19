@@ -73,6 +73,7 @@
 | [0042](0042-ds5-audio-haptics-onboard-synthesis.md) | active | DualSense 直插的触觉反馈走板上合成的音频通道：自写最小 UAC1 等时 OUT 客户端（48kHz/4ch PCM，后两路触觉、扬声器恒零），布局行 `out.audio_haptic` 声明能力，音频接手时 USB 路 HID 震动让位、桥接照旧 |
 | [0043](0043-ds5-bridge-pc-side-audio-haptics.md) | active | DualSense 桥接路径的音频触觉由 PC 侧合成：remapadctl 对 4ch 端点开 WASAPI 流驱动通道 3/4，参数吃 FEEDBACK 帧（载荷扩到 16 字节带频率落地值），经 `haptic audio on\|off` 告知设备把桥接 HID 震动让位；延伸 0042 的合成刻度与让位语义 |
 | [0044](0044-amiibo-bridge-upload-nfc-tag-emulation.md) | active | amiibo 镜像经桥接帧（0x40-0x43，逐帧 ACK）上传落 storage 分区 SPIFFS 固定 200 槽（572B 记录 = 镜像 + 厂商签名），选中持久化、重启恢复；NFC 命令通路（Command 0x01）由 target/ns2/ns2_nfc.c 软件模拟 NTAG215 标签，应答体按抓包布局钉在主机端用例 |
+| [0045](0045-host-output-raw-capture.md) | active | 主机输出的原始字节（布局解析之前）经 dp_capture 环形队列与新桥接帧 0x12（HOST_RAW）回传 PC 落盘：默认关闭、串口 capture on\|off 开关，PC 侧 --capture / :capture 接住，与手柄转发同会话共存 |
 
 ## 创建 ADR 脚本用法
 

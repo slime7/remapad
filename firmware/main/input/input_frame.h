@@ -36,14 +36,19 @@ extern "C" {
 #define INPUT_FRAME_WIRE_MAX_LEN \
     (INPUT_FRAME_HEADER_LEN + INPUT_FRAME_WIRE_MAX_PAYLOAD + INPUT_FRAME_CRC_LEN)
 
-/** 帧类型：输入通路 0x01-0x20，截图 0x21-0x23，OTA 升级 0x30-0x33，amiibo
- *  上传 0x40-0x43，探测 0x7F。 */
+/** 帧类型：输入通路 0x01-0x20（含设备 → PC 的输出报告 0x11 与主机输出
+ *  原始采集 0x12），截图 0x21-0x23，OTA 升级 0x30-0x33，amiibo 上传
+ *  0x40-0x43，探测 0x7F。 */
 typedef enum {
     INPUT_FRAME_TYPE_ATTACH = 0x01,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_DETACH = 0x02,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_REPORT = 0x10,   /**< 载荷 = 设备标识 + 原始报告。 */
     /** 设备 → PC：要写回手柄的输出报告（原始字节，首字节是 Report ID）。 */
     INPUT_FRAME_TYPE_OUT_REPORT = 0x11,
+    /** 设备 → PC：主机输出的原始采集（串口 `capture on` 打开）。载荷 =
+     *  通道字节 + 标志/长度字节（bit7 截断、低 7 位数据长度）+ 原始字节
+     *  （最多 253），帧头 slot 是设备侧记录号，跳号即队列满丢包。 */
+    INPUT_FRAME_TYPE_HOST_RAW = 0x12,
     INPUT_FRAME_TYPE_FEEDBACK = 0x20, /**< 载荷 = 反馈（设备 → PC）。 */
     /** 设备 → PC：截图声明。载荷 = 宽 u16 LE + 高 u16 LE + 格式 u8。 */
     INPUT_FRAME_TYPE_IMAGE_INFO = 0x21,

@@ -15,6 +15,7 @@
 #include "os/os_mbuf.h"
 
 #include "ble_session.h"
+#include "dp_capture.h"
 #include "ns2_identity.h"
 #include "ns2_frames.h"
 
@@ -314,6 +315,38 @@ static bool is_input_chr(uintptr_t tag)
     return tag == CHR_INPUT05 || tag == CHR_INPUT09;
 }
 
+/** 写入特征值 → 采集通道字节（controller.md「GATT 属性表」的句柄低字节，
+ *  PC 侧按同一张表还原通道名）。 */
+static uint8_t capture_channel(uintptr_t tag)
+{
+    switch (tag) {
+    case CHR_BASE_CONFIG:
+        return DP_CAPTURE_CH_BASE_CONFIG;
+    case CHR_RUMBLE:
+        return DP_CAPTURE_CH_RUMBLE;
+    case CHR_CMD:
+        return DP_CAPTURE_CH_CMD;
+    case CHR_COMPOSITE:
+        return DP_CAPTURE_CH_COMPOSITE;
+    case CHR_FWUPG:
+        return DP_CAPTURE_CH_FWUPG;
+    case CHR_EXT22:
+        return DP_CAPTURE_CH_EXT22;
+    case CHR_EXT26:
+        return DP_CAPTURE_CH_EXT26;
+    case CHR_EXT2A:
+        return DP_CAPTURE_CH_EXT2A;
+    case CHR_EXT2C:
+        return DP_CAPTURE_CH_EXT2C;
+    case CHR_EXT2E:
+        return DP_CAPTURE_CH_EXT2E;
+    case CHR_EXT32:
+        return DP_CAPTURE_CH_EXT32;
+    default:
+        return 0;
+    }
+}
+
 static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
                       struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
@@ -384,6 +417,9 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     uint16_t len = 0;
     ble_hs_mbuf_to_flat(ctxt->om, wbuf, sizeof(wbuf), &len);
     memset(&wbuf[len], 0, sizeof(wbuf) - len);
+    /* 主机输出的原始字节先过采集通道：这是布局解析与结构化事件之前的最
+     * 原始数据（串口 `capture on` 打开，关闭时只有一次布尔读）。 */
+    dp_capture_host_write(capture_channel(tag), wbuf, len);
     switch (tag) {
     case CHR_RUMBLE:
         ns2_session_on_output(wbuf, len, conn_handle);

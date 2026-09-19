@@ -63,6 +63,9 @@ TYPE_DETACH = 0x02
 TYPE_REPORT = 0x10
 #: 设备 → PC：要写回手柄的输出报告（原始字节，首字节是 Report ID）。
 TYPE_OUT_REPORT = 0x11
+#: 设备 → PC：主机输出的原始采集（通道 + 标志/长度 + 原始字节，布局转换
+#: 之前的数据）。固件默认关闭，串口 `capture on` 打开。
+TYPE_HOST_RAW = 0x12
 TYPE_FEEDBACK = 0x20
 #: 设备 → PC：实机截图（声明 / 分块 / 收尾），与固件 input_frame.h 同名。
 TYPE_IMAGE_INFO = 0x21
@@ -313,6 +316,45 @@ def feedback_params(payload: bytes) -> dict | None:
         params["lf_freq"] = (lf_l, lf_r)
         params["hf_freq"] = (hf_l, hf_r)
     return params
+
+
+#: HOST_RAW 载荷头：通道字节 + 标志/长度字节（bit7 = 截断，低 7 位 = 数据长度）。
+HOST_RAW_HEADER = 2
+#: 通道字节 → 名字（controller.md「GATT 属性表」的句柄低字节，与固件
+#: dp_capture.h 同一张表）。未登记的通道按 ch-<hex> 显示。
+HOST_RAW_CHANNELS = {
+    0x05: "base-config",
+    0x12: "rumble",
+    0x14: "cmd",
+    0x16: "composite",
+    0x18: "fwupg",
+    0x22: "ext-22",
+    0x26: "ext-26",
+    0x2A: "ext-2a",
+    0x2C: "ext-2c",
+    0x2E: "ext-2e",
+    0x32: "ext-32",
+}
+
+
+def parse_host_raw(payload: bytes) -> dict:
+    """采集帧载荷 → {channel, name, truncated, data}。
+
+    与固件 dp_capture.c 的载荷布局一致：[0] 通道、[1] 标志/长度、[2:] 原始
+    字节（主机写进输出特征值的原始数据，布局解析之前）。
+    """
+    if len(payload) < HOST_RAW_HEADER:
+        raise ValueError(f"采集帧载荷过短：{len(payload)} 字节")
+    channel = payload[0]
+    flags = payload[1]
+    length = flags & 0x7F
+    data = payload[HOST_RAW_HEADER:HOST_RAW_HEADER + length]
+    return {
+        "channel": channel,
+        "name": HOST_RAW_CHANNELS.get(channel, f"ch-{channel:02x}"),
+        "truncated": bool(flags & 0x80),
+        "data": data,
+    }
 
 
 class FrameDecoder:

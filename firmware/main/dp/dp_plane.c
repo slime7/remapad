@@ -16,9 +16,11 @@
 #include "ble_creds.h"
 #include "ble_session.h"
 #include "buzzer.h"
+#include "dp_capture.h"
 #include "dp_source.h"
 #include "dp_ui.h"
 #include "feedback.h"
+#include "input_frame.h"
 #include "input_link.h"
 #include "input_source.h"
 #include "ns2_output.h"
@@ -30,9 +32,12 @@ static const char *TAG = "remapad_dp";
 
 #define DP_TICK_MS 5
 
-/** 采样播放的自灭时限：主机正常会用 0x00 采样收掉提示音，但忘了发或丢包时
+/** 采集播放的自灭时限：主机正常会用 0x00 采样收掉提示音，但忘了发或丢包时
  *  不能把蜂鸣钉在响声上；主机以十几 Hz 重发采样时节奏自然续上。 */
 #define DP_HAPTIC_HOLD_US 300000LL
+
+/** 单拍最多发几条采集帧：突发时余下的留在环里，别把一拍时间全交给串口。 */
+#define DP_CAPTURE_DRAIN_MAX 8
 
 /** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告（ADR 0023 的取值）。
  *
@@ -317,6 +322,26 @@ static uint8_t held_haptic_envelope(int64_t now_us, uint32_t *remain_ms)
     return pad_haptic_pulse_step(sample, (uint32_t)((now_us - start) / 1000), remain_ms);
 }
 
+/**
+ * 排空主机输出原始采集：BLE 写侧只入环（NimBLE 主机任务），串口发送集中在
+ * 数据面任务（与反馈帧同一约束）。缓冲是本任务专用的静态区，不占任务栈。
+ */
+static void drain_host_capture(void)
+{
+    if (!input_link_active() || !dp_capture_enabled()) {
+        return;
+    }
+    static uint8_t payload[INPUT_FRAME_WIRE_MAX_PAYLOAD];
+    for (int i = 0; i < DP_CAPTURE_DRAIN_MAX; i++) {
+        uint8_t slot = 0;
+        const size_t len = dp_capture_pop_payload(payload, sizeof(payload), &slot);
+        if (len == 0) {
+            break;
+        }
+        input_link_send_host_raw(slot, payload, len);
+    }
+}
+
 /** 采样蜂鸣的使能判据：跟输入设备的接入方式走——有线接入（USB host 直插，
  *  或桥接转发的有线手柄）用板载蜂鸣器把采样放成声音；蓝牙手柄按约定丢弃
  *  （采样点播的提示音在蓝牙场景不发也不震）。 */
@@ -510,6 +535,7 @@ static void dp_task(void *param)
                 ESP_LOGD(TAG, "host gone: clearing held rumble state");
             }
         }
+        drain_host_capture();
         if (pad.buttons != last_buttons) {
             const int64_t now_us = esp_timer_get_time();
             if (now_us - last_button_log_us >= DP_BUTTON_LOG_MIN_INTERVAL_US) {

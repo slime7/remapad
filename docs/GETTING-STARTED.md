@@ -271,6 +271,8 @@ uv run python remapadctl.py -p COM3 reboot          # 软重启回 COM 模式
 uv run python remapadctl.py -p COM3 --log --seconds 20         # 只读设备日志 20 秒
 uv run python remapadctl.py -p COM3 --log --reset --seconds 25  # 先复位再抓完整启动日志
 uv run python remapadctl.py -p COM3 --shot --out shots\ui.png   # 抓实机截图并指定输出路径
+uv run python remapadctl.py -p COM3 capture on        # 主机输出原始采集开（off 关）：震动/玩家灯/指令等主机输出经 0x12 帧回传
+uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad   # 抓 30 秒主机原始输出到文件（布局转换前），手柄转发照常
 ```
 
 `key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr ui`。

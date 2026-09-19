@@ -18,6 +18,7 @@
 #include "ble_session.h"
 #include "buzzer.h"
 #include "console_out.h"
+#include "dp_capture.h"
 #include "dp_source.h"
 #include "dp_ui.h"
 #include "dp_plane.h"
@@ -86,6 +87,7 @@ static void cli_help(void)
     cli_print("  lamp [0x0-0xF]      manual player lamp mask (no arg = held state)");
     cli_print("  haptic [0xNN|audio on|off]");
     cli_print("                      manual sample byte; audio = PC drives DS5 haptics");
+    cli_print("  capture [on|off]    raw host output tap -> PC bridge frames (default off)");
     cli_print("  amiibo [list|select <n>|select off|del <n>|poll on|off]");
     cli_print("                      amiibo slots and NFC tag emulation (no arg = state)");
     cli_print("                      amiibo state <hex> pin report stage, done <hex> post-drain");
@@ -856,6 +858,29 @@ static void cli_usb(void)
     cli_print(line);
 }
 
+/** 主机输出原始采集开关：on 开、off 关（默认关）；无参回读状态与计数。
+ *  开启后主机写进输出特征值的原始字节（布局解析之前）经桥接帧 0x12 回传
+ *  PC，由 PC 端 `--capture` / `:capture` 落盘。 */
+static void cli_capture(const char *arg)
+{
+    if (strcmp(arg, "on") == 0) {
+        dp_capture_set_enabled(true);
+    } else if (strcmp(arg, "off") == 0) {
+        dp_capture_set_enabled(false);
+    } else if (arg[0] != '\0') {
+        cli_print("err usage: capture [on|off]");
+        return;
+    }
+    uint32_t pushed = 0;
+    uint32_t dropped = 0;
+    dp_capture_counts(&pushed, &dropped);
+    char line[64];
+    snprintf(line, sizeof(line), "capture %s pushed=%lu dropped=%lu",
+             dp_capture_enabled() ? "on" : "off", (unsigned long)pushed,
+             (unsigned long)dropped);
+    cli_print(line);
+}
+
 /** 同代透传开关：0 关、1 开（默认开）；无参回读当前值。 */
 static void cli_relay(const char *arg)
 {
@@ -1223,6 +1248,8 @@ static void cli_dispatch(char *line)
         cli_lamp(arg);
     } else if (strcmp(line, "haptic") == 0) {
         cli_haptic(arg);
+    } else if (strcmp(line, "capture") == 0) {
+        cli_capture(arg);
     } else if (strcmp(line, "amiibo") == 0) {
         cli_amiibo(arg);
     } else if (strcmp(line, "ltk") == 0) {

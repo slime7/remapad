@@ -295,3 +295,21 @@ void input_link_send_out_report(const uint8_t *report, size_t len)
     }
     input_link_send_frame(INPUT_FRAME_TYPE_OUT_REPORT, 0, report, len);
 }
+
+void input_link_send_host_raw(uint8_t slot, const uint8_t *payload, size_t payload_len)
+{
+    /* 采集载荷到线格式上限（255 字节），用放宽版编码入口；与反馈同一路径
+     * 的非阻塞写，主机没在读时整帧丢弃。 */
+    if (!s_running || payload == NULL || payload_len < 2u ||
+        payload_len > INPUT_FRAME_WIRE_MAX_PAYLOAD) {
+        return;
+    }
+    uint8_t frame[INPUT_FRAME_WIRE_MAX_LEN];
+    const size_t len = input_frame_encode_wire(frame, sizeof(frame),
+                                               INPUT_FRAME_TYPE_HOST_RAW, slot, 0,
+                                               payload, payload_len);
+    if (len == 0) {
+        return;
+    }
+    usb_serial_jtag_write_bytes(frame, len, 0);
+}

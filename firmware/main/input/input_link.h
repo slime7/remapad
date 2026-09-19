@@ -54,6 +54,13 @@ void input_link_send_feedback(const pad_feedback_t *feedback);
 void input_link_send_out_report(const uint8_t *report, size_t len);
 
 /**
+ * 采集帧（设备 → PC，INPUT_FRAME_TYPE_HOST_RAW）：主机输出的原始字节，
+ * 载荷最长到线格式上限（255 字节），因此走线格式编码；slot 传设备侧
+ * 记录号，PC 靠它检测跳号丢包。未接入或链路停用时丢弃，不阻塞。
+ */
+void input_link_send_host_raw(uint8_t slot, const uint8_t *payload, size_t payload_len);
+
+/**
  * 实机截图通路（设备 → PC）：INFO 声明尺寸与像素格式，DATA 按偏移分块回传
  * 像素，END 汇报总字节数。三者都用等待式发送并可能超时，供 UI owner task
  * 在调试命令里同步回传整幅画面；PC 侧按偏移是否覆盖满判定完整性。

@@ -40,6 +40,8 @@ uv run python remapadctl.py -p COM3 --all             # 拉取设备全部观测
 uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
 uv run python remapadctl.py -p COM3 --log --seconds 20
 uv run python remapadctl.py -p COM3 --log --reset --seconds 25
+uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30
+                                          # 抓 30 秒主机原始输出（布局转换前）后退出
 uv run python remapadctl.py -p COM3 --upgrade --wait
 uv run python remapadctl.py -p COM3 --amiibo Alm.bin   # 上传 amiibo 镜像后退出
 uv run python remapadctl.py -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --no-rumble
@@ -101,6 +103,8 @@ rumble 200 0     手动震动（0-255 双侧，rumble off 停）；lamp 0xF 玩�
                  与主机反馈走同一条编码投递路径
 ui on            手柄操控屏幕模式（ui off 退出）
 backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode host USB 角色
+capture on       主机输出原始采集（off 关；开启后主机写进输出特征值的原始字节
+                 经 0x12 帧回传 PC，PC 侧用 --capture / :capture 接住落盘）
 amiibo list      amiibo 槽位列表（名称 + UID，当前选中带 *）；amiibo select 0 选用、
                  select off 取消、del 0 删除、poll on|off 手动开关射频场（无主机验证）
 ```
@@ -116,6 +120,7 @@ amiibo list      amiibo 槽位列表（名称 + UID，当前选中带 *）；ami
 :all               拉取设备全部观测数据（同 --all）
 :shot [路径]       抓实机截图并存成 PNG
 :log [秒|off]      透传设备日志（0 表示持续到 :log off）
+:capture [路径|off] 抓主机原始输出到文件（震动/玩家灯/指令，布局转换前；off 停止）
 :ota [镜像路径]    推固件镜像（默认 ../firmware/build/remapad_firmware.bin）
 :amiibo <bin 路径> 上传 amiibo 镜像到设备（540 纯镜像或 572 = 镜像 + 厂商签名，槽位名取文件名主干）
 :quit              退出
@@ -193,7 +198,8 @@ CRC-16/CCITT-FALSE（多项式 `0x1021`、初值 `0xFFFF`）覆盖除末尾两�
 长度是单字节（线格式上限 255 字节）；`REPORT` 帧的载荷是 8 字节设备标识（家族、连接方式、
 VID/PID 小端、Report ID、报告长度）加上最多 64 字节原始报告，因此报文帧按 72 字节校验。
 类型有 `ATTACH`（0x01）、`DETACH`（0x02）、`REPORT`（0x10）、`OUT_REPORT`（0x11，设备 → PC）、
-`FEEDBACK`（0x20，设备 → PC）、截图帧 `IMAGE_INFO` / `IMAGE_DATA` / `IMAGE_END`（0x21-0x23，设备 → PC）、
+`HOST_RAW`（0x12，设备 → PC，主机输出原始采集）、`FEEDBACK`（0x20，设备 → PC）、
+截图帧 `IMAGE_INFO` / `IMAGE_DATA` / `IMAGE_END`（0x21-0x23，设备 → PC）、
 OTA 升级用的 `OTA_BEGIN`（0x30）、`OTA_DATA`（0x31，载荷到 202 字节）、`OTA_END`（0x32）、
 设备回发的 `OTA_ACK`（0x33）、amiibo 上传用的 `AMIIBO_BEGIN`（0x40）、`AMIIBO_DATA`（0x41）、
 `AMIIBO_END`（0x42）与设备回发的 `AMIIBO_ACK`（0x43），以及 `PING`（0x7F）。
@@ -225,6 +231,36 @@ PC 侧只把它交给 `hid.write()`，不参与任何映射（PS 系蓝牙形态
 `FEEDBACK` 帧的打印按秒合并（`FeedbackThrottle`）：震动效果的包络逐帧在变，
 逐条打印会把日志区刷爆（游戏内实测每秒上百条）；窗口内只打第一条，
 下一条带「已合并 N 条」。写回手柄与帧计数不受限频影响。
+
+## 主机原始输出采集（--capture / :capture）
+
+这是看「主机到底发了什么」的抓包通路：固件把主机写进输出特征值的**原始字节**
+（震动参数包、指令帧、复合输出、固件更新记录流与扩展通道）在解析成结构化事件、
+按布局编码之前的形态直接回传 PC。与 `OUT_REPORT` / `FEEDBACK` 的区别：
+那两帧是固件消化过的结果（归一化状态 / 按输入设备布局重新编码的报告），
+`HOST_RAW` 是主机原文，供协议对账与问题定位。
+
+```powershell
+uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad
+                                          # 抓 30 秒，手柄转发照常（实体手柄连着串口也能抓）
+```
+
+交互模式里 `:capture <路径>` 开始、`:capture off` 停止、`:capture` 看状态；
+`--capture` 是同一能力的一次性形态（`--seconds` 控制时长，0 = 到 Ctrl+C）。
+落盘是文本格式，一行一条记录：
+
+```text
++0.500s rumble[0x12] seq=000  32B 7c 04 80 01 97 63 ...
++1.250s cmd[0x14] seq=001   9B 09 91 01 07 00 01 00 00 01
+```
+
+通道字节取 controller.md「GATT 属性表」的句柄低字节（`base-config` 0x05、
+`rumble` 0x12、`cmd` 0x14、`composite` 0x16、`fwupg` 0x18、扩展通道 0x22-0x32，
+含音频下行 0x2C）；单条写入超过 253 字节（升级数据块）截断并带 `trunc` 标记；
+`seq` 是设备侧记录号，跳号说明设备队列满、丢过包（收尾总结里按处数汇总）。
+采集默认关闭（震动流约 66 Hz，开着会持续占用串口），设备侧开关是串口命令
+`capture on|off`，`:capture` / `--capture` 会自己发送；会话结束或 `:capture off`
+时自动发 `capture off` 并落总结一行。
 
 ## DS5 音频触觉（桥接路径，--no-audio-haptics 关闭）
 
