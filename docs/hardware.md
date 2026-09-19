@@ -101,8 +101,12 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 | GPIO43 | U0TXD | UART TX | 扩展口 |
 | GPIO44 | U0RXD | UART RX | 扩展口 |
 
-扩展口可用信号：
-`5V` / `3V3` / `GND`、I2C（`GPIO10` / `GPIO11`）、UART（`GPIO43` / `GPIO44`），以及 `GPIO2` / `GPIO3` / `GPIO17` / `GPIO18`。
+对外焊盘按 V2.1 原理图核对分两处：
+
+- **H1 排针（20 针）**：`3V3`（3 / 4 / 17 脚）、`GND`（1 / 5 / 6 / 12 / 18 / 19 / 20 脚）、I2C（13 脚 `GPIO10` SCL / 14 脚 `GPIO11` SDA）、LCD 控制线（2 脚 LEDK，7–11 脚 `GPIO4`–`GPIO8`）与触摸复位 / 中断（15 / 16 脚 `GPIO13` / `GPIO14`）。排针上没有 5V、UART 与 `GPIO2` / `GPIO3` / `GPIO17` / `GPIO18`。
+- **TP1–TP11 测试点**：TP1=`VBUS`（5V）、TP2=`GND`、TP3=`3V3`、TP4 / TP5=UART0（`GPIO44` / `GPIO43`）、TP6 / TP7=I2C、TP8–TP11=`GPIO2` / `GPIO3` / `GPIO17` / `GPIO18`。
+
+`5V` 即 TP1 上的 VBUS 网络，是 host 模式给手柄供电的注入点，见「USB 控制器复用」。
 
 ## 板级注意事项
 
@@ -147,7 +151,9 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 - 烧录不受影响：按住 BOOT 复位进下载模式，ROM 以复位默认 mux 接 USB-Serial/JTAG，COM 口出现，`idf.py flash` 照常工作；固件也可以实现"重启进下载模式"的软命令。
 - host 运行期间的日志通道改为 UART0（GPIO43/44 扩展焊盘 + USB-UART 适配器）——这就是「与串口调试通道互斥」的确切含义；
   固件在切 host 之前先把日志与 CLI 出口迁到 UART0（`console/console_out.c`），切回串口再迁回来。
-- host 模式还需板级向插入的手柄提供 VBUS 5V，供电路径仍待原理图确认，见板级注意事项；未确认前手柄能否枚举只有在实机上才能验证。
+- host 模式需向插入手柄提供 VBUS 5V。V2.1 原理图已确认供电路径：板上没有电池→5V 的升压级（ETA6098 只是把 VBUS 降压充进电池的开关充电器），
+  电池正极经电源开关 Q5 直接搭在 VBUS 网络上（约 3.5–4.1V，低于手柄枚举门限，这就是纯电池点不亮手柄的原因）；
+  VBUS 的 5V 只能从外部注入，板上注入点是 TP1（TP2 接 GND），注入同时经 ETA6098 给电池充电，手柄实际枚举仍待实机验证（[ROADMAP.md](ROADMAP.md) M5）。
 
 以上为芯片与 IDF v6.1 源码事实；固件已按这套机制接入 USB host（枚举、HID 收发与角色切换，方案见 [usb-input-plan.md](usb-input-plan.md)）。
 实机核对项见 [ROADMAP.md](ROADMAP.md) M5，结论回填本节。
@@ -172,7 +178,7 @@ BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller.md
 尚未接入的硬件：
 
 - IMU（QMI8658C）与 RTC（PCF85063ATL）的驱动与状态上报；
-- USB host 输入的实机验收（代码已落地，VBUS 供电与 mux 切换待实测，清单见 [ROADMAP.md](ROADMAP.md) M5）；
+- USB host 输入的实机验收（代码已落地；VBUS 供电路径已按 V2.1 原理图确认为 TP1 外部注入，mux 切换与手柄枚举待实测，清单见 [ROADMAP.md](ROADMAP.md) M5）；
 - 充电状态与外部供电的测量：核对原理图后确认 ETA6098 的 STAT 引脚（9 脚）空置、没有引出任何网络，板上也没有 VBUS 检测网络；
   固件的充电标志是按采样电压趋势推断的，不是实测值（见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)）。要拿到实测值，得另加测量：
   在 VBUS / PMID 网络上取分压接空闲 GPIO（外部供电），或在电池回路串采样电阻、并一颗电量计（电量与充放电方向）；

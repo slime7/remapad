@@ -19,7 +19,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
 目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围。
-两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）的代码都已落地，实机核对与 VBUS 供电确认待做。
+两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）的代码都已落地，实机核对待做（VBUS 供电路径已按 V2.1 原理图确认为 TP1 外部注入）。
 不要因为 Web 预览可以交互就认为真实 BLE 链路已经可用。
 
 板卡已知信息都记录在 [hardware.md](hardware.md)：
@@ -381,13 +381,13 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 - host 模式下 PC 上不再有 COM 口：串口 CLI、桥接程序与 OTA 都用不了，日志与 CLI 改走 UART0（GPIO43/44 扩展焊盘接 USB-UART 适配器，115200）。
 - 回到串口有两条路：在 UART0 上敲 `mode device`（或从模式页切回「串口」），或者复位——复用开关复位默认回 USB-Serial/JTAG，COM 口天然回来，烧录不受影响。
 - 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 Xbox 有线布局并打兜底标记。
-- 门禁：host 模式要给插入的手柄供 VBUS 5V，供电路径还没确认（[hardware.md](hardware.md) 挂起项）；确认前手柄能否枚举只能在实机验证。
+- 供电：host 模式要给插入的手柄供 VBUS 5V，V2.1 原理图确认板上无升压输出，需从 TP1 外部注入 5V（见 [hardware.md](hardware.md)）；手柄能否枚举仍需实机验证。
 
 ## 最终产品数据面（当前规划）
 
 后续固件工作按以下顺序拆分（进度跟踪见 [ROADMAP.md](ROADMAP.md)，BLE 链路先行、USB 输入殿后）：
 
-1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（代码完成：`firmware/main/usb/` 枚举 HID 手柄、按 VID/PID 走同一份家族表，实机核对与 VBUS 供电确认待做）
+1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（代码完成：`firmware/main/usb/` 枚举 HID 手柄、按 VID/PID 走同一份家族表，实机核对待做；VBUS 供电确认已完成，见 [hardware.md](hardware.md)）
 2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。
    （已完成，按 `firmware/main/input/` → `pad/` → `target/` 三段划分，见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）
 3. PC 手柄经桥接程序与串口帧进入设备，映射与编码走同一套 `pad/` + `target/`。（设备侧与 PC 侧代码已完成，实机验收与家族表抓包核对待做）

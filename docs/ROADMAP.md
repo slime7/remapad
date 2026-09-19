@@ -59,7 +59,7 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
 - [x] `usbRole` 命令真实化：模式页「手柄」卡片与 CLI `mode host` 都会真实切换；角色不落盘，复位即回串口
   （PWR 长按自 [ADR 0038](adr/0038-user-initiated-connection-window.md) 起改为连接键）。
 - [ ] USB mux 切换实机核对：切 host 后 PC 上的 COM 口消失、UART0（GPIO43/44）能看到日志与 CLI、切回串口或复位后 COM 口回来；结论回填 [hardware.md](hardware.md)。
-- [ ] VBUS 5V 供电路径确认（hardware.md 挂起项，决定 host 模式能否给插入的手柄供电；未确认前手柄枚举结果都要在实机复核）。
+- [x] VBUS 5V 供电路径确认（V2.1 原理图：板上无电池→5V 升压级，VBUS 只能由 Type-C / TP1 外部注入，注入同时给电池充电；手柄枚举实机复核并入下方核对项）。
 - [ ] 识别与透传实机核对：开关各家族手柄看 `pad` / `usb` 命令的识别结果、命中布局行与兜底标记；NS2 手柄插入后确认主机收到的是设备原样报文体（真电量与真运动数据）、`relay 0` 时回到解析重编码路径。
 - [ ] 反馈写实机核对：主机震动与玩家灯在 USB 直插与 PC 桥接两条路径上都能到实体手柄（`pad_feedback.c` 的偏移统统待核对，Xbox 与 DS3 尤其不确定）。
 - [ ] `motion 3` 实验档实机 A/B：确认主机是否接受按 NS1 样本风格填的 0x09 运动块；不接受则保持全零占位，等抓到真手柄运动报文再解。
@@ -137,7 +137,7 @@ UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重�
 - **内存预算**：NimBLE host + BLE controller 与 QuickJS guest（6.5 MB JS 堆）共存；
   内部 RAM 当前约 360 KB 空闲，必要时 NimBLE 堆切 PSRAM（ADR 0010）。
 - **连接间隔主导权在主机**：5–10 ms 区间由 Switch 2 作为 central 发起，外设侧需确保接受且上报循环跟上节奏（见 controller.md「常见问题排查与注意事项」）。
-- **VBUS 供电未知（M5 门禁）**：板卡唯一 Type-C 兼任烧录/日志/输入，host 模式下 PHY 切换会失去 COM 口，且 VBUS 5V 供电路径待原理图确认；M5 起步前先完成两项硬件确认。
+- **VBUS 供电需外部注入（M5 硬件确认已过）**：板卡唯一 Type-C 兼任烧录/日志/输入，host 模式下 PHY 切换会失去 COM 口；V2.1 原理图确认板上无 5V 输出路径，host 玩法必须从 TP1 注入 5V（充电宝 / USB 电源），剩余风险是实机枚举。
 - **实机条件**：Switch 2 主机、NS2 手柄（Pro Controller 2）、USB-C 数据线/OTG 转接、UART 串口适配器均已具备。
 
 ## 本阶段明确不做
