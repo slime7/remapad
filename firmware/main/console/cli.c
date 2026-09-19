@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "amiibo_store.h"
 #include "app_config.h"
 #include "backlight.h"
 #include "battery.h"
@@ -24,6 +25,7 @@
 #include "input_source.h"
 #include "layout.h"
 #include "ns2_identity.h"
+#include "ns2_nfc.h"
 #include "ns2_output.h"
 #include "ns2_report.h"
 #include "ota_session.h"
@@ -84,6 +86,10 @@ static void cli_help(void)
     cli_print("  lamp [0x0-0xF]      manual player lamp mask (no arg = held state)");
     cli_print("  haptic [0xNN|audio on|off]");
     cli_print("                      manual sample byte; audio = PC drives DS5 haptics");
+    cli_print("  amiibo [list|select <n>|select off|del <n>|poll on|off]");
+    cli_print("                      amiibo slots and NFC tag emulation (no arg = state)");
+    cli_print("                      amiibo state <hex> pin report stage, done <hex> post-drain");
+    cli_print("                      amiibo hdr 0|1 read buffer header, push 0-4 drain event");
     cli_print("  fwver [a.b.c]       handset fw version reported to the host");
     cli_print("  fwack [hex bytes]   ack body for the host update frame (default empty)");
     cli_print("  fwpost [a.b.c]      version reported after a host update (default 9.9.9)");
@@ -993,6 +999,163 @@ static void cli_fwapply(const char *arg)
     cli_print("err usage: fwapply on|off");
 }
 
+/** 槽位镜像里的 7 字节 UID（NTAG215 页 0-2 的 UID 字段）排成十六进制串。 */
+static void cli_amiibo_uid(const uint8_t *image, char *out, size_t cap)
+{
+    static const size_t offs[7] = {0, 1, 2, 4, 5, 6, 8};
+    size_t used = 0;
+    for (size_t i = 0; i < 7 && used + 2 < cap; i++) {
+        snprintf(&out[used], cap - used, "%02x", image[offs[i]]);
+        used += 2;
+    }
+    out[used < cap ? used : cap - 1] = 0;
+}
+
+/**
+ * amiibo 槽位与 NFC 标签模拟：镜像由 PC 侧（remapadctl --amiibo 或界面）经
+ * 桥接帧上传落库；select 把镜像预置进 NFC 模拟层（主机开轮询后即感应到卡）。
+ * poll 是串口验证开关——没有主机在场时让标签手动入场/离场。
+ */
+static void cli_amiibo(const char *arg)
+{
+    char cmd[16] = {0};
+    char sub[16] = {0};
+    const int fields = sscanf(arg, "%15s %15s", cmd, sub);
+    char line[128];
+    if (fields < 1) {
+        char name[AMIIBO_NAME_MAX + 1] = "-";
+        const int selected = amiibo_store_selected();
+        if (selected >= 0) {
+            amiibo_store_name((size_t)selected, name, sizeof(name));
+        }
+        snprintf(line, sizeof(line), "amiibo slots=%u/%u selected=%d '%s' nfc=0x%02x poll=%u hdr=%u",
+                 (unsigned)amiibo_store_count(), (unsigned)amiibo_store_capacity(), selected,
+                 name, (unsigned)ns2_nfc_report_state(), ns2_nfc_polling() ? 1u : 0u,
+                 (unsigned)ns2_nfc_header_mode());
+        cli_print(line);
+        return;
+    }
+    if (strcmp(cmd, "list") == 0) {
+        for (size_t i = 0; i < amiibo_store_capacity(); i++) {
+            char name[AMIIBO_NAME_MAX + 1];
+            if (!amiibo_store_name(i, name, sizeof(name))) {
+                continue;
+            }
+            uint8_t record[AMIIBO_RECORD_SIZE];
+            char uid[15] = "--------------";
+            if (amiibo_store_read_record(i, record, sizeof(record)) > 0) {
+                cli_amiibo_uid(record, uid, sizeof(uid));
+            }
+            snprintf(line, sizeof(line), "  %u%c %s uid=%s", (unsigned)i,
+                     amiibo_store_selected() == (int)i ? '*' : ' ', name, uid);
+            cli_print(line);
+        }
+        cli_print("ok amiibo list done");
+        return;
+    }
+    if (strcmp(cmd, "select") == 0) {
+        if (strcmp(sub, "off") == 0) {
+            amiibo_store_deselect();
+            cli_print("ok amiibo deselected (nfc state idle)");
+            return;
+        }
+        const int index = atoi(sub);
+        if (sub[0] == '\0' || index < 0 || (size_t)index >= amiibo_store_capacity()) {
+            cli_print("err usage: amiibo select <n>|off");
+            return;
+        }
+        const esp_err_t err = amiibo_store_select((size_t)index);
+        if (err != ESP_OK) {
+            snprintf(line, sizeof(line), "err amiibo select %d failed: %s", index,
+                     esp_err_to_name(err));
+            cli_print(line);
+            return;
+        }
+        snprintf(line, sizeof(line), "ok amiibo slot %d selected (nfc state 0x%02x)", index,
+                 (unsigned)ns2_nfc_report_state());
+        cli_print(line);
+        return;
+    }
+    if (strcmp(cmd, "del") == 0) {
+        const int index = atoi(sub);
+        if (sub[0] == '\0' || index < 0 || (size_t)index >= amiibo_store_capacity()) {
+            cli_print("err usage: amiibo del <n>");
+            return;
+        }
+        const esp_err_t err = amiibo_store_remove((size_t)index);
+        if (err != ESP_OK) {
+            snprintf(line, sizeof(line), "err amiibo del %d failed: %s", index,
+                     esp_err_to_name(err));
+            cli_print(line);
+            return;
+        }
+        snprintf(line, sizeof(line), "ok amiibo slot %d removed", index);
+        cli_print(line);
+        return;
+    }
+    if (strcmp(cmd, "poll") == 0) {
+        if (strcmp(sub, "on") == 0 || strcmp(sub, "off") == 0) {
+            ns2_nfc_set_polling(sub[1] == 'n');
+            snprintf(line, sizeof(line), "ok amiibo polling %s (nfc state 0x%02x)", sub,
+                     (unsigned)ns2_nfc_report_state());
+            cli_print(line);
+            return;
+        }
+        cli_print("err usage: amiibo poll on|off");
+        return;
+    }
+    if (strcmp(cmd, "state") == 0) {
+        if (sub[0] == '\0') {
+            snprintf(line, sizeof(line), "ok amiibo nfc state 0x%02x (poll=%u)",
+                     (unsigned)ns2_nfc_report_state(), ns2_nfc_polling() ? 1u : 0u);
+            cli_print(line);
+            return;
+        }
+        const uint32_t stage = strtoul(sub, NULL, 16);
+        ns2_nfc_set_report_stage((uint8_t)stage);
+        snprintf(line, sizeof(line), "ok amiibo stage -> %s (nfc state 0x%02x)", sub,
+                 (unsigned)ns2_nfc_report_state());
+        cli_print(line);
+        return;
+    }
+    if (strcmp(cmd, "done") == 0) {
+        if (sub[0] == '\0') {
+            cli_print("ok usage: amiibo done <hex> (post-drain state value)");
+            return;
+        }
+        const uint32_t value = strtoul(sub, NULL, 16);
+        ns2_nfc_set_drained_state((uint8_t)value);
+        snprintf(line, sizeof(line), "ok amiibo drained state -> 0x%02x",
+                 (unsigned)value & 0xFFu);
+        cli_print(line);
+        return;
+    }
+    if (strcmp(cmd, "push") == 0) {
+        if (sub[0] != '\0') {
+            const uint32_t value = strtoul(sub, NULL, 16);
+            ns2_nfc_set_push_mode((uint8_t)value);
+        }
+        snprintf(line, sizeof(line), "ok amiibo drain push mode %u (usage: amiibo push 0-4)",
+                 (unsigned)ns2_nfc_push_mode());
+        cli_print(line);
+        return;
+    }
+    if (strcmp(cmd, "hdr") == 0) {
+        if (strcmp(sub, "0") == 0 || strcmp(sub, "1") == 0) {
+            ns2_nfc_set_header_mode((uint8_t)(sub[0] - '0'));
+            snprintf(line, sizeof(line), "ok amiibo header mode %s",
+                     ns2_nfc_header_mode() ? "template" : "zeros");
+            cli_print(line);
+            return;
+        }
+        snprintf(line, sizeof(line), "ok amiibo header mode %u (usage: amiibo hdr 0|1)",
+                 (unsigned)ns2_nfc_header_mode());
+        cli_print(line);
+        return;
+    }
+    cli_print("err usage: amiibo [list|select <n>|select off|del <n>|poll on|off|state|done|hdr]");
+}
+
 static void cli_dispatch(char *line)
 {
     char *space = strchr(line, ' ');
@@ -1060,6 +1223,8 @@ static void cli_dispatch(char *line)
         cli_lamp(arg);
     } else if (strcmp(line, "haptic") == 0) {
         cli_haptic(arg);
+    } else if (strcmp(line, "amiibo") == 0) {
+        cli_amiibo(arg);
     } else if (strcmp(line, "ltk") == 0) {
         cli_ltk(arg);
     } else if (strcmp(line, "drop") == 0) {

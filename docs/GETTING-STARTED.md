@@ -265,6 +265,7 @@ uv run python remapadctl.py -p COM3 adv auto        # 广播窗口内的形态�
 uv run python remapadctl.py -p COM3 ctrl            # 手柄配色（ctrl [body button accent grip]，四段 0xRRGGBB，持久化；无参回读）
 uv run python remapadctl.py -p COM3 advaddr         # 广播地址形态（auto / public / random，不落盘），分辨主机是否按地址形态过滤
 uv run python remapadctl.py -p COM3 advpdu          # 广播 PDU 形态（auto / legacy / extended，不落盘）
+uv run python remapadctl.py -p COM3 --amiibo Alm.bin # 上传 amiibo 镜像到设备 storage 分区槽位（540 或 572 字节 dump；amiibo list / select 0 选用）
 uv run python remapadctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
 uv run python remapadctl.py -p COM3 reboot          # 软重启回 COM 模式
 uv run python remapadctl.py -p COM3 --log --seconds 20         # 只读设备日志 20 秒

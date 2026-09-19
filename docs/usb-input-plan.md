@@ -81,5 +81,6 @@ PC 程序职责：枚举本机手柄、采样原始报告、按约定格式打�
    若将来要把桥接改到 OTG device 形态（例如为了更高的带宽），仍受上面两条门槛约束，且需要「确认后重启回 COM」的保底恢复路径（复位即回 Serial/JTAG，天然成立）；在那之前 UI 与串口两条入口都保持禁切。
 4. **电池**：上报主机的电量优先取输入设备自报值（家族表置 `PAD_CAP_BATTERY`，经 `target_apply_pad_battery` 覆盖事实表）；
    板载 `drivers/battery.c`（GPIO1，`VBAT = VADC × 3`）只在设备没报电量时兜底，经 `ns2_output_set_battery` 上报，Report 0x05 / 0x09 电池字段随报告自动携带。
-5. **amiibo**：`ns2_output_amiibo_stage / _read` 已预留（PSRAM 内缓存 NTAG215 镜像，Report 0x09 的 NFC 状态字节随预置汇报 0x01）；
-   传输方式未定（bridge 分块 / storage 分区文件 / USB 通道均可），NFC 命令通路（Command 0x01）在会话层实现时消费该镜像，届时不再改动输出封装。
+5. **amiibo**：已按「bridge 分块」落地——镜像经桥接帧（`0x40-0x43`）上传落 storage 分区 SPIFFS 槽位（`amiibo/`），
+   NFC 命令通路（Command 0x01）由 `target/ns2/ns2_nfc.c` 消费预置镜像模拟标签，布局与实现位置见
+   [controller.md](controller.md) 的「NFC 与 Amiibo 数据交互协议规范」。

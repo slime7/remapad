@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "amiibo_session.h"
 #include "cli.h"
 #include "input_frame.h"
 #include "input_source.h"
@@ -20,7 +21,9 @@ static const char *TAG = "remapad_input";
 /** RX 环形缓冲要能吃下一整帧加一段命令行：太小会在日志刷屏时丢字节。 */
 #define INPUT_LINK_RX_BUF 4096
 #define INPUT_LINK_TX_BUF 1024
-#define INPUT_LINK_TASK_STACK 4096
+/* CLI 桥接命令在这条任务里执行：amiibo 槽位读写走 SPIFFS/VFS 的 fopen
+ * 调用链（栈深），4096 会溢出（实机 2026-09-19 select 即溢出），定 8192。 */
+#define INPUT_LINK_TASK_STACK 8192
 #define INPUT_LINK_TASK_PRIO 6
 /** 控制帧（PING/OTA 应答）等着写进发送环的上限：日志刷屏时环会满，但绝不无限等。 */
 #define INPUT_LINK_REPLY_TIMEOUT_MS 200u
@@ -41,10 +44,14 @@ static void on_frame(const input_frame_view_t *frame, void *user)
         return;
     }
     s_frames++;
-    /* 升级帧由 OTA 会话接走（要写 flash，不能落在输入通路里）；探测帧在这里
-     * 直接应答，其余交给输入源。 */
+    /* 升级帧由 OTA 会话接走（要写 flash，不能落在输入通路里）；amiibo 上传
+     * 帧由 amiibo 会话接走（要写 NVS）；探测帧在这里直接应答，其余交给输入源。 */
     if (ota_session_is_frame_type(frame->type)) {
         ota_session_handle_frame(frame);
+        return;
+    }
+    if (amiibo_session_is_frame_type(frame->type)) {
+        amiibo_session_handle_frame(frame);
         return;
     }
     if (frame->type == INPUT_FRAME_TYPE_PING) {

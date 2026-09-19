@@ -26,6 +26,9 @@ idf_component_register(
         "boot_splash.c"
         "pocketjs_host.c"
         "render_accel.c"
+        "amiibo/amiibo_proto.c"
+        "amiibo/amiibo_session.c"
+        "amiibo/amiibo_store.c"
         "bridge/js_bridge.c"
         "config/app_config.c"
         "console/cli.c"
@@ -55,6 +58,7 @@ idf_component_register(
         "target/ns2/ns2_report.c"
         "target/ns2/ns2_adv.c"
         "target/ns2/ns2_frames.c"
+        "target/ns2/ns2_nfc.c"
         "target/ns2/ns2_upgrade.c"
         "target/ns2/ns2_output.c"
         "target/ns2/ns2_serial.c"
@@ -74,6 +78,7 @@ idf_component_register(
         "usb/haptic_synth.c"
     INCLUDE_DIRS
         "."
+        "amiibo"
         "bridge"
         "config"
         "console"
@@ -86,7 +91,7 @@ idf_component_register(
         "ble"
         "dp"
         "usb"
-    REQUIRES ${remapad_pocketjs_requires}
+    REQUIRES ${remapad_pocketjs_requires} spiffs
 )
 
 set(POCKETJS_REMAPAD_PREBUILT_PACKAGE "" CACHE FILEPATH

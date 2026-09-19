@@ -41,6 +41,7 @@ uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
 uv run python remapadctl.py -p COM3 --log --seconds 20
 uv run python remapadctl.py -p COM3 --log --reset --seconds 25
 uv run python remapadctl.py -p COM3 --upgrade --wait
+uv run python remapadctl.py -p COM3 --amiibo Alm.bin   # 上传 amiibo 镜像后退出
 uv run python remapadctl.py -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --no-rumble
 uv run python remapadctl.py -p COM3 --logs            # 桥接的同时打印设备日志
 ```
@@ -100,6 +101,8 @@ rumble 200 0     手动震动（0-255 双侧，rumble off 停）；lamp 0xF 玩�
                  与主机反馈走同一条编码投递路径
 ui on            手柄操控屏幕模式（ui off 退出）
 backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode host USB 角色
+amiibo list      amiibo 槽位列表（名称 + UID，当前选中带 *）；amiibo select 0 选用、
+                 select off 取消、del 0 删除、poll on|off 手动开关射频场（无主机验证）
 ```
 
 无参敲这些命令即回读当前值（`backlight`、`ctrl`、`motion`、`relay`、`rumble`…），
@@ -114,12 +117,13 @@ backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode 
 :shot [路径]       抓实机截图并存成 PNG
 :log [秒|off]      透传设备日志（0 表示持续到 :log off）
 :ota [镜像路径]    推固件镜像（默认 ../firmware/build/remapad_firmware.bin）
+:amiibo <bin 路径> 上传 amiibo 镜像到设备（540 纯镜像或 572 = 镜像 + 厂商签名，槽位名取文件名主干）
 :quit              退出
 ```
 
 `:shot` 与 `:ota` 的路径参数整段生效：路径里有空格也不用加引号（界面里的截图与升级按钮走同一条路径）。
 
-手柄转发默认只在交互模式里开：一次性命令、`--shot`、`--log` 与 `--upgrade` 都不碰手柄（否则
+手柄转发默认只在交互模式里开：一次性命令、`--shot`、`--log`、`--upgrade` 与 `--amiibo` 都不碰手柄（否则
 主机会看到手柄闪一下），要在这些模式里也转发就加 `--pad`；`--no-pad` 在任何模式下都关掉转发。
 
 虚拟手柄（Moonlight/Sunshine 串流时经 ViGEmBus 虚拟出的 DS4 等）会被 hidapi 枚举成普通
@@ -191,11 +195,19 @@ VID/PID 小端、Report ID、报告长度）加上最多 64 字节原始报告�
 类型有 `ATTACH`（0x01）、`DETACH`（0x02）、`REPORT`（0x10）、`OUT_REPORT`（0x11，设备 → PC）、
 `FEEDBACK`（0x20，设备 → PC）、截图帧 `IMAGE_INFO` / `IMAGE_DATA` / `IMAGE_END`（0x21-0x23，设备 → PC）、
 OTA 升级用的 `OTA_BEGIN`（0x30）、`OTA_DATA`（0x31，载荷到 202 字节）、`OTA_END`（0x32）、
-设备回发的 `OTA_ACK`（0x33），以及 `PING`（0x7F）。
+设备回发的 `OTA_ACK`（0x33）、amiibo 上传用的 `AMIIBO_BEGIN`（0x40）、`AMIIBO_DATA`（0x41）、
+`AMIIBO_END`（0x42）与设备回发的 `AMIIBO_ACK`（0x43），以及 `PING`（0x7F）。
 
 截图三帧的载荷：`IMAGE_INFO` 是宽 u16 小端 + 高 u16 小端 + 格式（1 = RGB565 小端）共 5 字节；
 `IMAGE_DATA` 是整幅画面的字节偏移 u32 小端 + 最多 200 字节像素；`IMAGE_END` 是总字节数 u32 小端。
 完整性由偏移覆盖满整幅画面判定，不再另做校验和。
+
+amiibo 上传四帧（`--amiibo` 与交互模式 `:amiibo` 走这套）：
+`AMIIBO_BEGIN` 是名称长度 u8 + 名称（UTF-8，1-31 字节）+ 镜像字节数 u32 小端（必须是 540，或 572 = 镜像 + 尾部 32 字节厂商签名）；
+`AMIIBO_DATA` 是偏移 u16 小端 + 最多 200 字节数据（偏移越过已收字节数报错，重复帧幂等）；
+`AMIIBO_END` 无载荷；设备对每帧回 `AMIIBO_ACK`：状态 + 错误码 + 已收字节 u32 小端 + 槽位号
+（仅 DONE 有意义，0xFF 表示无）。收齐后设备落 storage 分区槽位（572 字节记录，纯镜像签名补零）并回 DONE，
+串口 `amiibo select <n>` 选用（NFC 标签模拟见 [../docs/controller.md](../docs/controller.md) 的 NFC 章节）。
 
 设备在主机下发 NS2 反馈（震动 / 玩家灯 / 触觉采样）时回发两种帧：
 `FEEDBACK` 是归一化状态（打印与对账用，DS5 桥接时还驱动 PC 侧音频触觉合成；

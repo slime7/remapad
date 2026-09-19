@@ -17,6 +17,7 @@
 #include "ns2_adv.h"
 #include "ns2_identity.h"
 #include "ns2_frames.h"
+#include "ns2_nfc.h"
 #include "ns2_output.h"
 #include "ns2_report.h"
 #include "ns2_serial.h"
@@ -1110,6 +1111,12 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     memset(resp, 0, ANSWER_PREFIX_LEN);
     size_t resp_len;
     switch (cmd) {
+    case 0x01:
+        /* NFC 命令通路（controller.md「NFC 与 Amiibo 数据交互协议规范」）：
+         * 软件模拟的 NTAG215 标签，镜像由 amiibo 存储层预置。 */
+        resp_len = ns2_nfc_on_command(data, len, subcmd, frame,
+                                      sizeof(resp) - ANSWER_PREFIX_LEN);
+        break;
     case 0x07:
         /* 初始握手（controller.md「通信交互与报告上报时序」阶段 1）：应答体 1 字节 0x00。 */
         frame[8] = 0x00;
@@ -1228,7 +1235,41 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         resp_len = NS2_FRAME_HEADER_LEN;
     }
     ns2_frame_response_header(frame, cmd, transport, subcmd);
+    if (cmd == 0x01) {
+        /* NFC 应答的 Status/ACK 字节按子命令取抓包值（0x05 一族 00/F8、
+         * 0x0C/0x15 10/78）；未命中的子命令沿用通用帧头。 */
+        uint8_t nfc_status = 0;
+        uint8_t nfc_ack = 0;
+        if (ns2_nfc_response_ack(subcmd, &nfc_status, &nfc_ack)) {
+            frame[4] = nfc_status;
+            frame[5] = nfc_ack;
+        }
+    }
     ble_controller_notify_answer(conn_handle, resp, ANSWER_PREFIX_LEN + resp_len);
+    if (cmd == 0x01) {
+        /* NFC 抽块结束（0x15 EOF）后的完成事件：按 MCU 时代 read3 的形态主动
+         * 补发一帧（`amiibo push <n>` 运行时选形态，0 = 关）。 */
+        ns2_nfc_event_t ev;
+        if (ns2_nfc_pop_event(&ev)) {
+            const size_t ev_len = NS2_FRAME_HEADER_LEN + ev.body_len;
+            if (ev_len <= sizeof(resp) - ANSWER_PREFIX_LEN) {
+                memset(frame, 0, ev_len);
+                if (ev.body_len > 0) {
+                    memcpy(&frame[NS2_FRAME_HEADER_LEN], ev.body, ev.body_len);
+                }
+                ns2_frame_response_header(frame, cmd, transport, ev.subcmd);
+                uint8_t ev_status = 0;
+                uint8_t ev_ack = 0;
+                if (ns2_nfc_response_ack(ev.subcmd, &ev_status, &ev_ack)) {
+                    frame[4] = ev_status;
+                    frame[5] = ev_ack;
+                }
+                ble_controller_notify_answer(conn_handle, resp, ANSWER_PREFIX_LEN + ev_len);
+                ESP_LOGI(TAG, "nfc drain push 0x%02x (%uB)", ev.subcmd,
+                         (unsigned)(ANSWER_PREFIX_LEN + ev_len));
+            }
+        }
+    }
     if (!hot_path) {
         ESP_LOGI(TAG, "rsp 0x%02x/0x%02x (%uB) %s", cmd, subcmd,
                  (unsigned)(ANSWER_PREFIX_LEN + resp_len),

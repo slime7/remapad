@@ -142,5 +142,6 @@ UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重�
 
 ## 本阶段明确不做
 
-amiibo/storage 分区（amiibo 镜像暂存 PSRAM）、IMU/RTC 外设、用户自定义映射与 NVS 持久化（本轮只留家族表与映射结构上的覆盖点）、UI 基础组件库（Phase 2 另一支线，另行安排）。
-OTA 由 M6 落地，不再是排除项。
+IMU/RTC 外设、用户自定义映射与 NVS 持久化（本轮只留家族表与映射结构上的覆盖点）、UI 基础组件库（Phase 2 另一支线，另行安排）。
+OTA 由 M6 落地，不再是排除项。amiibo 的底层通路（桥接帧上传 + storage 分区槽位 + Command 0x01 标签模拟，屏幕 UI 除外）已先行落地，
+整条读取流程待真机互操作验证，见 [controller.md](controller.md) 的「NFC 与 Amiibo 数据交互协议规范」。

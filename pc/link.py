@@ -72,6 +72,12 @@ TYPE_OTA_BEGIN = 0x30
 TYPE_OTA_DATA = 0x31
 TYPE_OTA_END = 0x32
 TYPE_OTA_ACK = 0x33
+#: amiibo 上传帧（设备 ← PC 的 BEGIN/DATA/END 与设备 → PC 的 ACK），载荷布局
+#: 与固件 amiibo/amiibo_proto.h 一致：镜像固定 540 字节，逐帧回 ACK。
+TYPE_AMIIBO_BEGIN = 0x40
+TYPE_AMIIBO_DATA = 0x41
+TYPE_AMIIBO_END = 0x42
+TYPE_AMIIBO_ACK = 0x43
 TYPE_PING = 0x7F
 
 #: BEGIN 载荷：magic + image_size(u32 LE)。
@@ -99,6 +105,67 @@ OTA_CODE_NAMES = {
     6: "镜像校验失败",
     7: "设备侧超时",
 }
+
+#: BEGIN 载荷：name_len(u8) + name(UTF-8) + 镜像大小(u32 LE)。
+AMIIBO_NAME_MAX = 31
+#: DATA 载荷：offset(u16 LE) + 数据，单帧数据上限 200 字节。
+AMIIBO_DATA_MAX = 200
+#: NTAG215 用户区完整镜像（amiibo dump 通行尺寸）。
+AMIIBO_TAG_SIZE = 540
+#: 厂商签名（READ_SIG 页）长度；572 字节 dump 把它附在镜像尾部。
+AMIIBO_SIG_SIZE = 32
+#: 带签名的整份 dump（镜像 + 签名）。
+AMIIBO_FULL_SIZE = AMIIBO_TAG_SIZE + AMIIBO_SIG_SIZE
+#: ACK 载荷：state + code + received(u32 LE) + slot（仅 done 有意义，0xFF 无）。
+AMIIBO_ACK_LEN = 7
+
+AMIIBO_STATE_NAMES = {0: "idle", 1: "receiving", 2: "done", 3: "failed"}
+#: 数值与固件 amiibo_code_t 一致（测试与调用方按名字取用）。
+AMIIBO_CODE_OK = 0
+AMIIBO_CODE_BUSY = 1
+AMIIBO_CODE_BAD_HEADER = 2
+AMIIBO_CODE_OFFSET_ERROR = 3
+AMIIBO_CODE_STORE_ERROR = 4
+AMIIBO_CODE_SIZE_MISMATCH = 5
+AMIIBO_CODE_TIMEOUT = 7
+AMIIBO_CODE_NAMES = {
+    0: "ok",
+    1: "设备忙（已有上传在进行）",
+    2: "名称或镜像大小无效",
+    3: "数据偏移不衔接",
+    4: "设备存储失败（槽位写满或 NVS 出错）",
+    5: "字节数与声明不符",
+    7: "设备侧超时",
+}
+
+
+def amiibo_begin_payload(name: str, size: int) -> bytes:
+    """BEGIN 载荷：名称长度 + 名称（UTF-8，1-31 字节）+ 镜像字节数（小端）。"""
+    raw = name.encode("utf-8")
+    if not 0 < len(raw) <= AMIIBO_NAME_MAX:
+        raise ValueError(f"amiibo 名称必须是 1-{AMIIBO_NAME_MAX} 字节（UTF-8），当前 {len(raw)}")
+    return bytes([len(raw)]) + raw + size.to_bytes(4, "little")
+
+
+def amiibo_data_payload(offset: int, chunk: bytes) -> bytes:
+    """DATA 载荷：偏移（小端）+ 镜像数据。"""
+    if len(chunk) > AMIIBO_DATA_MAX:
+        raise ValueError("amiibo 数据块超过单帧上限")
+    return offset.to_bytes(2, "little") + chunk
+
+
+def parse_amiibo_ack(payload: bytes) -> dict:
+    """解析设备回发的上传 ACK：state + code + received(u32 LE) + slot。"""
+    if len(payload) < AMIIBO_ACK_LEN:
+        raise ValueError(f"ACK 载荷过短：{len(payload)} 字节")
+    return {
+        "state": AMIIBO_STATE_NAMES.get(payload[0], str(payload[0])),
+        "state_id": payload[0],
+        "code": AMIIBO_CODE_NAMES.get(payload[1], str(payload[1])),
+        "code_id": payload[1],
+        "received": int.from_bytes(payload[2:6], "little"),
+        "slot": payload[6],
+    }
 
 FAMILY_UNKNOWN = 0
 FAMILY_XBOX = 1

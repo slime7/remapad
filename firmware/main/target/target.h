@@ -19,7 +19,7 @@ typedef struct {
     bool charging;
     bool external_power;
     bool rumble_enabled; /**< 主机开启了触觉/震动特性。 */
-    uint8_t nfc_state;   /**< 预置 amiibo 的就绪状态。 */
+    uint8_t nfc_state;   /**< NFC 标签模拟状态（ns2_nfc：开轮询且有镜像 0x01）。 */
 } pad_target_facts_t;
 
 /**

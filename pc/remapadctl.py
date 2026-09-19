@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""Remapad PC 侧单工具：桥接转发 + 串口命令行 + 实机截图 + 固件 OTA。
+﻿#!/usr/bin/env python3
+"""Remapad PC 侧单工具：桥接转发 + 串口命令行 + 实机截图 + 固件 OTA + amiibo 上传。
 
 设备只有一根 Type-C：USB-Serial/JTAG 同时承载桥接帧、固件日志与 CLI 文本。
 同一个进程持有这个口，因此转发手柄、敲命令、抓实机截图与推固件可以同时进行；
@@ -15,18 +15,21 @@
     uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
     uv run python remapadctl.py -p COM3 --log --seconds 20
     uv run python remapadctl.py -p COM3 --upgrade --wait
+    uv run python remapadctl.py -p COM3 --amiibo Alm.bin  # 上传 amiibo 后退出
 
 交互模式里不是 `:` 开头的行按固件 CLI 原样发送，手柄功能由此完整可控：
 输入注入 key/stick、身份 ctrl、配对 pairing/wake/adv/drop、上报内容
 motion/headset/fwver/fwpost/fwack/fwapply、链路 ltk/relay、反馈测试
-rumble/lamp/haptic、屏幕 ui/backlight/screen、模式 mode（固件侧 help 有全表）。
+rumble/lamp/haptic、amiibo 槽位 list/select/del/poll、屏幕 ui/backlight/screen、
+模式 mode（固件侧 help 有全表）。
 数据命令都由固件现场读数应答，不经过 UI 层——UI 冻结（截图期间、页面门控
 不取数）不影响 status/mem 等数据的实时性。
 `:` 开头的是本工具命令：
-    :help  :all  :shot [路径]  :log [秒]  :ota [镜像]  :quit
+    :help  :all  :shot [路径]  :log [秒]  :ota [镜像]  :amiibo <bin>  :quit
 
-手柄转发默认只在交互模式里开：一次性命令、截图、只读日志与升级不碰手柄（否则主机会看到
-手柄闪一下），要在这些模式里也转发就加 --pad，任何模式下都用 --no-pad 彻底关掉。
+手柄转发默认只在交互模式里开：一次性命令、截图、只读日志、升级与 amiibo 上传不碰手柄
+（否则主机会看到手柄闪一下），要在这些模式里也转发就加 --pad，任何模式下都用 --no-pad
+彻底关掉。
 
 图形界面入口见同目录的 remapadgui.py：界面复用这里的会话循环与所有命令处理，
 只是把输出换成队列、把键盘输入换成按钮与输入框；两边不要同时打开同一个串口。
@@ -48,6 +51,10 @@ from ctypes import wintypes
 from pathlib import Path
 
 from link import (
+    AMIIBO_DATA_MAX,
+    AMIIBO_NAME_MAX,
+    AMIIBO_SIG_SIZE,
+    AMIIBO_TAG_SIZE,
     CONN_BT,
     CONN_UNKNOWN,
     CONN_USB,
@@ -56,6 +63,10 @@ from link import (
     OTA_DATA_MAX,
     OTA_SLOT_WINDOW_END,
     OTA_WINDOW_FRAMES,
+    TYPE_AMIIBO_ACK,
+    TYPE_AMIIBO_BEGIN,
+    TYPE_AMIIBO_DATA,
+    TYPE_AMIIBO_END,
     TYPE_ATTACH,
     TYPE_DETACH,
     TYPE_FEEDBACK,
@@ -72,6 +83,8 @@ from link import (
     WIRE_MAX_PAYLOAD,
     FrameDecoder,
     SerialLink,
+    amiibo_begin_payload,
+    amiibo_data_payload,
     device_id,
     encode,
     family_for_vendor,
@@ -79,6 +92,7 @@ from link import (
     open_port,
     ota_begin_payload,
     ota_data_payload,
+    parse_amiibo_ack,
     parse_image_chunk,
     parse_image_end,
     parse_image_info,
@@ -109,6 +123,10 @@ class HidUnavailable(RuntimeError):
 
 class ImageError(RuntimeError):
     """应用镜像不合法：内容、芯片标识或项目名不符合本设备的升级条件。"""
+
+
+class AmiiboError(RuntimeError):
+    """amiibo 文件不合法：不是 540 字节的 NTAG215 dump，或拿不出可用的名称。"""
 
 
 class Reporter:
@@ -152,6 +170,12 @@ DEFAULT_IMAGE = "../firmware/build/remapad_firmware.bin"
 OTA_STATE_RECEIVING = 1
 OTA_STATE_DONE = 2
 OTA_STATE_FAILED = 3
+
+AMIIBO_STATE_RECEIVING = 1
+AMIIBO_STATE_DONE = 2
+AMIIBO_STATE_FAILED = 3
+#: ACK 里 slot 字段的「未落库」取值。
+AMIIBO_SLOT_NONE = 0xFF
 
 #: 升级后等设备回来的超时与轮询间隔。
 REOPEN_TIMEOUT_S = 60.0
@@ -657,6 +681,130 @@ class OtaJob:
         self.exit_code = 1
 
 
+class AmiiboJob:
+    """amiibo 上传状态机：BEGIN → 一段 DATA → END，逐帧 ACK 驱动；由会话
+    主循环 tick 驱动，桥接转发同时照跑。镜像固定 540 字节（三个数据帧），
+    设备逐帧回 ACK，received 就是续传起点。"""
+
+    ACK_TIMEOUT_S = 3.0
+    MAX_RETRIES = 5
+
+    def __init__(self, name: str, data: bytes, send, reporter: Reporter) -> None:
+        self.name = name
+        self.data = data
+        self._send = send
+        self.reporter = reporter
+        self.received = 0
+        self.retries = 0
+        self.phase = "begin"
+        self.deadline = 0.0
+        self.finished = False
+        self.exit_code = 1
+
+    def start(self, now: float) -> None:
+        self.reporter.line(f"上传 amiibo「{self.name}」（{len(self.data)} 字节）")
+        self.reporter.event("amiibo_started", amiibo=self.name, size=len(self.data))
+        self._send(encode(TYPE_AMIIBO_BEGIN, 0, 0,
+                          amiibo_begin_payload(self.name, len(self.data))))
+        self.phase = "begin"
+        self.deadline = now + self.ACK_TIMEOUT_S
+
+    def _send_pending(self, now: float) -> None:
+        """从设备已确认的字节起重发剩余数据；设备对已收区间按幂等处理。"""
+        window = bytearray()
+        offset = self.received
+        while offset < len(self.data):
+            piece = self.data[offset:offset + AMIIBO_DATA_MAX]
+            window += encode(TYPE_AMIIBO_DATA, 0, 0,
+                             amiibo_data_payload(offset, piece), max_payload=WIRE_MAX_PAYLOAD)
+            offset += len(piece)
+        self._send(bytes(window))
+        self.deadline = now + self.ACK_TIMEOUT_S
+
+    def tick(self, now: float) -> None:
+        if self.finished or now < self.deadline:
+            return
+        if self.phase == "begin":
+            self._fail("设备没有回应上传请求；确认设备是 COM 模式、串口没被占用"
+                       "且固件已带 amiibo 功能")
+            return
+        if self.phase == "data":
+            self.retries += 1
+            if self.retries > self.MAX_RETRIES:
+                self._fail(f"连续 {self.retries} 次没有等到数据应答，上传中止；"
+                           "设备侧 5 秒无数据也会自行作废会话")
+                return
+            self.reporter.line(f"数据应答超时，从 {self.received} 字节处重发（第 {self.retries} 次）")
+            self._send_pending(now)
+            return
+        if self.phase == "end":
+            self._fail("设备没有确认收尾，槽位没有落库")
+
+    def on_ack(self, ack: dict) -> None:
+        if self.finished:
+            return
+        if self.phase == "begin":
+            if ack["state_id"] != AMIIBO_STATE_RECEIVING or ack["code_id"] != 0:
+                self._fail(f"设备拒绝上传（{describe_amiibo_ack(ack)}）")
+                return
+            self.phase = "data"
+            self._send_pending(time.monotonic())
+            return
+        if self.phase == "data":
+            if ack["state_id"] == AMIIBO_STATE_FAILED:
+                self._fail(f"设备中止上传（{describe_amiibo_ack(ack)}），"
+                           f"已确认 {ack['received']} 字节")
+                return
+            self.retries = 0
+            self.received = ack["received"]
+            if self.received >= len(self.data):
+                self.phase = "end"
+                self._send(encode(TYPE_AMIIBO_END, 0, 0))
+                self.deadline = time.monotonic() + self.ACK_TIMEOUT_S
+            return
+        if self.phase == "end":
+            if ack["state_id"] == AMIIBO_STATE_DONE and ack["code_id"] == 0:
+                self.finished = True
+                self.exit_code = 0
+                slot = ack["slot"]
+                self.reporter.line(f"上传完成：「{self.name}」已存为槽位 "
+                                   f"{'-' if slot == AMIIBO_SLOT_NONE else slot}")
+                self.reporter.event("amiibo_finished", ok=True, slot=slot, amiibo=self.name)
+            else:
+                self._fail(f"设备落库失败（{describe_amiibo_ack(ack)}）")
+
+    def _fail(self, message: str) -> None:
+        self.reporter.error(message)
+        self.reporter.event("amiibo_finished", ok=False, message=message)
+        self.finished = True
+        self.exit_code = 1
+
+
+def describe_amiibo_ack(ack: dict) -> str:
+    return f"state={ack['state']} code={ack['code']} received={ack['received']}"
+
+
+def load_amiibo(path: Path) -> tuple[str, bytes]:
+    """读入 amiibo dump（540 字节 NTAG215 镜像，或 572 字节镜像 + 厂商签名），
+    返回（名称, 字节）。572 的签名段进设备读缓冲头区，主机校验签名时必需。
+
+    名称取文件名主干，按 UTF-8 截到 31 字节（不在多字节字符中间截断），
+    是设备侧槽位的显示名；不合法抛 AmiiboError。
+    """
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise AmiiboError(f"读不到 amiibo 文件 {path}：{exc}") from exc
+    if len(data) not in (AMIIBO_TAG_SIZE, AMIIBO_TAG_SIZE + AMIIBO_SIG_SIZE):
+        raise AmiiboError(
+            f"{path} 是 {len(data)} 字节，amiibo dump 固定是 {AMIIBO_TAG_SIZE}（纯镜像）"
+            f"或 {AMIIBO_TAG_SIZE + AMIIBO_SIG_SIZE}（镜像 + 厂商签名）字节")
+    name = path.stem.encode("utf-8")[:AMIIBO_NAME_MAX].decode("utf-8", errors="ignore").strip()
+    if not name:
+        raise AmiiboError(f"{path} 的文件名拿不出可用的槽位名")
+    return name, data
+
+
 def load_image(path: Path) -> tuple[bytes, str]:
     """读入并校验应用镜像，返回（字节, 版本号）；不合法抛 ImageError。"""
     try:
@@ -755,6 +903,7 @@ class Session:
         self.shot_path: Path | None = None
         self.shot_ready = False
         self.ota: OtaJob | None = None
+        self.amiibo: AmiiboJob | None = None
         self.stop = False
         self.stop_code = 0
         # 反馈帧打印限频（不影响写回手柄，见 FeedbackThrottle）。
@@ -926,6 +1075,8 @@ class Session:
                 self.finish_shot(payload)
             elif frame_type == TYPE_OTA_ACK and self.ota is not None:
                 self.ota.on_ack(parse_ota_ack(payload))
+            elif frame_type == TYPE_AMIIBO_ACK and self.amiibo is not None:
+                self.amiibo.on_ack(parse_amiibo_ack(payload))
         if text:
             self.handle_text(text)
 
@@ -1002,6 +1153,14 @@ class Session:
             self.reporter.line(f"透传设备日志 {seconds:.0f} 秒（0 表示持续到 :log off）")
         elif name == "ota":
             self.request_upgrade(arguments or None)
+        elif name == "amiibo":
+            if not arguments:
+                self.reporter.error("用法：:amiibo <bin 文件路径>（540 字节 NTAG215 dump）")
+                return
+            try:
+                self.request_amiibo_upload(arguments)
+            except AmiiboError as exc:
+                self.reporter.error(str(exc))
         elif name in ("quit", "q", "exit"):
             self.stop = True
         else:
@@ -1038,6 +1197,12 @@ class Session:
         self.ota = OtaJob(image, version, self.link.write, self.reporter)
         self.ota.start(time.monotonic())
 
+    def request_amiibo_upload(self, amiibo_path: str) -> None:
+        path = Path(amiibo_path).expanduser()
+        name, data = load_amiibo(path)
+        self.amiibo = AmiiboJob(name, data, self.link.write, self.reporter)
+        self.amiibo.start(time.monotonic())
+
     # --- 主循环 ----------------------------------------------------
 
     def pump(self, now: float) -> None:
@@ -1056,6 +1221,16 @@ class Session:
             if self.ota.finished:
                 self.stop = True
                 self.stop_code = self.ota.exit_code
+        if self.amiibo is not None:
+            self.amiibo.tick(now)
+            if self.amiibo.finished:
+                code = self.amiibo.exit_code
+                self.amiibo = None
+                # 交互模式的 :amiibo 不退出会话（传完可以接着 select / list）；
+                # 一次性 --amiibo 在这里收口退出。
+                if not self.interactive:
+                    self.stop = True
+                    self.stop_code = code
         if self.log_mode and self.log_deadline and now >= self.log_deadline:
             self.log_mode = False
             self.log_deadline = 0.0
@@ -1177,6 +1352,15 @@ class Session:
             time.sleep(0.001)
         return self.stop_code
 
+    def run_amiibo(self, path: str) -> int:
+        """上传 amiibo：状态机在 pump 里推进，完成即退出。"""
+        self.forward = self.args.pad and not self.args.no_pad
+        self.request_amiibo_upload(path)
+        while self.amiibo is not None and not self.stop:
+            self.pump(time.monotonic())
+            time.sleep(0.001)
+        return self.stop_code
+
 
 def print_local_help(reporter: Reporter) -> None:
     for text in (
@@ -1186,6 +1370,7 @@ def print_local_help(reporter: Reporter) -> None:
         "  :shot [路径]       抓实机截图并存成 PNG（默认 pc/shots/）",
         "  :log [秒|off]      透传设备日志（0 表示持续到 :log off）",
         "  :ota [镜像路径]    推固件镜像（默认 firmware/build/remapad_firmware.bin）",
+        "  :amiibo <bin 路径> 上传 amiibo 镜像到设备（之后用固件命令 amiibo select 选用）",
         "  :quit              退出",
         "其余行按固件 CLI 原样发送。手柄功能的完整控制面都在固件 CLI 里：",
         "  输入注入 key/stick，身份 ctrl，连接 connect/pairing/wake/adv/drop，",
@@ -1231,6 +1416,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--upgrade", action="store_true", help="推固件镜像后重启设备")
     parser.add_argument("--image", default=DEFAULT_IMAGE,
                         help=f"镜像路径（默认 {DEFAULT_IMAGE}）")
+    parser.add_argument("--amiibo", metavar="BIN",
+                        help="上传 amiibo 镜像（540 字节 NTAG215 dump）到设备后退出")
     parser.add_argument("--dry-run", action="store_true", help="只校验镜像，不接设备")
     parser.add_argument("--wait", action="store_true",
                         help="--upgrade 后等设备重启回来并打印版本")
@@ -1246,7 +1433,7 @@ def main(argv=None) -> int:
     command = [item for item in args.command if item]
     try:
         return _run(args, command)
-    except (HidUnavailable, ImageError) as exc:
+    except (HidUnavailable, ImageError, AmiiboError) as exc:
         print(exc, file=sys.stderr)
         return 2
 
@@ -1284,6 +1471,8 @@ def _run(args, command) -> int:
         try:
             if args.upgrade:
                 code = session.run_upgrade()
+            elif args.amiibo:
+                code = session.run_amiibo(args.amiibo)
             elif args.shot:
                 code = session.run_shot(args.out)
             elif args.all:

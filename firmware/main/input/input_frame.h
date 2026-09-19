@@ -36,7 +36,8 @@ extern "C" {
 #define INPUT_FRAME_WIRE_MAX_LEN \
     (INPUT_FRAME_HEADER_LEN + INPUT_FRAME_WIRE_MAX_PAYLOAD + INPUT_FRAME_CRC_LEN)
 
-/** 帧类型：输入通路 0x01-0x20，截图 0x21-0x23，OTA 升级 0x30-0x33，探测 0x7F。 */
+/** 帧类型：输入通路 0x01-0x20，截图 0x21-0x23，OTA 升级 0x30-0x33，amiibo
+ *  上传 0x40-0x43，探测 0x7F。 */
 typedef enum {
     INPUT_FRAME_TYPE_ATTACH = 0x01,   /**< 载荷 = 设备标识（8 字节）。 */
     INPUT_FRAME_TYPE_DETACH = 0x02,   /**< 载荷 = 设备标识（8 字节）。 */
@@ -55,6 +56,13 @@ typedef enum {
     INPUT_FRAME_TYPE_OTA_DATA = 0x31,  /**< 载荷 = 块序号 + 镜像数据（设备 ← PC）。 */
     INPUT_FRAME_TYPE_OTA_END = 0x32,   /**< 无载荷，声明数据发完（设备 ← PC）。 */
     INPUT_FRAME_TYPE_OTA_ACK = 0x33,   /**< 载荷 = 升级状态应答（设备 → PC）。 */
+    /** 载荷 = 名称声明（名称长度 + 名称 + 540 字节大小，设备 ← PC）。 */
+    INPUT_FRAME_TYPE_AMIIBO_BEGIN = 0x40,
+    /** 载荷 = 偏移(u16 LE) + 最多 200 字节镜像数据（设备 ← PC）。 */
+    INPUT_FRAME_TYPE_AMIIBO_DATA = 0x41,
+    INPUT_FRAME_TYPE_AMIIBO_END = 0x42, /**< 无载荷，声明数据发完（设备 ← PC）。 */
+    /** 载荷 = 状态 + 错误码 + 已收字节(u32 LE) + 槽位号（设备 → PC）。 */
+    INPUT_FRAME_TYPE_AMIIBO_ACK = 0x43,
     INPUT_FRAME_TYPE_PING = 0x7F,     /**< 载荷 = 版本号（1 字节）。 */
 } input_frame_type_t;
 

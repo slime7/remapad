@@ -2,16 +2,12 @@
 
 #include <string.h>
 
-#include "esp_err.h"
-#include "esp_heap_caps.h"
 #include "esp_log.h"
 
+#include "ns2_nfc.h"
 #include "ns2_report.h"
 
 static const char *TAG = "remapad_ns2out";
-
-/** NTAG215 用户区完整镜像（ amiibo dump 通行尺寸：135 页 × 4B = 540B）。 */
-#define NS2_AMIIBO_MAX 540
 
 static struct {
     ns2_output_sink_t sink;
@@ -34,9 +30,6 @@ static struct {
     bool headset_override_on;
     uint8_t headset_override;
     uint8_t headset_derived;
-
-    uint8_t *amiibo;
-    size_t amiibo_len;
 } s_out;
 
 void ns2_output_set_sink(const ns2_output_sink_t *sink)
@@ -182,55 +175,10 @@ bool ns2_output_send_raw(const pad_state_t *pad)
     return delivered > 0;
 }
 
-esp_err_t ns2_output_amiibo_stage(const uint8_t *data, size_t len)
-{
-    if (len == 0 || data == NULL) {
-        if (s_out.amiibo != NULL) {
-            heap_caps_free(s_out.amiibo);
-            s_out.amiibo = NULL;
-            s_out.amiibo_len = 0;
-        }
-        return ESP_OK;
-    }
-    if (len > NS2_AMIIBO_MAX) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-    if (s_out.amiibo == NULL) {
-        s_out.amiibo = heap_caps_malloc(NS2_AMIIBO_MAX, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (s_out.amiibo == NULL) {
-            s_out.amiibo = heap_caps_malloc(NS2_AMIIBO_MAX, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
-        if (s_out.amiibo == NULL) {
-            return ESP_ERR_NO_MEM;
-        }
-    }
-    memcpy(s_out.amiibo, data, len);
-    s_out.amiibo_len = len;
-    ESP_LOGI(TAG, "amiibo staged: %u bytes (nfc state -> ready)", (unsigned)len);
-    return ESP_OK;
-}
-
-bool ns2_output_amiibo_ready(void)
-{
-    return s_out.amiibo != NULL;
-}
-
-size_t ns2_output_amiibo_read(uint32_t offset, uint8_t *out, size_t len)
-{
-    if (out == NULL || len == 0 || s_out.amiibo == NULL || offset >= s_out.amiibo_len) {
-        return 0;
-    }
-    const size_t avail = s_out.amiibo_len - offset;
-    const size_t n = len < avail ? len : avail;
-    memcpy(out, &s_out.amiibo[offset], n);
-    return n;
-}
-
 uint8_t ns2_output_nfc_state(void)
 {
-    /* 预置就绪汇报 0x01（检测到标签入场）；完整感应流程状态（0x02-0x07）
-     * 待 Command 0x01 NFC 通路实现后由会话层驱动。 */
-    return s_out.amiibo != NULL ? 0x01u : 0x00u;
+    /* NFC 状态字节由 ns2_nfc 的标签模拟状态机决定（开轮询且预置镜像 0x01）。 */
+    return ns2_nfc_report_state();
 }
 
 void ns2_output_emit_rumble(const ns2_rumble_event_t *event)

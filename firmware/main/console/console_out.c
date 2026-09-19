@@ -17,7 +17,9 @@ static const char *TAG = "remapad_console";
 #define CONSOLE_UART_RX_GPIO 44
 #define CONSOLE_UART_BAUD 115200
 #define CONSOLE_UART_BUF 1024
-#define CONSOLE_RX_TASK_STACK 3072
+/* UART0 上的 CLI 与桥接 CLI 同一套命令表：amiibo 的 SPIFFS fopen 调用链
+ * 栈深，3072 会溢出，与 remapad-input 对齐到 8192。 */
+#define CONSOLE_RX_TASK_STACK 8192
 #define CONSOLE_RX_TASK_PRIO 4
 
 static bool s_uart_active;

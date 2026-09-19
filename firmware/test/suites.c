@@ -19,6 +19,8 @@ extern const host_test_suite_t suite_pad_feedback;
 extern const host_test_suite_t suite_ns2_relay;
 extern const host_test_suite_t suite_input_frame;
 extern const host_test_suite_t suite_ota_proto;
+extern const host_test_suite_t suite_ns2_nfc;
+extern const host_test_suite_t suite_amiibo_proto;
 extern const host_test_suite_t suite_target_ns2;
 extern const host_test_suite_t suite_battery;
 extern const host_test_suite_t suite_usb_audio;
@@ -40,6 +42,8 @@ static const host_test_suite_t *const s_suites[] = {
     &suite_ns2_relay,
     &suite_input_frame,
     &suite_ota_proto,
+    &suite_ns2_nfc,
+    &suite_amiibo_proto,
     &suite_target_ns2,
     &suite_battery,
     &suite_usb_audio,

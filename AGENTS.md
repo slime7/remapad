@@ -93,7 +93,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 | **固件 OTA 升级** | `cd pc ; uv run python remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
 | **PC 手柄桥接** | `cd pc ; uv run python remapadctl.py -p COMx` | 读 PC 手柄原始报告按桥接帧转发给设备，同进程提供串口命令行、实机截图与 OTA；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移；转发默认只在交互模式开，`--pad` / `--no-pad` 控制 |
 | **PC 连接控制台** | `cd pc ; uv run python remapadgui.py` | 同一套会话的图形界面：选串口、连接/断开、手柄转发开关、实时日志、命令输入、实机截图与 OTA；与命令行不要同时连同一个口 |
-| **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`version`、`rollback` |
+| **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`amiibo list\|select\|del\|poll`、`version`、`rollback` |
+| **amiibo 镜像上传** | `cd pc ; uv run python remapadctl.py -p COMx --amiibo Alm.bin` | 经桥接帧（`0x40-0x43`）把 NTAG215 dump（540 纯镜像或 572 带厂商签名）传进设备 storage 分区 SPIFFS 槽位（200 槽，槽位名取文件名主干）；交互模式 `:amiibo <bin>` 同通道，选中持久化、重启恢复，标签模拟见 [ADR 0044](docs/adr/0044-amiibo-bridge-upload-nfc-tag-emulation.md) |
 | **实机截图** | `cd pc ; uv run python remapadctl.py -p COMx --shot` | 固件把当前画面整屏重渲染并按图像帧回传，PC 拼成 PNG（默认 `pc/shots/`，`--out` 指定路径；期间 UI 冻结约 0.2-1 秒，见 [ADR 0033](docs/adr/0033-pc-single-process-tool-and-device-screenshot.md)） |
 
 固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行；配置用的解释器记录在 `firmware/build/CMakeCache.txt`

@@ -23,10 +23,9 @@ extern "C" {
  * - 反馈侧：主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析成
  *   结构化事件后经 ns2_output_emit_* 分发给监听者（当前由 dp 记录日志，
  *   M5 起转发给插入的 USB 手柄或桥接 PC），返回信息结构化、便于解析。
- * - 电池 / amiibo：ns2_output_set_battery 更新随报告上发的电源字段；
- *   amiibo 镜像先经 ns2_output_amiibo_stage 预置在设备内存（传输方式
- *   待定：bridge 分块 / storage 文件 / USB 均可），NFC 命令通路接通后
- *   由会话层经 ns2_output_amiibo_read 分块取用。
+ * - 电池 / NFC：ns2_output_set_battery 更新随报告上发的电源字段；NFC 状态
+ *   字节取自 ns2_nfc 的标签模拟状态机（amiibo 镜像与 Command 0x01 通路都在
+ *   那边，见 ns2_nfc.h）。
  */
 
 /** 输出通道：把编码后的报告体发往 NS2 主机链路（BLE 现役，USB 预留）。
@@ -135,19 +134,8 @@ void ns2_output_set_headset_derived(uint8_t value);
 bool ns2_output_headset_override(uint8_t *out_value);
 void ns2_output_set_headset_override(bool enabled, uint8_t value);
 
-/** 预置 amiibo / NTAG215 镜像（最长 NS2_AMIIBO_MAX 字节，拷贝进 PSRAM）。
- *  成功后 ns2_output_nfc_state() 汇报 0x01（已就绪待感应），供输入报告
- *  的 NFC 状态字节使用；传 NULL/0 清除。 */
-esp_err_t ns2_output_amiibo_stage(const uint8_t *data, size_t len);
-
-/** 当前预置的 amiibo 镜像是否就绪。 */
-bool ns2_output_amiibo_ready(void);
-
-/** 会话层 NFC 命令通路读取预置镜像（偏移越界部分补 0xFF），返回实际长度。 */
-size_t ns2_output_amiibo_read(uint32_t offset, uint8_t *out, size_t len);
-
-/** 输入报告 NFC 状态字节：0x00 空闲；预置就绪 0x01（待主机轮询语义由
- *  NFC 命令通路实现后扩展为感应流程状态）。 */
+/** 输入报告 NFC 状态字节：透传与重编码两条路径共用的取值源（ns2_nfc 的
+ *  标签模拟状态机：开轮询且预置镜像 0x01，否则 0x00）。 */
 uint8_t ns2_output_nfc_state(void);
 
 /* --- 以下由 ble_session 在解析主机输出后调用（结构化反馈入口）--- */

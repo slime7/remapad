@@ -215,7 +215,10 @@ flowchart TB
   写回插入手柄的动作见下一条。上报主机的电量跟输入设备走：家族表置 `PAD_CAP_BATTERY` 且本帧解出电量字段的设备（如 DualSense 蓝牙）
   经 `target_apply_pad_battery` 覆盖事实表后随报告上发，板载电池（`battery.c` 唯一入口）只在设备没报电量时兜底，
   0x05 报文专用的端电压字段按电压—容量表反演成名义值（输入设备的电量以档位到达，没有真实的毫伏可带）；
-  amiibo 镜像经 `ns2_output_amiibo_stage` 预置（传输方式待定），Report 0x09 的 NFC 状态字节随预置汇报。
+  amiibo 由软件模拟一张 NTAG215 标签：镜像经桥接帧上传落 storage 分区 SPIFFS 槽位（`amiibo/`，
+  572 字节记录 = 镜像 + 厂商签名，200 槽，选中持久化、重启恢复），
+  主机的 NFC 命令（Command 0x01）由 `target/ns2/ns2_nfc.c` 按抓包布局应答，读缓冲头区按 MCU 时代结构
+  填充（UID + 厂商签名 + 尾串，`amiibo hdr 0|1` 可切全零对账），布局细节见 [controller.md](controller.md) 的 NFC 章节。
   USB host 直插的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
 - USB host 直插的数据面：`usb/usb_transport.c` 装 host 栈、枚举、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口）。
   `usb/usb_input.c` 把 IN 报告组成 `pad_report_t` 交给同一份家族表并把反馈写回 OUT 端点。
@@ -357,11 +360,16 @@ classDiagram
 | `0x31` OTA_DATA | PC → 设备 | 块序号（u16 小端）+ 最多 200 字节镜像数据；帧内 `slot=1` 标记该窗口的末帧 |
 | `0x32` OTA_END | PC → 设备 | 空 |
 | `0x33` OTA_ACK | 设备 → PC | 状态 + 错误码 + 期望序号（u16 小端）+ 已收字节（u32 小端）；对 BEGIN 的应答末尾再附 16 字节运行版本 |
+| `0x40` AMIIBO_BEGIN | PC → 设备 | 名称长度（u8）+ 名称（UTF-8，1-31 字节）+ 镜像字节数（u32 小端，必须是 540 或 572） |
+| `0x41` AMIIBO_DATA | PC → 设备 | 偏移（u16 小端）+ 最多 200 字节镜像数据；偏移越过已收字节数报错，重复帧幂等 |
+| `0x42` AMIIBO_END | PC → 设备 | 空 |
+| `0x43` AMIIBO_ACK | 设备 → PC | 状态 + 错误码 + 已收字节（u32 小端）+ 槽位号（仅 DONE 有意义，0xFF 表示无） |
 | `0x7F` PING | 双向 | 协议版本号（1 字节） |
 
 解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验（8 字节设备标识 + 最多 64 字节报告），
 输出报告帧按 78 字节校验（DualSense / DualShock 4 的蓝牙输出报告长度）。
-OTA 帧由 `input_link` 交给 `ota/ota_session`，PING 由 `input_link` 直接应答，其余交给 `input_source`；
+OTA 帧由 `input_link` 交给 `ota/ota_session`，amiibo 上传帧交给 `amiibo/amiibo_session`（逐帧回 ACK，
+收齐后经 `amiibo_store` 落 storage 分区 SPIFFS 槽位），PING 由 `input_link` 直接应答，其余交给 `input_source`；
 升级协议、流控与回滚门槛见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」。
 
 PC 手柄到 NS2 主机的完整时序（映射表把家族差异收敛在 `pad/`，所以桥接路径与将来的 USB host 直插路径共用后面两段）：
