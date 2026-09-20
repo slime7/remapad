@@ -272,7 +272,7 @@ class BuildBt36ReportTest(unittest.TestCase):
         self.assertEqual(report[1], 0x50)  # 报告序号在高半字节
         self.assertEqual(report[2], 0x91)  # 配置包 0x11 + sized
         self.assertEqual(report[3], 7)
-        self.assertEqual(report[4], 0xFE)  # 关麦克风、开喇叭
+        self.assertEqual(report[4], 0xFF)  # 音频段全开（vds 实发值）
         self.assertEqual(report[5:10], bytes([64] * 5))  # 音频缓冲长度
         self.assertEqual(report[10], 0xBC)  # 配置包滚动序号
         self.assertEqual(report[11], 0x90)  # 状态块 0x10 + sized
@@ -297,13 +297,16 @@ class BuildBt36ReportTest(unittest.TestCase):
         self.assertEqual(int.from_bytes(report[-4:], "little"), want)
 
     def test_state_block_keeps_leds_to_the_state_reports(self):
-        """状态块沿用 vds 初始值（喇叭音量 100、触觉走音频块），但灯条与
-        玩家灯字节全零：手柄的灯归固件的 0x31 写回管，0x36 不掺和。"""
+        """状态块沿用 vds 运行态（喇叭音量 100、输出路径钉手柄喇叭、触觉走
+        音频块），但灯条与玩家灯字节全零：手柄的灯归固件的 0x31 写回管，
+        0x36 不掺和。输出路径不路由到手柄喇叭的话，喇叭块会播进没插的
+        耳机口（实机：0x36 触觉可达而喇叭无声）。"""
         state = ds5_haptics.BT36_STATE
         self.assertEqual(len(state), 63)
         self.assertEqual(state[0], 0xFD)  # 音频各段使能 + 喇叭音量更新
         self.assertEqual(state[4], 0x7F)  # 耳机音量缺省
         self.assertEqual(state[5], 100)   # 喇叭音量 = PS5 缺省档
+        self.assertEqual(state[7], 0x39)  # 输出路径 = 手柄喇叭（0x30 位段）
         self.assertEqual(state[43:47], bytes(4))  # 玩家灯与灯条 RGB 全零
 
     def test_sender_uses_bt36_with_speaker_encoder(self):
@@ -331,7 +334,9 @@ class BuildBt36ReportTest(unittest.TestCase):
         encoder = FakeEncoder()
         device = FakeDevice()
         sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=encoder)
-        sender.set_params({})
+        sender.set_params({"hd": {"l": {"count": 0, "keys": ()},
+                                  "r": {"count": 0, "keys": ()},
+                                  "speaker": (880, 255)}})
         sender._run()
         self.assertEqual(len(device.writes), 3)
         self.assertEqual(len(encoder.chunks), 3)
@@ -361,6 +366,55 @@ class BuildBt36ReportTest(unittest.TestCase):
         values = [int.from_bytes(tone[i:i + 2], "little", signed=True)
                   for i in range(0, len(tone), 2)]
         self.assertTrue(any(abs(v) > 10000 for v in values))
+
+    def test_bt36_only_while_speaker_has_content(self):
+        """0x36 只在喇叭有内容（含收音尾）时上：满速 0x36 ≈ 40KB/s，Windows
+        蓝牙 HID 链路长时间扛不住（实机：接入即断链、重连后报文才落地、触发
+        触控板幻手势）。平时与只有触觉时都走 0x32（发声段折进音圈兜底），
+        喇叭有音量才切 0x36，退回后 0x32 的折进把发声段接回来。"""
+        import threading
+
+        class FakeEncoder:
+            def encode(self, pcm: bytes) -> bytes:
+                return bytes(ds5_haptics.BT36_SPEAKER_BYTES)
+
+        class FakeDevice:
+            def __init__(self) -> None:
+                self.writes = []
+
+            def write(self, report):
+                self.writes.append(report)
+                if len(self.writes) >= 3:
+                    raise OSError("done")
+
+        # 无内容：全走 0x32。
+        device = FakeDevice()
+        sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=FakeEncoder())
+        sender.set_params({})
+        sender._run()
+        self.assertEqual({len(r) for r in device.writes}, {ds5_haptics.BT_REPORT_LEN})
+
+        # 只有触觉、喇叭静默：仍是 0x32。
+        device = FakeDevice()
+        sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=FakeEncoder())
+        sender.set_params({"hd": {"l": {"count": 1, "keys": (((135, 200), (0, 0)),)},
+                                  "r": {"count": 0, "keys": ()},
+                                  "speaker": (0, 0)}})
+        sender._run()
+        self.assertEqual({len(r) for r in device.writes}, {ds5_haptics.BT_REPORT_LEN})
+
+        # 喇叭有音量：切 0x36，喇叭块与触觉块都在。
+        device = FakeDevice()
+        sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=FakeEncoder())
+        sender.set_params({"hd": {"l": {"count": 0, "keys": ()},
+                                  "r": {"count": 0, "keys": ()},
+                                  "speaker": (880, 255)}})
+        sender._run()
+        self.assertEqual({len(r) for r in device.writes},
+                         {ds5_haptics.BT36_REPORT_LEN})
+        for report in device.writes:
+            self.assertEqual(report[0], ds5_haptics.BT36_REPORT_ID)
+            self.assertEqual(report[142], 0x93)  # 手柄喇叭 + sized
 
 
 class CaptureReplayTest(unittest.TestCase):

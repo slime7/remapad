@@ -372,16 +372,24 @@ BT36_REPORT_ID = 0x36
 BT36_SPEAKER_RATE = 48000
 BT36_SPEAKER_FRAMES = 480
 BT36_SPEAKER_BYTES = 200
-#: 0x36 的状态块（vds kInitialSetStateData + 16 字节保留零）：喇叭音量 100
-#: （PS5 缺省档）、触觉走音频块；玩家灯与灯条字节清零——灯归 0x31 写回管。
+#: 0x36 的状态块（vds kInitialSetStateData 经 set_audio_out_stream_active
+#: 改写后的形态 + 16 字节保留零）：喇叭音量 100（PS5 缺省档）、音频控制字节
+#: 的输出路径位段钉在手柄喇叭（0x30，初始 0x09 是耳机/自动——不路由的话
+#: 喇叭块播进没插的耳机口，无声）、触觉走音频块；玩家灯与灯条字节清零——
+#: 灯归 0x31 写回管。
 BT36_STATE = bytes([
-    0xFD, 0xF7, 0x00, 0x00, 0x7F, 100, 0x08, 0x09, 0x00, 0x0F,
+    0xFD, 0xF7, 0x00, 0x00, 0x7F, 100, 0x08, 0x39, 0x00, 0x0F,
 ] + [0] * 27 + [
     0x01, 0x07, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00,
 ]) + bytes(16)
 #: 发送节拍：喇叭块 10ms 一报（触觉块 64B = 32 帧 ≈ 10.67ms，按喇叭节拍走，
 #: vds 的取法——按触觉时长对表会让喇叭周期性欠喂）。
 BT36_INTERVAL_S = 0.010
+#: 喇叭静默多少秒后从 0x36 退回 0x32：0x36 满速空包 ≈ 40KB/s，Windows 蓝牙
+#: HID 链路长时间扛不住（实机：接入即断链、重连后报文才落地、还触发触控板
+#: 幻手势）——只在喇叭真有内容（含收音尾）时用 0x36，其余时间走实测安全的
+#: 0x32（发声段折进音圈兜底）。
+BT36_SPEAKER_TAIL_S = 0.3
 
 
 def bt36_build_report(pcm: bytes, speaker: bytes, report_seq: int,
@@ -398,7 +406,7 @@ def bt36_build_report(pcm: bytes, speaker: bytes, report_seq: int,
     report[1] = (report_seq & 0xF) << 4
     report[2] = 0x11 | 0x80
     report[3] = 7
-    report[4] = 0xFE  # 音频段开关：关麦克风、开喇叭
+    report[4] = 0xFF  # 音频段全开（vds 实发值；0xFE 是关麦克风的变体）
     report[5:10] = bytes([64] * 5)  # 音频缓冲长度
     report[10] = packet_seq & 0xFF
     report[11] = 0x10 | 0x80  # 状态块
@@ -525,6 +533,7 @@ class Ds5HapticsBt:
         next_due = time.monotonic()
         seq = 0
         packet_seq = 0
+        last_speaker_at = 0.0
         while not self._stop.is_set():
             with self._lock:
                 params = dict(self._params)
@@ -535,20 +544,27 @@ class Ds5HapticsBt:
                 # 没有 HD 段（老固件 / 未接入）：发静音报文保持私有通路活跃。
                 left_v = right_v = None
                 speaker = ()
-            if self._speaker_encoder is None:
+            now = time.monotonic()
+            tone = speaker[0] if speaker else (0, 0)
+            if tone[1]:
+                last_speaker_at = now
+            # 0x36 只在喇叭真有内容（含收音尾）时上；其余时间走 0x32
+            # （发声段折进音圈兜底）——Windows 蓝牙 HID 链路吃不满速空包。
+            use_36 = (self._speaker_encoder is not None and
+                      now - last_speaker_at < BT36_SPEAKER_TAIL_S)
+            if not use_36:
                 if left_v is None:
                     pcm = bytes(BT_PCM_BYTES)
                 else:
                     pcm = bt_render_pcm(left_v, right_v, speaker, self._state)
                 report = bt_build_report(pcm, seq)
                 seq = (seq + 1) & 0xFF
+                interval = BT_INTERVAL_S
             else:
                 if left_v is None:
                     coil = bytes(BT_PCM_BYTES)
-                    tone = (0, 0)
                 else:
                     coil = bt_render_pcm(left_v, right_v, (), self._state)
-                    tone = speaker[0] if speaker else (0, 0)
                 speaker_block = self._speaker_encoder.encode(
                     render_speaker_48k(tone, self._state48))
                 report = bt36_build_report(coil, speaker_block,
@@ -556,6 +572,7 @@ class Ds5HapticsBt:
                                            packet_seq=packet_seq)
                 seq = (seq + 1) & 0xF
                 packet_seq = (packet_seq + 1) & 0xFF
+                interval = BT36_INTERVAL_S
             try:
                 self._device.write(report)
             except OSError as exc:
@@ -563,8 +580,7 @@ class Ds5HapticsBt:
                 if self._on_error is not None:
                     self._on_error(exc)
                 break
-            next_due += self._interval_s
-            now = time.monotonic()
+            next_due += interval
             if now - next_due > 0.1:
                 # 落后超过一个容限（挂起/断连后追不上）：从当前时刻重新对表。
                 next_due = now
