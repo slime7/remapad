@@ -499,6 +499,8 @@ class Ds5HapticsBt:
         self._state48 = _VoiceState()  # 0x36 喇叭块的 48kHz 声部
         self._last_speaker_at = 0.0
         self._last_coil_at = 0.0
+        self._stats = {"writes": 0, "write_ms_total": 0.0,
+                       "write_ms_max": 0.0, "late": 0}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -517,6 +519,16 @@ class Ds5HapticsBt:
     @property
     def label(self) -> str:
         return self.LABEL_36 if self._speaker_encoder is not None else self.LABEL
+
+    def stats(self) -> str:
+        """写回链路统计（平均/最大单次写回耗时、超节拍占比）：蓝牙 HID 写回
+        慢于节拍说明链路吞吐撑不住当前速率，声音/触觉会被排队延迟播放。"""
+        s = self._stats
+        if s["writes"] == 0:
+            return "写回统计：无写回"
+        avg = s["write_ms_total"] / s["writes"]
+        return (f"写回统计：{s['writes']} 份，平均 {avg:.1f}ms/份，"
+                f"最大 {s['write_ms_max']:.1f}ms，超节拍 {s['late']} 份")
 
     def start(self) -> bool:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -604,7 +616,15 @@ class Ds5HapticsBt:
                 self._stop.wait(0.02)
                 continue
             try:
+                t0 = time.monotonic()
                 self._device.write(report)
+                write_ms = (time.monotonic() - t0) * 1000.0
+                self._stats["writes"] += 1
+                self._stats["write_ms_total"] += write_ms
+                self._stats["write_ms_max"] = max(self._stats["write_ms_max"],
+                                                  write_ms)
+                if write_ms > interval * 1000.0:
+                    self._stats["late"] += 1
             except OSError as exc:
                 self._warn(f"DS5 蓝牙触觉流写回失败：{exc}")
                 if self._on_error is not None:

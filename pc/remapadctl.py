@@ -1082,7 +1082,10 @@ class Session:
     def stop_haptics(self) -> None:
         if self.haptics is None:
             return
+        stats = getattr(self.haptics, "stats", None)
         self.haptics.stop()
+        if stats is not None:
+            self.reporter.line(stats())
         self.haptics = None
         try:
             self.send_cli("haptic audio off")

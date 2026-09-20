@@ -363,16 +363,20 @@ def cmd_test():
     def stream_0x32(build, seconds):
         state = ds5_haptics._VoiceState()
         seq = 0
+        durations = []
         next_due = time.monotonic()
         end = next_due + seconds
         while True:
+            t0 = time.monotonic()
             dev.write(ds5_haptics.bt_build_report(build(state), seq))
+            durations.append(time.monotonic() - t0)
             seq = (seq + 1) & 0xFF
             next_due += ds5_haptics.BT_INTERVAL_S
             now = time.monotonic()
             if now >= end:
                 break
             time.sleep(max(0.0, min(next_due - now, 0.02)))
+        print_report(durations)
 
     def stream_0x36(speaker_tone, seconds):
         state = ds5_haptics._VoiceState()
@@ -380,6 +384,7 @@ def cmd_test():
         coil_state = ds5_haptics._VoiceState()
         seq = 0
         packet_seq = 0
+        durations = []
         silent = {"count": 3, "keys": (((0, 0), (0, 0)),) * 3}
         next_due = time.monotonic()
         end = next_due + seconds
@@ -387,9 +392,11 @@ def cmd_test():
             coil = ds5_haptics.bt_render_pcm(silent, silent, (), coil_state)
             block = encoder.encode(
                 ds5_haptics.render_speaker_48k(speaker_tone, state48))
+            t0 = time.monotonic()
             dev.write(ds5_haptics.bt36_build_report(coil, block,
                                                     report_seq=seq,
                                                     packet_seq=packet_seq))
+            durations.append(time.monotonic() - t0)
             seq = (seq + 1) & 0xF
             packet_seq = (packet_seq + 1) & 0xFF
             next_due += ds5_haptics.BT36_INTERVAL_S
@@ -397,6 +404,16 @@ def cmd_test():
             if now >= end:
                 break
             time.sleep(max(0.0, min(next_due - now, 0.02)))
+        print_report(durations)
+
+    def print_report(durations):
+        if not durations:
+            return
+        avg = sum(durations) / len(durations) * 1000.0
+        mx = max(durations) * 1000.0
+        slow = sum(1 for d in durations if d * 1000.0 > 10.67)
+        print(f"  （写回 {len(durations)} 份：平均 {avg:.1f}ms、最大 {mx:.1f}ms、"
+              f"超 10.67ms {slow} 份——平均越接近 10.67ms 链路越撑得住）", flush=True)
 
     strong = {"count": 3, "keys": (((135, 255), (0, 0)),) * 3}
     silent = {"count": 0, "keys": ()}
@@ -409,12 +426,13 @@ def cmd_test():
         dev.write(build_rumble_0x31(i & 0xF, 0, 0))
     print("A 结束", flush=True)
     time.sleep(4)
-    print("B：0x32 HD 触觉 135Hz 2 秒", flush=True)
+    print("B：0x32 HD 触觉 135Hz 2 秒（音圈震动）", flush=True)
     stream_0x32(lambda s: ds5_haptics.bt_render_pcm(strong, strong, (), s), 2.0)
     stream_0x32(lambda s: ds5_haptics.bt_render_pcm(silent, silent, (), s), 0.3)
     print("B 结束", flush=True)
     time.sleep(4)
-    print("C：0x32 两声上行短鸣 880 → 1175Hz（折进音圈）", flush=True)
+    print("C：0x32 两声上行短鸣 880 → 1175Hz（只有触感，没有声音——发声段折进"
+          "音圈，这是设计行为）", flush=True)
     stream_0x32(lambda s: ds5_haptics.bt_render_pcm(silent, silent, ((880, 255),), s), 0.12)
     stream_0x32(lambda s: ds5_haptics.bt_render_pcm(silent, silent, ((0, 0),), s), 0.12)
     stream_0x32(lambda s: ds5_haptics.bt_render_pcm(silent, silent, ((1175, 255),), s), 0.12)
@@ -422,12 +440,14 @@ def cmd_test():
     print("C 结束", flush=True)
     if encoder is not None:
         time.sleep(4)
-        print("D：0x36 两声上行短鸣 880 → 1175Hz（手柄喇叭真声）", flush=True)
+        print("D：0x36 两声上行短鸣 880 → 1175Hz（这一段才有喇叭声，应与提示同时"
+              "出现）", flush=True)
         stream_0x36((880, 255), 0.14)
         stream_0x36((0, 0), 0.14)
         stream_0x36((1175, 255), 0.14)
         stream_0x36((0, 0), 0.3)
-        print("D 结束，归零", flush=True)
+        print("D 结束，发送已全部停止——如果之后才听到声音，说明报文在链路上被"
+              "排队延迟播放，把上面每段的写回统计发我", flush=True)
     else:
         print("D 跳过（无 Opus 编码器）")
     dev.close()
