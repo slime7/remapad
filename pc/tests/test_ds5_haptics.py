@@ -183,6 +183,36 @@ class AudioCallbackTest(unittest.TestCase):
         release = round(ds5_haptics.SPEAKER_RELEASE_S * ds5_haptics.RATE)
         self.assertEqual(max(abs(v) for v in ch1[release + 1:]), 0)
 
+    def test_coil_rumble_fades_after_host_stops(self):
+        """主机收震后音圈走收音包络而不是块对齐硬切：收震后第一块立即还有声
+        （短震动不被承载块边界截没）、收音时长内落回静音（结束及时）——
+        与蓝牙 0x32 通路同一份门控行为。"""
+        audio = ds5_haptics.Ds5HapticsAudio()
+        silent_side = {"count": 0, "keys": ()}
+        audio.set_params({"hd": {
+            "l": {"count": 1, "keys": (((55, 255), (0, 0)),)},
+            "r": silent_side,
+            "speaker": (0, 0)}})
+        frames = 480
+        out = bytearray(frames * ds5_haptics.CHANNELS * 2)
+        audio._callback(out, frames, None, None)
+        block = memoryview(out).cast("h")
+        ch3 = [block[i * 4 + 2] for i in range(frames)]
+        self.assertGreater(max(abs(v) for v in ch3), 10000)
+
+        audio.set_params({"hd": {
+            "l": silent_side,
+            "r": silent_side,
+            "speaker": (0, 0)}})
+        tails = []
+        for _ in range(3):
+            tail = bytearray(frames * ds5_haptics.CHANNELS * 2)
+            audio._callback(tail, frames, None, None)
+            tails.append([memoryview(tail).cast("h")[i * 4 + 2]
+                          for i in range(frames)])
+        self.assertGreater(abs(tails[0][0]), 0)   # 收震后第一块仍在收音尾
+        self.assertEqual(max(abs(v) for v in tails[2]), 0)  # 尾长过后全静
+
 
 if __name__ == "__main__":
     unittest.main()

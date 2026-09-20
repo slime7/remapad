@@ -161,6 +161,51 @@ class RenderPcmTest(unittest.TestCase):
         self.assertEqual(left[15:30], bytes(15))  # 子帧 1：静默切片
         self.assertGreater(max(abs(v) for v in left[30:45]), 30)  # 回绕到子帧 2
 
+    def test_short_burst_fades_out_smoothly_instead_of_hard_cut(self):
+        """短震动的收尾是平滑有界的收音尾，不是块对齐硬切：主机收震后第一块
+        仍有声（只占一块的短震动不被截没）、收音时长内落回静音（结束及时，
+        不无限拖长）。"""
+        state = ds5_haptics._VoiceState()
+        burst = {"count": 1, "keys": (((55, 255), (0, 0)),)}
+        silent = silent_side()
+
+        def left_peak(block: bytes) -> int:
+            values = [b - 256 if b > 127 else b for b in block[0::2]]
+            return max(abs(v) for v in values)
+
+        self.assertNotEqual(ds5_haptics.bt_render_pcm(burst, silent, (), state),
+                            SILENT_PCM)
+        tail = [ds5_haptics.bt_render_pcm(silent, silent, (), state)
+                for _ in range(3)]
+        self.assertGreater(left_peak(tail[0]), 20)   # 收震后仍在收音尾
+        self.assertGreater(left_peak(tail[1]), 0)    # 尾内连续衰减
+        self.assertEqual(left_peak(tail[2]), 0)      # 两个块内落回静音
+
+    def test_new_burst_after_silence_starts_from_the_first_subframe(self):
+        """整段静默后的新震动从子帧 0 起播：强子帧立刻出去，而不是从上一段
+        震动停下的游标位置续播（那会让短震动的起拍落后最多两个子帧）。"""
+        state = ds5_haptics._VoiceState()
+        burst = {"count": 3, "keys": (((55, 255), (0, 0)),
+                                      ((0, 0), (0, 0)),
+                                      ((0, 0), (0, 0)))}
+        silent = silent_side()
+        ds5_haptics.bt_render_pcm(burst, silent, (), state)
+        ds5_haptics.bt_render_pcm(burst, silent, (), state)
+        ds5_haptics.bt_render_pcm(silent, silent, (), state)
+        ds5_haptics.bt_render_pcm(silent, silent, (), state)
+        pcm = ds5_haptics.bt_render_pcm(burst, silent, (), state)
+        left = [b - 256 if b > 127 else b for b in pcm[0::2]]
+        self.assertGreater(max(abs(v) for v in left[:4]), 20)
+
+    def test_gate_saturates_for_continuous_rumble(self):
+        """连续震动时包络门饱和在满幅：插值只平滑沿，不压稳态强度。"""
+        state = ds5_haptics._VoiceState()
+        burst = {"count": 3, "keys": (((55, 255), (0, 0)),) * 3}
+        for _ in range(3):
+            pcm = ds5_haptics.bt_render_pcm(burst, burst, (), state)
+        left = [b - 256 if b > 127 else b for b in pcm[0::2]]
+        self.assertGreater(max(abs(v) for v in left), 120)
+
 
 class SenderLoopTest(unittest.TestCase):
     def test_sender_pushes_well_formed_reports(self):
@@ -200,6 +245,24 @@ class SenderLoopTest(unittest.TestCase):
         sender._stop.set()  # 空闲路径不写回：置停止位让循环退出
         sender._run()
         self.assertEqual(device.writes, [])
+
+    def test_new_content_wakes_the_idle_sender(self):
+        """新内容到达要唤醒空闲的发送线程：整流停发期间的第一拍震动不等
+        20ms 兜底轮询才被看见——短震动的启动延迟少掉一个轮询拍。"""
+        sender = ds5_haptics.Ds5HapticsBt(object())
+        try:
+            sender.set_params({})
+            self.assertFalse(sender._wake.is_set())
+            sender.set_params({"hd": {"l": {"count": 1, "keys": (((55, 200), (0, 0)),)},
+                                      "r": silent_side(),
+                                      "speaker": (0, 0)}})
+            self.assertTrue(sender._wake.is_set())
+            sender._wake.clear()
+            sender.set_params({"hd": {"l": silent_side(), "r": silent_side(),
+                                      "speaker": (500, 255)}})
+            self.assertTrue(sender._wake.is_set())  # 发声段（折进音圈）也算内容
+        finally:
+            sender.stop()
 
     def test_write_failure_notifies_the_session(self):
         """写回被拒（Windows 长度校验等）时通知会话回落 HID 震动，而不是

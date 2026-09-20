@@ -36,14 +36,31 @@ typedef struct {
     pad_hd_render_t tones;
 } haptic_synth_params_t;
 
+/** 一条时序子帧的音色（与 `pad_hd_render_t` 的子帧同构）：包络门的收音尾
+ *  锁定最后发声的子帧用。 */
+typedef struct {
+    uint16_t lf_freq;
+    uint8_t lf_gain;
+    uint16_t hf_freq;
+    uint8_t hf_gain;
+} haptic_synth_key_t;
+
 /** 振荡器相位与子帧游标（跨块连续，换参数不重置相位，避免拼接处跳变）：
  *  每侧低频/高频各一相，扬声器另有一相；子帧游标按帧数倒数、到 0 切下一
  *  子帧（回绕），切帧不重置相位。speaker_env 是发声段音色的包络（Q15，
- *  边沿触发的起音/收音，段边界硬切会在小喇叭上听成咔哒）。 */
+ *  边沿触发的起音/收音，段边界硬切会在小喇叭上听成咔哒）。
+ *
+ *  音圈包络门（与 PC 侧 ds5_haptics.py 同一条曲线）：coil_env 是 Q15 增益
+ *  刻度（满幅 32768），有增益子帧=1ms 爬满、全零参数=收音 ~15ms 淡出；
+ *  coil_latch 是收音尾锁定的最后发声子帧（env 落 0 清锁）——只占一块的
+ *  短震动不被承载块边界截没，收震落点平滑有界。整段静默（两侧 env 全 0）
+ *  后来了新震动：子帧时间轴与相位回零，从新震动的第一个子帧起播。 */
 typedef struct {
     uint32_t phase[2][2];
     uint32_t speaker_phase;
     uint16_t speaker_env;
+    haptic_synth_key_t coil_latch[2];
+    uint16_t coil_env[2];
     uint16_t slice_left;
     uint8_t key_index;
 } haptic_synth_state_t;
@@ -54,7 +71,8 @@ uint16_t haptic_synth_band_freq(uint16_t freq_hz, bool high_band);
 void haptic_synth_reset(haptic_synth_state_t *state);
 
 /** 生成 frames 帧四通道交错 PCM：扬声器两路放发声音色（静音时恒零），触觉
- *  两路按各自子帧序列的当前子帧合成，相位与子帧游标在 state 里跨块推进。 */
+ *  两路按各自子帧序列的当前子帧合成并过音圈包络门（起音/收音插值），相位
+ *  与子帧游标在 state 里跨块推进。 */
 void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t *params,
                        int16_t *pcm, size_t frames);
 

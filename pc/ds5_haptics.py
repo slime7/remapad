@@ -10,7 +10,10 @@ DualSense 连在 PC 上时有两条投递通路，共用同一份哑渲染：
 
 两条通路共用同一份哑渲染，行为一致：NS2 的震动是波形描述，每侧最多 3 个
 时序子帧，按时间顺序各播 1/3 周期；采样发声段铺扬声器之外同时折进两侧音圈
-（蓝牙没有扬声器通道，音圈是它唯一的载体）。声部参数来自设备的 FEEDBACK 帧
+（蓝牙没有扬声器通道，音圈是它唯一的载体）。震动的起止经音圈包络门平滑：
+起音 1ms、收音 15ms（收音锁定最后发声的子帧淡出）——只占一块的短震动不再
+被承载块边界截没，收震落点平滑有界；整段静默后的新震动从子帧 0 重播。
+声部参数来自设备的 FEEDBACK 帧
 （57 字节 HD 版）：固件已按布局行把子帧序列重整好（震动映音圈、采样发声段
 映扬声器，频率落地在固件里算好），这里只做哑渲染——振荡器相位跨块连续，
 子帧按 slice 帧数轮播；老固件的 16 字节帧回落两带正弦（扬声器恒零）。
@@ -47,6 +50,14 @@ CYCLE_MS = 15.0
 #: 听成咔哒（查找手柄页刺耳声的来源之一），包络在边沿内平滑过渡。
 SPEAKER_ATTACK_S = 0.006
 SPEAKER_RELEASE_S = 0.014
+#: 音圈包络门的起音/收音时长（秒）：NS 震动的起止落在承载块边界上是硬切，
+#: 只占一块（USB 10ms / 蓝牙 10.67ms）的短震动会被截得几乎不剩、收震又可能
+#: 多播半块——起音 1ms 爬满（启动及时），收音 15ms 锁定最后发声的子帧淡出
+#: （短震动被拉到可感知的长度，长震动的结尾多 15ms 感知不到）。门控只在
+#: 「有增益的参数 ↔ 全零参数」的边沿发生，子帧序列内部的静默切片原样保留，
+#: 主机排的时间轴不变。
+COIL_ATTACK_S = 0.001
+COIL_RELEASE_S = 0.015
 #: 发声段音色的二次谐波比例与合成峰值回缩：给蜂鸣一点中空腔体，接近
 #: Joy-Con 提示音的音色；谐波频率超过承载奈奎斯特频率时自动省去（蓝牙
 #: 3kHz 承载 880/1175Hz 基频的二倍频已越界，混叠出不成调的杂音）。
@@ -103,11 +114,19 @@ def _render_side(tones: tuple, phases: list[float], frames: int, rate: int, peak
 
 
 def _render_keys(side: dict, phases: list[float], cursor: list, frames: int,
-                 rate: int, peak: int, slice_samples: int) -> list[int]:
+                 rate: int, peak: int, slice_samples: int,
+                 gate: _CoilGate | None = None) -> list[int]:
     """一条时序子帧序列的渲染：首帧从子帧 0 起播整一切片，其后每
     slice_samples 帧切下一子帧（回绕），有效子帧数之外的切片静默——主机排
     好的时间轴原样保留。相位跨块与跨子帧都连续（切子帧只换频率与增益，
-    不重置相位）。"""
+    不重置相位）。
+
+    gate 是音圈包络门（`_CoilGate`，跨块连续），不传按直渲处理（主机收震的
+    下一块立刻全静）：带增益的参数到达且门开着（env 已落到 0）时游标与相位
+    回零——新震动从自己的第一个子帧出去，不从上一段震动的游标位置续播；
+    主机收震后锁定最后发声的子帧按 COIL_RELEASE_S 淡出——只占一块的短震动
+    被拉到可感知的长度，结尾落点平滑且有界。门控只看参数级的有/无增益，
+    子帧序列内部的静默切片不参与（时间轴不变）。"""
     count = side["count"]
     keys = side["keys"]
     lf_phase, hf_phase = phases
@@ -116,31 +135,92 @@ def _render_keys(side: dict, phases: list[float], cursor: list, frames: int,
         idx = 0
         left = slice_samples
     out = [0] * frames
+    if gate is None:
+        for i in range(frames):
+            if left == 0:
+                idx = (idx + 1) % KEY_MAX
+                left = slice_samples
+            left -= 1
+            total = 0.0
+            if idx < count:
+                (lf, lg), (hf, hg) = keys[idx]
+                if lg:
+                    total += lg * peak / 255.0 * math.sin(lf_phase)
+                    lf_phase = (lf_phase + _TAU * lf / rate) % _TAU
+                if hg:
+                    total += hg * peak / 255.0 * math.sin(hf_phase)
+                    hf_phase = (hf_phase + _TAU * hf / rate) % _TAU
+            out[i] = _clamp16(round(total))
+        cursor[0], cursor[1] = idx, left
+        phases[0], phases[1] = lf_phase, hf_phase
+        return out
+    active_key = None
+    for k in range(min(count, KEY_MAX)):
+        (lf, lg), (hf, hg) = keys[k]
+        if lg or hg:
+            active_key = keys[k]
+            break
+    if active_key is not None:
+        gate.latch = active_key
+    elif gate.env <= 0.0:
+        gate.latch = None
+    target = 1.0 if active_key is not None else 0.0
+    if target == 1.0 and gate.env <= 0.0:
+        idx = 0
+        left = slice_samples
+        lf_phase = 0.0
+        hf_phase = 0.0
+    rise = 1.0 / max(1.0, COIL_ATTACK_S * rate)
+    fall = 1.0 / max(1.0, COIL_RELEASE_S * rate)
+    env = gate.env
     for i in range(frames):
         if left == 0:
             idx = (idx + 1) % KEY_MAX
             left = slice_samples
         left -= 1
+        if target > env:
+            env = min(1.0, env + rise)
+        elif target < env:
+            env = max(0.0, env - fall)
         total = 0.0
-        if idx < count:
-            (lf, lg), (hf, hg) = keys[idx]
-            if lg:
-                total += lg * peak / 255.0 * math.sin(lf_phase)
-                lf_phase = (lf_phase + _TAU * lf / rate) % _TAU
-            if hg:
-                total += hg * peak / 255.0 * math.sin(hf_phase)
-                hf_phase = (hf_phase + _TAU * hf / rate) % _TAU
-        out[i] = _clamp16(round(total))
+        if env > 0.0:
+            if target == 1.0:
+                key = keys[idx] if idx < count else None
+            else:
+                key = gate.latch
+            if key is not None:
+                (lf, lg), (hf, hg) = key
+                if lg:
+                    total += lg * peak / 255.0 * math.sin(lf_phase)
+                    lf_phase = (lf_phase + _TAU * lf / rate) % _TAU
+                if hg:
+                    total += hg * peak / 255.0 * math.sin(hf_phase)
+                    hf_phase = (hf_phase + _TAU * hf / rate) % _TAU
+        out[i] = _clamp16(round(total * env))
+    gate.env = env
     cursor[0], cursor[1] = idx, left
     phases[0], phases[1] = lf_phase, hf_phase
     return out
 
 
+class _CoilGate:
+    """单侧音圈的包络门（跨块连续）：env 是 0-1 的增益刻度（起音/收音在
+    COIL_ATTACK_S / COIL_RELEASE_S 内推进），latch 是主机收震后收音尾锁定的
+    最后发声子帧（env 落到 0 时清除）。"""
+
+    __slots__ = ("env", "latch")
+
+    def __init__(self) -> None:
+        self.env = 0.0
+        self.latch: tuple | None = None
+
+
 class _VoiceState:
-    """两侧振荡器相位 + 扬声器相位/包络 + 各侧子帧游标（跨块连续）。
+    """两侧振荡器相位 + 扬声器相位/包络 + 各侧子帧游标与音圈包络门（跨块连续）。
 
     speaker 是 3kHz 蓝牙承载（发声段折进音圈）的声部，speaker48 是 0x36 的
-    48kHz 喇叭块专用声部——两路采样率不同、相位与包络不能混用。"""
+    48kHz 喇叭块专用声部——两路采样率不同、相位与包络不能混用。gates 是
+    左右音圈的包络门（`_CoilGate`），挂各自的子帧游标走。"""
 
     def __init__(self) -> None:
         self.key_phase = [[0.0, 0.0], [0.0, 0.0]]
@@ -149,6 +229,7 @@ class _VoiceState:
         self.speaker48 = [0.0]
         self.speaker48_env = 0.0
         self.cursor = [[0, 0], [0, 0]]  # 每侧 [子帧序号, 距下次切换的样本数]
+        self.gates = (_CoilGate(), _CoilGate())
 
 
 def _render_speaker(tone: tuple, state: _VoiceState, frames: int, rate: int,
@@ -188,6 +269,23 @@ def _render_speaker(tone: tuple, state: _VoiceState, frames: int, rate: int,
 def to_s8(value: int) -> int:
     """int16 刻度 → s8：饱和夹取（不回卷）。"""
     return max(-128, min(127, value))
+
+
+def _side_active(side: dict) -> bool:
+    """一侧的子帧序列里是否有非零增益的子帧。"""
+    for key in tuple(side["keys"])[:max(0, side["count"])]:
+        if key[0][1] or key[1][1]:
+            return True
+    return False
+
+
+def _has_content(params: dict) -> bool:
+    """参数里是否带要出的内容（任一侧音圈或发声段有增益）：发送线程的空闲
+    唤醒按它判定。"""
+    hd = params.get("hd")
+    if hd is None:
+        return False
+    return _side_active(hd["l"]) or _side_active(hd["r"]) or bool(hd["speaker"][1])
 
 
 class Ds5HapticsAudio:
@@ -279,9 +377,11 @@ class Ds5HapticsAudio:
             left_v, right_v, speaker = hd
             slice_samples = _slice_samples(RATE)
             left = _render_keys(left_v, self._state.key_phase[0], self._state.cursor[0],
-                                frames, RATE, peak, slice_samples)
+                                frames, RATE, peak, slice_samples,
+                                self._state.gates[0])
             right = _render_keys(right_v, self._state.key_phase[1], self._state.cursor[1],
-                                 frames, RATE, peak, slice_samples)
+                                 frames, RATE, peak, slice_samples,
+                                 self._state.gates[1])
         else:
             left_v, right_v, speaker = _legacy_voices(params)
             left = _render_side(left_v, self._state.key_phase[0], frames, RATE, peak)
@@ -347,12 +447,15 @@ def bt_build_report(pcm: bytes, seq: int) -> bytes:
 def bt_render_pcm(left_v: dict, right_v: dict, speaker: tuple,
                   state: _VoiceState) -> bytes:
     """子帧序列 → 一块 32 帧的触觉 PCM（交错左/右音圈 s8）：蓝牙上没有扬声器
-    通道，发声段折进两侧音圈——与 USB 直插的音圈行为一致。"""
+    通道，发声段折进两侧音圈——与 USB 直插的音圈行为一致。两侧各过一道音圈
+    包络门（起音/收音插值，见 `_render_keys`）。"""
     peak = AMP_PEAK_BT
     left = _render_keys(left_v, state.key_phase[0], state.cursor[0],
-                        BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE))
+                        BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE),
+                        state.gates[0])
     right = _render_keys(right_v, state.key_phase[1], state.cursor[1],
-                         BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE))
+                         BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE),
+                         state.gates[1])
     sp = _render_speaker(speaker[0] if speaker else (0, 0), state,
                          BT_FRAMES, BT_RATE, peak)
     out = bytearray(BT_PCM_BYTES)
@@ -480,9 +583,10 @@ class Ds5HapticsBt:
     改走 0x36 报文（398 字节，vds 形态）：10ms 节拍、触觉块不折喇叭，由真正的
     手柄喇叭出声。空闲整流停发——蓝牙无线电是 2.4GHz 公共介质，常驻空包会和
     同频段设备互相干扰（实机：无线鼠标卡顿、触控板幻手势），触觉块到手即播、
-    无会话可保活；发送线程独立于会话主循环（蓝牙 HID 写回慢，不能占桥接热
-    路径）。写回被拒时经 on_error 通知会话（回落 HID 震动写回），蓝牙不至于
-    整路静默。"""
+    无会话可保活；停发期间 set_params 带新内容时即时唤醒发送线程（短震动的
+    第一拍不等 20ms 兜底轮询才被看见）。发送线程独立于会话主循环（蓝牙 HID
+    写回慢，不能占桥接热路径）。写回被拒时经 on_error 通知会话（回落 HID
+    震动写回），蓝牙不至于整路静默。"""
 
     LABEL = "DS5 蓝牙触觉流已启用（0x32 私有报文，HID 震动让位）"
     LABEL_36 = "DS5 蓝牙触觉流已启用（0x36 HD 触觉 + 手柄喇叭，HID 震动让位）"
@@ -502,6 +606,7 @@ class Ds5HapticsBt:
         self._stats = {"writes": 0, "write_ms_total": 0.0,
                        "write_ms_max": 0.0, "late": 0}
         self._stop = threading.Event()
+        self._wake = threading.Event()
         self._thread: threading.Thread | None = None
 
     @property
@@ -537,6 +642,7 @@ class Ds5HapticsBt:
 
     def stop(self) -> None:
         self._stop.set()
+        self._wake.set()
         if self._thread is not None:
             self._thread.join(timeout=1.0)
             self._thread = None
@@ -544,6 +650,10 @@ class Ds5HapticsBt:
     def set_params(self, params: dict) -> None:
         with self._lock:
             self._params = dict(params)
+        # 新内容到达即时唤醒空闲的发送线程：整流停发期间的第一拍震动不等
+        # 20ms 兜底轮询才被看见——短震动的启动延迟少掉一个轮询拍。
+        if _has_content(params):
+            self._wake.set()
 
     def _warn(self, text: str) -> None:
         if self._reporter is not None:
@@ -552,13 +662,7 @@ class Ds5HapticsBt:
     @staticmethod
     def _coil_active(left_v, right_v) -> bool:
         """当前拍音圈是否有内容（任一子帧增益非零）。"""
-        if left_v is None:
-            return False
-        for side in (left_v, right_v):
-            for key in tuple(side["keys"])[:max(0, side["count"])]:
-                if key[0][1] or key[1][1]:
-                    return True
-        return False
+        return left_v is not None and (_side_active(left_v) or _side_active(right_v))
 
     def _run(self) -> None:
         next_due = time.monotonic()
@@ -611,9 +715,11 @@ class Ds5HapticsBt:
                 seq = (seq + 1) & 0xFF
                 interval = BT_INTERVAL_S
             else:
-                # 空闲：一报不发，等下一拍内容（next_due 由苏醒后的重对表
-                # 兜底，不在这里推进）。
-                self._stop.wait(0.02)
+                # 空闲：一报不发，等 set_params 的内容唤醒或 20ms 兜底轮询
+                # （新震动的第一拍不等下一个轮询拍才被看见）；next_due 由
+                # 苏醒后的重对表兜底，不在这里推进。
+                if self._wake.wait(0.02):
+                    self._wake.clear()
                 continue
             try:
                 t0 = time.monotonic()

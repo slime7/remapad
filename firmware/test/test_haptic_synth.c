@@ -59,15 +59,56 @@ static void idle_params_produce_silence(void)
     for (size_t ch = 0; ch < HAPTIC_SYNTH_CHANNELS; ch++) {
         CHECK(channel_is_silent(pcm, 300, ch));
     }
+}
 
-    /* 参数清零（主机断连的清理帧）后立即安静，没有衰减尾巴。 */
+/** 主机收震后的音圈收音尾：不是块对齐硬切——只占一块的短震动不被截没
+ *  （收震后仍有声），收音在固定时长内平滑落回静音（结束及时，不拖长）。 */
+static void coil_ringdown_is_bounded_after_host_stops(void)
+{
+    haptic_synth_state_t state;
+    haptic_synth_reset(&state);
+    haptic_synth_params_t params = params_default();
+    params.slice_frames = 1200;
     params.tones.key[0][0].lf_freq = 48;
     params.tones.key[0][0].lf_gain = 255;
-    haptic_synth_fill(&state, &params, pcm, 100);
-    CHECK(peak_of(pcm, 100, 2) > 10000);
+
+    int16_t pcm[800 * HAPTIC_SYNTH_CHANNELS];
+    haptic_synth_fill(&state, &params, pcm, 400);
+    CHECK(peak_of(pcm, 400, 2) > 10000);
+
     params.tones.key[0][0].lf_gain = 0;
     haptic_synth_fill(&state, &params, pcm, 100);
-    CHECK(channel_is_silent(pcm, 100, 2));
+    CHECK(peak_of(pcm, 100, 2) > 1000); /* 收震后第一块仍在收音尾 */
+    haptic_synth_fill(&state, &params, pcm, 800); /* 100+800 帧盖过收音时长 */
+    haptic_synth_fill(&state, &params, pcm, 400);
+    CHECK(channel_is_silent(pcm, 400, 2)); /* 收音时长过后落回静音 */
+}
+
+/** 整段静默后的新震动从子帧 0 起播：强子帧立刻出去，而不是从上一段震动
+ *  停下的游标位置续播（那会让短震动的起拍落后最多两个子帧）。静默期的填充
+ *  尺寸刻意不按切片对齐，让游标停在静默子帧的中段。 */
+static void new_burst_after_silence_restarts_the_timeline(void)
+{
+    haptic_synth_state_t state;
+    haptic_synth_reset(&state);
+    haptic_synth_params_t params = params_default();
+    params.slice_frames = 100;
+    params.tones.key[0][0].lf_freq = 48; /* 子帧 0：强 */
+    params.tones.key[0][0].lf_gain = 255;
+    /* 子帧 1/2：静默 */
+
+    int16_t pcm[450 * HAPTIC_SYNTH_CHANNELS];
+    haptic_synth_fill(&state, &params, pcm, 400);
+    haptic_synth_fill(&state, &params, pcm, 400);
+    /* 静默两块（850 帧 > 收音时长，且不按切片对齐）：门落回零、游标停在
+     * 静默子帧中段。 */
+    params.tones.key[0][0].lf_gain = 0;
+    haptic_synth_fill(&state, &params, pcm, 450);
+    haptic_synth_fill(&state, &params, pcm, 400);
+    /* 新震动：头 50 帧就是强子帧，不是游标所在的静默切片。 */
+    params.tones.key[0][0].lf_gain = 255;
+    haptic_synth_fill(&state, &params, pcm, 50);
+    CHECK(peak_of(pcm, 50, 2) > 5000);
 }
 
 /** 没有真正的声音时扬声器两路填充 0 静音；触觉两路照常有波形。 */
@@ -275,7 +316,11 @@ static void band_freq_falls_back_and_clamps(void)
 }
 
 HOST_TEST_SUITE(suite_haptic_synth, "haptic_synth",
-                {"静置参数输出纯零，清零立即安静", idle_params_produce_silence},
+                {"静置参数输出纯零", idle_params_produce_silence},
+                {"收震后音圈平滑收音且时长有界（短震动不被截没）",
+                 coil_ringdown_is_bounded_after_host_stops},
+                {"整段静默后的新震动从子帧 0 起播",
+                 new_burst_after_silence_restarts_the_timeline},
                 {"没有声音时扬声器恒零，触觉两路有波形",
                  speaker_channels_stay_silent_without_sound},
                 {"发声段的小喇叭音色铺在频道 1/2", speaker_tone_rides_channels_1_2},
