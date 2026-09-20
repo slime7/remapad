@@ -87,14 +87,16 @@ export const STYLE = {
   colorSwatch42: 'w-[42] h-[42] shrink-0 rounded-full flex-row items-center justify-center focus:border-2 focus:border-[#ffffff]',
   colorSwatchRing42: 'w-[36] h-[36] shrink-0 rounded-full border-2',
 
-  /** 配对页操作按钮。 */
-  pairMainBtn: 'w-[100] h-[36] rounded-[12] bg-[#1b416f] flex-row items-center justify-center active:bg-[#091423] focus:border-2 focus:border-[#ffffff]',
-  pairStopBtn: 'w-[100] h-[36] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  pairAuxBtn: 'w-[100] h-[32] rounded-[10] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-
-  /** 电源管理操作按钮。 */
-  powerBtn: 'w-[104] h-[36] rounded-[12] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  powerDangerBtn: 'w-[104] h-[36] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  /** 四叶草角钮：64 圆形，圆心与背景瓣外弧同心（瓣外弧半径约 49.6，圆心落在
+   *  256 卡片的 (82,82)/(174,82)/(82,174)/(174,174)，钮左上角取整到 50/142）。
+   *  常规底色 secondaryContainer、内容 onSecondaryContainer；Error 变体给
+   *  「断开/停止」与「设备关机」两处破坏性动作（errorContainer 语义）。
+   *  定位进同一条字面量（构建期整条注册，焦点环也直接呈现在 focusable 节点上）。 */
+  cornerBtnTL: 'absolute left-[50] top-[50] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  cornerBtnTR: 'absolute left-[142] top-[50] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  cornerBtnBL: 'absolute left-[50] top-[142] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  cornerBtnBR: 'absolute left-[142] top-[142] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  cornerBtnBRError: 'absolute left-[142] top-[142] w-[64] h-[64] rounded-full bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 
   /** 调试页操作按钮。 */
   dbgBtn: 'w-[52] h-[32] rounded-[10] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
@@ -111,10 +113,10 @@ export const STYLE = {
   track: 'w-[192] h-[8] rounded-[4] bg-[#00261359] overflow-hidden',
   trackFill: 'h-[8] rounded-[4] bg-[#002613]',
 
-  /** 垂直亮度控制相关（四叶草 primaryContainer 背景上的嵌套组件）。 */
-  vSliderTrack: 'w-[24] h-[120] rounded-[12] bg-[#1b416f] flex-col justify-end p-1 overflow-hidden',
+  /** 垂直亮度控制相关（四叶草 primaryContainer 背景上的嵌套组件）。
+   *  滑槽定位进字面量：中心对齐左侧瓣心列 x=82，竖直居中（y 68-188）。 */
+  vSliderTrack: 'absolute left-[70] top-[68] w-[24] h-[120] rounded-[12] bg-[#1b416f] flex-col justify-end p-1 overflow-hidden',
   vSliderFill: 'w-full rounded-[8] bg-[#ffffff]',
-  brightnessBtn: 'w-[42] h-[42] rounded-[12] bg-[#0d1a2c] flex-row items-center justify-center active:bg-[#15263e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
 } as const;
 
 /**

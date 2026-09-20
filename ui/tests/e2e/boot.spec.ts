@@ -26,6 +26,6 @@ test('页面在首屏前一次挂完，未激活页面处于 hidden', async ({ a
   const texts = await app.visibleTexts();
   // 当前处于第 1 页亮度调节，未激活页面的特有文案不应可见
   expect(texts).toContain('2');
-  expect(await app.hasVisibleText('重启设备')).toBe(false);
+  expect(await app.hasVisibleText('重启')).toBe(false);
   expect(await app.hasVisibleText('调试指令')).toBe(false);
 });

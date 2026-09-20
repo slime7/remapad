@@ -1,5 +1,5 @@
 /**
- * 配对页：连接键（开广播）与配对新主机。
+ * 配对页：连接键（开广播）与配对副按钮。
  */
 import { test, expect } from './fixtures';
 import { openPairing, swipePrev } from './pages';
@@ -10,9 +10,35 @@ test('开机静默：未配对也不广播，主按钮是「连接」', async ({
   await expect.poll(() => app.hasVisibleText('未配对')).toBe(true);
   const texts = await app.visibleTexts();
   expect(texts).toContain('连接');
-  expect(texts).toContain('配对新主机');
+  expect(texts).toContain('配对');
   expect(texts, '没有窗口就不该在广播').not.toContain('扫描中…');
   expect(texts).not.toContain('停止');
+});
+
+test('配对页提示在上方，两枚圆钮落在下方两角的瓣心', async ({ app }) => {
+  await app.goto();
+  await openPairing(app);
+  await expect.poll(() => app.hasVisibleText('未配对')).toBe(true);
+
+  // 右下主钮与左下副钮的钮内采样点都是 secondaryContainer 深底，
+  // 上方两颗瓣心没有按钮，仍是四叶草浅蓝。
+  expect(await app.colorAt(166, 136)).toBe('#152a1f');
+  expect(await app.colorAt(74, 136)).toBe('#152a1f');
+  expect(await app.colorAt(74, 44)).toBe('#a6c8ff');
+  expect(await app.colorAt(166, 44)).toBe('#a6c8ff');
+
+  // 提示文字块在页面上部（屏坐标 y < 80），主按钮文字在下半区（y > 100）。
+  // 静止画面下官方 inspect 拿不到静态文本的矩形，用边界命中扫描定位。
+  const status = await app.findByText('未配对');
+  expect(status).toBeDefined();
+  const statusRect = await app.locateNode(status!);
+  expect(statusRect).not.toBeNull();
+  expect(statusRect!.y).toBeLessThan(80);
+  const main = await app.findByText('连接');
+  expect(main).toBeDefined();
+  const mainRect = await app.locateNode(main!);
+  expect(mainRect).not.toBeNull();
+  expect(mainRect!.y).toBeGreaterThan(100);
 });
 
 test('配对键的提示文案来自界面字面量（固件回发的文本不上屏）', async ({ app }) => {
@@ -20,7 +46,7 @@ test('配对键的提示文案来自界面字面量（固件回发的文本不�
   await openPairing(app);
 
   // 副按钮配新主机：断开当前主机后进发现广播。
-  await app.tapText('配对新主机');
+  await app.tapText('配对');
   await expect.poll(() => app.hasVisibleText('广播中，等待主机连接')).toBe(true);
 
   // 连接键在静默时打开连接窗口，提示同样来自界面字面量。

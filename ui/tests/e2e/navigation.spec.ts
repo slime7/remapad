@@ -76,8 +76,8 @@ test("松开手势后顺应位移过渡切页，过渡期间右侧不跳变为�
   await app.touch.drag({ x: 190, y: 100 }, { x: 90, y: 100 }, { dwellMs: 0 });
   await app.waitFrames(2);
   await app.refreshTree();
-  // 在过渡期间，右侧槽位不应该提前跳变展示第 3 页（配对新主机）
-  // expect(await app.hasVisibleText("配对新主机")).toBe(false);
+  // 在过渡期间，右侧槽位不应该提前跳变展示第 3 页（配对）
+  // expect(await app.hasVisibleText("配对")).toBe(false);
 
   // 等待过渡动画完全结束
   await app.waitSettled();
@@ -86,5 +86,5 @@ test("松开手势后顺应位移过渡切页，过渡期间右侧不跳变为�
   expect(await app.hasVisibleText("SN: HEJ71001123456")).toBe(true);
   // 且第 1 页和第 3 页均不再可见（左右槽位原子隐藏）
   // expect(await app.hasVisibleText("2")).toBe(false);
-  // expect(await app.hasVisibleText("配对新主机")).toBe(false);
+  // expect(await app.hasVisibleText("配对")).toBe(false);
 });

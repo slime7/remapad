@@ -1,10 +1,11 @@
 /**
  * 亮度调节页（第 1 页）：
- * 位于四叶草中心区域 (120 × 120)。
+ * 页根铺满整张 256 卡片，± 按钮是与背景瓣外弧同心的 64 圆钮（右上加、右下减），
+ * 亮度档位以大号字居中显示，滑槽落在左侧瓣心列（左列无按钮，正好让它）。
  * 遵循 MD3 container / on-container 规范：
  * - 四叶草底色为 primaryContainer (#a6c8ff)；
- * - 表面直显文字百分比采用 onPrimaryContainer (#1b416f)；
- * - 嵌套加减号按钮采用 surfaceContainer (#0d1a2c) 配 onSurface (#d9e6ff)；
+ * - 表面直显文字（滑槽、档位）采用 onPrimaryContainer (#1b416f)；
+ * - 角钮采用 secondaryContainer (#152a1f) 配 onSecondaryContainer (#92a99a)；
  * - 加减号使用无损排版字符 '+' 与 '−'，杜绝图标字体缺失导致的豆腐块。
  */
 import { View, Text } from '@pocketjs/framework/vue-vapor/components';
@@ -39,40 +40,39 @@ export function BrightnessPage(props: {
   const fillHeight = () => Math.round((Math.max(16, Math.min(100, currentLevel())) / 100) * 112);
 
   return (
-    <View class={props.active() ? 'w-full h-full flex-row items-center justify-center gap-4' : 'hidden'}>
-      {/* 左侧垂直滑槽 (bg: onPrimaryContainer 深蓝, fill: 白色高亮) */}
+    <View class={props.active() ? 'relative w-full h-full' : 'hidden'}>
+      {/* 垂直滑槽（左列，定位见 STYLE.vSliderTrack） */}
       <View class={STYLE.vSliderTrack}>
         <View class={STYLE.vSliderFill} style={{ height: fillHeight() }} />
       </View>
 
-      {/* 右侧上下加减按钮与读数 */}
-      <View class="flex-col items-center justify-between h-[120] py-[2]">
-        {/* 加号按钮（增加背光） */}
-        <View
-          focusable={props.interactive()}
-          onPress={onStepUp}
-          class={STYLE.brightnessBtn}
-        >
-          <Text class="text-lg font-bold" style={{ textColor: COLOR.onSurface }}>
-            +
-          </Text>
-        </View>
-
-        {/* 亮度档位数值 1-5 (直显文本使用 onPrimaryContainer) */}
-        <Text class="text-sm shrink-0 font-bold" style={{ textColor: COLOR.onPrimaryContainer }}>
+      {/* 亮度档位：卡片正中、大号字（直显文本使用 onPrimaryContainer） */}
+      <View class="absolute left-0 top-0 w-full h-full flex-row items-center justify-center">
+        <Text class="text-2xl font-bold" style={{ textColor: COLOR.onPrimaryContainer }}>
           {`${currentStep()}`}
         </Text>
+      </View>
 
-        {/* 减号按钮（降低背光） */}
-        <View
-          focusable={props.interactive()}
-          onPress={onStepDown}
-          class={STYLE.brightnessBtn}
-        >
-          <Text class="text-lg font-bold" style={{ textColor: COLOR.onSurface }}>
-            −
-          </Text>
-        </View>
+      {/* 加号按钮（右上瓣心，增加背光） */}
+      <View
+        focusable={props.interactive()}
+        onPress={onStepUp}
+        class={STYLE.cornerBtnTR}
+      >
+        <Text class="text-2xl font-bold" style={{ textColor: COLOR.onSecondaryContainer }}>
+          +
+        </Text>
+      </View>
+
+      {/* 减号按钮（右下瓣心，降低背光） */}
+      <View
+        focusable={props.interactive()}
+        onPress={onStepDown}
+        class={STYLE.cornerBtnBR}
+      >
+        <Text class="text-2xl font-bold" style={{ textColor: COLOR.onSecondaryContainer }}>
+          −
+        </Text>
       </View>
     </View>
   );

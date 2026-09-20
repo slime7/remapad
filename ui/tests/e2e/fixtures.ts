@@ -324,8 +324,12 @@ export class RemapadApp {
     await this.tapNode(node!);
   }
 
-  /** 点某个节点当前可点区域的中心（含其祖先与后代，见 harness.locate）。 */
-  async tapNode(node: FlatNode): Promise<void> {
+  /**
+   * 节点当前可点区域的命中矩形（含其祖先与后代，见 harness.locate）。
+   * 用边界命中扫描定位，静止画面也能拿到矩形——官方 inspect 依赖最近一帧
+   * 的绘制记录，静态文本会返回 null。
+   */
+  async locateNode(node: FlatNode): Promise<Rect | null> {
     const nodes = await this.nodes();
     // 优先顺序：自己 → 最近的祖先一路到根 → 自己的后代。命中返回元素节点，
     // 文本子节点要由包住它的元素代收，所以最近的祖先排在前面（见 harness.locate）。
@@ -342,10 +346,15 @@ export class RemapadApp {
         ids.push(candidate.i);
       }
     }
-    const box = await this.page.evaluate(
+    return this.page.evaluate(
       (targets) => globalThis.__remapadHarness?.locate(targets) ?? null,
       ids,
     );
+  }
+
+  /** 点某个节点当前可点区域的中心（含其祖先与后代，见 harness.locate）。 */
+  async tapNode(node: FlatNode): Promise<void> {
+    const box = await this.locateNode(node);
     expect(box, `节点 ${node.i}（${node.x ?? node.c ?? node.t}）当前点不到`).not.toBeNull();
     await this.touch.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
   }

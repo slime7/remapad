@@ -563,6 +563,8 @@ flowchart TB
 按键取自数据面的手柄操控映射（`dp_ui_buttons()`，只在组合键捕获期间非零，含十字键、圆圈键与肩键等价出的左 / 右，见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)）。
 模拟量恒为零。
 触点由 CST816T 采样转换为官方 `pocketjs_ui_touch_t` 触点数组。
+息屏（背光关闭）期间 `sample_input` 整段跳过触摸采样：画面不可见，触点只剩误触，
+亮屏由 PWR 键或命令承担、触摸不参与唤醒。
 CST816T 是单点触摸，触点 `id` 在同一按压期间恒为 0，坐标使用逻辑像素，板卡引脚见 [hardware.md](hardware.md)。
 USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
 

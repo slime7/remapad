@@ -317,13 +317,14 @@ export default function App() {
         nodeRef={padPageRef}
         class="absolute top-0 left-0 w-full h-[200] overflow-hidden"
       >
-        {/* 第 1 页：亮度调节 (几何中心 x: 120, y: 104) */}
+        {/* 第 1 页：亮度调节 (几何中心 x: 120, y: 104)。角钮页铺满整张卡片：
+            角钮要与背景瓣外弧同心，圆心落在中央内容框 (50,54,156,148) 之外。 */}
         <View
           nodeRef={setCardRef(0)}
           class={isCardVisible(0) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+          <View class="absolute left-0 top-0 w-[256] h-[256]">
             <BrightnessPage active={() => isPageActive(0)} interactive={interactive(0)} />
           </View>
         </View>
@@ -339,24 +340,24 @@ export default function App() {
           </View>
         </View>
 
-        {/* 第 3 页：手柄配对 (几何中心 x: 120, y: 104) */}
+        {/* 第 3 页：手柄配对 (几何中心 x: 120, y: 104)。角钮页，容器同第 1 页。 */}
         <View
           nodeRef={setCardRef(2)}
           class={isCardVisible(2) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+          <View class="absolute left-0 top-0 w-[256] h-[256]">
             <PairingPage active={() => isPageActive(2)} interactive={interactive(2)} />
           </View>
         </View>
 
-        {/* 第 4 页：电源管理 (几何中心 x: 120, y: 104) */}
+        {/* 第 4 页：电源管理 (几何中心 x: 120, y: 104)。角钮页，容器同第 1 页。 */}
         <View
           nodeRef={setCardRef(3)}
           class={isCardVisible(3) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+          <View class="absolute left-0 top-0 w-[256] h-[256]">
             <PowerPage
               active={() => isPageActive(3)}
               interactive={interactive(3)}
@@ -391,18 +392,18 @@ export default function App() {
         ) : null}
       </View>
 
-      {/* 左右翻页箭头：落在四叶草左右凹陷的深色区（触摸点按切页，见上方手势注册） */}
+      {/* 左右翻页箭头：落在四叶草左右凹陷的深色区（无柄 chevron，触摸点按切页，见上方手势注册） */}
       <View
         nodeRef={leftArrowRef}
         class="absolute left-[2] top-[88] w-[32] h-[32] flex-row items-center justify-center"
       >
-        <Icon glyph={ICON.arrowBack} class="text-lg shrink-0" color={COLOR.onSurfaceVariant} />
+        <Icon glyph={ICON.chevronLeft} class="text-lg shrink-0" color={COLOR.onSurfaceVariant} />
       </View>
       <View
         nodeRef={rightArrowRef}
         class="absolute left-[206] top-[88] w-[32] h-[32] flex-row items-center justify-center"
       >
-        <Icon glyph={ICON.arrowForward} class="text-lg shrink-0" color={COLOR.onSurfaceVariant} />
+        <Icon glyph={ICON.chevronRight} class="text-lg shrink-0" color={COLOR.onSurfaceVariant} />
       </View>
 
       {/* 下半部分：底部三态圆角状态栏 (y: 208 ~ 272) */}

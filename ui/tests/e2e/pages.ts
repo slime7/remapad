@@ -36,14 +36,14 @@ export async function openControllerSettings(app: RemapadApp): Promise<void> {
 export async function openPairing(app: RemapadApp): Promise<void> {
   await openControllerSettings(app);
   await swipeNext(app);
-  await expect.poll(() => app.hasVisibleText('配对新主机')).toBe(true);
+  await expect.poll(() => app.hasVisibleText('配对')).toBe(true);
 }
 
 /** 打开第 4 页：电源管理页。 */
 export async function openPower(app: RemapadApp): Promise<void> {
   await openPairing(app);
   await swipeNext(app);
-  await expect.poll(() => app.hasVisibleText('重启设备')).toBe(true);
+  await expect.poll(() => app.hasVisibleText('重启')).toBe(true);
 }
 
 /** 打开第 5 页：系统信息页。 */

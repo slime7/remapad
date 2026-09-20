@@ -308,17 +308,21 @@ static esp_err_t sample_input(pocketjs_ui_input_t *input, void *user_data)
     input->touches = NULL;
     input->touch_count = 0;
 
-    /* 触点 id 必须在同一按压期间保持稳定；CST816T 为单点触摸，恒用 0。 */
-    static pocketjs_ui_touch_t ui_touches[POCKETJS_UI_MAX_TOUCHES];
-    touch_contact_t contacts[POCKETJS_UI_MAX_TOUCHES];
-    const size_t count = touch_sample(contacts, POCKETJS_UI_MAX_TOUCHES);
-    for (size_t index = 0; index < count; ++index) {
-        ui_touches[index].id = 0;
-        ui_touches[index].x = contacts[index].x;
-        ui_touches[index].y = contacts[index].y;
+    /* 触点 id 必须在同一按压期间保持稳定；CST816T 为单点触摸，恒用 0。
+     * 息屏（背光关闭）期间整段跳过：画面不可见，触点只会误触看不见的
+     * 控件，不再进 UI（亮屏由 PWR 键或命令承担，触摸不负责唤醒）。 */
+    if (app_config_get()->screen_on) {
+        static pocketjs_ui_touch_t ui_touches[POCKETJS_UI_MAX_TOUCHES];
+        touch_contact_t contacts[POCKETJS_UI_MAX_TOUCHES];
+        const size_t count = touch_sample(contacts, POCKETJS_UI_MAX_TOUCHES);
+        for (size_t index = 0; index < count; ++index) {
+            ui_touches[index].id = 0;
+            ui_touches[index].x = contacts[index].x;
+            ui_touches[index].y = contacts[index].y;
+        }
+        input->touches = ui_touches;
+        input->touch_count = count;
     }
-    input->touches = ui_touches;
-    input->touch_count = count;
     return ESP_OK;
 }
 
