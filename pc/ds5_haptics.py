@@ -385,11 +385,12 @@ BT36_STATE = bytes([
 #: 发送节拍：喇叭块 10ms 一报（触觉块 64B = 32 帧 ≈ 10.67ms，按喇叭节拍走，
 #: vds 的取法——按触觉时长对表会让喇叭周期性欠喂）。
 BT36_INTERVAL_S = 0.010
-#: 喇叭静默多少秒后从 0x36 退回 0x32：0x36 满速空包 ≈ 40KB/s，Windows 蓝牙
-#: HID 链路长时间扛不住（实机：接入即断链、重连后报文才落地、还触发触控板
-#: 幻手势）——只在喇叭真有内容（含收音尾）时用 0x36，其余时间走实测安全的
-#: 0x32（发声段折进音圈兜底）。
+#: 喇叭静默多少秒后从 0x36 退回 0x32：发声段之间的短停顿不切换承载。
 BT36_SPEAKER_TAIL_S = 0.3
+#: 触觉静默多少秒后整条私有流停发：蓝牙无线电是 2.4GHz 公共介质，常驻空包
+#: 会和同频段的无线鼠标互相干扰（实机：鼠标卡、触控板幻手势弹 OSK/开始
+#: 菜单）。触觉块到手即播、没有需要保活的会话，空闲就一报不发。
+BT_HAPTIC_TAIL_S = 0.15
 
 
 def bt36_build_report(pcm: bytes, speaker: bytes, report_seq: int,
@@ -470,13 +471,15 @@ class Bt36OpusEncoder:
 
 
 class Ds5HapticsBt:
-    """蓝牙连接的 DualSense 私有触觉流：默认按 10.67ms 节拍把子帧序列渲染成
-    0x32 报告（142 字节 SAxense 形态，发声段折进两侧音圈——蓝牙没有扬声器
-    通道，音圈是它唯一的载体）；给了 speaker_encoder（Bt36OpusEncoder）时改走
-    0x36 报文（398 字节，vds 形态）：10ms 节拍、触觉块不折喇叭，发声段由真正的
-    手柄喇叭出声。空闲时发静音报文保持私有通路活跃；发送线程独立于会话主循环
-    （蓝牙 HID 写回慢，不能占桥接热路径）。写回被拒时经 on_error 通知会话
-    （回落 HID 震动写回），蓝牙不至于整路静默。"""
+    """蓝牙连接的 DualSense 私有触觉流：有内容时按 10.67ms 节拍把子帧序列渲染
+    成 0x32 报告（142 字节 SAxense 形态，发声段折进两侧音圈——蓝牙没有扬声器
+    通道，音圈是它唯一的载体）；给了 speaker_encoder（Bt36OpusEncoder）时发声段
+    改走 0x36 报文（398 字节，vds 形态）：10ms 节拍、触觉块不折喇叭，由真正的
+    手柄喇叭出声。空闲整流停发——蓝牙无线电是 2.4GHz 公共介质，常驻空包会和
+    同频段设备互相干扰（实机：无线鼠标卡顿、触控板幻手势），触觉块到手即播、
+    无会话可保活；发送线程独立于会话主循环（蓝牙 HID 写回慢，不能占桥接热
+    路径）。写回被拒时经 on_error 通知会话（回落 HID 震动写回），蓝牙不至于
+    整路静默。"""
 
     LABEL = "DS5 蓝牙触觉流已启用（0x32 私有报文，HID 震动让位）"
     LABEL_36 = "DS5 蓝牙触觉流已启用（0x36 HD 触觉 + 手柄喇叭，HID 震动让位）"
@@ -529,11 +532,23 @@ class Ds5HapticsBt:
         if self._reporter is not None:
             self._reporter.error(text)
 
+    @staticmethod
+    def _coil_active(left_v, right_v) -> bool:
+        """当前拍音圈是否有内容（任一子帧增益非零）。"""
+        if left_v is None:
+            return False
+        for side in (left_v, right_v):
+            for key in tuple(side["keys"])[:max(0, side["count"])]:
+                if key[0][1] or key[1][1]:
+                    return True
+        return False
+
     def _run(self) -> None:
         next_due = time.monotonic()
         seq = 0
         packet_seq = 0
         last_speaker_at = 0.0
+        last_coil_at = 0.0
         while not self._stop.is_set():
             with self._lock:
                 params = dict(self._params)
@@ -541,26 +556,25 @@ class Ds5HapticsBt:
             if hd is not None:
                 left_v, right_v, speaker = hd
             else:
-                # 没有 HD 段（老固件 / 未接入）：发静音报文保持私有通路活跃。
+                # 没有 HD 段（老固件 / 未接入）：等同于空闲，不发报。
                 left_v = right_v = None
                 speaker = ()
             now = time.monotonic()
             tone = speaker[0] if speaker else (0, 0)
             if tone[1]:
                 last_speaker_at = now
-            # 0x36 只在喇叭真有内容（含收音尾）时上；其余时间走 0x32
-            # （发声段折进音圈兜底）——Windows 蓝牙 HID 链路吃不满速空包。
+            if self._coil_active(left_v, right_v):
+                last_coil_at = now
+            # 0x36 只在喇叭真有内容（含收音尾）时上；触觉走 0x32（发声段
+            # 折进音圈兜底）；两条静默超尾长就整流停发——蓝牙无线电是公共
+            # 介质，常驻空包会和同频段设备互相干扰（实机：2.4GHz 无线鼠标
+            # 卡顿、触控板幻手势弹 OSK/开始菜单）。触觉块到手即播，没有
+            # 需要保活的会话。
             use_36 = (self._speaker_encoder is not None and
                       now - last_speaker_at < BT36_SPEAKER_TAIL_S)
-            if not use_36:
-                if left_v is None:
-                    pcm = bytes(BT_PCM_BYTES)
-                else:
-                    pcm = bt_render_pcm(left_v, right_v, speaker, self._state)
-                report = bt_build_report(pcm, seq)
-                seq = (seq + 1) & 0xFF
-                interval = BT_INTERVAL_S
-            else:
+            haptic_recent = (now - last_coil_at < BT_HAPTIC_TAIL_S or
+                             now - last_speaker_at < BT_HAPTIC_TAIL_S)
+            if use_36:
                 if left_v is None:
                     coil = bytes(BT_PCM_BYTES)
                 else:
@@ -573,6 +587,19 @@ class Ds5HapticsBt:
                 seq = (seq + 1) & 0xF
                 packet_seq = (packet_seq + 1) & 0xFF
                 interval = BT36_INTERVAL_S
+            elif haptic_recent:
+                if left_v is None:
+                    pcm = bytes(BT_PCM_BYTES)
+                else:
+                    pcm = bt_render_pcm(left_v, right_v, speaker, self._state)
+                report = bt_build_report(pcm, seq)
+                seq = (seq + 1) & 0xFF
+                interval = BT_INTERVAL_S
+            else:
+                # 空闲：一报不发，等下一拍内容（next_due 由苏醒后的重对表
+                # 兜底，不在这里推进）。
+                self._stop.wait(0.02)
+                continue
             try:
                 self._device.write(report)
             except OSError as exc:

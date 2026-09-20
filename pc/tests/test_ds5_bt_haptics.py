@@ -191,13 +191,15 @@ class SenderLoopTest(unittest.TestCase):
             self.assertEqual(int.from_bytes(report[138:142], "little"), want)
             self.assertNotEqual(report[13:77], SILENT_PCM)  # 左侧子帧在震
 
-        # 无声时发静音报文（保持私有通路活跃）。
+        # 空闲整流停发：蓝牙无线电是公共介质，常驻空包会和同频段设备互相
+        # 干扰（实机：2.4GHz 无线鼠标卡顿、触控板幻手势弹 OSK），静默期
+        # 一报不发。
         sender = ds5_haptics.Ds5HapticsBt(device)
         sender.set_params({})
         device.writes.clear()
+        sender._stop.set()  # 空闲路径不写回：置停止位让循环退出
         sender._run()
-        for report in device.writes:
-            self.assertEqual(report[13:77], SILENT_PCM)
+        self.assertEqual(device.writes, [])
 
     def test_write_failure_notifies_the_session(self):
         """写回被拒（Windows 长度校验等）时通知会话回落 HID 震动，而不是
@@ -211,7 +213,10 @@ class SenderLoopTest(unittest.TestCase):
         losses = []
         sender = ds5_haptics.Ds5HapticsBt(RejectingDevice(),
                                           on_error=losses.append)
-        sender.set_params({})
+        sender.set_params({"hd": {
+            "l": {"count": 1, "keys": (((55, 128), (0, 0)),)},
+            "r": silent_side(),
+            "speaker": (0, 0)}})
         sender._run()
         self.assertEqual(len(losses), 1)
         self.assertIsInstance(losses[0], OSError)
@@ -235,12 +240,17 @@ class SenderLoopTest(unittest.TestCase):
 
         device = FakeDevice()
         sender = ds5_haptics.Ds5HapticsBt(device)
-        sender.set_params({})
+        sender.set_params({"hd": {
+            "l": {"count": 1, "keys": (((135, 128), (0, 0)),)},
+            "r": silent_side(),
+            "speaker": (0, 0)}})
         sender._run()
         self.assertEqual(len(device.writes), 2)
         for i, report in enumerate(device.writes):
             self.assertEqual(len(report), ds5_haptics.BT_REPORT_LEN)
-            self.assertEqual(report, ds5_haptics.bt_build_report(SILENT_PCM, i))
+            self.assertEqual(report[0], 0x32)
+            want = reference_crc32(bytes([0xA2]) + report[:138])
+            self.assertEqual(int.from_bytes(report[138:142], "little"), want)
 
         # 填充入口已删：构造器不再收 output_len，报文也不会被拉长。
         self.assertFalse(hasattr(ds5_haptics, "bt_report_windows_pad"))
@@ -387,12 +397,13 @@ class BuildBt36ReportTest(unittest.TestCase):
                 if len(self.writes) >= 3:
                     raise OSError("done")
 
-        # 无内容：全走 0x32。
+        # 无内容：整流停发，一报不发。
         device = FakeDevice()
         sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=FakeEncoder())
         sender.set_params({})
+        sender._stop.set()
         sender._run()
-        self.assertEqual({len(r) for r in device.writes}, {ds5_haptics.BT_REPORT_LEN})
+        self.assertEqual(device.writes, [])
 
         # 只有触觉、喇叭静默：仍是 0x32。
         device = FakeDevice()
