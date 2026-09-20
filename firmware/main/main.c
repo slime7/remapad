@@ -78,7 +78,7 @@ void app_main(void)
 
     nvs_init();
     ESP_ERROR_CHECK(app_config_init());
-    /* amiibo 存储初始化临时禁用（2026-09-19）：NFC 读卡收尾未通（controller.md
+    /* amiibo 存储初始化临时禁用：NFC 读卡收尾未通（controller.md
      * 「Amiibo 读写完整交互时序」外部调研），SPIFFS 挂载与槽位扫描的开销先省下，
      * 期间槽位操作按「未挂载」拒绝。恢复时解开下面三行即可。 */
     // if (xTaskCreate(amiibo_store_init_task, "amiibo-init", 8192, NULL, 3, NULL) != pdPASS) {

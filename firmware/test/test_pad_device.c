@@ -629,7 +629,7 @@ static void unregistered_headset_row_reports_nothing(void)
 
 /**
  * DualSense 蓝牙行登记了耳机状态字节（第 55 字节）：bit0 是插入、bit1 是
- * 带麦。取值来自 2026-09-15 的 DualSense Edge（0x0DF2）插拔差分：拔掉 0x00、
+ * 带麦。取值来自 DualSense Edge（0x0DF2）的插拔差分：拔掉 0x00、
  * 插入 0x01、插入带麦 0x03（第 56 字节跟着 bit0 走）。
  */
 static void dualsense_bt_headset_state_parses(void)
@@ -657,8 +657,8 @@ static void dualsense_bt_headset_state_parses(void)
 
 /**
  * DualSense 蓝牙行登记了电量字节（第 54 字节）：与 DS4 同一套读法，低四位是
- * 0-10 档、bit4 表示充电中。两份实机抓包交叉核对：2026-09-15 的空闲帧样本
- * 读作 0x09（90%），2026-09-17 同一只 Edge 掉到 0x05（50%），两份样本里耳机
+ * 0-10 档、bit4 表示充电中。两份实机抓包交叉核对：一份空闲帧样本
+ * 读作 0x09（90%），后来同一只 Edge 掉到 0x05（50%），两份样本里耳机
  * 字节（第 55 字节）都在原位，偏移没有漂移。
  */
 static void dualsense_bt_battery_parses(void)

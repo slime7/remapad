@@ -52,7 +52,7 @@
 | [0021](0021-input-path-three-stage-layering.md) | active | 输入通路按 input/pad/target 三段分层（接收 / 处理 / 转换），部分取代 0011 的目录划分 |
 | [0022](0022-ota-over-bridge-frames-with-rollback.md) | active | OTA 升级复用桥接帧（USB-Serial/JTAG 双分区回写）与回滚健康门槛 |
 | [0023](0023-ns2-sub-spec-conn-interval-and-wake-burst.md) | active | NS2 手柄链路采用亚规范连接间隔（5 ms）与显式唤醒广播（0x81 突发）；广播形态与唤醒突发由 0024 部分取代，连接间隔与特性启用门槛仍生效，上报节奏一项由 0034 确认并写死 |
-| [0024](0024-ns2-steady-wake-adv-and-pairing-key.md) | active | 已配对身份常驻唤醒广播（0x81 + 主机地址）自动回连，配对页按钮改真机配对键语义，切换手柄走断连重连；部分取代 0023 的广播形态与唤醒突发；广播里的主机地址来源由 0030 部分取代，常态广播形态由 0031 部分取代，其中「上报节奏 15 ms 仍生效」经 2026-09-15 复测确认 |
+| [0024](0024-ns2-steady-wake-adv-and-pairing-key.md) | active | 已配对身份常驻唤醒广播（0x81 + 主机地址）自动回连，配对页按钮改真机配对键语义，切换手柄走断连重连；部分取代 0023 的广播形态与唤醒突发；广播里的主机地址来源由 0030 部分取代，常态广播形态由 0031 部分取代，其中「上报节奏 15 ms 仍生效」经实机复测确认 |
 | [0025](0025-pad-layout-modules-per-series.md) | active | 家族布局按系列分文件登记（layout.h/layout.c + layouts/），注册表统一匹配；补全 0021 在 pad/ 内的文件划分 |
 | [0026](0026-same-generation-input-passthrough.md) | active | 手柄输入按同代透传、异代解析分发：设备自带报告语言与目标语言一致时原样转发报文体 |
 | [0027](0027-runtime-usb-role-switch.md) | active | USB host 直插采用运行时角色切换（日志改走 UART0），复位回到串口；PWR 长按这一入口由 0038 部分取代 |
@@ -74,6 +74,7 @@
 | [0043](0043-ds5-bridge-pc-side-audio-haptics.md) | active | DualSense 桥接路径的音频触觉由 PC 侧合成：remapadctl 对 4ch 端点开 WASAPI 流驱动通道 3/4，参数吃 FEEDBACK 帧（载荷扩到 16 字节带频率落地值），经 `haptic audio on\|off` 告知设备把桥接 HID 震动让位；延伸 0042 的合成刻度与让位语义 |
 | [0044](0044-amiibo-bridge-upload-nfc-tag-emulation.md) | active | amiibo 镜像经桥接帧（0x40-0x43，逐帧 ACK）上传落 storage 分区 SPIFFS 固定 200 槽（572B 记录 = 镜像 + 厂商签名），选中持久化、重启恢复；NFC 命令通路（Command 0x01）由 target/ns2/ns2_nfc.c 软件模拟 NTAG215 标签，应答体按抓包布局钉在主机端用例 |
 | [0045](0045-host-output-raw-capture.md) | active | 主机输出的原始字节（布局解析之前）经 dp_capture 环形队列与新桥接帧 0x12（HOST_RAW）回传 PC 落盘：默认关闭、串口 capture on\|off 开关，PC 侧 --capture / :capture 接住，与手柄转发同会话共存 |
+| [0046](0046-ns-waveform-to-ds5-pcm-hd-haptics.md) | active | NS2 波形（每侧 3 个时序子帧，SDL 位打包）经布局行 `hd` 规则重整为 DS5 的 PCM HD 触觉：USB 4ch 承载频道 3/4 音圈 + 1/2 发声、蓝牙走 0x32 私有报告（3kHz 2ch s8 + CRC32），映射与落地只在固件布局内、PC 哑渲染；延伸 0042/0043 的合成刻度与让位语义，FEEDBACK 扩到 57 字节 |
 
 ## 创建 ADR 脚本用法
 

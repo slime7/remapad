@@ -42,7 +42,7 @@ static const char *TAG = "remapad_dp";
 /** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告（ADR 0023 的取值）。
  *
  *  主机在初始化末尾用报告率描述符（0x0010 写 `85 00`）点的就是这一量级，
- *  2026-09-15 的实机对照确认只有它能被稳定吃下：15 ms 下 66.7 帧/秒、
+ *  实机对照确认只有它能被稳定吃下：15 ms 下 66.7 帧/秒、
  *  发送失败计数为 0；改成 5 ms 后发送失败与已发计数一起涨（四成以上通知因
  *  mbuf 耗尽被丢），有效投递反掉到 20 次/秒上下，主机侧表现为操作延迟与
  *  震动丢失。节奏因此写死，不再提供运行时档位。 */
@@ -196,6 +196,19 @@ static void feedback_listener(ns2_feedback_type_t type, const void *payload, voi
         event.rumble_hf_freq[PAD_TRIGGER_R2] = haptic_synth_band_freq(hf_hz, true);
         memcpy(event.rumble_raw[PAD_TRIGGER_L2], rumble->raw, 16);
         memcpy(event.rumble_raw[PAD_TRIGGER_R2], &rumble->raw[16], 16);
+        /* NS2 波形规则的完整形态（每侧时序子帧）随事件进持续帧：HD 触觉
+         * 映射按它把主机的波形按时间顺序重整成目标设备的 PCM。 */
+        ns2_rumble_key_t keys[PAD_RUMBLE_KEY_COUNT];
+        event.rumble_key_count[PAD_TRIGGER_L2] =
+            (uint8_t)ns2_rumble_keys(rumble->raw, keys);
+        for (size_t k = 0; k < PAD_RUMBLE_KEY_COUNT; k++) {
+            event.rumble_keys[PAD_TRIGGER_L2][k] = keys[k];
+        }
+        event.rumble_key_count[PAD_TRIGGER_R2] =
+            (uint8_t)ns2_rumble_keys(&rumble->raw[16], keys);
+        for (size_t k = 0; k < PAD_RUMBLE_KEY_COUNT; k++) {
+            event.rumble_keys[PAD_TRIGGER_R2][k] = keys[k];
+        }
         fields = PAD_FEEDBACK_FIELD_RUMBLE;
         ESP_LOGD(TAG, "feedback rumble: L=%u/%u R=%u/%u", (unsigned)rumble->left_on,
                  (unsigned)event.rumble_strength[PAD_TRIGGER_L2], (unsigned)rumble->right_on,
@@ -437,10 +450,22 @@ static void dp_task(void *param)
             const pad_layout_t *feedback_layout =
                 feedback_out_len > 0 ? pad_feedback_last_layout() : NULL;
 
+            /* 采样音色的当前段随持续帧走：强震段铺音圈、发声段铺扬声器。
+             * 先落段再做 HD 渲染，子帧表才是这一拍的铺色结果。 */
+            feedback.haptic_env = haptic_env;
+
+            /* HD 触觉映射（映射在布局内完成）：布局行声明了 HD 通路才把主机
+             * 波形重整成本设备的时序子帧组——USB 直插走板上合成，桥接经 FEEDBACK
+             * 帧交 PC 哑渲染（音频触觉让位与采样发声段都从这一份走）。 */
+            pad_hd_render_t hd_render;
+            pad_feedback_hd_render(feedback_layout, &feedback, &hd_render);
+            const bool hd_active =
+                feedback_layout != NULL && feedback_layout->out.hd.ops != 0;
+
             /* 音频触觉让位（USB 直插走板上合成、桥接走 PC 侧合成）：两颗音圈
              *  被 HID 与音频同时驱动会叠成浑浊触感，接手的一条通路拿到的 HID
-             *  报告把震动字段清零。频率落地值随持续帧走，两侧合成同一份数值
-             *  （PC 只做哑渲染，落地规则只在固件里有一份）。 */
+             *  报告把震动字段清零。子帧（含频率落地）随持续帧走，两侧合成
+             *  同一份数值（PC 只做哑渲染，落地规则只在固件里有一份）。 */
             const bool usb_audio_engaged = usb_input_attached() && feedback_layout != NULL &&
                                            feedback_layout->out.audio_haptic &&
                                            usb_input_audio_haptics();
@@ -449,13 +474,13 @@ static void dp_task(void *param)
                                               s_bridge_audio_haptics;
             if (usb_audio_engaged) {
                 haptic_synth_params_t haptic;
-                memset(&haptic, 0, sizeof(haptic));
-                for (size_t side = 0; side < PAD_TRIGGER_COUNT; side++) {
-                    haptic.lf_amp[side] = feedback.rumble_strength[side];
-                    haptic.hf_amp[side] = feedback.rumble_hf_strength[side];
-                    haptic.lf_freq[side] = feedback.rumble_lf_freq[side];
-                    haptic.hf_freq[side] = feedback.rumble_hf_freq[side];
-                }
+                haptic.amp_peak = feedback_layout->out.hd.amp_peak;
+                /* 每个子帧的帧数 = rate × cycle_ms / 1000 / 3（整数帧，引擎
+                 * 按它倒数切帧）。 */
+                haptic.slice_frames = (uint16_t)(
+                    (uint32_t)feedback_layout->out.hd.rate_hz *
+                    feedback_layout->out.hd.cycle_ms / 3000u);
+                haptic.tones = hd_render;
                 usb_input_haptic(&haptic);
             }
 
@@ -508,9 +533,16 @@ static void dp_task(void *param)
             }
             /* 桥接的反馈状态帧（PC 日志展示与音频触觉输入）按写回语义变化才发：
              *  原始字节的抖动不产生新帧；采样字节带原始采样 ID，只供 PC 日志
-             *  展示——采样不再向桥接渲染（震动与音圈合成都不吃它）。 */
+             *  展示。布局行声明 HD 通路时载荷扩到 57 字节，附上重整后的时序子帧
+             *  组（PC 侧音频触觉与蓝牙私有流按它哑渲染）。 */
             if (!feedback_sent_valid || !pad_feedback_equal(&feedback_sent, &feedback)) {
-                input_link_send_feedback(&feedback);
+                uint8_t feedback_payload[PAD_FEEDBACK_WIRE_HD];
+                const size_t feedback_payload_len =
+                    pad_feedback_wire(&feedback, hd_active ? &hd_render : NULL,
+                                      feedback_payload, sizeof(feedback_payload));
+                if (feedback_payload_len > 0) {
+                    input_link_send_feedback(feedback_payload, feedback_payload_len);
+                }
                 feedback_sent = feedback;
                 feedback_sent_valid = true;
             }

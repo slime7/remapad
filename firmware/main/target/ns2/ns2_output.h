@@ -58,6 +58,20 @@ typedef struct {
     uint8_t raw[32];
 } ns2_rumble_event_t;
 
+/**
+ * LRA 参数包里一个时序子帧的解码结果（NS2 的波形规则：每侧最多 3 个子帧，
+ * 每个子帧一条低频音与一条高频音，按时间顺序各播 1/3 周期，主机以接近输入
+ * 上报的频率刷新它们来合成连续包络）。位布局取 SDL 的 Switch 2 驱动
+ * （SDL_hidapi_switch2.c 的 EncodeHDRumble，zlib 协议）：
+ * 5 字节小端位串 = 高频频率 bit0-9、高频振幅 bit10-19、低频频率 bit20-29、
+ * 低频振幅 bit30-39，各 10 位（振幅是 16 位定点的最高 10 位）。BlueRetro 的
+ * sw2.h 对同一位串给出了带序相反、并含使能位的解释——两者解出的振幅归一值
+ * 一致，这里取 SDL 的形态。振幅与频率是 LRA 的原始档位，单位未经实机核对，
+ * 落地规则（夹取与回落）由消费侧的布局映射决定。结构复用 pad 层的
+ * pad_rumble_key_t（私有反馈模型的家族无关形状）。
+ */
+typedef pad_rumble_key_t ns2_rumble_key_t;
+
 typedef void (*ns2_feedback_fn)(ns2_feedback_type_t type, const void *payload, void *user);
 
 /** 解析主机经 0x0012 下发的 Output Report 0x02（BLE 形态）为结构化震动事件：
@@ -67,18 +81,26 @@ typedef void (*ns2_feedback_fn)(ns2_feedback_type_t type, const void *payload, v
 bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out);
 
 /**
- * 从 16 字节 LRA 参数包按频带取振幅：三组操作数据各带低频 10 位与高频 8 位
- * 振幅，逐带取最大值、低频压到 8 位刻度（0-255）。主机的震动流是连续包络
+ * 从 16 字节 LRA 参数包按频带取振幅：三个时序子帧各带低频与高频 10 位振幅，
+ * 逐带取最大值、压到 8 位刻度（0-255）。主机的震动流是连续包络
  * （低频给冲击、高频给纹理），映射设备的马达前先按带拆开。
  */
 void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf);
 
 /**
- * 从 16 字节 LRA 参数包按频带取驱动频率：三组操作数据各带低频与高频 9 位
- * 频率字段（组内位 0-8 / 位 19-27），逐带取最大。字段单位未经实机核对，
+ * 从 16 字节 LRA 参数包按频带取驱动频率：三个时序子帧各带低频与高频 10 位
+ * 频率字段（位 20-29 / 位 0-9），逐带取最大。字段单位未经实机核对，
  * 消费侧（音频触觉合成）自行夹取与回落，这里只报原始刻度。
  */
 void ns2_rumble_band_frequencies(const uint8_t raw[16], uint16_t *lf_hz, uint16_t *hf_hz);
+
+/**
+ * 从 16 字节 LRA 参数包解出全部 3 个时序子帧（NS2 波形规则的完整形态）：
+ * 每个子帧的高/低频频率与振幅原样给出，不做归一。返回有效子帧数（状态字
+ * 的操作数计数，0 按 3 处理）。HD 触觉映射按它把主机的波形按时间顺序
+ * 重整为目标设备的 PCM，而不是只留两带最大值。
+ */
+size_t ns2_rumble_keys(const uint8_t raw[16], ns2_rumble_key_t keys[PAD_RUMBLE_KEY_COUNT]);
 
 /**
  * 从 16 字节 LRA 参数包估一个 0-255 强度：两带振幅取大，供「在震」判定与
@@ -143,6 +165,13 @@ uint8_t ns2_output_nfc_state(void);
 void ns2_output_emit_rumble(const ns2_rumble_event_t *event);
 void ns2_output_emit_player_led(uint8_t led_mask);
 void ns2_output_emit_haptic_sample(uint8_t sample_id);
+
+/**
+ * 从命令帧解出触觉采样 ID（Command 0x0A）：命中返回 true 并把采样 ID 写进
+ * sample（0x00 = 停止播放）。纯函数，供 ble_session 的命令分发与主机端
+ * 抓包回放共用。
+ */
+bool ns2_haptic_sample_parse(const uint8_t *frame, size_t len, uint8_t *sample);
 
 #ifdef __cplusplus
 }

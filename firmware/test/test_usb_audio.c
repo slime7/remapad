@@ -1,6 +1,6 @@
 /**
  * UAC1 音频流 OUT 接口解析（usb/usb_audio_parse.c）：用 DualSense Edge 实机
- * 描述符（2026-09-18 pyusb 无驱动抓取）钉住挑选规则——跳过音频控制接口、
+ * 描述符（pyusb 无驱动抓取）钉住挑选规则——跳过音频控制接口、
  * 麦克风流（IN 端点）与 HID 接口，只认 PCM 格式（wFormatTag 0x0001）、
  * Type I 16 位、带等时 OUT 端点的非 0 备用设置。
  *

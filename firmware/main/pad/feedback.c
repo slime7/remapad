@@ -6,13 +6,6 @@
 #define PAD_NS2_OUT_REPORT_ID 0x02u
 #define PAD_NS2_OUT_LRA_LEN 42u
 
-/** 采样音色里强震段的幅度（0-255，大于 0 即发声——蜂鸣器不调音量，
- *  幅度只区分「响」与「停顿」两态）。 */
-#define PAD_HAPTIC_PULSE 0xC0u
-/** 采样音色里蜂鸣段的幅度：与强震同响，只在时间轴上形成
- *  「震动、停顿、发声、停顿」的节奏。 */
-#define PAD_HAPTIC_BEEP 0x80u
-
 /**
  * 感知重映射表：out = 40 + 215·√(amp/255)（amp > 0，四舍五入），0 除外。
  * NS2 的线性档位直写 ERM 马达时小值整段落在死区，这里抬低端、压顶端；
@@ -50,7 +43,7 @@ uint8_t pad_rumble_perceived(uint8_t amp)
 
 /** DualSense 蓝牙输出报告的序号半字节：内核 hid-playstation.c 注明高 4 位
  *  是「每份报告都要递增」的序号（DS_OUTPUT_SEQ_NO），恒值报告会被手柄按
- *  重复包处理——2026-09-19 蓝牙震动不稳定的头号嫌疑；低 4 位 tag 保持 0。
+ *  重复包处理——蓝牙震动不稳定的头号嫌疑；低 4 位 tag 保持 0。
  *  USB 形态没有这个字节，因此只有蓝牙路径不稳定。 */
 static uint8_t s_ps_bt_seq;
 
@@ -73,7 +66,7 @@ typedef struct {
     size_t step_count;
 } haptic_sound_t;
 
-/** 定位呼叫（0x02，「搜索手柄」长按，2026-09-18 实机抓包建模）：真手柄上
+/** 定位呼叫（0x02，「搜索手柄」长按，实机抓包建模）：真手柄上
  *  「强震、停顿、两声蜂鸣、长停顿」是 HD 马达放出的声与震，这里整段转成
  *  板载蜂鸣器的响/停节奏，整周期 1200ms 循环——主机长按期间持续重发，
  *  节奏只能由设备侧给出，恒定单一响法撑不出这个形态。 */
@@ -227,6 +220,131 @@ const pad_layout_t *pad_feedback_last_layout(void)
     return s_last_layout;
 }
 
+/** 频率落地值（HD 规则）：0 回落该带缺省，再夹进 [min, max]（max 0 = 不设
+ *  上限的防呆）。 */
+static uint16_t hd_freq(const pad_hd_haptic_t *hd, uint16_t raw, bool high_band)
+{
+    const uint16_t min = high_band ? hd->hf_min_hz : hd->lf_min_hz;
+    const uint16_t max = high_band ? hd->hf_max_hz : hd->lf_max_hz;
+    if (raw == 0) {
+        raw = high_band ? hd->hf_default_hz : hd->lf_default_hz;
+    }
+    if (raw < min) {
+        return min;
+    }
+    if (max != 0 && raw > max) {
+        return max;
+    }
+    return raw;
+}
+
+void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *feedback,
+                            pad_hd_render_t *out)
+{
+    if (out == NULL) {
+        return;
+    }
+    memset(out, 0, sizeof(*out));
+    if (layout == NULL || feedback == NULL) {
+        return;
+    }
+    const pad_hd_haptic_t *hd = &layout->out.hd;
+    if (hd->ops == 0 || hd->ops > PAD_HD_KEY_MAX) {
+        return;
+    }
+    for (size_t side = 0; side < PAD_TRIGGER_COUNT; side++) {
+        /* 主机波形的时序重整：子帧按时间顺序原样保留（各播 cycle_ms/3），
+         * 振幅按原始档位线性直迁（10 位压到 8 位刻度）——音圈没有 ERM 死区，
+         * 不做感知重映射，重整只落在频率范围与承载 PCM 上；无效子帧是
+         * 静默子帧（增益 0），保住主机排好的时间轴。 */
+        size_t count = feedback->rumble_key_count[side];
+        if (count == 0 || count > PAD_HD_KEY_MAX) {
+            count = PAD_HD_KEY_MAX;
+        }
+        out->key_count[side] = (uint8_t)count;
+        for (size_t k = 0; k < PAD_HD_KEY_MAX; k++) {
+            const pad_rumble_key_t *src =
+                k < count ? &feedback->rumble_keys[side][k] : &feedback->rumble_keys[side][0];
+            const bool active = k < count && (src->lf_amp != 0 || src->hf_amp != 0);
+            out->key[side][k].lf_freq = active ? hd_freq(hd, src->lf_freq, false) : 0;
+            out->key[side][k].lf_gain = active ? (uint8_t)(src->lf_amp >> 2) : 0;
+            out->key[side][k].hf_freq = active ? hd_freq(hd, src->hf_freq, true) : 0;
+            out->key[side][k].hf_gain = active ? (uint8_t)(src->hf_amp >> 2) : 0;
+        }
+        /* 采样「强震」段是音色里的震动成分：覆盖该侧各子帧的音圈（真手柄的
+         * 定位音就是 HD 马达放出的「震动、停顿、发声、停顿」，震动段归
+         * 音圈），保持子帧时间轴不变。 */
+        if (feedback->haptic_env == PAD_HAPTIC_PULSE && hd->pulse_hz != 0) {
+            for (size_t k = 0; k < PAD_HD_KEY_MAX; k++) {
+                out->key[side][k].lf_freq = hd->pulse_hz;
+                out->key[side][k].lf_gain = 255u;
+                out->key[side][k].hf_freq = 0;
+                out->key[side][k].hf_gain = 0;
+            }
+        }
+    }
+    /* 「发声」段铺到扬声器（音频映射为音频）：没有真正声音的时段保持静音。 */
+    if (feedback->haptic_env == PAD_HAPTIC_BEEP && hd->beep_hz != 0) {
+        out->speaker.freq = hd->beep_hz;
+        out->speaker.gain = 255u;
+    }
+}
+
+size_t pad_feedback_wire(const pad_feedback_t *feedback, const pad_hd_render_t *hd,
+                         uint8_t *out, size_t cap)
+{
+    if (feedback == NULL || out == NULL) {
+        return 0;
+    }
+    if (cap < PAD_FEEDBACK_WIRE_LEGACY) {
+        return 0;
+    }
+    memset(out, 0, PAD_FEEDBACK_WIRE_LEGACY);
+    out[0] = feedback->rumble_on[PAD_TRIGGER_L2] ? 1u : 0u;
+    out[1] = feedback->rumble_on[PAD_TRIGGER_R2] ? 1u : 0u;
+    out[2] = feedback->rumble_strength[PAD_TRIGGER_L2];
+    out[3] = feedback->rumble_strength[PAD_TRIGGER_R2];
+    out[4] = feedback->player_led;
+    out[5] = feedback->haptic_sample_valid ? feedback->haptic_sample : 0u;
+    out[6] = feedback->rumble_hf_strength[PAD_TRIGGER_L2];
+    out[7] = feedback->rumble_hf_strength[PAD_TRIGGER_R2];
+    const uint16_t freqs[4] = {
+        feedback->rumble_lf_freq[PAD_TRIGGER_L2],
+        feedback->rumble_lf_freq[PAD_TRIGGER_R2],
+        feedback->rumble_hf_freq[PAD_TRIGGER_L2],
+        feedback->rumble_hf_freq[PAD_TRIGGER_R2],
+    };
+    for (size_t i = 0; i < 4; i++) {
+        out[8 + i * 2] = (uint8_t)(freqs[i] & 0xFFu);
+        out[9 + i * 2] = (uint8_t)(freqs[i] >> 8);
+    }
+    if (hd == NULL) {
+        return PAD_FEEDBACK_WIRE_LEGACY;
+    }
+    if (cap < PAD_FEEDBACK_WIRE_HD) {
+        return 0;
+    }
+    memset(&out[PAD_FEEDBACK_WIRE_LEGACY], 0,
+           PAD_FEEDBACK_WIRE_HD - PAD_FEEDBACK_WIRE_LEGACY);
+    for (size_t side = 0; side < PAD_TRIGGER_COUNT; side++) {
+        const size_t base = side == 0 ? 16u : 35u;
+        out[base] = hd->key_count[side];
+        for (size_t k = 0; k < PAD_HD_KEY_MAX; k++) {
+            uint8_t *p = &out[base + 1 + k * 6];
+            p[0] = (uint8_t)(hd->key[side][k].lf_freq & 0xFFu);
+            p[1] = (uint8_t)(hd->key[side][k].lf_freq >> 8);
+            p[2] = hd->key[side][k].lf_gain;
+            p[3] = (uint8_t)(hd->key[side][k].hf_freq & 0xFFu);
+            p[4] = (uint8_t)(hd->key[side][k].hf_freq >> 8);
+            p[5] = hd->key[side][k].hf_gain;
+        }
+    }
+    out[54] = (uint8_t)(hd->speaker.freq & 0xFFu);
+    out[55] = (uint8_t)(hd->speaker.freq >> 8);
+    out[56] = hd->speaker.gain;
+    return PAD_FEEDBACK_WIRE_HD;
+}
+
 void pad_feedback_apply(pad_feedback_t *held, uint8_t fields, const pad_feedback_t *event)
 {
     if ((fields & PAD_FEEDBACK_FIELD_RUMBLE) != 0) {
@@ -238,6 +356,11 @@ void pad_feedback_apply(pad_feedback_t *held, uint8_t fields, const pad_feedback
             held->rumble_hf_freq[side] = event->rumble_hf_freq[side];
             memcpy(held->rumble_raw[side], event->rumble_raw[side],
                    sizeof(held->rumble_raw[side]));
+            /* 时序子帧随震动事件一起覆盖：HD 映射吃的是它，漏拷会让主机的
+             * 波形变化停在旧包络上（与高频带强度同一类陷阱）。 */
+            memcpy(held->rumble_keys[side], event->rumble_keys[side],
+                   sizeof(held->rumble_keys[side]));
+            held->rumble_key_count[side] = event->rumble_key_count[side];
         }
     }
     if ((fields & PAD_FEEDBACK_FIELD_PLAYER_LED) != 0) {
@@ -259,6 +382,16 @@ static uint8_t effective_haptic(const pad_feedback_t *f)
     return f->haptic_sample_valid && f->haptic_sample != 0 ? f->haptic_sample : 0;
 }
 
+/** HD 子帧的量化值（等价判定用）：原始子帧逐包在抖（低有效位、频率扫描），
+ *  全精度比较会把等价帧全部判成变化；完全忽略又会让 HD 流冻结在旧包络上。
+ *  振幅压到 16 档、频率压到 64 档——真实的包络变化仍然触发，低位的抖动
+ *  不再产生新帧。 */
+static bool key_equal_quantized(const pad_rumble_key_t *a, const pad_rumble_key_t *b)
+{
+    return (a->lf_amp >> 4) == (b->lf_amp >> 4) && (a->hf_amp >> 4) == (b->hf_amp >> 4) &&
+           (a->lf_freq >> 3) == (b->lf_freq >> 3) && (a->hf_freq >> 3) == (b->hf_freq >> 3);
+}
+
 bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b)
 {
     if (a == b) {
@@ -269,13 +402,29 @@ bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b)
     }
     /* 只比会改变写回内容的语义字段。主机的震动流是音频式连续包络，原始 LRA
      * 参数包逐包都在抖（低有效位、频率扫描），拿它当变化判据会把等价帧全部
-     * 判成变化、以接近输入上报的频率把串口灌爆（2026-09-18 实机：稳态强度
-     * 9/9 每秒重发上百条帧，PC 会话循环被拖到输入转发卡顿）。 */
-    return memcmp(a->rumble_on, b->rumble_on, sizeof(a->rumble_on)) == 0 &&
-           memcmp(a->rumble_strength, b->rumble_strength, sizeof(a->rumble_strength)) == 0 &&
-           memcmp(a->rumble_hf_strength, b->rumble_hf_strength,
-                  sizeof(a->rumble_hf_strength)) == 0 &&
-           a->player_led == b->player_led && effective_haptic(a) == effective_haptic(b);
+     * 判成变化、以接近输入上报的频率把串口灌爆（实机曾出现稳态强度每秒重发
+     * 上百条帧，把 PC 会话循环拖到输入转发卡顿）。 */
+    if (memcmp(a->rumble_on, b->rumble_on, sizeof(a->rumble_on)) != 0 ||
+        memcmp(a->rumble_strength, b->rumble_strength, sizeof(a->rumble_strength)) != 0 ||
+        memcmp(a->rumble_hf_strength, b->rumble_hf_strength,
+               sizeof(a->rumble_hf_strength)) != 0 ||
+        a->player_led != b->player_led || effective_haptic(a) != effective_haptic(b)) {
+        return false;
+    }
+    /* HD 子帧按量化值参与：HD 流要跟上主机的波形包络，但低位的逐包抖动
+     * 不值得占一次传输。 */
+    for (size_t side = 0; side < PAD_TRIGGER_COUNT; side++) {
+        if (a->rumble_key_count[side] != b->rumble_key_count[side]) {
+            return false;
+        }
+        for (size_t k = 0; k < PAD_RUMBLE_KEY_COUNT; k++) {
+            if (!key_equal_quantized(&a->rumble_keys[side][k], &b->rumble_keys[side][k])) {
+                return false;
+            }
+        }
+    }
+    /* 采样音色的段边界（蜂鸣与停顿切换）也要投递：PC 侧的发声段铺色按它走。 */
+    return a->haptic_env == b->haptic_env;
 }
 
 size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,

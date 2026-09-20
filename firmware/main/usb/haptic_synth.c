@@ -2,9 +2,6 @@
 
 #include <string.h>
 
-/** 满幅强度（amp 255）在 16 位 PCM 上的峰值：留出两带叠加的余量。 */
-#define HAPTIC_SYNTH_AMP_MAX 24000
-
 /** 256 点 Q15 正弦表（sin(2πi/256) × 32767），线性插值后误差远小于音圈
  *  的可分辨度；定点查表让完成回调里的合成只有几十次整数运算。 */
 static const int16_t s_sine_lut[256] = {
@@ -78,31 +75,90 @@ void haptic_synth_reset(haptic_synth_state_t *state)
     }
 }
 
+/** 一个振荡器的相位步进与增益（gain 0-255 × amp_peak → 正弦表乘数），静音
+ *  声部直接置零增益跳过循环内的工作。 */
+typedef struct {
+    uint32_t step;
+    int32_t gain;
+} synth_osc_t;
+
+static synth_osc_t osc_prepare(uint16_t freq_hz, uint8_t gain, uint16_t amp_peak)
+{
+    synth_osc_t osc;
+    if (freq_hz == 0 || gain == 0) {
+        osc.step = 0;
+        osc.gain = 0;
+        return osc;
+    }
+    osc.step = phase_step(freq_hz);
+    osc.gain = ((int32_t)gain * amp_peak) / 255;
+    if (osc.gain == 0) {
+        osc.step = 0;
+    }
+    return osc;
+}
+
 void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t *params,
                        int16_t *pcm, size_t frames)
 {
     if (state == NULL || params == NULL || pcm == NULL) {
         return;
     }
-    /* 每侧两带的相位步进与增益先落地（频率夹取也在这里发生），循环里只剩
-     * 两次查表乘移位与一次饱和叠加。 */
-    uint32_t step[2][2];
-    int32_t gain[2][2];
+    const synth_osc_t speaker = osc_prepare(params->tones.speaker.freq,
+                                            params->tones.speaker.gain, params->amp_peak);
+    const uint16_t slice = params->slice_frames != 0 ? params->slice_frames : 1;
+    /* 子帧游标从上一块的断点继续：循环内逐帧倒数、到 0 切下一子帧并按新
+     * 子帧重算振荡器步进（切帧不重置相位，时间轴上是连续波形）。 */
+    uint8_t key = state->key_index;
+    uint16_t left = state->slice_left;
+    if (left == 0 || key >= PAD_HD_KEY_MAX) {
+        key = 0;
+        left = slice;
+    }
+    synth_osc_t lf[2];
+    synth_osc_t hf[2];
     for (size_t side = 0; side < 2; side++) {
-        step[side][0] = phase_step(haptic_synth_band_freq(params->lf_freq[side], false));
-        step[side][1] = phase_step(haptic_synth_band_freq(params->hf_freq[side], true));
-        gain[side][0] = ((int32_t)params->lf_amp[side] * HAPTIC_SYNTH_AMP_MAX) / 255;
-        gain[side][1] = ((int32_t)params->hf_amp[side] * HAPTIC_SYNTH_AMP_MAX) / 255;
+        lf[side] = osc_prepare(params->tones.key[side][key].lf_freq,
+                               params->tones.key[side][key].lf_gain, params->amp_peak);
+        hf[side] = osc_prepare(params->tones.key[side][key].hf_freq,
+                               params->tones.key[side][key].hf_gain, params->amp_peak);
     }
     for (size_t i = 0; i < frames; i++) {
+        if (left == 0) {
+            key = (uint8_t)((key + 1u) % PAD_HD_KEY_MAX);
+            left = slice;
+            for (size_t side = 0; side < 2; side++) {
+                lf[side] = osc_prepare(params->tones.key[side][key].lf_freq,
+                                       params->tones.key[side][key].lf_gain,
+                                       params->amp_peak);
+                hf[side] = osc_prepare(params->tones.key[side][key].hf_freq,
+                                       params->tones.key[side][key].hf_gain,
+                                       params->amp_peak);
+            }
+        }
+        left--;
         int16_t *frame = &pcm[i * HAPTIC_SYNTH_CHANNELS];
-        frame[0] = 0;
-        frame[1] = 0;
+        int32_t speaker_sample = 0;
+        if (speaker.gain != 0) {
+            speaker_sample = (sine_q15(state->speaker_phase) * speaker.gain) >> 15;
+            state->speaker_phase += speaker.step;
+        }
+        if (speaker_sample > 32767) {
+            speaker_sample = 32767;
+        } else if (speaker_sample < -32768) {
+            speaker_sample = -32768;
+        }
+        frame[0] = (int16_t)speaker_sample;
+        frame[1] = (int16_t)speaker_sample;
         for (size_t side = 0; side < 2; side++) {
             int32_t sample = 0;
-            for (size_t band = 0; band < 2; band++) {
-                sample += (sine_q15(state->phase[side][band]) * gain[side][band]) >> 15;
-                state->phase[side][band] += step[side][band];
+            if (lf[side].gain != 0) {
+                sample += (sine_q15(state->phase[side][0]) * lf[side].gain) >> 15;
+                state->phase[side][0] += lf[side].step;
+            }
+            if (hf[side].gain != 0) {
+                sample += (sine_q15(state->phase[side][1]) * hf[side].gain) >> 15;
+                state->phase[side][1] += hf[side].step;
             }
             if (sample > 32767) {
                 sample = 32767;
@@ -112,4 +168,6 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
             frame[2 + side] = (int16_t)sample;
         }
     }
+    state->key_index = key;
+    state->slice_left = left;
 }

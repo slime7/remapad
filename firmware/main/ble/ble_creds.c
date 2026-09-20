@@ -29,7 +29,7 @@ static const char *TAG = "remapad_blcred";
 #define CREDS_V1_LEN_MAX (1 + NS2_CREDS_MAX * (NS2_CREDS_MAC_LEN + NS2_CREDS_LTK_LEN))
 /** 读旧记录用的缓冲区上限：v2 与 v1 单表取大者。缓冲区必须够大，否则
  * nvs_get_blob 会因「缓冲不足」直接失败、已配对的凭证被当成没有
- * （2026-09-16 实机踩到：读回缓冲区按当前长度开、比盘上的短，整张表读不进来，
+ * （实机踩到：读回缓冲区按当前长度开、比盘上的短，整张表读不进来，
  * 会话回落去读 v1 老表，拿到的是过期记录）。 */
 #define CREDS_BLOB_LEN_MAX \
     (CREDS_BLOB_LEN > CREDS_V1_LEN_MAX ? CREDS_BLOB_LEN : CREDS_V1_LEN_MAX)

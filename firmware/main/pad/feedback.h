@@ -14,6 +14,18 @@ extern "C" {
 /** 输出报告缓冲上限：最长的是 DualSense 蓝牙形态（78 字节）。 */
 #define PAD_OUTPUT_MAX 78
 
+/** 采样音色里强震段的幅度（0-255，大于 0 即发声——蜂鸣器不调音量，
+ *  幅度只区分「响」与「停顿」两态）。 */
+#define PAD_HAPTIC_PULSE 0xC0u
+/** 采样音色里蜂鸣段的幅度：与强震同响，只在时间轴上形成
+ *  「震动、停顿、发声、停顿」的节奏。 */
+#define PAD_HAPTIC_BEEP 0x80u
+
+/** 反馈状态线格式的两代长度：16 字节 = 基础段（使能、两带强度、玩家灯、
+ *  采样与两带频率），57 字节 = 追加 HD 时序子帧表（PC 侧哑渲染的输入）。 */
+#define PAD_FEEDBACK_WIRE_LEGACY 16u
+#define PAD_FEEDBACK_WIRE_HD 57u
+
 /**
  * 反馈方向的编码入口（处理段）：把主机下发的反馈（pad_feedback_t）按输入
  * 设备的布局行编码成该设备能吃的输出报告，首字节是 Report ID，交给传输侧
@@ -28,6 +40,26 @@ size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
 
 /** 上次编码命中的布局行（诊断；未命中或无反馈通道时为 NULL）。 */
 const pad_layout_t *pad_feedback_last_layout(void);
+
+/**
+ * HD 触觉映射（映射在布局内完成）：按布局行的 hd 规则把主机波形
+ * （rumble_keys 的时序子帧）重整成该设备的子帧序列——子帧按时间顺序各播
+ * cycle_ms/3，低频给冲击、高频给纹理，振幅线性直迁（音圈没有 ERM 死区，
+ * 不做感知重映射），频率按 hd 的范围夹取、0 回落缺省；采样音色的「强震」
+ * 段以 hd.pulse_hz 覆盖各子帧的音圈、「发声」段以 hd.beep_hz 铺到扬声器。
+ * 布局行没有 HD 通路时输出全零。
+ */
+void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *feedback,
+                            pad_hd_render_t *out);
+
+/**
+ * 反馈状态线格式（桥接 FEEDBACK 帧载荷）：前 16 字节是基础段（使能、两带
+ * 强度、玩家灯、采样与两带频率，老 PC 按长度识别），hd 非 NULL 且布局声明
+ * 了 HD 通路时追加到 57 字节（每侧时序子帧表 + 扬声器音色，PC 侧音频触觉/
+ * 蓝牙私有流的哑渲染输入）。返回实际长度，cap 不够且需要 HD 段时返回 0。
+ */
+size_t pad_feedback_wire(const pad_feedback_t *feedback, const pad_hd_render_t *hd,
+                         uint8_t *out, size_t cap);
 
 /** 反馈事件带来的字段（pad_feedback_apply 的 fields 位）。 */
 typedef enum {
@@ -59,7 +91,7 @@ bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b);
  * 主机震动振幅的感知重映射（0-255 → 0-255）：NS2 的振幅是 LRA 线性驱动档位，
  * 小档位在共振频点上也能摸到；ERM 偏心马达（DualSense / DualShock / Xbox）
  * 低占空比整段落在死区里，线性直迁会让游戏里中低强度的震动几乎无感
- * （2026-09-19 实机：USB 直插游戏震动非常轻）。按 out = 40 + 215·√(amp/255)
+ * （实机：USB 直插游戏震动非常轻）。按 out = 40 + 215·√(amp/255)
  * （amp > 0）抬低端、压顶端，0 仍映射 0。采样音色与 CLI 注入写的是设备刻度，
  * 不经过本表。
  */

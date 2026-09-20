@@ -93,7 +93,7 @@ void ble_controller_adv_start(uint8_t instance, uint8_t identity,
                               const uint8_t payload[31], const uint8_t addr[6]);
 
 /** 广播 PDU 形态（实机对账开关，不落盘）：auto 与 legacy 都是 legacy PDU
- *  （可连接 + 可扫描，主机只认这种，2026-09-16 实机对账）；extended 换成
+ *  （可连接 + 可扫描，主机只认这种，实机对账）；extended 换成
  *  扩展 PDU 做反向验证——扩展实例在主机侧完全看不见。 */
 typedef enum {
     BLE_CTL_ADV_PDU_AUTO = 0,

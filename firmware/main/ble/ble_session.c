@@ -493,7 +493,7 @@ static void log_session_normal(const session_slot_t *ses)
  * 注册证据到齐就把会话从等待态提升为已注册（判据见 ns2_adv_host_registered）。
  * 三条证据分别在连接时、配对握手上、以及主机启用特性时出现，三条都走这里——
  * 只认地址的那条会让「主机换了随机地址」或「主机不再重跑 0x15」的链路一直停在
- * 等待态：屏幕停在「配对中…」，配新主机的流程也退不出来（2026-09-17 实机现场）。
+ * 等待态：屏幕停在「配对中…」，配新主机的流程也退不出来（实机现场）。
  */
 static void promote_if_host_registered(session_slot_t *ses)
 {
@@ -1092,7 +1092,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
      * 对不上抓包的握手步骤一眼可见。应答体同样留前 16 字节，用于对照
      * 主机重复轮询某条命令（重复轮询说明该应答没被主机接受）。
      * 例外是 0x0A 触觉采样：运行期热路径（游戏里接近输入上报的频率），
-     * 逐包日志会把发送环灌满、拖住输入通知（2026-09-18 实机现场），只按
+     * 逐包日志会把发送环灌满、拖住输入通知（实机现场），只按
      * 秒聚合。 */
     const bool hot_path = cmd_is_hot_path(data[0]);
     if (!hot_path) {
@@ -1133,19 +1133,21 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         resp_len = handle_led_cmd(ses, data, len, subcmd);
         break;
     case 0x0A: {
-        const uint8_t sample = subcmd == 0x02 && len >= 9 ? data[8] : subcmd;
+        uint8_t sample = 0;
         /* 触觉采样按秒聚合（热路径，见上面的 cmd 留痕例外）：逐包三条日志
          * 在发送环吃紧时会把 NimBLE 主机任务拖住，输入通知随之停摆。 */
         static int64_t s_haptic_log_us;
         static uint32_t s_haptic_count;
         s_haptic_count++;
         const int64_t now_us = esp_timer_get_time();
-        if (now_us - s_haptic_log_us >= 1000000LL) {
-            ESP_LOGI(TAG, "haptic x%u/s: sample 0x%02x", (unsigned)s_haptic_count, sample);
-            s_haptic_log_us = now_us;
-            s_haptic_count = 0;
+        if (ns2_haptic_sample_parse(data, len, &sample)) {
+            if (now_us - s_haptic_log_us >= 1000000LL) {
+                ESP_LOGI(TAG, "haptic x%u/s: sample 0x%02x", (unsigned)s_haptic_count, sample);
+                s_haptic_log_us = now_us;
+                s_haptic_count = 0;
+            }
+            ns2_output_emit_haptic_sample(sample);
         }
-        ns2_output_emit_haptic_sample(sample);
         resp_len = NS2_FRAME_HEADER_LEN;
         break;
     }
@@ -1186,7 +1188,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         break;
     case 0x13:
         /* 0x13/0x01：回空体时主机不发 0x0c/0x04、也不订阅输入通道；回 4 字节
-         *  `01 00 00 00` 后主机立刻启用特性并开始收输入（实机 2026-09-16）。
+         *  `01 00 00 00` 后主机立刻启用特性并开始收输入（实机验证）。
          *  语义与长度未知，`01 00 00 00` 是实测能走通的形态（controller.md「Command 0x13 / 0x18」）。 */
         {
             static const uint8_t body[4] = {0x01, 0x00, 0x00, 0x00};
@@ -1307,15 +1309,21 @@ void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle
 
 void ns2_session_on_composite(const uint8_t *data, size_t len, uint16_t conn_handle)
 {
-    /* 实机抓包：复合输出 = 33 字节 0x00 填充 + 命令帧（首字节为震动形态
-     * 的 Switch 1 布局未被 Switch 2 主机使用）。 */
+    /* 实机抓包：复合输出 = 1 字节 0x00 填充 + 左右两条 16 字节 LRA 参数包 +
+     * 命令帧（BlueRetro sw2 的 out_cmd 布局；Switch 1 的「0x00 + 2×16B 震动 +
+     * 命令」布局未被 Switch 2 主机观测到，此处是 Switch 2 的原生形态）。 */
     if (len < 33 + NS2_FRAME_HEADER_LEN) {
         ESP_LOGW(TAG, "composite too short (%u)", (unsigned)len);
         return;
     }
-    /* 复合写入的震动段只有一条 16 字节 LRA 参数包（与 0x0012 的左右两条
-     * 不同），本工程不模拟马达，遂不解析；震动反馈走 0x0012 通路的
-     * ns2_session_on_output。 */
+    /* 复合写入的震动段与 0x0012 同构（左右两条 16 字节 LRA 参数包）。只在
+     * 真的在震时解析成震动事件：主机经 0x0016 下发指令时参数包段通常是
+     * 静置零包（ns2-search-page.capture 全程如此），照单全收会把 0x0012 的
+     * 震动流误清成停震。 */
+    ns2_rumble_event_t event;
+    if (ns2_rumble_parse(&data[1], 32, &event) && (event.left_on || event.right_on)) {
+        ns2_output_emit_rumble(&event);
+    }
     ns2_session_on_command(&data[33], len - 33, NS2_FRAME_TRANSPORT_BLE, conn_handle);
 }
 
@@ -1734,7 +1742,7 @@ void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *
              *  门槛——主机不采用未启用链路上的输入，提前灌报文只会挤占发送
              *  队列（休眠连接上曾实测近半数通知因拥塞失败）。
              *  但 READ 缓存要跟着刷新：主机在握把页的行只发了 0x0c/0x02、
-             *  没订阅输入通道，靠 READ 轮询取输入值（实机 2026-09-16）——
+             *  没订阅输入通道，靠 READ 轮询取输入值（实机）——
              *  缓存不刷新，主机读到的永远是全零。 */
             if (!slot->features_enabled) {
                 ble_controller_store_input(conn, report_id, body);

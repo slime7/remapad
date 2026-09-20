@@ -22,7 +22,7 @@ static const char *TAG = "remapad_input";
 #define INPUT_LINK_RX_BUF 4096
 #define INPUT_LINK_TX_BUF 1024
 /* CLI 桥接命令在这条任务里执行：amiibo 槽位读写走 SPIFFS/VFS 的 fopen
- * 调用链（栈深），4096 会溢出（实机 2026-09-19 select 即溢出），定 8192。 */
+ * 调用链（栈深），4096 会溢出（实机 select 即溢出），定 8192。 */
 #define INPUT_LINK_TASK_STACK 8192
 #define INPUT_LINK_TASK_PRIO 6
 /** 控制帧（PING/OTA 应答）等着写进发送环的上限：日志刷屏时环会满，但绝不无限等。 */
@@ -258,33 +258,14 @@ esp_err_t input_link_send_image_end(uint32_t total_bytes, uint32_t timeout_ms)
     return send_encoded_wait(frame, len, timeout_ms);
 }
 
-void input_link_send_feedback(const pad_feedback_t *feedback)
+void input_link_send_feedback(const uint8_t *payload, size_t payload_len)
 {
-    if (feedback == NULL) {
+    /* 载荷来自 pad_feedback_wire（16 字节基础段或 57 字节 HD 版），编码在
+     * 处理段完成，这里只搬运。 */
+    if (!s_running || payload == NULL || payload_len < 8u || payload_len > 64u) {
         return;
     }
-    /* 反馈载荷：左右震动使能、两带强度（低频冲击 + 高频纹理）、玩家灯与
-     * 触觉采样；字节 8-15 是两带驱动频率的落地值（Hz，小端 u16 ×4：低频
-     * L/R、高频 L/R，PC 侧音频触觉合成按它选频，夹取与回落已在反馈监听者
-     * 完成）。老固件的帧只有前 12 字节，PC 按长度判断。 */
-    uint8_t payload[16] = {0};
-    payload[0] = feedback->rumble_on[PAD_TRIGGER_L2] ? 1u : 0u;
-    payload[1] = feedback->rumble_on[PAD_TRIGGER_R2] ? 1u : 0u;
-    payload[2] = feedback->rumble_strength[PAD_TRIGGER_L2];
-    payload[3] = feedback->rumble_strength[PAD_TRIGGER_R2];
-    payload[4] = feedback->player_led;
-    payload[5] = feedback->haptic_sample_valid ? feedback->haptic_sample : 0u;
-    payload[6] = feedback->rumble_hf_strength[PAD_TRIGGER_L2];
-    payload[7] = feedback->rumble_hf_strength[PAD_TRIGGER_R2];
-    payload[8] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_L2] & 0xFFu);
-    payload[9] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_L2] >> 8);
-    payload[10] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_R2] & 0xFFu);
-    payload[11] = (uint8_t)(feedback->rumble_lf_freq[PAD_TRIGGER_R2] >> 8);
-    payload[12] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_L2] & 0xFFu);
-    payload[13] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_L2] >> 8);
-    payload[14] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_R2] & 0xFFu);
-    payload[15] = (uint8_t)(feedback->rumble_hf_freq[PAD_TRIGGER_R2] >> 8);
-    input_link_send_frame(INPUT_FRAME_TYPE_FEEDBACK, 0, payload, sizeof(payload));
+    input_link_send_frame(INPUT_FRAME_TYPE_FEEDBACK, 0, payload, payload_len);
 }
 
 void input_link_send_out_report(const uint8_t *report, size_t len)

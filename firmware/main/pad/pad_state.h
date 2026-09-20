@@ -68,6 +68,20 @@ typedef enum {
 /** 透传载荷上限（USB HID 报告实际不超过 64 字节）。 */
 #define PAD_RAW_MAX 64
 
+/** 主机波形的一个时序子帧（NS2 LRA 参数包的解码结果，见 ns2_output.h）：每侧
+ *  最多 3 个子帧，子帧按时间顺序各播 1/3 周期（SDL/VIIPER 同款语义），频率与
+ *  振幅档位直迁重整进 PCM。pad 层只定义数据形状，解码在 target 侧按家族
+ *  完成——pad_feedback_t 是家族无关的中间模型。 */
+typedef struct {
+    uint16_t lf_freq;
+    uint16_t lf_amp; /**< 原始档位（NS2 为 10 位）。 */
+    uint16_t hf_freq;
+    uint16_t hf_amp; /**< 原始档位（NS2 为 10 位）。 */
+} pad_rumble_key_t;
+
+/** 每侧的时序子帧数上限（NS2 波形规则为 3 个）。 */
+#define PAD_RUMBLE_KEY_COUNT 3
+
 /** 按键位（位置语义，键名沿用 PS）。扩展位放主机侧新增或第三方手柄的附加键。 */
 enum {
     PAD_BTN_TRIANGLE = 1u << 0, /**< △ 上 */
@@ -193,10 +207,10 @@ typedef struct {
  */
 typedef struct {
     bool rumble_on[PAD_TRIGGER_COUNT];
-    /** 低频带归一强度（0-255）：NS2 参数包三组操作数据里最大的低频振幅，
+    /** 低频带归一强度（0-255）：NS2 参数包三个时序子帧里最大的低频振幅，
      *  压到 8 位刻度。设备的「重击」马达（DS5 大马达、NS1 低频马达）跟它。 */
     uint8_t rumble_strength[PAD_TRIGGER_COUNT];
-    /** 高频带归一强度（0-255）：三组里最大的高频振幅。设备的「纹理」马达
+    /** 高频带归一强度（0-255）：三个时序子帧里最大的高频振幅。设备的「纹理」马达
      *  （DS5 小马达、NS1 高频马达）跟它；主机的震动流是连续包络，低频给
      *  冲击、高频给质感，两带分开才不会把高频糊进低频里。 */
     uint8_t rumble_hf_strength[PAD_TRIGGER_COUNT];
@@ -207,9 +221,20 @@ typedef struct {
      *  与桥接 FEEDBACK 帧共用；不参与写回等价判定（频率字段逐包在抖）。 */
     uint16_t rumble_lf_freq[PAD_TRIGGER_COUNT];
     uint16_t rumble_hf_freq[PAD_TRIGGER_COUNT];
+    /** 主机波形的时序子帧（每侧最多 3 个，NS2 波形规则）：HD 触觉映射按它把
+     *  主机的波形按时间顺序重整为目标设备的 PCM。原始档位随包在抖，不直接
+     *  参与写回等价判定（等价判定用它的量化值，见 pad_feedback_equal）。 */
+    pad_rumble_key_t rumble_keys[PAD_TRIGGER_COUNT][PAD_RUMBLE_KEY_COUNT];
+    /** 各侧有效子帧数（取自参数包状态字的操作数计数；0 按 3 处理）。 */
+    uint8_t rumble_key_count[PAD_TRIGGER_COUNT];
     uint8_t player_led; /**< 玩家灯掩码 bit0-3。 */
     bool haptic_sample_valid;
     uint8_t haptic_sample;
+    /** 采样音色当前段的幅度（feedback.h 的 PAD_HAPTIC_* 两态）：由数据面按
+     *  音色表逐拍刷新，HD 通路据此把「强震」段铺到音圈、「发声」段铺到
+     *  扬声器；0 = 停顿。不是主机下发的事件字段，等价判定参与（段边界才
+     *  变化，不会引发风暴）。 */
+    uint8_t haptic_env;
 } pad_feedback_t;
 
 /** 复位为静置默认：摇杆居中、无按键、无外设数据。 */

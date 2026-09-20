@@ -43,9 +43,12 @@ void input_link_send_frame(uint8_t type, uint8_t slot, const uint8_t *payload,
 esp_err_t input_link_send_frame_wait(uint8_t type, uint8_t slot, const uint8_t *payload,
                                     size_t payload_len, uint32_t timeout_ms);
 
-/** 回发一帧反馈给 PC（主机 → 手柄方向）：本轮 PC 端只打印，投递到手柄
- *  在后续里程碑实现。 */
-void input_link_send_feedback(const pad_feedback_t *feedback);
+/**
+ * 回发一帧反馈给 PC（主机 → 手柄方向）：载荷由 pad_feedback_wire 编码
+ * （16 字节基础段，或带 HD 子帧的 57 字节），映射知识只在固件里有一份，
+ * 这里只搬运。未接入或链路停用时丢弃。
+ */
+void input_link_send_feedback(const uint8_t *payload, size_t payload_len);
 
 /**
  * 把编码好的输出报告发给 PC（设备 → PC），由 PC 侧写进手柄：反馈的布局

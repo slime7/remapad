@@ -61,6 +61,49 @@ typedef enum {
 } pad_out_frame_t;
 
 /**
+ * HD 触觉波形映射规则（布局行声明，映射在布局内完成）：NS 的震动参数是
+ * 「波形描述」（每侧最多 3 个时序子帧，子帧按时间顺序各播 1/3 周期，每帧
+ * 一条低频音与一条高频音的频率与振幅档位），不是马达信号；声明了 HD 通路
+ * 的设备按这份规则把主机的波形重整为自己的 PCM——震动映到触觉音圈、采样
+ * 提示音的发声段映到扬声器。频率字段的单位未经实机核对，落地时夹进各带的
+ * [min, max]（0 回落缺省）。
+ */
+typedef struct {
+    uint8_t ops; /**< 参与合成的时序子帧数上限（NS2 波形规则为 3）；0 = 无 HD 通路。 */
+    uint16_t rate_hz;   /**< 承载 PCM 的采样率（USB UAC 为 48000；蓝牙私有流 3000）。 */
+    uint16_t amp_peak;  /**< 归一满幅（gain 255）的 PCM 峰值（合成引擎按它刻度）。 */
+    uint16_t cycle_ms;  /**< 子帧序列的整周期：3 个子帧各播 cycle_ms/3。 */
+    uint16_t lf_min_hz;
+    uint16_t lf_max_hz;
+    uint16_t lf_default_hz;
+    uint16_t hf_min_hz;
+    uint16_t hf_max_hz;
+    uint16_t hf_default_hz;
+    uint16_t pulse_hz; /**< 采样「强震」段铺在音圈上的频率。 */
+    uint16_t beep_hz;  /**< 采样「发声」段铺在扬声器上的频率。 */
+} pad_hd_haptic_t;
+
+/** HD 渲染结果：每侧一条按时间顺序播放的子帧序列（低频/高频各一个振荡器，
+ *  增益 0-255）加一路扬声器音色。由布局行的 hd 规则从主机波形渲染出来，
+ *  合成引擎与桥接 FEEDBACK 帧都吃这一份——落地规则只在固件里有一份，PC
+ *  只做哑渲染。 */
+#define PAD_HD_KEY_MAX 3 /**< 每侧子帧上限（NS2 波形规则为 3）。 */
+
+typedef struct {
+    uint8_t key_count[2]; /**< 各侧有效子帧数（不足的子帧按静默子帧播放）。 */
+    struct {
+        uint16_t lf_freq;
+        uint8_t lf_gain;
+        uint16_t hf_freq;
+        uint8_t hf_gain;
+    } key[2][PAD_HD_KEY_MAX];
+    struct {
+        uint16_t freq;
+        uint8_t gain;
+    } speaker;
+} pad_hd_render_t;
+
+/**
  * 运动字段描述：一次性给出取样位置、样本数与轴映射。轴映射把来源轴归一到
  * 私有约定（X 右为正、Y 上为正、Z 朝屏幕外为正）：gyro_src / accel_src 的
  * 第 i 项是私有三轴第 i 路取来源的第几路（PAD_OFF_NONE 表示该路缺失），
@@ -98,9 +141,13 @@ typedef struct {
     uint8_t led_style; /**< pad_led_style_t。 */
     /** 音频触觉：设备带可驱动的 UAC 音频触觉通道（DualSense 的 4ch PCM，
      *  后两路直连左右触觉音圈）。USB 直插时震动改走板上合成，HID 震动字节
-     *  让位；桥接路径（PC 持有音频接口）不受影响。触觉采样不进任何渲染
-     *  通路（板载蜂鸣器发声 / 蓝牙桥接丢弃），与音频触觉标记无关。 */
+     *  让位；桥接路径（PC 持有音频接口）不受影响。蓝牙接入时它声明的是
+     *  蓝牙私有触觉流（DualSense 的 0x32 报告），让位语义相同。触觉采样
+     *  不进任何渲染通路（板载蜂鸣器发声 / 蓝牙桥接丢弃），与音频触觉标记
+     *  无关。 */
     uint8_t audio_haptic;
+    /** HD 触觉波形映射规则（ops 为 0 表示该设备没有 HD 通路）。 */
+    pad_hd_haptic_t hd;
     uint8_t frame;     /**< pad_out_frame_t。 */
     /** PS 蓝牙形态的序号字节偏移（高半字节逐报递增、低半字节 tag 保持 0，
      *  内核 DS_OUTPUT_SEQ_NO 的语义）；0 表示没有序号字节——DualShock 4 的

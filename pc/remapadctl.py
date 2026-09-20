@@ -103,7 +103,7 @@ from link import (
     parse_ota_ack,
 )
 
-from ds5_haptics import Ds5HapticsAudio
+from ds5_haptics import Ds5HapticsAudio, Ds5HapticsBt
 
 # 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码。
 for _stream in (sys.stdout, sys.stderr):
@@ -369,6 +369,11 @@ def format_feedback(payload: bytes) -> str:
         # 两带驱动频率落地值（Hz）：音频触觉合成按它选频。
         line += (f" 频率 {params['lf_freq'][0]}/{params['lf_freq'][1]}"
                  f"+{params['hf_freq'][0]}/{params['hf_freq'][1]}")
+    hd = params.get("hd")
+    if hd is not None:
+        # HD 时序子帧段：固件按布局行重整出的子帧序列（PC 侧只做哑渲染）。
+        line += (f" HD {hd['l']['count']}+{hd['r']['count']}子帧"
+                 + (" 发声" if hd["speaker"][1] else ""))
     return line
 
 
@@ -395,7 +400,7 @@ class FeedbackThrottle:
 
 class WriteBackGate:
     """桥接写回限速：游戏内震动包络逐包都变，设备侧「字节变了才发」压不住
-    写回量，蓝牙 HID 写回又慢（实机 2026-09-19：蓝牙手柄游戏内约 100 条/秒，
+    写回量，蓝牙 HID 写回又慢（实机：蓝牙手柄游戏内约 100 条/秒，
     会话循环被拖到输入转发卡顿无法操作）。把写回钉在 min_interval_s 上限：
     窗口内只放行第一条，被挡下的帧不丢、留作最新待写帧，窗口到期由 poll
     放行——收尾状态（比如停震的最后一帧）因此一定落地，马达不会被钉住。"""
@@ -989,20 +994,26 @@ class Session:
         self.maybe_start_haptics()
 
     def maybe_start_haptics(self) -> None:
-        """DS5 有线接入时启用 PC 侧音频触觉：对它的 4ch 音频端点合成触觉波形
-        （通道 3/4），并告知固件把桥接写回的震动字段清零（haptic audio on）。
-        --no-audio-haptics / --no-rumble 或端点开不起来时静默回落 HID 震动。
-        WASAPI 开流要秒级、且不能占着桥接热路径，启动放后台线程。"""
+        """DS5 接入时启用 PC 侧音频触觉：USB 直插走 4ch 音频端点（频道 3/4
+        触觉、1/2 发声），蓝牙接入走 0x32 私有触觉流（HID 上没有音频接口）。
+        两条通路都会告知固件把桥接写回的震动字段清零（haptic audio on）。
+        --no-audio-haptics / --no-rumble 或通路开不起来时静默回落 HID 震动。
+        开流要秒级、且不能占着桥接热路径，启动放后台线程。"""
         if self.haptics is not None or self._haptics_starting:
             return
         if getattr(self.args, "no_audio_haptics", False) or self.args.no_rumble:
             return
         info = self.pad_info or {}
         if (info.get("vendor_id") != 0x054C
-                or info.get("product_id") not in (0x0CE6, 0x0DF2)
-                or conn_for(info) != CONN_USB):
+                or info.get("product_id") not in (0x0CE6, 0x0DF2)):
             return
         self._haptics_starting = True
+        if conn_for(info) == CONN_BT:
+            threading.Thread(target=self._start_bt_haptics_worker, daemon=True).start()
+            return
+        if conn_for(info) != CONN_USB:
+            self._haptics_starting = False
+            return
         threading.Thread(target=self._start_haptics_worker, daemon=True).start()
 
     def _start_haptics_worker(self) -> None:
@@ -1010,6 +1021,16 @@ class Session:
         if not audio.start():
             self._haptics_starting = False
             return
+        self._adopt_haptics(audio)
+
+    def _start_bt_haptics_worker(self) -> None:
+        audio = Ds5HapticsBt(self.pad, self.reporter)
+        if not audio.start():
+            self._haptics_starting = False
+            return
+        self._adopt_haptics(audio)
+
+    def _adopt_haptics(self, audio) -> None:
         if self.pad is None:
             # 启动期间手柄已断开（会话收尾）：不留孤儿流。
             audio.stop()
@@ -1018,7 +1039,7 @@ class Session:
         self.haptics = audio
         self._haptics_starting = False
         # 「haptic audio on」由主循环发：串口句柄不跨线程写（worker 与主循环
-        # 并发写会把命令字节冲烂，2026-09-18 实机抓到 err unknown command）。
+        # 并发写会把命令字节冲烂，实机抓到 err unknown command）。
         self._haptics_notify = True
 
     def pump_haptics_notify(self) -> None:
@@ -1027,7 +1048,7 @@ class Session:
         self._haptics_notify = False
         try:
             self.send_cli("haptic audio on")
-            self.reporter.line("DS5 音频触觉已启用（通道 3/4 合成，HID 震动让位）")
+            self.reporter.line(self.haptics.LABEL)
             self.reporter.event("haptics_audio", state="on")
         except OSError:
             self.stop_haptics()

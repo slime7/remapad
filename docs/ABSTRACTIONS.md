@@ -22,7 +22,7 @@
 | **转换段（target/）** | 输入通路的第三段：目标编码器 `pad_target_t` 把私有格式编码成具体目标家族的报文，现役实现为 `target/ns2/`。 |
 | **桥接帧** | PC 与设备之间的分帧载荷：帧头 `A5 5A` 加版本、类型、槽位、序号、长度字段，再跟载荷与 CRC16，与 CLI 文本共用一根 USB-Serial/JTAG；承载输入帧（ATTACH/REPORT…）、输出报告帧（`0x11`，设备 → PC 的反馈写回）、主机原始采集帧（`0x12`，设备 → PC 的主机输出原文）、反馈帧（`0x20`）、截图帧（`0x21`-`0x23`，设备 → PC 的像素分块）、OTA 升级帧（`0x30`-`0x33`）与 PING 探测帧。 |
 | **同代透传** | 设备自带的报告语言与目标语言一致时，把设备报文体原样交给目标发送（NS2 手柄 → NS2 主机），只重写由本机会话决定的状态字节；判定与取舍见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。 |
-| **输出报告（反馈）** | 主机下发的震动 / 玩家灯经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告，USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。触觉采样不进输出报告：它是主机点播的声音（主机只发采样 ID、节奏来自手柄内部音色库），输入设备有线接入时由板载蜂鸣器按采样音色表发声、蓝牙手柄直接丢弃。DualSense 直插另有音频触觉通道：分带震动包络在板上合成 4ch PCM 经等时端点驱动触觉音圈（[ADR 0042](adr/0042-ds5-audio-haptics-onboard-synthesis.md)）。 |
+| **输出报告（反馈）** | 主机下发的震动 / 玩家灯经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告，USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。触觉采样不进输出报告：它是主机点播的声音（主机只发采样 ID、节奏来自手柄内部音色库），输入设备有线接入时由板载蜂鸣器按采样音色表发声、发声段经 HD 映射铺到声明设备的扬声器、其余丢弃。声明 HD 触觉的设备（DualSense）按布局行 `hd` 规则把 NS 波形（每侧 3 组音色）重整为 PCM：USB 直插走板上合成 4ch PCM（频道 3/4 音圈、1/2 发声），桥接由 PC 哑渲染（[ADR 0046](adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)）。 |
 | **主机输出原始采集（capture）** | 诊断通道：主机写进输出特征值的原始字节（震动参数包 / 指令帧 / 复合输出 / 固件更新记录流 / 扩展通道）在解析成结构化事件、按布局编码之前的形态，经桥接帧 `0x12` 回传 PC 落盘。采集点在 `ble_controller` 的写分发入口，BLE 侧只入环、串口发送由数据面任务承担；默认关闭，串口 `capture on|off` 开关，PC 侧 `--capture` / `:capture` 接住（[ADR 0045](adr/0045-host-output-raw-capture.md)）。 |
 | **OTA 会话（ota/）** | 升级通道的固件侧：`ota_session` 负责帧队列、非阻塞分派、flash 写入与重启，`ota_proto` 是纯逻辑的序号判定、窗口应答、4 KB 聚合与超时；镜像写进非运行分区，校验通过后切启动分区（见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)）。 |
 | **NS2 report encoder** | 将私有手柄状态（`pad_state_t`）编码为目标 NS2 手柄的 USB/BLE 报告，位于 `firmware/main/target/ns2/`。 |
@@ -124,12 +124,12 @@ flowchart TB
   二是**稳定不跳号的上报流**：dp 每 5 ms 采样、每 15 ms 发一份报告（`DP_SEND_DIV=3`，节奏写在 `dp_plane.c` 里、没有运行时档位，
   见 [ADR 0034](adr/0034-ns2-report-interval-fixed-15ms.md)）；
   主机在初始化末尾用报告率描述符（0x0010 写 `85 00`）点的就是这一量级，
-  以 5 ms 从任务侧灌 63B 通知会打爆发送队列（2026-09-15 实测四成以上因 mbuf 耗尽被丢、有效投递掉到 20 次/秒上下），实测记录见 [controller.md](controller.md)。
+  以 5 ms 从任务侧灌 63B 通知会打爆发送队列（实测四成以上因 mbuf 耗尽被丢、有效投递掉到 20 次/秒上下），实测记录见 [controller.md](controller.md)。
   `0x0E` 运动数据长度必须非零，按 40 字节零值占位（板卡无 IMU）。
    耳机状态（3.5 mm）由输入设备派生：`pad_state_t` 的 `headset_present` / `headset_mic` 经 NS2 目标的单一来源映射
    成 `0x09` 偏移 `0x0D`（未插入 0x00、插入 0x05）与 `0x05` 的耳机插入位，编码路径与同代透传路径共用；
    串口 `headset auto|0xNN` 可钉住覆盖值做主机侧 A/B。
-   带麦位不上行：主机接受 0x05 / 0x0D，换上 0x07 / 0x0F 后约 150 ms 就取消 0x000E 的订阅（2026-09-15 实测），
+   带麦位不上行：主机接受 0x05 / 0x0D，换上 0x07 / 0x0F 后约 150 ms 就取消 0x000E 的订阅（实测），
    认那一档要先有 0x002C 的音频 / 麦克风通路。
    PC 手柄报告里耳机状态字节的偏移与位序：DualSense 蓝牙行已按实机插拔差分核对（第 55 字节），其余行未核对（未登记的行一律按未插入上报），
    见 [ADR 0035](adr/0035-ns2-headset-state-passthrough.md) 与 [pc/README.md](../pc/README.md)。
@@ -164,7 +164,7 @@ flowchart TB
   是按电压趋势推断的值，限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。
 - **设备对外只模拟一台 Pro Controller 2**（[ADR 0039](adr/0039-pro-controller-only.md)）：
   身份枚举 `ns2_identity_t` 只有 `NS2_ID_PRO`，单身份、单连接、单广播实例，报告格式固定 `0x09`（USB 模式 `0x05`）。
-  JoyCon 形态（专用输入通道 UUID、`0x07` / `0x08` 报文体、导轨键确认、左右分槽凭证）在 2026-09-16 实机对账后移除：
+  JoyCon 形态（专用输入通道 UUID、`0x07` / `0x08` 报文体、导轨键确认、左右分槽凭证）经实机对账后移除：
   主机只接受 public 地址的广播，一台控制器只有一个 public 地址，左右两只无法各自寻址。
   协议事实留在 [controller.md](controller.md) 的 GATT 属性表、专用输入报告与广播过滤各节备查。
   配对凭证按 `ns2_identity_t` 分槽持久化（`ble_creds`，NVS v2 格式，旧单表记录迁移进 Pro 槽）——分槽结构保留，将来真要再加型号时不用改存储与广播层的分槽方式。
@@ -179,7 +179,7 @@ flowchart TB
   `controllerConfig` 应答带 `addresses.pro`（显示序大写十六进制，host 未同步时为空串），手柄设置页的身份信息行取用它。
 - 配对对外的心智模型是「设备不主动发信号，连接要按连接键」：开机与断开后都静默，按连接键才广播（已配对身份发回连形态等主机连回来、未配对身份进配对流程），主机睡下时按 HOME 把它叫醒并自动回连；
   主机侧配对记录在首次连接握手时完成，用户不需要在屏幕上做任何确认动作。屏幕配对页用于观察状态、按连接键、配新主机或断开，主机 Grip / 手柄顺序界面只用于调整手柄顺序。
-- 主机推送的手柄固件更新按「接住数据、逐帧应答、不重启」处理（2026-09-15 实机对账，协议见 controller.md「Command 0x0D - 手柄固件更新推送」）：
+- 主机推送的手柄固件更新按「接住数据、逐帧应答、不重启」处理（实机对账，协议见 controller.md「Command 0x0D - 手柄固件更新推送」）：
   `0x0018` 上的记录流按帧装配（`main/target/ns2/ns2_upgrade.c`，字节级用例在 `firmware/test/test_ns2_upgrade.c`），帧凑齐即按指令通道格式回一条空体应答，
   主机因此把整包推完（实测 114 帧、4751 条记录、483,692 字节）；收尾的 `0x0d/0x07` 之后默认**不重启**——
   实测重启会被主机当成更新没生效而重推整包，形成「推包 → 重启 → 再推包」的循环（串口 `fwapply on` 才一次性武装收尾重启，留着做对照实验）。
@@ -206,12 +206,14 @@ flowchart TB
   （事件带哪些字段就覆盖哪些字段：震动与玩家灯是主机的持续状态，回落到默认值会把刚点亮的玩家灯写灭；
   触觉采样是事件式的，只在带它的事件里更新、0x00 是停止——载波包以高频到达，非采样事件清采样会把节奏切碎，数据面再以 300ms 超时自灭兜底）；
   采样的播放形态不在主机参数里（同一 ID 以十几 Hz 重发），节奏由 `pad/feedback.c` 的采样音色表给出——按 ID 登记响/停时间线、
-  未登记回落一次短脉冲；采样是主机点播的声音，不转成震动：输入设备有线接入时数据面按音色段驱动板载蜂鸣器发声，蓝牙手柄直接丢弃，
-  马达编码、板上音圈合成与 FEEDBACK 帧的合成都不消费采样（FEEDBACK 的采样字节只带原始 ID 供 PC 日志展示）；
-  主机振幅是 NS2 LRA 的线性档位，ERM 马达低占空比落在死区，归一时经 `pad_rumble_perceived` 感知重映射（音色表与 CLI 注入不过表）；
+  未登记回落一次短脉冲；采样是主机点播的声音：输入设备有线接入时数据面按音色段驱动板载蜂鸣器发声，
+  声明 HD 触觉的设备把「强震」段以 `hd.pulse_hz` 铺到音圈、「发声」段以 `hd.beep_hz` 铺到扬声器（震动映射为震动、音频映射为音频），
+  其余设备丢弃（FEEDBACK 的采样字节带原始 ID 供 PC 日志展示，发声铺色随 HD 子帧下发）；
+  主机振幅是 NS2 LRA 的线性档位，ERM 马达低占空比落在死区，归一时经 `pad_rumble_perceived` 感知重映射（音色表、CLI 注入与 HD 的 PCM 波形不过表——音圈没有 ERM 死区）；
   DualSense 蓝牙输出报告的序号半字节由编码器逐报递增（恒值会被手柄当重复包，布局行 `seq_off` 声明偏移）；
-  桥接反馈帧由数据面任务按「写回语义变化才发」投递（`pad_feedback_equal` 只比两带强度、使能、玩家灯与非零采样，
-  原始参数包逐包都在抖、不参与比较），BLE 回调里不做任何串口/USB 传输——
+  桥接反馈帧由数据面任务按「写回语义变化才发」投递（`pad_feedback_equal` 比两带强度、使能、玩家灯、非零采样，
+  外加波形组的量化值（振幅 16 档 / 频率 64 档）与采样段边界——HD 流要跟上主机包络，低有效位的逐包抖动不算变化），
+  BLE 回调里不做任何串口/USB 传输——
   主机在游戏里以接近输入上报的频率刷震动，逐帧写串口会拖住 NimBLE 主机任务，输入通知随之停摆；
   写回插入手柄的动作见下一条。上报主机的电量跟输入设备走：家族表置 `PAD_CAP_BATTERY` 且本帧解出电量字段的设备（如 DualSense 蓝牙）
   经 `target_apply_pad_battery` 覆盖事实表后随报告上发，板载电池（`battery.c` 唯一入口）只在设备没报电量时兜底，
@@ -225,23 +227,29 @@ flowchart TB
   `usb/usb_input.c` 把 IN 报告组成 `pad_report_t` 交给同一份家族表并把反馈写回 OUT 端点。
   `usb/usb_role.c` 负责运行时切换角色（先迁日志到 UART0，再让出 USB-Serial/JTAG）。实机步骤与 VBUS 门禁见 [usb-input-plan.md](usb-input-plan.md)。
   布局行声明音频触觉能力的设备（DualSense）另由 `usb/usb_audio.c` 认领 UAC1 音频流 OUT 接口：持续向等时端点送板上合成的 4ch PCM，
-  触觉走后两路、扬声器两路恒零；纯逻辑的描述符解析与 PCM 合成在 `usb_audio_parse.c` / `haptic_synth.c`（主机端可测）。
+  触觉走后两路（频道 3/4）、发声段的小喇叭音色走前两路（频道 1/2，无声时恒零）；
+  纯逻辑的描述符解析与 PCM 合成在 `usb_audio_parse.c` / `haptic_synth.c`（主机端可测）。
 - 反馈方向已投递到实体手柄：主机下发的震动 / 玩家 LED / 触觉采样经 ble_session 解析成结构化事件，在反馈监听者里归一到 `pad_feedback_t`。
   由 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告（DS4 / DualSense / Xbox / DS3 / NS1 各有一行描述，NS2 手柄原样吃主机的 LRA 参数包）。
-  震动流是音频式连续包络：低频给冲击、高频给纹理，参数包逐带解析（`ns2_rumble_band_strengths`），
+  震动流是音频式连续包络：低频给冲击、高频给纹理，参数包逐带解析（`ns2_rumble_band_strengths`，完整的时序子帧由 `ns2_rumble_keys` 给出），
   每颗马达按布局行的 `rumble_band` 跟带（DS5 大马达跟低频、小马达跟高频，NS1 低频/高频马达同理），振幅再按 `rumble_max` 缩放。
-  「查找手柄」页的蜂鸣由 0x0A 采样流承载（0x02 播放 / 0x00 停止），同期的参数包只带载波电平（高频 1-2/255）——两带强度都要跟着事件进持续帧
+  声明 HD 触觉的设备（DualSense）走布局行 `hd` 规则的波形重整：`pad_feedback_hd_render` 把三个时序子帧按时间顺序重整成振荡器声部
+  （振幅线性直迁、频率按 `hd` 范围夹取回落），采样音色的强震段铺音圈、发声段铺扬声器——映射在布局内完成，
+  渲染结果同时驱动板上合成（USB 直插）与 FEEDBACK 帧（桥接 PC 哑渲染，[ADR 0046](adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)）。
+  「查找手柄」页的蜂鸣由 0x0A 采样流承载（0x02 播放 / 0x00 停止），同期的参数包只带载波（静止包形态：低频频率 0x1E1、零振幅）——两带强度都要跟着事件进持续帧
   （`pad_feedback_apply` 的拷贝清单与输入侧 `copy_primary_fields` 是同一个陷阱：新增字段忘了拷会静默停在默认值上，纹理就变成全零马达字节）。
   写回（USB OUT 端点 / 桥接 `0x11` OUT_REPORT 帧给 PC 写回）按编码后的报告字节变化才发——
   等价帧以接近输入上报的频率重复，逐包写会把串口与 PC 会话循环堵到输入转发卡顿；
   同代透传的参数包原样在编码字节里，真实纹理逐包照常透传。
   震动的「在震」判据是 LRA 状态字使能位且归一强度高过载波电平（>2/255，`ns2_rumble_parse`）：
   游戏里主机持续刷的零幅度保活包、查找手柄页的载波包都不算在震，不写给输入手柄——载波电平任何马达都感知不到，判成在震只会白发写回。
-  DualSense 的玩家号只落四颗白灯，灯条不驱动：反馈写回会连帧重写玩家色并带「淡出」设置，一震就变色、平时淡回默认白（2026-09-18 实机撤出）。
+  DualSense 的玩家号只落四颗白灯，灯条不驱动：反馈写回会连帧重写玩家色并带「淡出」设置，一震就变色、平时淡回默认白（实机撤出）。
   DualSense 直插时反馈优先走音频触觉通道（板上合成，见 USB host 一条与 [ADR 0042](adr/0042-ds5-audio-haptics-onboard-synthesis.md)）：
   音频接手期间数据面给 USB 路发的 HID 报告把震动字段清零（玩家灯照常）。桥接路径在 PC 经
-  `haptic audio on` 告知时同样让位——PC 侧对 DS5 的 4ch 音频端点合成触觉（`pc/ds5_haptics.py`，
-  振幅与频率吃 FEEDBACK 帧的落地值，[ADR 0043](adr/0043-ds5-bridge-pc-side-audio-haptics.md)）。
+  `haptic audio on` 告知时同样让位——USB 直插 PC 对 DS5 的 4ch 音频端点合成触觉（`pc/ds5_haptics.py`，
+  吃 FEEDBACK 帧的 HD 子帧，[ADR 0043](adr/0043-ds5-bridge-pc-side-audio-haptics.md)）；
+  蓝牙连接 PC 没有音频接口，触觉流改走 SAxense 逆向的 0x32 私有报告（141 字节，3000Hz / 2ch / 8-bit PCM + 尾部 CRC32，
+  每 10.67ms 一报），发声段没有独立通道、随触觉子帧铺到音圈（[ADR 0046](adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)）。
 - 运动数据（陀螺仪与加速度）：布局行描述取样位置、样本数与轴映射（NS1 一次三份取最新一份），解析进 `pad_motion_t`；
   0x05 报文的 IMU 字段按 controller.md「Input Report 0x05」的偏移填真值，0x09 的 40 字节运动块结构未公开。
   因此只提供 CLI `motion 3` 的实验填充档（默认关），真 NS2 手柄走同代透传时运动块原样到达主机。
@@ -324,8 +332,10 @@ classDiagram
         bool rumble_on 双马达
         uint8 rumble_strength 双马达
         uint8 rumble_raw 目标原始参数
+        pad_rumble_key_t rumble_keys 每侧 3 个时序子帧
         uint8 player_led
         uint8 haptic_sample
+        uint8 haptic_env 音色当前段
     }
 
     pad_report_t --> pad_state_t : pad_state_from_report
@@ -343,8 +353,11 @@ classDiagram
   同代透传的判定与状态字节重写见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。
   `out` 里的 `frame` 标出报告的收尾方式：PS 系的蓝牙形态要在末 4 字节补 CRC32（种子字节 0xA2 参与计算，见 `pad/feedback.c`），缺它的报告手柄整份都不接受（实机表现：写回成功、毫无反应）；
   `led_mask_map` 把主机玩家灯掩码落到设备自己的灯位模式（DualSense 的五颗灯是固定模式，1P 只有中灯、2P 中灯加外灯，不能直写主机掩码）；
-  `audio_haptic` 声明设备带可驱动的 UAC 音频触觉通道（现只有 DualSense 有线行），USB 直插时由 `usb/usb_audio.c` 接管震动渲染。
-  DualSense 的灯条不参与反馈：玩家号只上四颗白灯，灯条颜色留给 PC 侧管理——写条会连帧重写玩家色并带「淡出」设置，一震就变色、平时淡回默认白（2026-09-18 撤出）；
+  `audio_haptic` 声明设备带可驱动的音频触觉通道（DualSense 两种连接方式都有）：USB 直插时是 UAC 通道、由 `usb/usb_audio.c` 接管震动渲染，
+  蓝牙接入时是 0x32 私有触觉流、由 PC 侧接管；
+  `hd` 是 HD 触觉波形映射规则（承载采样率/峰值、两带频率落地范围与缺省、采样强震与发声频率；`ops = 0` 表示无 HD 通路）——
+  NS 的震动是波形描述，映射在布局内完成（[ADR 0046](adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)）。
+  DualSense 的灯条不参与反馈：玩家号只上四颗白灯，灯条颜色留给 PC 侧管理——写条会连帧重写玩家色并带「淡出」设置，一震就变色、平时淡回默认白（实机撤出）；
   若真要在蓝牙上写灯条，设置与颜色必须同一帧（主机的连接动画会一直盖着灯），这条实机结论留档备用。
 - 未登记的 VID/PID 仍回落 Xbox 有线布局并置 `PAD_CAP_FALLBACK_LAYOUT`；
   Nintendo 家族（VID `0x057E`）按系列文件 `pad/layouts/ns.c` 登记，NS2 的 0x05 / 0x09 报文体与 NS1 的 0x30 / 0x3F 各占一行，偏移同样先取自公开资料、待实机回填。
@@ -357,7 +370,7 @@ classDiagram
 | `0x10` REPORT | PC → 设备 | 设备标识 + 原始报告（最多 64 字节） |
 | `0x11` OUT_REPORT | 设备 → PC | 要写回手柄的输出报告原始字节（首字节是 Report ID，最多 78 字节） |
 | `0x12` HOST_RAW | 设备 → PC | 主机输出原始采集：通道字节（GATT 句柄低字节）+ 标志/长度（bit7 截断、低 7 位数据长度）+ 原始字节（最多 253）；帧头 slot 是设备侧记录号，跳号即队列满丢包。默认关闭，串口 `capture on` 打开 |
-| `0x20` FEEDBACK | 设备 → PC | 左右震动使能与两带强度、玩家灯、触觉采样（原始采样 ID，仅日志展示——采样不向桥接渲染）；16 字节版再带两带驱动频率落地值（u16 小端 ×4，PC 侧音频触觉合成用） |
+| `0x20` FEEDBACK | 设备 → PC | 左右震动使能与两带强度、玩家灯、触觉采样（原始采样 ID，仅日志展示）；16 字节版再带两带驱动频率落地值（u16 小端 ×4）；57 字节 HD 版再带固件按布局行重整出的时序子帧表（每侧有效子帧数 + 3×（低频频率 u16 LE + 低频增益 + 高频频率 u16 LE + 高频增益）+ 扬声器频率 u16 LE + 增益），PC 侧音频触觉与蓝牙私有流按它哑渲染 |
 | `0x30` OTA_BEGIN | PC → 设备 | `ROM1` + 镜像字节数（u32 小端） |
 | `0x31` OTA_DATA | PC → 设备 | 块序号（u16 小端）+ 最多 200 字节镜像数据；帧内 `slot=1` 标记该窗口的末帧 |
 | `0x32` OTA_END | PC → 设备 | 空 |

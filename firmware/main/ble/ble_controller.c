@@ -713,7 +713,7 @@ void ble_controller_adv_start(uint8_t instance, uint8_t identity,
     s_adv_identity[instance] = identity;
     ESP_LOG_BUFFER_HEX(TAG, payload, 31);
     /* 默认形态是 legacy PDU（controller.md「Bluetooth LE 广播帧规范」：真机发现广播是可连接 + 可
-     * 扫描的 ADV_IND）：实机对账（2026-09-16）里扩展 PDU 的实例在主机侧完全
+     * 扫描的 ADV_IND）：实机对账里扩展 PDU 的实例在主机侧完全
      * 看不见——同一份载荷、同一个 public 地址，切成 legacy PDU 后主机立刻
      * 连接并跑完 0x15 配对。对账开关可强制扩展形态做反向验证。 */
     const int legacy_pdu = s_adv_pdu_form == BLE_CTL_ADV_PDU_EXTENDED ? 0 : 1;

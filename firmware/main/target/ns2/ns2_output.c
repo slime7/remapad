@@ -188,10 +188,29 @@ void ns2_output_emit_rumble(const ns2_rumble_event_t *event)
     }
 }
 
-/** 「在震」的载波电平上限（8 位刻度）：主机在「查找手柄」页会用 1-2/255 的
- *  高频振幅维持 LRA 通路（蜂鸣本体由 0x0A 采样流承载），这种电平在任何
- *  马达上都感知不到。归一强度不超过它的参数包不算在震。 */
+/** 「在震」的载波电平上限（8 位刻度）：主机在「查找手柄」页会用极低的高频
+ *  振幅维持 LRA 通路（蜂鸣本体由 0x0A 采样流承载），这种电平在任何马达上都
+ *  感知不到。归一强度不超过它的参数包不算在震。 */
 #define NS2_RUMBLE_CARRIER_MAX 2u
+
+/** 一个时序子帧的位串（5 字节小端，SDL_hidapi_switch2.c 的 EncodeHDRumble）：
+ *  高频频率 bit0-9、高频振幅 bit10-19、低频频率 bit20-29、低频振幅
+ *  bit30-39，各 10 位。BlueRetro sw2.h 对同一位串给出了带序相反、含使能位
+ *  的解释——振幅的归一值在两种解释下一致，这里取 SDL 的形态。 */
+#define NS2_KEY_HF_FREQ_SHIFT 0u
+#define NS2_KEY_HF_AMP_SHIFT 10u
+#define NS2_KEY_LF_FREQ_SHIFT 20u
+#define NS2_KEY_LF_AMP_SHIFT 30u
+#define NS2_KEY_FIELD_MASK 0x3FFu
+
+static uint64_t key_word(const uint8_t *p)
+{
+    uint64_t v = 0;
+    for (size_t i = 0; i < 5; i++) {
+        v |= (uint64_t)p[i] << (8 * i);
+    }
+    return v;
+}
 
 void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf)
 {
@@ -204,19 +223,16 @@ void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf)
     if (raw == NULL) {
         return;
     }
-    /* 参数包：字节 0 是状态字，其后三组各 5 字节（低频频率 9 位 + 低频振幅
-     * 10 位 + 高频频率 9 位 + 高频振幅 8 位，小端位序）。逐带取三组最大振幅，
-     * 低频 10 位右移两位压到 8 位刻度，与私有的 0-255 强度对齐。 */
+    /* 参数包：字节 0 是状态字，其后 3 个时序子帧各 5 字节。逐带取三帧最大
+     * 振幅，10 位右移两位压到 8 位刻度，与私有的 0-255 强度对齐。 */
     uint8_t best_lf = 0;
     uint8_t best_hf = 0;
     for (size_t g = 0; g < 3; g++) {
-        const uint8_t *p = &raw[1 + g * 5];
-        uint64_t v = 0;
-        for (size_t i = 0; i < 5; i++) {
-            v |= (uint64_t)p[i] << (8 * i);
-        }
-        const uint8_t group_lf = (uint8_t)(((v >> 9) & 0x3FFu) >> 2);
-        const uint8_t group_hf = (uint8_t)((v >> 28) & 0xFFu);
+        const uint64_t v = key_word(&raw[1 + g * 5]);
+        const uint8_t group_lf =
+            (uint8_t)(((v >> NS2_KEY_LF_AMP_SHIFT) & NS2_KEY_FIELD_MASK) >> 2);
+        const uint8_t group_hf =
+            (uint8_t)(((v >> NS2_KEY_HF_AMP_SHIFT) & NS2_KEY_FIELD_MASK) >> 2);
         if (group_lf > best_lf) {
             best_lf = group_lf;
         }
@@ -251,18 +267,16 @@ void ns2_rumble_band_frequencies(const uint8_t raw[16], uint16_t *lf_hz, uint16_
     if (raw == NULL) {
         return;
     }
-    /* 频率字段与振幅同处一组 5 字节小端位串：低频在位 0-8、高频在位 19-27，
-     * 同样逐组取最大。 */
+    /* 频率字段与振幅同处一个 5 字节子帧：高频在位 0-9、低频在位 20-29，
+     * 逐帧取最大。 */
     uint16_t best_lf = 0;
     uint16_t best_hf = 0;
     for (size_t g = 0; g < 3; g++) {
-        const uint8_t *p = &raw[1 + g * 5];
-        uint64_t v = 0;
-        for (size_t i = 0; i < 5; i++) {
-            v |= (uint64_t)p[i] << (8 * i);
-        }
-        const uint16_t group_lf = (uint16_t)(v & 0x1FFu);
-        const uint16_t group_hf = (uint16_t)((v >> 19) & 0x1FFu);
+        const uint64_t v = key_word(&raw[1 + g * 5]);
+        const uint16_t group_lf =
+            (uint16_t)((v >> NS2_KEY_LF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
+        const uint16_t group_hf =
+            (uint16_t)((v >> NS2_KEY_HF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
         if (group_lf > best_lf) {
             best_lf = group_lf;
         }
@@ -278,6 +292,39 @@ void ns2_rumble_band_frequencies(const uint8_t raw[16], uint16_t *lf_hz, uint16_
     }
 }
 
+size_t ns2_rumble_keys(const uint8_t raw[16], ns2_rumble_key_t keys[PAD_RUMBLE_KEY_COUNT])
+{
+    if (keys == NULL) {
+        return 0;
+    }
+    const size_t count = 3;
+    for (size_t g = 0; g < count; g++) {
+        const uint8_t *p = raw != NULL ? &raw[1 + g * 5] : NULL;
+        ns2_rumble_key_t *key = &keys[g];
+        if (p == NULL) {
+            key->lf_freq = 0;
+            key->lf_amp = 0;
+            key->hf_freq = 0;
+            key->hf_amp = 0;
+            continue;
+        }
+        const uint64_t v = key_word(p);
+        key->hf_freq = (uint16_t)((v >> NS2_KEY_HF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
+        key->hf_amp = (uint16_t)((v >> NS2_KEY_HF_AMP_SHIFT) & NS2_KEY_FIELD_MASK);
+        key->lf_freq = (uint16_t)((v >> NS2_KEY_LF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
+        key->lf_amp = (uint16_t)((v >> NS2_KEY_LF_AMP_SHIFT) & NS2_KEY_FIELD_MASK);
+    }
+    if (raw != NULL) {
+        /* 状态字 bit4-5 是有效子帧数（实机载波包为 1、游戏包为 3）；0 表示
+         * 未声明，按满 3 帧处理。 */
+        const size_t declared = (raw[0] >> 4) & 0x3u;
+        if (declared != 0 && declared < count) {
+            return declared;
+        }
+    }
+    return count;
+}
+
 bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
 {
     if (data == NULL || out == NULL) {
@@ -291,12 +338,12 @@ bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
     }
     memcpy(out->raw, &data[body], sizeof(out->raw));
     /* LRA 状态字 bit6 = 启用标志（controller.md「输出报告格式」）。游戏里主机以接近输入
-     * 上报的频率持续刷「保活包」：使能位为 1、三组振幅全 0，真机收到同样毫无
+     * 上报的频率持续刷「保活包」：使能位为 1、三个子帧振幅全 0，真机收到同样毫无
      * 动静。「在震」必须是使能且归一强度非零——把使能位直接当在震，输入手柄
      * 会被写上一场主机根本没有的震动。非零的门槛还要高过载波电平：「查找
-     * 手柄」页的参数包带着 1-2/255 的高频振幅维持 LRA 通路（蜂鸣本体走 0x0A
-     * 采样流），这种电平任何马达都感知不到，判成在震会把采样退化出的短震动
-     * 压掉（2026-09-18 实机：高频 1/1、点击手柄毫无动静）。 */
+     * 手柄」页的参数包带着零振幅的静止包维持 LRA 通路（蜂鸣本体走 0x0A
+     * 采样流），极低振幅任何马达都感知不到，判成在震会把采样退化出的短震动
+     * 压掉（实机：点击手柄毫无动静）。 */
     out->left_on = (out->raw[0] & 0x40) != 0 &&
                    ns2_rumble_strength(out->raw) > NS2_RUMBLE_CARRIER_MAX;
     out->right_on = (out->raw[16] & 0x40) != 0 &&
@@ -316,4 +363,17 @@ void ns2_output_emit_haptic_sample(uint8_t sample_id)
     if (s_out.feedback_fn != NULL) {
         s_out.feedback_fn(NS2_FEEDBACK_HAPTIC_SAMPLE, &sample_id, s_out.feedback_user);
     }
+}
+
+bool ns2_haptic_sample_parse(const uint8_t *frame, size_t len, uint8_t *sample)
+{
+    if (frame == NULL || sample == NULL || len < 4 || frame[0] != 0x0A) {
+        return false;
+    }
+    /* 实机抓包（ns2-search-page.capture）：命令帧 = 头 4 字节
+     * `0A 91 01 02` + 值段，采样 ID 在值段第 5 字节（帧内偏移 8），「查找
+     * 手柄」页以约 16-18 Hz 重发 0x02、收尾发 0x00。子命令非 0x02 时帧内
+     * 不带值段，采样 ID 就是子命令本身。 */
+    *sample = frame[3] == 0x02 && len >= 9 ? frame[8] : frame[3];
+    return true;
 }

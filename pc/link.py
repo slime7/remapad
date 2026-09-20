@@ -291,14 +291,36 @@ def family_for_vendor(vid: int) -> int:
 #: 12 字节 = 老固件（无频率字段），PC 按长度判断。
 FEEDBACK_FREQ_OFF = 8
 FEEDBACK_LEN = 16
+#: 57 字节版本再带 HD 时序子帧表（固件按布局行 hd 规则重整出的子帧序列，
+#: PC 侧音频触觉与蓝牙私有流按它哑渲染）：[16] 左子帧数 + 3×（低频频率 u16 LE
+#: + 低频增益 u8 + 高频频率 u16 LE + 高频增益 u8），[35] 右子帧数 + 3 子帧，
+#: [54:56] 扬声器频率、[56] 扬声器增益。
+FEEDBACK_HD_LEN = 57
+FEEDBACK_HD_KEY_MAX = 3
+
+
+def _feedback_keys(payload: bytes, base: int) -> dict:
+    count = payload[base]
+    keys = []
+    for k in range(FEEDBACK_HD_KEY_MAX):
+        off = base + 1 + k * 6
+        lf = payload[off] | payload[off + 1] << 8
+        lg = payload[off + 2]
+        hf = payload[off + 3] | payload[off + 4] << 8
+        hg = payload[off + 5]
+        if k < count:
+            keys.append(((lf, lg), (hf, hg)))
+    return {"count": count, "keys": tuple(keys)}
 
 
 def feedback_params(payload: bytes) -> dict | None:
     """FEEDBACK 帧载荷 → 参数字典（音频触觉合成与打印共用）。
 
-    与固件 input_link.c 的载荷布局一致：[0]/[1] 左右使能、[2]/[3] 低频强度、
-    [4] 玩家灯、[5] 触觉采样（0 = 无）、[6]/[7] 高频强度；16 字节版本再带
-    [8:16] 两带驱动频率落地值（低频 L/R、高频 L/R，Hz）。载荷过短返回 None。
+    与固件 pad_feedback_wire 的载荷布局一致：[0]/[1] 左右使能、[2]/[3] 低频
+    强度、[4] 玩家灯、[5] 触觉采样（0 = 无）、[6]/[7] 高频强度；16 字节版本
+    再带 [8:16] 两带驱动频率落地值（低频 L/R、高频 L/R，Hz）；57 字节版本
+    再带 HD 时序子帧表（每侧子帧按时间顺序各播 1/3 周期 + 扬声器音色，映射
+    已在固件布局内完成）。载荷过短返回 None。
     """
     if len(payload) < 8:
         return None
@@ -310,11 +332,18 @@ def feedback_params(payload: bytes) -> dict | None:
         "hf_amp": (payload[6], payload[7]),
         "lf_freq": None,
         "hf_freq": None,
+        "hd": None,
     }
     if len(payload) >= FEEDBACK_LEN:
         lf_l, lf_r, hf_l, hf_r = struct.unpack_from("<4H", payload, FEEDBACK_FREQ_OFF)
         params["lf_freq"] = (lf_l, lf_r)
         params["hf_freq"] = (hf_l, hf_r)
+    if len(payload) >= FEEDBACK_HD_LEN:
+        params["hd"] = {
+            "l": _feedback_keys(payload, 16),
+            "r": _feedback_keys(payload, 35),
+            "speaker": (payload[54] | payload[55] << 8, payload[56]),
+        }
     return params
 
 

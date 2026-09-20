@@ -22,7 +22,7 @@ static pad_feedback_t feedback_default(void)
 /** 蓝牙输出报告尾部 CRC32 的黄金值（算法与来源见 dualsense 蓝牙用例）：
  *  依次对应「左 255 / 右 128 / 1P」「停止震动 / 1P」「无震动 2P」「DS4 左 64 / 2P」。
  *  DS5 的三组是灯条退出反馈通道后的取值（valid_flag1 只置玩家灯、灯条设置与
- *  RGB 字节全零，2026-09-18 重算）。 */
+ *  RGB 字节全零）。 */
 static const uint8_t s_crc_ds5_rumble[4] = {0x37, 0xe0, 0xa8, 0xda};
 static const uint8_t s_crc_ds5_stop[4] = {0xcf, 0x05, 0xcd, 0x06};
 static const uint8_t s_crc_ds5_2p[4] = {0x69, 0xe3, 0xde, 0x0e};
@@ -156,7 +156,7 @@ static void dualsense_motors_follow_rumble_bands(void)
 
 /** 监听者按两带解出强度后要经持续帧合并（pad_feedback_apply）才到编码——
  *  合并漏拷高频带会把高频纹理编码成全零马达字节，写回层按「字节没变」一帧
- *  都不发（2026-09-18 实机曾表现：反馈帧 L=on 而两带强度印成 0/0 自相矛盾）。 */
+ *  都不发（实机曾表现：反馈帧 L=on 而两带强度印成 0/0 自相矛盾）。 */
 static void hf_band_strength_survives_into_held_frame(void)
 {
     pad_feedback_t held = feedback_default();
@@ -201,7 +201,7 @@ static void rumble_frequencies_survive_into_held_frame(void)
     CHECK_EQ(held.rumble_hf_freq[PAD_TRIGGER_R2], 200);
 }
 
-/** 主机只发采样 ID、不带播放形态（2026-09-18 实机抓包：重发同一 ID 约
+/** 主机只发采样 ID、不带播放形态（实机抓包：重发同一 ID 约
  *  18Hz），节奏由采样音色表给出——0x02（定位呼叫）是首个登记条目：强震、
  *  停顿、两声蜂鸣、停顿，整周期循环；把恒定强度写马达会整段钉成「一直震」。
  *  音色表是常规数据：新增采样只登记新条目，不改编码路径。 */
@@ -294,7 +294,7 @@ static void haptic_sample_never_drives_motors(void)
 /** 「查找手柄」页的蜂鸣由 0x0A 采样流承载，同期的 LRA 参数包只是载波
  *  （高频 1-2/255，不判成在震）。载波包以接近输入上报的频率到达，持续帧
  *  合并若被非采样事件顺手清掉采样，蜂鸣节奏会被切成 15ms 碎片——实机表现：
- *  查找手柄页的提示音时有时无（2026-09-18）。采样只在带它的事件里更新，
+ *  查找手柄页的提示音时有时无。采样只在带它的事件里更新，
  *  0x00 是「停止播放」；马达不吃采样，一直保持中性。 */
 static void haptic_pulse_survives_rumble_carriers(void)
 {
@@ -364,7 +364,7 @@ static void dualsense_player_led_follows_pattern(void)
     CHECK_EQ(out[46], 0x00);
 }
 
-/** 震动写回不能改灯条颜色（2026-09-18 实机：玩家灯 0x01 时每次震动写回都把
+/** 震动写回不能改灯条颜色（实机：玩家灯 0x01 时每次震动写回都把
  *  灯条钉成玩家蓝并带「淡出」设置，平时淡回默认白、一震就变深蓝）。DualSense
  *  的玩家号只落四颗白灯，灯条留给 PC 侧管理：valid_flag1 不置灯条位，灯条
  *  设置与 RGB 字节全零。 */
@@ -473,7 +473,7 @@ static void held_feedback_keeps_steady_state(void)
 
 /** DualSense 蓝牙输出报告 b1 的高半字节是序号，每份报告都要递增、低半字节
  *  是 tag 保持 0（Linux hid-playstation.c 的 DS_OUTPUT_SEQ_NO：「needs to be
- *  increased every report」）。恒 0 的报告会被手柄按重复包处理——2026-09-19
+ *  increased every report」）。恒 0 的报告会被手柄按重复包处理——
  *  蓝牙震动不稳定的头号嫌疑。 */
 static void bt_reports_increment_seq_nibble(void)
 {
@@ -519,7 +519,7 @@ static void ds4_bt_keeps_static_header(void)
 
 /** 主机下发的振幅是 NS2 LRA 的线性档位（共振上小档位也摸得到），ERM 马达
  *  （DS5/DS4/Xbox）低占空比整段落在死区——线性直迁让游戏里中低强度的震动
- *  几乎无感（2026-09-19 实机：USB 直插游戏震动非常轻）。感知重映射把非零档
+ *  几乎无感（实机：USB 直插游戏震动非常轻）。感知重映射把非零档
  *  抬出死区（下限约 40）、压平顶端、保持单调。 */
 static void host_rumble_amp_is_remapped_perceptually(void)
 {
@@ -536,6 +536,211 @@ static void host_rumble_amp_is_remapped_perceptually(void)
         CHECK(now >= 40);
         prev = now;
     }
+}
+
+/** NS2 的震动是波形描述（每侧 3 个时序子帧，按时间顺序各播 1/3 周期），HD
+ *  映射按布局行的 hd 规则把它逐帧重整成设备子帧：振幅线性直迁（10 位压 8
+ *  位）、频率按布局范围夹取与回落，时间轴原样保留。这里用 DualSense 的
+ *  USB 行钉住子帧表。 */
+static void hd_render_maps_host_waveform_per_layout(void)
+{
+    pad_family_t family = PAD_FAMILY_UNKNOWN;
+    const pad_layout_t *ds5 = pad_layout_find_by_ids(0x054C, 0x0CE6, PAD_CONN_USB, &family);
+    REQUIRE(ds5 != NULL);
+    REQUIRE(ds5->out.hd.ops == 3);
+
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_key_count[PAD_TRIGGER_L2] = 3;
+    feedback.rumble_key_count[PAD_TRIGGER_R2] = 3;
+    pad_rumble_key_t *left = feedback.rumble_keys[PAD_TRIGGER_L2];
+    left[0].lf_freq = 55;
+    left[0].lf_amp = 400; /* 压 8 位 = 100 */
+    left[0].hf_freq = 190;
+    left[0].hf_amp = 256; /* 压 8 位 = 64 */
+    left[1].lf_freq = 90;
+    left[1].lf_amp = 8; /* 压 8 位 = 2 */
+    left[2].lf_freq = 600; /* 越上界：夹回 500 */
+    left[2].lf_amp = 40;   /* 压 8 位 = 10 */
+    pad_rumble_key_t *right = feedback.rumble_keys[PAD_TRIGGER_R2];
+    right[0].hf_freq = 0;   /* 频率 0 回落缺省 190 */
+    right[0].hf_amp = 512;  /* 压 8 位 = 128 */
+
+    pad_hd_render_t render;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key_count[0], 3);
+    CHECK_EQ(render.key_count[1], 3);
+    CHECK_EQ(render.key[0][0].lf_freq, 55);
+    CHECK_EQ(render.key[0][0].lf_gain, 100);
+    CHECK_EQ(render.key[0][0].hf_freq, 190);
+    CHECK_EQ(render.key[0][0].hf_gain, 64);
+    CHECK_EQ(render.key[0][1].lf_freq, 90);
+    CHECK_EQ(render.key[0][1].lf_gain, 2);
+    CHECK_EQ(render.key[0][2].lf_freq, 500); /* 越界夹取 */
+    CHECK_EQ(render.key[0][2].lf_gain, 10);
+    CHECK_EQ(render.key[1][0].hf_freq, 190); /* 频率 0 回落缺省 */
+    CHECK_EQ(render.key[1][0].hf_gain, 128);
+    CHECK_EQ(render.speaker.freq, 0); /* 没有真正的声音时扬声器静音 */
+    CHECK_EQ(render.speaker.gain, 0);
+
+    /* 只声明 1 个有效子帧（实机载波包的操作数计数）：其余子帧按静默播。 */
+    feedback.rumble_key_count[PAD_TRIGGER_L2] = 1;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key_count[0], 1);
+    CHECK_EQ(render.key[0][1].lf_gain, 0);
+    CHECK_EQ(render.key[0][1].lf_freq, 0);
+}
+
+/** 采样音色的段铺色按「震动映射为震动、音频映射为音频」走：强震段以
+ *  pulse_hz 覆盖各子帧的音圈（保持子帧时间轴），发声段以 beep_hz 铺到
+ *  扬声器，停顿段两者皆静。 */
+static void hd_render_spreads_sample_segments(void)
+{
+    pad_family_t family = PAD_FAMILY_UNKNOWN;
+    const pad_layout_t *ds5 = pad_layout_find_by_ids(0x054C, 0x0CE6, PAD_CONN_USB, &family);
+    REQUIRE(ds5 != NULL);
+
+    pad_feedback_t feedback = feedback_default();
+    feedback.haptic_env = PAD_HAPTIC_PULSE;
+    pad_hd_render_t render;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key_count[0], 3);
+    for (size_t k = 0; k < 3; k++) {
+        CHECK_EQ(render.key[0][k].lf_freq, 55);
+        CHECK_EQ(render.key[0][k].lf_gain, 255);
+        CHECK_EQ(render.key[0][k].hf_gain, 0);
+    }
+    CHECK_EQ(render.key_count[1], 3);
+    CHECK_EQ(render.speaker.gain, 0);
+
+    feedback.haptic_env = PAD_HAPTIC_BEEP;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key[0][0].lf_gain, 0);
+    CHECK_EQ(render.speaker.freq, 880);
+    CHECK_EQ(render.speaker.gain, 255);
+
+    feedback.haptic_env = 0;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key[0][0].lf_gain, 0);
+    CHECK_EQ(render.speaker.freq, 0);
+}
+
+/** 没有 HD 通路声明的布局行（DualShock 4）不产子帧：HD 映射只发生在声明了
+ *  规则的设备上，其余设备继续走马达字节。 */
+static void hd_render_needs_a_declared_layout(void)
+{
+    pad_family_t family = PAD_FAMILY_UNKNOWN;
+    const pad_layout_t *ds4 = pad_layout_find_by_ids(0x054C, 0x09CC, PAD_CONN_USB, &family);
+    REQUIRE(ds4 != NULL);
+    CHECK_EQ(ds4->out.hd.ops, 0);
+
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_keys[0][0].lf_amp = 400;
+    feedback.haptic_env = PAD_HAPTIC_BEEP;
+    pad_hd_render_t render;
+    pad_feedback_hd_render(ds4, &feedback, &render);
+    CHECK_EQ(render.key_count[0], 0);
+    CHECK_EQ(render.speaker.freq, 0);
+
+    pad_feedback_hd_render(NULL, &feedback, &render);
+    CHECK_EQ(render.key_count[0], 0);
+}
+
+/** 反馈状态线格式：基础段 16 字节（老 PC 按长度识别），布局行声明 HD 后
+ *  扩到 57 字节——每侧时序子帧表与扬声器音色按固定偏移落位。 */
+static void feedback_wire_carries_legacy_and_hd(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 200;
+    feedback.rumble_hf_strength[PAD_TRIGGER_R2] = 40;
+    feedback.player_led = 0x01;
+
+    uint8_t wire[64];
+    memset(wire, 0xCC, sizeof(wire));
+    CHECK_EQ(pad_feedback_wire(&feedback, NULL, wire, sizeof(wire)), PAD_FEEDBACK_WIRE_LEGACY);
+    CHECK_EQ(wire[0], 1);
+    CHECK_EQ(wire[2], 200);
+    CHECK_EQ(wire[7], 40);
+    CHECK_EQ(wire[4], 0x01);
+    CHECK_EQ(wire[16], 0xCC); /* 无 HD 段：基础段之外一字节都不写 */
+
+    pad_hd_render_t render;
+    memset(&render, 0, sizeof(render));
+    render.key_count[0] = 2;
+    render.key[0][0].lf_freq = 55;
+    render.key[0][0].lf_gain = 100;
+    render.key[0][1].hf_freq = 190;
+    render.key[0][1].hf_gain = 64;
+    render.key_count[1] = 1;
+    render.key[1][0].hf_freq = 484;
+    render.key[1][0].hf_gain = 128;
+    render.speaker.freq = 880;
+    render.speaker.gain = 255;
+    CHECK_EQ(pad_feedback_wire(&feedback, &render, wire, sizeof(wire)), PAD_FEEDBACK_WIRE_HD);
+    CHECK_EQ(wire[16], 2);           /* 左侧子帧数 */
+    CHECK_EQ(wire[17], 55);          /* 子帧 0 低频频率低字节 */
+    CHECK_EQ(wire[19], 100);         /* 子帧 0 低频增益 */
+    CHECK_EQ(wire[26], 190);         /* 子帧 1 高频频率低字节 */
+    CHECK_EQ(wire[28], 64);
+    CHECK_EQ(wire[35], 1);           /* 右侧子帧数 */
+    CHECK_EQ(wire[39], 484 & 0xFF);  /* 右侧子帧 0 高频频率 */
+    CHECK_EQ(wire[41], 128);
+    CHECK_EQ(wire[54], 880 & 0xFF);  /* 扬声器频率低字节 */
+    CHECK_EQ(wire[55], 880 >> 8);
+    CHECK_EQ(wire[56], 255);
+
+    /* 容量不够装 HD 段时拒绝编码，不写半帧。 */
+    CHECK_EQ(pad_feedback_wire(&feedback, &render, wire, PAD_FEEDBACK_WIRE_LEGACY), 0);
+}
+
+/** 等价判定要跟上 HD 包络又不被低有效位灌爆：子帧的量化值（振幅 16 档、
+ *  频率 64 档）与有效子帧数参与比较，段边界（蜂鸣/停顿切换）也触发投递。 */
+static void equal_follows_quantized_ops_and_env(void)
+{
+    pad_feedback_t a;
+    pad_feedback_t b;
+    pad_feedback_defaults(&a);
+    pad_feedback_defaults(&b);
+    a.rumble_keys[0][0].lf_amp = 400;
+    b = a;
+    CHECK(pad_feedback_equal(&a, &b));
+
+    b.rumble_keys[0][0].lf_amp = 407; /* 低有效位抖动：量化后等价 */
+    CHECK(pad_feedback_equal(&a, &b));
+
+    b.rumble_keys[0][0].lf_amp = 500; /* 跨过量化档：真实的包络变化 */
+    CHECK(!pad_feedback_equal(&a, &b));
+
+    b = a;
+    b.rumble_key_count[0] = 1; /* 有效子帧数变了：时间轴变了 */
+    CHECK(!pad_feedback_equal(&a, &b));
+
+    b = a;
+    b.haptic_env = PAD_HAPTIC_BEEP; /* 段边界要投递给 HD 通路 */
+    CHECK(!pad_feedback_equal(&a, &b));
+}
+
+/** 时序子帧随震动事件进持续帧：apply 漏拷会让 HD 映射停在旧包络上（与高频
+ *  带强度同一类陷阱）。 */
+static void rumble_keys_survive_into_held_frame(void)
+{
+    pad_feedback_t held = feedback_default();
+    pad_feedback_t event = feedback_default();
+    event.rumble_key_count[PAD_TRIGGER_R2] = 3;
+    event.rumble_keys[PAD_TRIGGER_R2][2].hf_freq = 300;
+    event.rumble_keys[PAD_TRIGGER_R2][2].hf_amp = 360;
+
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
+    CHECK_EQ(held.rumble_key_count[PAD_TRIGGER_R2], 3);
+    CHECK_EQ(held.rumble_keys[PAD_TRIGGER_R2][2].hf_freq, 300);
+    CHECK_EQ(held.rumble_keys[PAD_TRIGGER_R2][2].hf_amp, 360);
+
+    /* 玩家灯事件不带震动字段：子帧沿用持续帧。 */
+    pad_feedback_t led_event = feedback_default();
+    led_event.player_led = 0x01;
+    pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_PLAYER_LED, &led_event);
+    CHECK_EQ(held.rumble_key_count[PAD_TRIGGER_R2], 3);
+    CHECK_EQ(held.rumble_keys[PAD_TRIGGER_R2][2].hf_amp, 360);
 }
 
 static void ns2_pad_relays_lra_payload_verbatim(void)
@@ -602,7 +807,7 @@ static void unknown_device_has_no_feedback_channel(void)
 
 /** 游戏里主机以接近输入上报的频率刷震动流，内容常常只差原始参数包的低有效位
  *  （音频式包络逐包都在抖），写回的字节却一模一样：桥接反馈按「写回语义变了
- *  才发」判定——2026-09-18 实机稳态 `强度 9/9` 每秒重发上百条帧、写回风暴把
+ *  才发」判定——实机稳态 `强度 9/9` 每秒重发上百条帧、写回风暴把
  *  PC 会话循环拖到转发卡顿，就是拿原始字节当变化判据的结果。等价判定跟两带
  *  强度、使能、玩家灯与「非零」触觉采样走，原始 LRA 参数包不参与。 */
 static void equal_frames_follow_writeback_semantics(void)
@@ -685,4 +890,13 @@ HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"NS1 的震动按固定头加振幅写入", ns1_rumble_uses_band_template},
                 {"未识别设备没有反馈通道", unknown_device_has_no_feedback_channel},
                 {"等价反馈帧按写回语义判定（原始参数包不算变化）",
-                 equal_frames_follow_writeback_semantics});
+                 equal_frames_follow_writeback_semantics},
+                {"HD 映射按布局规则把主机波形重整成时序子帧",
+                 hd_render_maps_host_waveform_per_layout},
+                {"采样音色的强震段铺音圈、发声段铺扬声器",
+                 hd_render_spreads_sample_segments},
+                {"没有声明 HD 通路的布局行不产子帧", hd_render_needs_a_declared_layout},
+                {"反馈线格式带基础段与 HD 子帧段", feedback_wire_carries_legacy_and_hd},
+                {"等价判定跟子帧量化值与采样段边界走",
+                 equal_follows_quantized_ops_and_env},
+                {"时序子帧随震动事件进持续帧", rumble_keys_survive_into_held_frame});

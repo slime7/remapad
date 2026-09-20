@@ -35,7 +35,7 @@ static const pad_layout_t s_rows[] = {
          * 0x02 关音频触觉、0x04 灯条、0x10 玩家指示灯），b3/b4 是右小马达与
          * 左大马达，b44 是玩家灯、b45-b47 是灯条 RGB。
          * 偏移取 Linux hid-playstation.c 的 dualsense_output_report_usb，蓝牙行
-         * 实机核对过震动与灯。灯条不驱动（2026-09-18 实机：每次震动写回都把
+         * 实机核对过震动与灯。灯条不驱动（实机：每次震动写回都把
          * 灯条钉成玩家蓝、平时淡回默认白，一震就变色）——valid_flag1 只置玩家
          * 灯位，灯条设置控制与 RGB 字节全零、不声明有效，颜色留给 PC 侧管理；
          * 玩家号落四颗白灯（led_mask_map）。 */
@@ -50,6 +50,16 @@ static const pad_layout_t s_rows[] = {
             .led_rgb_off = PAD_OFF_NONE,
             .led_style = PAD_LED_PLAYER_MASK,
             .audio_haptic = 1,
+            /* HD 触觉波形映射（NS 波形规则 → 本设备 PCM）：USB 承载是 4 声道
+             * 48kHz 16-bit PCM（频道 3/4 直连左右触觉音圈，频道 1/2 是手柄
+             * 小喇叭）。主机的时序子帧按时间顺序重整进音圈（15ms 周期各播
+             * 1/3），频带夹进音圈的有效频段（20-500Hz，缺省 55/190 与
+             * haptic_synth 同一套）；采样音色的强震段以 55Hz 铺音圈、发声段
+             * 以 880Hz 铺扬声器。 */
+            .hd = {.ops = 3, .rate_hz = 48000, .amp_peak = 24000, .cycle_ms = 15,
+                   .lf_min_hz = 20, .lf_max_hz = 500, .lf_default_hz = 55,
+                   .hf_min_hz = 20, .hf_max_hz = 500, .hf_default_hz = 190,
+                   .pulse_hz = 55, .beep_hz = 880},
             .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},
         },
     },
@@ -59,7 +69,7 @@ static const pad_layout_t s_rows[] = {
          * 第 17-22 字节的角速度接近 0 而加速度有一轴约 1 g。触摸点尚未核对，
          * 本轮不登记。第 55 字节是耳机状态：插拔差分实测 0x00（未插入）/
          * 0x01（插入）/ 0x03（插入带麦），第 56 字节跟着 bit0 走。电量在第
-         * 54 字节：2026-09-15 与 2026-09-17 两份抓包分别读作 0x09（90%）与
+         * 54 字节：两份抓包分别读作 0x09（90%）与
          * 0x05（50%），同一期间耳机字节都在原位，与 DS4 的电量字节同一套
          * 读法（低四位 0-10 档、bit4 充电中）。 */
         .family = PAD_FAMILY_PS,
@@ -85,11 +95,11 @@ static const pad_layout_t s_rows[] = {
         /* 蓝牙形态报告 0x31（78 字节）：b1 是序号/标签字节（高半字节逐报
          *  递增、低半字节 tag 保持 0，内核 hid-playstation.c 注明「每份报告
          *  都要递增」，恒值会被手柄按重复包处理——seq_off 交给编码器递增）、
-         * b2 是固定魔数 0x10、公共段从 b3 起，末 4 字节是 CRC32——缺这段主机
-         * 整份报告都不认（实机表现：写回成功而手柄毫无反应）。b46 是玩家灯、
-         * b47-b49 是灯条 RGB，偏移取 Linux dualsense_output_report_bt。灯条不
-         * 驱动（同有线行，2026-09-18 实机把灯条钉成玩家蓝 + 淡出设置，一震就
-         * 变色）：valid_flag1 只置玩家灯位，灯条字节全零。 */
+         *  b2 是固定魔数 0x10、公共段从 b3 起，末 4 字节是 CRC32——缺这段主机
+         *  整份报告都不认（实机表现：写回成功而手柄毫无反应）。b46 是玩家灯、
+         *  b47-b49 是灯条 RGB，偏移取 Linux dualsense_output_report_bt。灯条不
+         *  驱动（同有线行，实机把灯条钉成玩家蓝 + 淡出设置，一震就
+         *  变色）：valid_flag1 只置玩家灯位，灯条字节全零。 */
         .out = {
             .report_id = 0x31,
             .len = 78,
@@ -100,6 +110,16 @@ static const pad_layout_t s_rows[] = {
             .led_mask_off = 46,
             .led_rgb_off = PAD_OFF_NONE,
             .led_style = PAD_LED_PLAYER_MASK,
+            /* 蓝牙私有触觉流（SAxense 逆向的 0x32 报告，141 字节 = 报文头 +
+             *  packet 0x11 配置/序号 + packet 0x12 承载 64 字节 PCM + CRC32）：
+             *  3000Hz / 2 声道 / 8-bit，每 10.67ms 一报，PC 侧按 FEEDBACK 的
+             *  HD 子帧哑渲染。audio_haptic 置位后 0x31 的马达字节让位，同一
+             *  对音圈不双驱动。 */
+            .audio_haptic = 1,
+            .hd = {.ops = 3, .rate_hz = 3000, .amp_peak = 127, .cycle_ms = 15,
+                   .lf_min_hz = 20, .lf_max_hz = 500, .lf_default_hz = 55,
+                   .hf_min_hz = 20, .hf_max_hz = 500, .hf_default_hz = 190,
+                   .pulse_hz = 55, .beep_hz = 880},
             .frame = PAD_OUT_FRAME_PS_BT,
             .seq_off = 1,
             .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},
