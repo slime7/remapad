@@ -386,10 +386,10 @@ BT36_STATE = bytes([
 #: vds 的取法——按触觉时长对表会让喇叭周期性欠喂）。
 BT36_INTERVAL_S = 0.010
 #: 喇叭静默多少秒后从 0x36 退回 0x32：发声段之间的短停顿不切换承载。
+#: 不做「采样按住期间保温」——那会让 0x36 在整个按住期间满速（100% 空口），
+#: 同频段无线鼠标全程被骚扰（实机复测）；空口让给鼠标，冷启动延迟只在
+#: 每个循环的第一声出现且被拥塞消除的大头抵消。
 BT36_SPEAKER_TAIL_S = 0.3
-#: 查找手柄的采样按住期间（FEEDBACK 采样字节非零）0x36 的保温窗：定位呼叫
-#: 两声短鸣之间隔着约一秒的停顿，退了承载下一声就要吃冷启动延迟。
-BT36_SAMPLE_HOLD_S = 5.0
 #: 触觉静默多少秒后整条私有流停发：蓝牙无线电是 2.4GHz 公共介质，常驻空包
 #: 会和同频段的无线鼠标互相干扰（实机：鼠标卡、触控板幻手势弹 OSK/开始
 #: 菜单）。触觉块到手即播、没有需要保活的会话，空闲就一报不发。
@@ -572,13 +572,9 @@ class Ds5HapticsBt:
             # 折进音圈兜底）；两条静默超尾长就整流停发——蓝牙无线电是公共
             # 介质，常驻空包会和同频段设备互相干扰（实机：2.4GHz 无线鼠标
             # 卡顿、触控板幻手势弹 OSK/开始菜单）。触觉块到手即播，没有
-            # 需要保活的会话。查找手柄的采样还按着时 0x36 保持热态（FEEDBACK
-            # 的采样字节非零）：鸣叫之间的停顿不退承载，第一声不吃冷启动延迟。
-            sample_active = bool(params.get("sample"))
-            speaker_window = (BT36_SAMPLE_HOLD_S if sample_active
-                              else BT36_SPEAKER_TAIL_S)
+            # 需要保活的会话，也不做采样按住期间的满速保温。
             use_36 = (self._speaker_encoder is not None and
-                      now - self._last_speaker_at < speaker_window)
+                      now - self._last_speaker_at < BT36_SPEAKER_TAIL_S)
             haptic_recent = (now - self._last_coil_at < BT_HAPTIC_TAIL_S or
                              now - self._last_speaker_at < BT_HAPTIC_TAIL_S)
             if use_36:

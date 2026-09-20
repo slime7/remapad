@@ -428,24 +428,26 @@ class BuildBt36ReportTest(unittest.TestCase):
             self.assertEqual(report[0], ds5_haptics.BT36_REPORT_ID)
             self.assertEqual(report[142], 0x93)  # 手柄喇叭 + sized
 
-        # 查找手柄的采样按住期间（喇叭静默的停顿里）0x36 保持热态：定位呼叫
-        # 两声短鸣之间隔约一秒，退了承载下一声就吃冷启动延迟。先响一声盖上
-        # 时间戳，再静默并按住采样，0x36 不退回 0x32。
+        # 鸣叫停顿期间（喇叭静默、采样还按着）：过收音尾就整流停发，把空口
+        # 还给同频段设备——采样按住期间的满速保温会让无线鼠标全程被骚扰
+        # （实机复测）；下一声鸣叫重新进入 0x36。
+        import time as time_mod
+
         device = FakeDevice(limit=1)
         sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=FakeEncoder())
         sender.set_params({"hd": {"l": {"count": 0, "keys": ()},
                                   "r": {"count": 0, "keys": ()},
                                   "speaker": (880, 255)}})
         sender._run()  # 响一声（写 1 份后 OSError 退出），盖上发声时间戳
-        device2 = FakeDevice(limit=2)
-        sender._device = device2
+        time_mod.sleep(ds5_haptics.BT36_SPEAKER_TAIL_S + 0.05)
         sender.set_params({"sample": 0x02,
                            "hd": {"l": {"count": 0, "keys": ()},
                                   "r": {"count": 0, "keys": ()},
                                   "speaker": (0, 0)}})
+        sender._stop.set()  # 过尾长即空闲：置停止位让循环退出
+        device.writes.clear()
         sender._run()
-        self.assertEqual({len(r) for r in device2.writes},
-                         {ds5_haptics.BT36_REPORT_LEN})
+        self.assertEqual(device.writes, [])
 
 
 class CaptureReplayTest(unittest.TestCase):
