@@ -63,9 +63,15 @@ static size_t build_data(uint8_t *out, uint16_t seq, size_t data_len, uint8_t fi
 static ota_proto_result_t feed_image(ota_proto_t *proto, uint32_t image_size, uint16_t seq,
                                      size_t data_len, sink_t *sink)
 {
+    ota_proto_result_t misuse = {0};
     uint8_t payload[OTA_DATA_PAYLOAD_MAX];
-    REQUIRE(data_len <= OTA_DATA_MAX_LEN);
-    REQUIRE(data_len <= image_size);
+    /* REQUIRE 的无值 return 只能用在 void 用例函数里；这里喂参越界是用例自身的
+     * 错误，记录断言后按空结论返回，别把垃圾值当结论。 */
+    if (data_len > OTA_DATA_MAX_LEN || data_len > image_size) {
+        host_test_expect(false, "data_len <= OTA_DATA_MAX_LEN && data_len <= image_size",
+                         __FILE__, __LINE__);
+        return misuse;
+    }
     const size_t len = build_data(payload, seq, data_len, (uint8_t)seq);
     return ota_proto_data(proto, payload, len, false, (int64_t)seq * 1000, sink_flush, sink);
 }

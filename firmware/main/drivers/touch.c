@@ -101,16 +101,13 @@ size_t touch_sample(touch_contact_t *out, size_t capacity)
     }
 
     /* CST816T 是单点触摸，读到按下即返回一个触点；无按下时触点数组清空。 */
-    uint16_t x = 0;
-    uint16_t y = 0;
+    esp_lcd_touch_point_data_t point = {0};
     uint8_t count = 0;
     (void)esp_lcd_touch_read_data(s_touch);
-    const bool pressed =
-        esp_lcd_touch_get_coordinates(s_touch, &x, &y, NULL, &count, 1);
-    if (!pressed || count == 0) {
+    if (esp_lcd_touch_get_data(s_touch, &point, &count, 1) != ESP_OK || count == 0) {
         return 0;
     }
-    out[0].x = x;
-    out[0].y = y;
+    out[0].x = point.x;
+    out[0].y = point.y;
     return 1;
 }

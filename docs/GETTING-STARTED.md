@@ -26,7 +26,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。
 固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；
 BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)）。
-协议边界见 [ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，主机互操作待实机验证（进度见 [ROADMAP.md](ROADMAP.md)）；
+协议边界见 [ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，主机互操作已实机验证（剩余验收项见 [ROADMAP.md](ROADMAP.md)）；
 USB 输入与 IMU/RTC 等其余外设仍待实现（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
 
 ## 最短步骤
@@ -394,7 +394,7 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
    （已完成，按 `firmware/main/input/` → `pad/` → `target/` 三段划分，见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）
 3. PC 手柄经桥接程序与串口帧进入设备，映射与编码走同一套 `pad/` + `target/`。（设备侧与 PC 侧代码已完成，实机验收与家族表抓包核对待做）
 3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。
-   （代码完成，`firmware/main/ble/` + `firmware/main/dp/`，合成源静置、按键由调试页注入，实机互操作待验证）
+   （代码完成，`firmware/main/ble/` + `firmware/main/dp/`，合成源静置、按键由调试页注入，实机互操作已验证）
 4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。（配对/回连/NVS 凭证代码完成，唤醒广播顺延；震动解析记录，M5 转发 USB）
 5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。（配对/连接与电池电量已真实化；充电状态为电压趋势推断值）
 
@@ -507,7 +507,7 @@ Get-CimInstance Win32_Process |
 ### 屏幕上没有出现 BLE 手柄广播
 
 BLE 手柄外设已接入（`firmware/main/ble/`，见 [ROADMAP.md](ROADMAP.md)）：
-开机后设备以厂商数据广播出现（nRF Connect 可见 Company ID `0x0553`），但**主机互操作尚未实机验证**——Switch 2 能否发现、连接并完成 0x15 配对取决于协议逆向细节，验证前不要宣称支持 NS2。
+开机后设备以厂商数据广播出现（nRF Connect 可见 Company ID `0x0553`），主机互操作已在 Switch 2 实机对账——发现、连接、0x15 配对、断连回连与 HOME 唤醒均实测通过，协议依据与对账记录见 [controller.md](controller.md)。
 排查顺序：先看启动日志有无 `host synced` 与 GATT 句柄表，再确认广播载荷，最后对照 [controller.md](controller.md) 逐段核对。
 USB 输入源尚未接入（M5），当前合成源保持静置，按键输入仅来自调试页的注入按钮。
 

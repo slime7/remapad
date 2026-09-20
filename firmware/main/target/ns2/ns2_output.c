@@ -2,12 +2,8 @@
 
 #include <string.h>
 
-#include "esp_log.h"
-
 #include "ns2_nfc.h"
 #include "ns2_report.h"
-
-static const char *TAG = "remapad_ns2out";
 
 static struct {
     ns2_output_sink_t sink;

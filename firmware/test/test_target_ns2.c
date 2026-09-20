@@ -4,6 +4,10 @@
  * 现象。这里把会话通道换成捕获回调，驱动真实的 ns2_output 编码后断言报文字节，
  * 因此面键位置、背键折并、扳机阈值与电量折叠都在真实编码路径上验证。
  */
+/* 抓包回放只读一份本地样本，fopen/sscanf 的 MSVC 安全替换对本用例没有意义；
+ * 必须在任何 CRT 头之前定义，corecrt.h 随首个 MSVC 头定死弃用注记。 */
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "host_test.h"
 
 #include <stdio.h>

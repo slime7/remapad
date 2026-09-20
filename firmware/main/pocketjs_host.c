@@ -46,7 +46,6 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_POCKETJS_TASK_NAME "remapad-pjs"
 #define REMAPAD_POCKETJS_TASK_PRIORITY 5
 #define REMAPAD_POCKETJS_MAX_LAG_US 500000
-#define REMAPAD_POCKETJS_STOP_TIMEOUT_MS 5000
 /** 持久化亮度缺失时的兜底值（app_config 加载后通常有用户设定值）。 */
 #define REMAPAD_BACKLIGHT_PCT_DEFAULT 40
 /** 内存对照日志的周期：5 秒统计窗口的个数，60 秒一行。JS_ComputeMemoryUsage
@@ -204,34 +203,6 @@ static void release_resources(remapad_pocketjs_runtime_t *runtime)
         runtime->package = NULL;
     }
 }
-
-static esp_err_t destroy_runtime(remapad_pocketjs_runtime_t *runtime)
-{
-    if (runtime->task != NULL) {
-        atomic_store_explicit(&runtime->stopping, true, memory_order_relaxed);
-        if (runtime->binding != NULL) {
-            pocketjs_ui_qjs_interrupt(runtime->binding);
-        }
-        (void)xSemaphoreGive(runtime->wake);
-        if (xSemaphoreTake(runtime->exited,
-                           pdMS_TO_TICKS(REMAPAD_POCKETJS_STOP_TIMEOUT_MS)) != pdTRUE) {
-            ESP_LOGE(TAG, "PocketJS owner task did not stop in time");
-            return ESP_ERR_TIMEOUT;
-        }
-        runtime->task = NULL;
-    }
-    if (runtime->wake != NULL) {
-        vSemaphoreDelete(runtime->wake);
-        runtime->wake = NULL;
-    }
-    if (runtime->exited != NULL) {
-        vSemaphoreDelete(runtime->exited);
-        runtime->exited = NULL;
-    }
-    release_resources(runtime);
-    return ESP_OK;
-}
-
 
 static esp_err_t scaled_dimension(uint32_t logical, uint32_t scale, size_t *out)
 {

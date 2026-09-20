@@ -18,7 +18,7 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
 
 ### M1–M4 — 编码核心、BLE 链路、配对凭证与控制面　状态：已完成
 
-### M2/M3 — 实机验收　状态：未开始
+### M2/M3 — 实机验收　状态：进行中
 
 - **广播与 GATT**：
   nRF Connect 可见广播且厂商数据逐字节一致（Company ID `0x0553`、VID `0x057E`、PID `0x2069`），
@@ -27,9 +27,6 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
   握手应答符合 controller.md「通信交互与报告上报时序」的时序
   （0x001B CCCD → 0x07/0x01 握手 → 版本/出厂信息/校准应答 → LED → 0x0C 特性配置 → 0x000F CCCD → notify 循环）。
 - **输入上报**：调试页注入的按键在主机侧可见变化，摇杆与按键连续上报不丢帧。
-- **配对与回连**：Command 0x15 四步配对在实机完成且不触发 SMP；设备上电静默，按连接键（配对页「连接」或 PWR 长按 3 秒）后主机在首页 / 握把顺序页 / 从待机醒来三种情况下都连回来，注入按键主机可见；
-  主机睡下后广播收掉（睡眠观察窗口内没有连接动作），需要主动唤醒时按调试页 HOME（未连接时）或发串口 `wake`；
-  想把设备留给 2P 时先按「断开」再在握把/顺序页按连接（[ADR 0038](adr/0038-user-initiated-connection-window.md)）。
 - **JoyCon 组合**：本硬件上不可行（一台控制器只有一个 public 地址，主机也只接受 public 地址的广播），形态已移除，见 [ADR 0039](adr/0039-pro-controller-only.md)；
   验收项改为「配新主机」：设备已配对过的情况下按「配对 新主机」→ 主机 Grip/顺序页搜索并连上来 → 屏幕回到「已连接」（凭证与注册证据见 [controller.md](controller.md)「广播过滤与配对记录」）。
 - **震动输出**：Output Report 0x02 解析正确（板卡无马达，最终转发给 USB 源手柄，属 M5）。
@@ -73,9 +70,7 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
 选型见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)。
 协议见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」，操作见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「固件 OTA 升级」。剩余：
 
-- [ ] 实机验收：正常升级（记录用时）→ 自动重启 → `remapadctl.py -p COMx version` 与系统页显示新版本；升级期间 NS2 主机连接的表现与重启后免配对回连。
 - [ ] 异常路径：中途杀掉 PC 端进程 → 设备回 TIMEOUT 且仍从旧镜像启动；发送被截断的镜像 → 在首帧写入或 `esp_ota_end` 处被拒；人为丢帧 → 从 ACK 的期望序号续传成功。
-- [ ] 回滚演练：把 `ota_session.c` 的健康门槛临时改成 300 秒，升级后立刻断电/重启 → 设备自动回到旧镜像；确认 `rollback` 命令在待验证状态下可用。
 - [ ] 开发流程对账：
   跑到 `ota_1` 后验证 `idf.py app-flash` 的错位现象与 `idf.py erase-otadata` 的恢复路径，结论回填 [GETTING-STARTED.md](GETTING-STARTED.md)。
 
