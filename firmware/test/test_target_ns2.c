@@ -268,7 +268,7 @@ static void rumble_payload_accepts_ble_form(void)
     uint8_t ble[32];
     memset(ble, 0, sizeof(ble));
     ble[0] = 0x40;  /* 左 LRA 状态字 bit6：启用 */
-    ble[5] = 0x05;  /* 左路低频振幅 = 20/1023（压 8 位 = 5，越过载波电平）：真的在震 */
+    ble[5] = 0x05;  /* 左路子帧 0 的高频振幅字节 = 5（越过载波电平）：真的在震 */
     ble[16] = 0x00; /* 右 LRA 状态字：未启用 */
 
     ns2_rumble_event_t event;
@@ -303,64 +303,66 @@ static void rumble_payload_accepts_ble_form(void)
 
 /** 主机的震动流是连续包络：低频给冲击、高频给纹理，两颗马达各跟一个频带。
  *  把两带压成单一归一值写进两颗马达，高频纹理会被低频冲掉、手感糊成一片。
- *  LRA 参数包 3 个时序子帧各带 4 个 10 位字段（SDL_hidapi_switch2.c 的打包：
- *  高频频率 bit0-9、高频振幅 bit10-19、低频频率 bit20-29、低频振幅
- *  bit30-39），逐带取三帧最大值、压到 8 位刻度。 */
+ *  LRA 参数包 3 个时序子帧的位串按 BlueRetro sw2.h（真机验证过的参照，
+ *  静止包常量与我们实机抓包一致）：低频振幅 10 位在 bit10-19、高频振幅
+ *  8 位在子帧第 5 字节，逐带取三帧最大值、压到 8 位刻度。 */
 static void rumble_amplitudes_come_out_per_band(void)
 {
     uint8_t raw[16];
     memset(raw, 0, sizeof(raw));
     raw[0] = 0x40; /* 状态字 bit6：启用 */
-    /* 子帧 0：高频振幅 10 位 = 400（压 8 位 = 100）。 */
+    /* 子帧 0：低频振幅 10 位 = 400（压 8 位 = 100）。 */
     raw[2] = 0x40;
     raw[3] = 0x06;
-    /* 子帧 1：低频振幅 10 位 = 800（压 8 位 = 200）。 */
+    /* 子帧 1：高频振幅 8 位 = 200。 */
     raw[10] = 0xC8;
 
     uint8_t lf = 0;
     uint8_t hf = 0;
     ns2_rumble_band_strengths(raw, &lf, &hf);
-    CHECK_EQ(lf, 200);
-    CHECK_EQ(hf, 100);
+    CHECK_EQ(lf, 100);
+    CHECK_EQ(hf, 200);
     /* 原有的归一强度 = 两带取大，供「在震」判定与不分带的设备继续使用。 */
     CHECK_EQ(ns2_rumble_strength(raw), 200);
 
-    /* 右路参数包单独解析：高频 10 位 = 400（压 8 位 = 100）、低频 = 20（压
-     * 8 位 = 5）。单独给一个 16 字节数组——把 16 字节形参的指针偏到数组外
+    /* 右路参数包单独解析：低频 10 位 = 400（压 8 位 = 100）、高频 8 位 = 5。
+     * 单独给一个 16 字节数组——把 16 字节形参的指针偏到数组外
      * 会让 MSVC 的 RTC 检查误报越界（C4789）。 */
     uint8_t right[16];
     memset(right, 0, sizeof(right));
     right[0] = 0x40;
-    right[2] = 0x40; /* 高频 400 -> 位 10-19：字节 2 = 0x40、字节 3 = 0x06 */
+    right[2] = 0x40; /* 低频 400 -> 位 10-19：字节 2 = 0x40、字节 3 = 0x06 */
     right[3] = 0x06;
-    right[5] = 0x05; /* 低频 20 -> 位 30-39：字节 5 = 0x05 */
+    right[5] = 0x05; /* 高频 5 -> 子帧第 5 字节 */
     ns2_rumble_band_strengths(right, &lf, &hf);
-    CHECK_EQ(lf, 5);
-    CHECK_EQ(hf, 100);
+    CHECK_EQ(lf, 100);
+    CHECK_EQ(hf, 5);
 }
 
-/** LRA 参数包里的 10 位频率字段（高频在位 0-9、低频在位 20-29）：音频触觉
- *  合成按它选驱动频率，这里钉住字段位与「三帧取最大」的语义。 */
+/** LRA 参数包的频率字段是 9 位 log2 刻度（低频在 bit0-8、高频在 bit20-28，
+ *  f = 10×2^(码/128) Hz——与 Joy-Con 一代 log2(f/10)×32 同一条曲线、4 倍
+ *  细分；BlueRetro 的驱动常量 0x100/0x180 在这条曲线上正好是整八度
+ *  40/80Hz）。音频触觉合成按落地 Hz 选驱动频率，这里钉住解码与「三帧取
+ *  最大」的语义。 */
 static void rumble_frequencies_decode_per_band(void)
 {
     uint8_t raw[16];
     memset(raw, 0, sizeof(raw));
     raw[0] = 0x40;
-    /* 子帧 0 v = 180 | 55<<20 = 0x370000B4：高频频率 180、低频频率 55。
-     * 5 字节小端 -> 字节 1..5 = B4 00 70 03 00。 */
-    raw[1] = 0xB4;
-    raw[3] = 0x70;
-    raw[4] = 0x03;
-    /* 子帧 2（字节 11-15）给更大的低频频率 90（位 20-29 落在字节 13/14），
-     * 三帧取最大后低频应报 90。 */
-    raw[13] = 0xA0;
-    raw[14] = 0x05;
+    /* 子帧 0：低频码 0x100（=40Hz 整八度）、高频码 0x180（=80Hz）。
+     * 位串 -> 字节 1..5 = 00 01 00 18 00。 */
+    raw[2] = 0x01;
+    raw[4] = 0x18;
+    /* 子帧 2（字节 11-15）给更大的低频码 0x140（=57Hz），三帧取最大后
+     * 低频应报 57。 */
+    raw[11] = 0x40;
+    raw[12] = 0x01;
 
     uint16_t lf_hz = 0;
     uint16_t hf_hz = 0;
     ns2_rumble_band_frequencies(raw, &lf_hz, &hf_hz);
-    CHECK_EQ(lf_hz, 90);
-    CHECK_EQ(hf_hz, 180);
+    CHECK_EQ(lf_hz, 57);
+    CHECK_EQ(hf_hz, 80);
 
     /* 空包（频率字段全 0）原样报 0：回落缺省值是消费侧（合成）的事。 */
     memset(raw, 0, sizeof(raw));
@@ -372,32 +374,34 @@ static void rumble_frequencies_decode_per_band(void)
 /** NS2 的震动是波形描述而不是马达信号：每侧最多 3 个时序子帧（按时间顺序
  *  各播 1/3 周期），每帧一条高频音与一条低频音（频率 + 振幅）。HD 触觉映射
  *  要按它逐帧重整波形，这里把解码逐字段钉住——含 BlueRetro 静止包常量
- *  0x1E100000（低频频率 0x1E1、零振幅）与实机抓包样例 `04 80 01 97 63`。 */
+ *  0x1E100000（高频频率 0x1E1、零振幅，落在音圈静置频率 135Hz）与实机抓包
+ *  样例 `04 80 01 97 63`。 */
 static void rumble_keys_decode_the_full_waveform(void)
 {
     uint8_t raw[16];
     memset(raw, 0, sizeof(raw));
     raw[0] = 0x7C; /* 实机抓包状态字：tid 12、有效子帧 3、使能 */
-    /* 子帧 0（实机样例 04 80 01 97 63）。 */
+    /* 子帧 0（实机样例 04 80 01 97 63）：低频码 4（10Hz 垫底）、低频振幅
+     * 10 位 = 96；高频码 368（74Hz）、高频振幅 8 位 = 99；使能位为 1。 */
     raw[1] = 0x04;
     raw[2] = 0x80;
     raw[3] = 0x01;
     raw[4] = 0x97;
     raw[5] = 0x63;
-    /* 子帧 1（BlueRetro 静止包 0x1E100000）：低频频率 0x1E1、零振幅。 */
+    /* 子帧 1（BlueRetro 静止包 0x1E100000）：高频频率 0x1E1、零振幅。 */
     raw[8] = 0x10;
     raw[9] = 0x1E;
 
     ns2_rumble_key_t keys[PAD_RUMBLE_KEY_COUNT];
     const size_t count = ns2_rumble_keys(raw, keys);
     CHECK_EQ(count, 3);
-    CHECK_EQ(keys[0].hf_freq, 4);
-    CHECK_EQ(keys[0].hf_amp, 96);
-    CHECK_EQ(keys[0].lf_freq, 368);
-    CHECK_EQ(keys[0].lf_amp, 398);
-    CHECK_EQ(keys[1].hf_freq, 0);
+    CHECK_EQ(keys[0].lf_freq, 10);
+    CHECK_EQ(keys[0].lf_amp, 96);
+    CHECK_EQ(keys[0].hf_freq, 73);
+    CHECK_EQ(keys[0].hf_amp, 396);
+    CHECK_EQ(keys[1].hf_freq, 135);
     CHECK_EQ(keys[1].hf_amp, 0);
-    CHECK_EQ(keys[1].lf_freq, 0x1E1);
+    CHECK_EQ(keys[1].lf_freq, 0);
     CHECK_EQ(keys[1].lf_amp, 0);
     CHECK_EQ(keys[2].lf_amp, 0);
 
@@ -407,7 +411,7 @@ static void rumble_keys_decode_the_full_waveform(void)
     raw[8] = 0x10;
     raw[9] = 0x1E;
     CHECK_EQ(ns2_rumble_keys(raw, keys), 1);
-    CHECK_EQ(keys[1].lf_freq, 0x1E1); /* 静止包落在子帧 1 的槽位 */
+    CHECK_EQ(keys[1].hf_freq, 135); /* 静止包落在子帧 1 的槽位 */
 
     ns2_rumble_keys(NULL, keys);
     CHECK_EQ(keys[0].hf_amp, 0);
@@ -429,7 +433,7 @@ static void zero_amplitude_enable_is_not_rumbling(void)
     CHECK(!event.left_on);
     CHECK(!event.right_on);
 
-    /* 左路来一点低频振幅（位 30-39 的 20/1023，压 8 位 = 5，越过载波电平）：
+    /* 左路来一点高频振幅（子帧第 5 字节 = 5，越过载波电平）：
      * 左路在震，零幅度的右路保持安静。 */
     ble[5] = 0x05;
     REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
@@ -445,9 +449,9 @@ static void zero_amplitude_enable_is_not_rumbling(void)
 }
 
 /** 「查找手柄」页的蜂鸣由 0x0A 采样流承载（0x02 播放 / 0x00 停止），LRA 参数包
- *  只带维持 LRA 通路的载波：BlueRetro 的静止包形态（低频频率 0x1E1、零振幅，
+ *  只带维持 LRA 通路的载波：BlueRetro 的静止包形态（高频频率 0x1E1、零振幅，
  *  状态字只声明 1 个有效子帧）在位布局记错的年代曾被误读成「高频 1-2/255 的
- *  载波振幅」——按 SDL 打包修正后它就是零振幅，载波天然不算在震。真正的
+ *  载波振幅」——按 BlueRetro 位表读，它就是零振幅，载波天然不算在震。真正的
  *  极低振幅（低于 12/1023）在任何马达上都感知不到，照旧被载波电平闸拦下。 */
 static void carrier_level_envelope_is_not_rumbling(void)
 {
@@ -455,7 +459,7 @@ static void carrier_level_envelope_is_not_rumbling(void)
     memset(ble, 0, sizeof(ble));
     ble[0] = 0x52;  /* 实机载波包状态字：使能位为 1、有效子帧 1 */
     ble[16] = 0x52; /* 右路同样使能 */
-    /* 载波段（BlueRetro 静止包）：低频频率 0x1E1、零振幅。 */
+    /* 载波段（BlueRetro 静止包）：高频频率 0x1E1、零振幅。 */
     ble[8] = 0x10;
     ble[9] = 0x1E;
     ble[24] = 0x10;
@@ -473,17 +477,18 @@ static void carrier_level_envelope_is_not_rumbling(void)
     uint16_t lf_hz = 0;
     uint16_t hf_hz = 0;
     ns2_rumble_band_frequencies(event.raw, &lf_hz, &hf_hz);
-    CHECK_EQ(lf_hz, 0x1E1); /* 载波频率照常解出 */
+    CHECK_EQ(lf_hz, 0);
+    CHECK_EQ(hf_hz, 135); /* 载波频率照常解出（0x1E1 = 音圈静置频率） */
 
     /* 真正的极低振幅：10 位 8-11（压 8 位 = 2）不算在震，12-15（压 8 位 = 3，
      * 马达上可感知）才算。 */
-    ble[2] = 0x20; /* 高频振幅 10 位 = 8 */
+    ble[2] = 0x20; /* 低频振幅 10 位 = 8 */
     ble[18] = 0x20;
     REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
     CHECK(!event.left_on);
     CHECK(!event.right_on);
 
-    ble[2] = 0x30; /* 高频振幅 10 位 = 12 */
+    ble[2] = 0x30; /* 低频振幅 10 位 = 12 */
     ble[18] = 0x30;
     REQUIRE(ns2_rumble_parse(ble, sizeof(ble), &event));
     CHECK(event.left_on);
@@ -704,7 +709,7 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"未识别型号兜底后仍照常上报", unknown_model_still_reports_keys},
                 {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form},
                 {"LRA 参数包按低频/高频频带分别给出振幅", rumble_amplitudes_come_out_per_band},
-                {"LRA 参数包按频带解出 10 位驱动频率", rumble_frequencies_decode_per_band},
+                {"LRA 参数包按频带解出 log2 频率码并落地 Hz", rumble_frequencies_decode_per_band},
                 {"LRA 参数包逐帧解出完整波形（含静止包与实机样例）",
                  rumble_keys_decode_the_full_waveform},
                 {"零幅度的使能保活包不算在震", zero_amplitude_enable_is_not_rumbling},

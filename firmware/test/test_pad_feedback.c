@@ -562,7 +562,7 @@ static void hd_render_maps_host_waveform_per_layout(void)
     left[2].lf_freq = 600; /* 越上界：夹回 500 */
     left[2].lf_amp = 40;   /* 压 8 位 = 10 */
     pad_rumble_key_t *right = feedback.rumble_keys[PAD_TRIGGER_R2];
-    right[0].hf_freq = 0;   /* 频率 0 回落缺省 190 */
+    right[0].hf_freq = 0;   /* 频率 0 回落缺省 135 */
     right[0].hf_amp = 512;  /* 压 8 位 = 128 */
 
     pad_hd_render_t render;
@@ -577,7 +577,7 @@ static void hd_render_maps_host_waveform_per_layout(void)
     CHECK_EQ(render.key[0][1].lf_gain, 2);
     CHECK_EQ(render.key[0][2].lf_freq, 500); /* 越界夹取 */
     CHECK_EQ(render.key[0][2].lf_gain, 10);
-    CHECK_EQ(render.key[1][0].hf_freq, 190); /* 频率 0 回落缺省 */
+    CHECK_EQ(render.key[1][0].hf_freq, 135); /* 频率 0 回落缺省 */
     CHECK_EQ(render.key[1][0].hf_gain, 128);
     CHECK_EQ(render.speaker.freq, 0); /* 没有真正的声音时扬声器静音 */
     CHECK_EQ(render.speaker.gain, 0);
@@ -605,7 +605,7 @@ static void hd_render_spreads_sample_segments(void)
     pad_feedback_hd_render(ds5, &feedback, &render);
     CHECK_EQ(render.key_count[0], 3);
     for (size_t k = 0; k < 3; k++) {
-        CHECK_EQ(render.key[0][k].lf_freq, 55);
+        CHECK_EQ(render.key[0][k].lf_freq, 135);
         CHECK_EQ(render.key[0][k].lf_gain, 255);
         CHECK_EQ(render.key[0][k].hf_gain, 0);
     }
@@ -615,7 +615,7 @@ static void hd_render_spreads_sample_segments(void)
     feedback.haptic_env = PAD_HAPTIC_BEEP;
     pad_feedback_hd_render(ds5, &feedback, &render);
     CHECK_EQ(render.key[0][0].lf_gain, 0);
-    CHECK_EQ(render.speaker.freq, 880);
+    CHECK_EQ(render.speaker.freq, 500);
     CHECK_EQ(render.speaker.gain, 255);
 
     feedback.haptic_env = 0;

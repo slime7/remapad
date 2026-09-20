@@ -15,13 +15,14 @@ extern "C" {
 #define HAPTIC_SYNTH_RATE_HZ 48000
 #define HAPTIC_SYNTH_CHANNELS 4
 
-/** 频率夹取范围与两带的缺省值（Hz）：参数包的频率字段单位未经实机核对，
- *  越界或为 0 时回落到缺省值，保证波形始终落在触觉音圈的有效频段。
+/** 频率夹取范围与两带的缺省值（Hz）：NS2 的频率码已按 9 位 log2 刻度解成
+ *  Hz，越界或为 0 时回落到缺省值，保证波形始终落在触觉音圈的有效频段。
+ *  缺省 80/135 取 BlueRetro 驱动常量 0x180/0x1E1 的落地值。
  *  只剩旧 FEEDBACK 帧的标量频率字段还在用（布局行的 hd 规则落地时序子帧）。 */
 #define HAPTIC_SYNTH_FREQ_MIN 20u
 #define HAPTIC_SYNTH_FREQ_MAX 500u
-#define HAPTIC_SYNTH_FREQ_DEFAULT_LF 55u
-#define HAPTIC_SYNTH_FREQ_DEFAULT_HF 190u
+#define HAPTIC_SYNTH_FREQ_DEFAULT_LF 80u
+#define HAPTIC_SYNTH_FREQ_DEFAULT_HF 135u
 
 /**
  * 合成参数（布局行 hd 规则的渲染结果 + 承载刻度）：每侧一条按时间顺序播放

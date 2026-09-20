@@ -188,20 +188,26 @@ void ns2_output_emit_rumble(const ns2_rumble_event_t *event)
     }
 }
 
-/** 「在震」的载波电平上限（8 位刻度）：主机在「查找手柄」页会用极低的高频
- *  振幅维持 LRA 通路（蜂鸣本体由 0x0A 采样流承载），这种电平在任何马达上都
- *  感知不到。归一强度不超过它的参数包不算在震。 */
+/** 「在震」的载波电平上限（8 位刻度）：静止包是零振幅的频率字段（音圈静置
+ *  频率），天然不算在震；万一主机真的用极低振幅维持 LRA 通路，这种电平在
+ *  任何马达上都感知不到，归一强度不超过它的参数包也不算在震。 */
 #define NS2_RUMBLE_CARRIER_MAX 2u
 
-/** 一个时序子帧的位串（5 字节小端，SDL_hidapi_switch2.c 的 EncodeHDRumble）：
- *  高频频率 bit0-9、高频振幅 bit10-19、低频频率 bit20-29、低频振幅
- *  bit30-39，各 10 位。BlueRetro sw2.h 对同一位串给出了带序相反、含使能位
- *  的解释——振幅的归一值在两种解释下一致，这里取 SDL 的形态。 */
-#define NS2_KEY_HF_FREQ_SHIFT 0u
-#define NS2_KEY_HF_AMP_SHIFT 10u
-#define NS2_KEY_LF_FREQ_SHIFT 20u
-#define NS2_KEY_LF_AMP_SHIFT 30u
-#define NS2_KEY_FIELD_MASK 0x3FFu
+/** 一个时序子帧的位串（5 字节小端，BlueRetro sw2.h 的 sw2_lra_op_t）：
+ *  低频频率 bit0-8、低频使能音 bit9、低频振幅 bit10-19、高频频率 bit20-28、
+ *  高频使能音 bit29、保留 bit30、使能 bit31、高频振幅 bit32-39（独立 8 位）。
+ *  BlueRetro 是真机验证过的参照：它的静止包常量 0x1E100000（高频频率
+ *  0x1E1）与我们实机抓包的静止字一致，实机主动子帧的 bit31 使能位为 1；
+ *  SDL_hidapi_switch2.c 的 10/10/10/10 对称位表是没上过真机的逆向猜测，
+ *  按它读会把频率位错认成振幅、错认振幅的刻度。 */
+#define NS2_KEY_LF_FREQ_SHIFT 0u
+#define NS2_KEY_LF_FREQ_MASK 0x1FFu
+#define NS2_KEY_LF_AMP_SHIFT 10u
+#define NS2_KEY_LF_AMP_MASK 0x3FFu
+#define NS2_KEY_HF_FREQ_SHIFT 20u
+#define NS2_KEY_HF_FREQ_MASK 0x1FFu
+#define NS2_KEY_HF_AMP_SHIFT 0u
+#define NS2_KEY_HF_AMP_MASK 0xFFu
 
 static uint64_t key_word(const uint8_t *p)
 {
@@ -210,6 +216,33 @@ static uint64_t key_word(const uint8_t *p)
         v |= (uint64_t)p[i] << (8 * i);
     }
     return v;
+}
+
+/** 2^(1/2^n) × 65536（n=1..7）：把频率码按八度逐位展开成定点乘数。
+ *  首项 92682 超出 16 位，元素必须落在 uint32_t 上。 */
+static const uint32_t s_freq_oct_frac[7] = {92682, 77935, 71461, 68442, 66965, 66229, 65878};
+
+/** 频率码落地 Hz：字段是 9 位 log2 刻度，f = 10×2^(码/128)——与 Joy-Con
+ *  一代 log2(f/10)×32 同一条曲线、4 倍细分（BlueRetro 的驱动常量 0x100/
+ *  0x180 在这条曲线上正好是整八度 40/80Hz，SDL 缺省码 0x112/0x187 落在
+ *  经典的 44/83Hz 低高对）。码 0 按「未声明」返回 0，消费侧回落缺省值；
+ *  9 位码的满量程是 159Hz，恰好盖住音圈的低频有效区。 */
+static uint16_t key_freq_hz(uint16_t code)
+{
+    if (code == 0) {
+        return 0;
+    }
+    if (code > NS2_KEY_LF_FREQ_MASK) {
+        code = NS2_KEY_LF_FREQ_MASK;
+    }
+    uint64_t f = (uint64_t)(10u << (code >> 7)) << 16;
+    const uint16_t frac = code & 0x7Fu;
+    for (size_t i = 0; i < 7; i++) {
+        if ((frac & (0x40u >> i)) != 0) {
+            f = ((f * s_freq_oct_frac[i]) + 0x8000u) >> 16;
+        }
+    }
+    return (uint16_t)((f + 0x8000u) >> 16);
 }
 
 void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf)
@@ -223,16 +256,17 @@ void ns2_rumble_band_strengths(const uint8_t raw[16], uint8_t *lf, uint8_t *hf)
     if (raw == NULL) {
         return;
     }
-    /* 参数包：字节 0 是状态字，其后 3 个时序子帧各 5 字节。逐带取三帧最大
-     * 振幅，10 位右移两位压到 8 位刻度，与私有的 0-255 强度对齐。 */
+    /* 参数包：字节 0 是状态字，其后 3 个时序子帧各 5 字节。低频振幅逐帧取
+     * 三帧最大（10 位右移两位压到 8 位刻度），高频振幅本身是 8 位字节、
+     * 原样取最大，与私有的 0-255 强度对齐。 */
     uint8_t best_lf = 0;
     uint8_t best_hf = 0;
     for (size_t g = 0; g < 3; g++) {
         const uint64_t v = key_word(&raw[1 + g * 5]);
         const uint8_t group_lf =
-            (uint8_t)(((v >> NS2_KEY_LF_AMP_SHIFT) & NS2_KEY_FIELD_MASK) >> 2);
+            (uint8_t)(((v >> NS2_KEY_LF_AMP_SHIFT) & NS2_KEY_LF_AMP_MASK) >> 2);
         const uint8_t group_hf =
-            (uint8_t)(((v >> NS2_KEY_HF_AMP_SHIFT) & NS2_KEY_FIELD_MASK) >> 2);
+            (uint8_t)((v >> 32) & NS2_KEY_HF_AMP_MASK);
         if (group_lf > best_lf) {
             best_lf = group_lf;
         }
@@ -267,16 +301,16 @@ void ns2_rumble_band_frequencies(const uint8_t raw[16], uint16_t *lf_hz, uint16_
     if (raw == NULL) {
         return;
     }
-    /* 频率字段与振幅同处一个 5 字节子帧：高频在位 0-9、低频在位 20-29，
-     * 逐帧取最大。 */
+    /* 频率字段与振幅同处一个 5 字节子帧：低频在位 0-8、高频在位 20-28，
+     * 解出 Hz 后逐帧取最大。 */
     uint16_t best_lf = 0;
     uint16_t best_hf = 0;
     for (size_t g = 0; g < 3; g++) {
         const uint64_t v = key_word(&raw[1 + g * 5]);
         const uint16_t group_lf =
-            (uint16_t)((v >> NS2_KEY_LF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
+            key_freq_hz((uint16_t)((v >> NS2_KEY_LF_FREQ_SHIFT) & NS2_KEY_LF_FREQ_MASK));
         const uint16_t group_hf =
-            (uint16_t)((v >> NS2_KEY_HF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
+            key_freq_hz((uint16_t)((v >> NS2_KEY_HF_FREQ_SHIFT) & NS2_KEY_HF_FREQ_MASK));
         if (group_lf > best_lf) {
             best_lf = group_lf;
         }
@@ -309,10 +343,12 @@ size_t ns2_rumble_keys(const uint8_t raw[16], ns2_rumble_key_t keys[PAD_RUMBLE_K
             continue;
         }
         const uint64_t v = key_word(p);
-        key->hf_freq = (uint16_t)((v >> NS2_KEY_HF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
-        key->hf_amp = (uint16_t)((v >> NS2_KEY_HF_AMP_SHIFT) & NS2_KEY_FIELD_MASK);
-        key->lf_freq = (uint16_t)((v >> NS2_KEY_LF_FREQ_SHIFT) & NS2_KEY_FIELD_MASK);
-        key->lf_amp = (uint16_t)((v >> NS2_KEY_LF_AMP_SHIFT) & NS2_KEY_FIELD_MASK);
+        key->hf_freq = key_freq_hz((uint16_t)((v >> NS2_KEY_HF_FREQ_SHIFT) & NS2_KEY_HF_FREQ_MASK));
+        /* 高频振幅是 8 位字节，左移两位抬到 10 位刻度，与低频振幅共用下游
+         * 的「压回 8 位」路径。 */
+        key->hf_amp = (uint16_t)(((v >> 32) & NS2_KEY_HF_AMP_MASK) << 2);
+        key->lf_freq = key_freq_hz((uint16_t)((v >> NS2_KEY_LF_FREQ_SHIFT) & NS2_KEY_LF_FREQ_MASK));
+        key->lf_amp = (uint16_t)((v >> NS2_KEY_LF_AMP_SHIFT) & NS2_KEY_LF_AMP_MASK);
     }
     if (raw != NULL) {
         /* 状态字 bit4-5 是有效子帧数（实机载波包为 1、游戏包为 3）；0 表示

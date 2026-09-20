@@ -4,6 +4,7 @@ Switch 2 驱动与 Linux hid-playstation.c 的 CRC 规则；两条通路都没�
 字节在这里钉死。
 """
 
+import math
 import re
 import sys
 import unittest
@@ -101,12 +102,41 @@ class RenderPcmTest(unittest.TestCase):
             self.assertGreaterEqual(signed, -128)
             self.assertLessEqual(signed, 127)
 
-    def test_sample_segments_reach_the_coils(self):
-        """蓝牙上没有扬声器通道：0x32 只承载 2 声道触觉 PCM，发声段由固件
-        折进触觉子帧，这里的扬声器音色参数不会悄悄进触觉 PCM。"""
+    def test_speaker_segment_reaches_the_coils(self):
+        """蓝牙上没有扬声器通道：发声段折进两侧音圈 PCM——与 USB 直插的音圈
+        行为一致，而不是把发声段静默丢掉。"""
         state = ds5_haptics._VoiceState()
-        pcm = ds5_haptics.bt_render_pcm(silent_side(), silent_side(), ((880, 255),), state)
-        self.assertEqual(pcm, SILENT_PCM)
+        pcm = ds5_haptics.bt_render_pcm(silent_side(), silent_side(), ((500, 255),), state)
+        self.assertNotEqual(pcm, SILENT_PCM)
+        left = [b - 256 if b > 127 else b for b in pcm[0::2]]
+        right = [b - 256 if b > 127 else b for b in pcm[1::2]]
+        self.assertGreater(max(abs(v) for v in left), 40)
+        self.assertGreater(max(abs(v) for v in right), 40)
+
+    def test_speaker_matches_usb_coil_scale(self):
+        """发声段在两条承载通路上行为一致：蓝牙音圈与 USB 音圈渲染同一份
+        折进音色，幅度按各自峰值刻度（24000/127）等比。"""
+        speaker = ((500, 255),)
+
+        def rms(values):
+            return math.sqrt(sum(v * v for v in values) / len(values))
+
+        state = ds5_haptics._VoiceState()
+        pcm = ds5_haptics.bt_render_pcm(silent_side(), silent_side(), speaker, state)
+        bt_left = [b - 256 if b > 127 else b for b in pcm[0::2]]
+
+        audio = ds5_haptics.Ds5HapticsAudio()
+        audio.set_params({"hd": {"l": silent_side(), "r": silent_side(),
+                                 "speaker": (500, 255)}})
+        frames = ds5_haptics.BT_FRAMES * 8
+        out = bytearray(frames * ds5_haptics.CHANNELS * 2)
+        audio._callback(out, frames, None, None)
+        block = memoryview(out).cast("h")
+        usb_left = [block[i * 4 + 2] for i in range(frames)]
+
+        ratio = rms(usb_left) / rms(bt_left)
+        want = ds5_haptics.AMP_PEAK_USB / ds5_haptics.AMP_PEAK_BT
+        self.assertAlmostEqual(ratio, want, delta=want * 0.02)
 
     def test_keys_play_in_time_order(self):
         """子帧时间轴在蓝牙流上同样保留：3kHz 下每切片 15 样本。"""

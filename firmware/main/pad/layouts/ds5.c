@@ -53,13 +53,15 @@ static const pad_layout_t s_rows[] = {
             /* HD 触觉波形映射（NS 波形规则 → 本设备 PCM）：USB 承载是 4 声道
              * 48kHz 16-bit PCM（频道 3/4 直连左右触觉音圈，频道 1/2 是手柄
              * 小喇叭）。主机的时序子帧按时间顺序重整进音圈（15ms 周期各播
-             * 1/3），频带夹进音圈的有效频段（20-500Hz，缺省 55/190 与
-             * haptic_synth 同一套）；采样音色的强震段以 55Hz 铺音圈、发声段
-             * 以 880Hz 铺扬声器。 */
+             * 1/3），频率按 9 位 log2 刻度解出 Hz 后夹进音圈的有效频段
+             * （20-500Hz，码 0 回落 80/135——BlueRetro 驱动常量 0x180/0x1E1
+             * 的落地值）；采样音色的强震段以 135Hz（音圈静置频率，≈共振点）
+             * 铺音圈、发声段以 500Hz 铺扬声器并折进音圈（蓝牙通路没有
+             * 扬声器通道，两条承载的音圈行为保持一致）。 */
             .hd = {.ops = 3, .rate_hz = 48000, .amp_peak = 24000, .cycle_ms = 15,
-                   .lf_min_hz = 20, .lf_max_hz = 500, .lf_default_hz = 55,
-                   .hf_min_hz = 20, .hf_max_hz = 500, .hf_default_hz = 190,
-                   .pulse_hz = 55, .beep_hz = 880},
+                   .lf_min_hz = 20, .lf_max_hz = 500, .lf_default_hz = 80,
+                   .hf_min_hz = 20, .hf_max_hz = 500, .hf_default_hz = 135,
+                   .pulse_hz = 135, .beep_hz = 500},
             .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},
         },
     },
@@ -117,9 +119,9 @@ static const pad_layout_t s_rows[] = {
              *  对音圈不双驱动。 */
             .audio_haptic = 1,
             .hd = {.ops = 3, .rate_hz = 3000, .amp_peak = 127, .cycle_ms = 15,
-                   .lf_min_hz = 20, .lf_max_hz = 500, .lf_default_hz = 55,
-                   .hf_min_hz = 20, .hf_max_hz = 500, .hf_default_hz = 190,
-                   .pulse_hz = 55, .beep_hz = 880},
+                   .lf_min_hz = 20, .lf_max_hz = 500, .lf_default_hz = 80,
+                   .hf_min_hz = 20, .hf_max_hz = 500, .hf_default_hz = 135,
+                   .pulse_hz = 135, .beep_hz = 500},
             .frame = PAD_OUT_FRAME_PS_BT,
             .seq_off = 1,
             .led_mask_map = {0x04, 0x0A, 0x15, 0x1B},

@@ -102,7 +102,7 @@ class RenderTest(unittest.TestCase):
 class AudioCallbackTest(unittest.TestCase):
     def test_callback_block_layout(self):
         """WASAPI 回调的整块字节：4ch 交错 int16，扬声器两路放发声音色，
-        触觉两路各跟各的子帧。"""
+        触觉两路各跟各的子帧、发声段同时折进音圈（与蓝牙通路一致）。"""
         audio = ds5_haptics.Ds5HapticsAudio()
         audio.set_params(hd_params())
         frames = 480
@@ -114,9 +114,30 @@ class AudioCallbackTest(unittest.TestCase):
         ch4 = [block[i * 4 + 3] for i in range(frames)]
         self.assertGreater(max(abs(v) for v in ch1), 10000)  # 发声段铺频道 1/2
         self.assertGreater(max(abs(v) for v in ch3), 10000)  # 左音圈
-        # 右侧子帧 0 高频 484Hz：仅前 1/3 周期有声，其余切片静默。
+        # 右侧子帧 0 高频 484Hz：仅前 1/3 周期有声，其后音圈只剩折进来的
+        # 发声段——与频道 1 的扬声器音色同值。
         self.assertGreater(max(abs(v) for v in ch4), 3000)
-        self.assertEqual(max(abs(v) for v in ch4[240:]), 0)
+        self.assertEqual(ch4[240:], ch1[240:])
+
+    def test_speaker_segment_reaches_coil_channels(self):
+        """发声段折进两侧音圈：子帧全静、只有扬声器音色时，触觉两路与
+        扬声器两路同样在响（蓝牙上没有扬声器通道，靠它保持行为一致）。"""
+        audio = ds5_haptics.Ds5HapticsAudio()
+        audio.set_params({"hd": {
+            "l": {"count": 0, "keys": ()},
+            "r": {"count": 0, "keys": ()},
+            "speaker": (500, 255)}})
+        frames = 480
+        out = bytearray(frames * ds5_haptics.CHANNELS * 2)
+        audio._callback(out, frames, None, None)
+        block = memoryview(out).cast("h")
+        ch1 = [block[i * 4 + 0] for i in range(frames)]
+        ch2 = [block[i * 4 + 1] for i in range(frames)]
+        ch3 = [block[i * 4 + 2] for i in range(frames)]
+        ch4 = [block[i * 4 + 3] for i in range(frames)]
+        self.assertGreater(max(abs(v) for v in ch1), 10000)
+        self.assertEqual(ch3, ch1)
+        self.assertEqual(ch4, ch2)
 
     def test_legacy_callback_keeps_speaker_silent(self):
         """老固件两带参数：扬声器两路恒零。"""

@@ -6,14 +6,15 @@ DualSense 连在 PC 上时有两条投递通路，共用同一份哑渲染：
   小喇叭（采样提示音的发声段，没有真正的声音时恒零）。
 - 蓝牙：HID 之外没有音频接口，触觉走 SAxense 逆向的私有报告 0x32（141 字节
   = 报文头 + packet 0x11 配置/序号 + packet 0x12 承载 64 字节 PCM + 尾部
-  CRC32），3000Hz / 2 声道 / 8-bit，每 10.67ms 一报由发送线程推送，蓝牙上
-  没有扬声器通道，发声段与强震段都铺在触觉 PCM 里。
+  CRC32），3000Hz / 2 声道 / 8-bit，每 10.67ms 一报由发送线程推送。
 
-NS2 的震动是波形描述：每侧最多 3 个时序子帧，按时间顺序各播 1/3 周期。
-声部参数来自设备的 FEEDBACK 帧（57 字节 HD 版）：固件已按布局行把子帧序列
-重整好（震动映音圈、采样发声段映扬声器，频率落地在固件里算好），这里只做
-哑渲染——振荡器相位跨块连续，子帧按 slice 帧数轮播；老固件的 16 字节帧回落
-两带正弦（扬声器恒零）。实机验证：共享流 4ch 独立可控、扬声器不漏音。
+两条通路共用同一份哑渲染，行为一致：NS2 的震动是波形描述，每侧最多 3 个
+时序子帧，按时间顺序各播 1/3 周期；采样发声段铺扬声器之外同时折进两侧音圈
+（蓝牙没有扬声器通道，音圈是它唯一的载体）。声部参数来自设备的 FEEDBACK 帧
+（57 字节 HD 版）：固件已按布局行把子帧序列重整好（震动映音圈、采样发声段
+映扬声器，频率落地在固件里算好），这里只做哑渲染——振荡器相位跨块连续，
+子帧按 slice 帧数轮播；老固件的 16 字节帧回落两带正弦（扬声器恒零）。
+实机验证：共享流 4ch 独立可控、扬声器不漏音。
 
 用 RawOutputStream 而不是 OutputStream：后者的回调走 numpy 数组，而 numpy
 的原生扩展在会话进程里加载会卡死（cffi/PortAudio 都正常，仅 numpy 如此，
@@ -34,8 +35,9 @@ AMP_PEAK_USB = 24000
 AMP_PEAK_BT = 127
 RATE = 48000
 CHANNELS = 4
-#: 频率缺省值（设备发的落地值理论上不为 0，这里兜底）。
-FREQ_DEFAULTS = (55.0, 190.0)
+#: 频率缺省值（设备发的落地值理论上不为 0，这里兜底；与固件布局行的
+#: lf/hf_default_hz 同源：BlueRetro 驱动常量 0x180/0x1E1 的落地值 80/135Hz）。
+FREQ_DEFAULTS = (80.0, 135.0)
 #: 每侧时序子帧上限（与固件 PAD_HD_KEY_MAX 一致：NS2 波形规则为 3）。
 KEY_MAX = 3
 #: 子帧序列的整周期（ms）：3 个子帧各播 1/3，与固件 DS5 布局行的 cycle_ms 同值。
@@ -230,6 +232,11 @@ class Ds5HapticsAudio:
             left = _render_side(left_v, self._state.key_phase[0], frames, RATE, peak)
             right = _render_side(right_v, self._state.key_phase[1], frames, RATE, peak)
         sp = _render_side(speaker, self._state.speaker, frames, RATE, peak)
+        # 发声段折进触觉两路：蓝牙上没有扬声器通道，音圈是发声段唯一的载体，
+        # 两条承载通路对音圈的驱动保持一致；USB 的频道 1/2 照常加一份真声。
+        for i in range(frames):
+            left[i] = _clamp16(left[i] + sp[i])
+            right[i] = _clamp16(right[i] + sp[i])
         # 小喇叭音色铺频道 1/2；没有真正的声音时两路填充 0 静音。
         block = bytearray(frames * CHANNELS * 2)
         pack_into = struct.pack_into
@@ -282,16 +289,17 @@ def bt_build_report(pcm: bytes, seq: int) -> bytes:
 def bt_render_pcm(left_v: dict, right_v: dict, speaker: tuple,
                   state: _VoiceState) -> bytes:
     """子帧序列 → 一块 32 帧的触觉 PCM（交错左/右音圈 s8）：蓝牙上没有扬声器
-    通道，发声段与强震段都由固件折进触觉子帧，这里原样渲染。"""
+    通道，发声段折进两侧音圈——与 USB 直插的音圈行为一致。"""
     peak = AMP_PEAK_BT
     left = _render_keys(left_v, state.key_phase[0], state.cursor[0],
                         BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE))
     right = _render_keys(right_v, state.key_phase[1], state.cursor[1],
                          BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE))
+    sp = _render_side(speaker, state.speaker, BT_FRAMES, BT_RATE, peak)
     out = bytearray(BT_PCM_BYTES)
     for i in range(BT_FRAMES):
-        out[i * 2] = left[i] & 0xFF
-        out[i * 2 + 1] = right[i] & 0xFF
+        out[i * 2] = _clamp16(left[i] + sp[i]) & 0xFF
+        out[i * 2 + 1] = _clamp16(right[i] + sp[i]) & 0xFF
     return bytes(out)
 
 
