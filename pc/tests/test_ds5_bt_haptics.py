@@ -389,12 +389,13 @@ class BuildBt36ReportTest(unittest.TestCase):
                 return bytes(ds5_haptics.BT36_SPEAKER_BYTES)
 
         class FakeDevice:
-            def __init__(self) -> None:
+            def __init__(self, limit=3) -> None:
                 self.writes = []
+                self._limit = limit
 
             def write(self, report):
                 self.writes.append(report)
-                if len(self.writes) >= 3:
+                if len(self.writes) >= self._limit:
                     raise OSError("done")
 
         # 无内容：整流停发，一报不发。
@@ -426,6 +427,25 @@ class BuildBt36ReportTest(unittest.TestCase):
         for report in device.writes:
             self.assertEqual(report[0], ds5_haptics.BT36_REPORT_ID)
             self.assertEqual(report[142], 0x93)  # 手柄喇叭 + sized
+
+        # 查找手柄的采样按住期间（喇叭静默的停顿里）0x36 保持热态：定位呼叫
+        # 两声短鸣之间隔约一秒，退了承载下一声就吃冷启动延迟。先响一声盖上
+        # 时间戳，再静默并按住采样，0x36 不退回 0x32。
+        device = FakeDevice(limit=1)
+        sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=FakeEncoder())
+        sender.set_params({"hd": {"l": {"count": 0, "keys": ()},
+                                  "r": {"count": 0, "keys": ()},
+                                  "speaker": (880, 255)}})
+        sender._run()  # 响一声（写 1 份后 OSError 退出），盖上发声时间戳
+        device2 = FakeDevice(limit=2)
+        sender._device = device2
+        sender.set_params({"sample": 0x02,
+                           "hd": {"l": {"count": 0, "keys": ()},
+                                  "r": {"count": 0, "keys": ()},
+                                  "speaker": (0, 0)}})
+        sender._run()
+        self.assertEqual({len(r) for r in device2.writes},
+                         {ds5_haptics.BT36_REPORT_LEN})
 
 
 class CaptureReplayTest(unittest.TestCase):

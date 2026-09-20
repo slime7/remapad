@@ -387,6 +387,9 @@ BT36_STATE = bytes([
 BT36_INTERVAL_S = 0.010
 #: 喇叭静默多少秒后从 0x36 退回 0x32：发声段之间的短停顿不切换承载。
 BT36_SPEAKER_TAIL_S = 0.3
+#: 查找手柄的采样按住期间（FEEDBACK 采样字节非零）0x36 的保温窗：定位呼叫
+#: 两声短鸣之间隔着约一秒的停顿，退了承载下一声就要吃冷启动延迟。
+BT36_SAMPLE_HOLD_S = 5.0
 #: 触觉静默多少秒后整条私有流停发：蓝牙无线电是 2.4GHz 公共介质，常驻空包
 #: 会和同频段的无线鼠标互相干扰（实机：鼠标卡、触控板幻手势弹 OSK/开始
 #: 菜单）。触觉块到手即播、没有需要保活的会话，空闲就一报不发。
@@ -494,6 +497,8 @@ class Ds5HapticsBt:
         self._params: dict = {}
         self._state = _VoiceState()
         self._state48 = _VoiceState()  # 0x36 喇叭块的 48kHz 声部
+        self._last_speaker_at = 0.0
+        self._last_coil_at = 0.0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -547,8 +552,6 @@ class Ds5HapticsBt:
         next_due = time.monotonic()
         seq = 0
         packet_seq = 0
-        last_speaker_at = 0.0
-        last_coil_at = 0.0
         while not self._stop.is_set():
             with self._lock:
                 params = dict(self._params)
@@ -562,18 +565,22 @@ class Ds5HapticsBt:
             now = time.monotonic()
             tone = speaker[0] if speaker else (0, 0)
             if tone[1]:
-                last_speaker_at = now
+                self._last_speaker_at = now
             if self._coil_active(left_v, right_v):
-                last_coil_at = now
+                self._last_coil_at = now
             # 0x36 只在喇叭真有内容（含收音尾）时上；触觉走 0x32（发声段
             # 折进音圈兜底）；两条静默超尾长就整流停发——蓝牙无线电是公共
             # 介质，常驻空包会和同频段设备互相干扰（实机：2.4GHz 无线鼠标
             # 卡顿、触控板幻手势弹 OSK/开始菜单）。触觉块到手即播，没有
-            # 需要保活的会话。
+            # 需要保活的会话。查找手柄的采样还按着时 0x36 保持热态（FEEDBACK
+            # 的采样字节非零）：鸣叫之间的停顿不退承载，第一声不吃冷启动延迟。
+            sample_active = bool(params.get("sample"))
+            speaker_window = (BT36_SAMPLE_HOLD_S if sample_active
+                              else BT36_SPEAKER_TAIL_S)
             use_36 = (self._speaker_encoder is not None and
-                      now - last_speaker_at < BT36_SPEAKER_TAIL_S)
-            haptic_recent = (now - last_coil_at < BT_HAPTIC_TAIL_S or
-                             now - last_speaker_at < BT_HAPTIC_TAIL_S)
+                      now - self._last_speaker_at < speaker_window)
+            haptic_recent = (now - self._last_coil_at < BT_HAPTIC_TAIL_S or
+                             now - self._last_speaker_at < BT_HAPTIC_TAIL_S)
             if use_36:
                 if left_v is None:
                     coil = bytes(BT_PCM_BYTES)
