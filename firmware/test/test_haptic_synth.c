@@ -112,6 +112,29 @@ static void speaker_tone_rides_channels_1_2(void)
     }
 }
 
+/** 发声段的包络：起音渐入、收音渐出——段边界硬切满幅/零幅会在小喇叭上
+ *  听成咔哒（查找手柄页刺耳声的来源之一）。起播第一帧远小于满幅、起音
+ *  时长内爬到满幅；增益归零后按收音时长落回静音。 */
+static void speaker_tone_fades_in_and_out(void)
+{
+    haptic_synth_state_t state;
+    haptic_synth_reset(&state);
+    haptic_synth_params_t params = params_default();
+    params.slice_frames = 1200;
+    params.tones.speaker.freq = 880;
+    params.tones.speaker.gain = 255;
+
+    int16_t pcm[720 * HAPTIC_SYNTH_CHANNELS];
+    haptic_synth_fill(&state, &params, pcm, 480);
+    CHECK(peak_of(pcm, 1, 0) < 4000);             /* 起音：第一帧不是满幅硬切 */
+    CHECK(peak_of(pcm, 288, 0) > 18000);          /* 起音段内爬到满幅 */
+
+    params.tones.speaker.gain = 0;
+    haptic_synth_fill(&state, &params, pcm, 672 + 48);
+    CHECK(peak_of(pcm, 54, 0) > 1000);            /* 收音起点附近还有声 */
+    CHECK(channel_is_silent(pcm + 672 * HAPTIC_SYNTH_CHANNELS, 48, 0));
+}
+
 static void sides_follow_their_own_keys(void)
 {
     haptic_synth_state_t state;
@@ -256,6 +279,8 @@ HOST_TEST_SUITE(suite_haptic_synth, "haptic_synth",
                 {"没有声音时扬声器恒零，触觉两路有波形",
                  speaker_channels_stay_silent_without_sound},
                 {"发声段的小喇叭音色铺在频道 1/2", speaker_tone_rides_channels_1_2},
+                {"发声段包络起音渐入收音渐出（段边界硬切听成咔哒）",
+                 speaker_tone_fades_in_and_out},
                 {"左右触觉通道各跟各的子帧", sides_follow_their_own_keys},
                 {"子帧按时间顺序轮播，静默子帧保住节奏",
                  keys_play_in_order_over_the_timeline},

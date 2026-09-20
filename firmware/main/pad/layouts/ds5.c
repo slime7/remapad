@@ -31,18 +31,21 @@ static const pad_layout_t s_rows[] = {
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
         /* 输出报告 0x02（48 字节 = Report ID + 47 字节公共段，与 SDL 在
-         * Windows 上发的长度一致）：b1/b2 是两个 valid_flag（0x01 兼容震动、
-         * 0x02 关音频触觉、0x04 灯条、0x10 玩家指示灯），b3/b4 是右小马达与
-         * 左大马达，b44 是玩家灯、b45-b47 是灯条 RGB。
+         * Windows 上发的长度一致）：b1/b2 是两个 valid_flag（b1：0x01 兼容
+         * 震动、0x02 关音频触觉、0x20 更新喇叭音量、0x80 更新音频控制；b2：
+         * 0x10 玩家指示灯），b3/b4 是右小马达与左大马达，b6 是喇叭音量，
+         * b44 是玩家灯、b45-b47 是灯条 RGB。
          * 偏移取 Linux hid-playstation.c 的 dualsense_output_report_usb，蓝牙行
          * 实机核对过震动与灯。灯条不驱动（实机：每次震动写回都把
          * 灯条钉成玩家蓝、平时淡回默认白，一震就变色）——valid_flag1 只置玩家
          * 灯位，灯条设置控制与 RGB 字节全零、不声明有效，颜色留给 PC 侧管理；
-         * 玩家号落四颗白灯（led_mask_map）。 */
+         * 玩家号落四颗白灯（led_mask_map）。喇叭音量逐报钉在 100（PS5 缺省
+         * 档，vds/DS5Dongle 的初始状态同值）：手柄自己的音量档被主机/PC 游戏
+         * 压低时采样提示音会轻到听不见（实机：查找手柄短鸣非常轻）。 */
         .out = {
             .report_id = 0x02,
             .len = 48,
-            .presets = {{1, 0x03}, {2, 0x10}},
+            .presets = {{1, 0x23}, {2, 0x10}, {6, 100}},
             .rumble_off = {4, 3},
             .rumble_max = {255, 255},
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},
@@ -57,8 +60,10 @@ static const pad_layout_t s_rows[] = {
              * （20-500Hz，码 0 回落 80/135——BlueRetro 驱动常量 0x180/0x1E1
              * 的落地值）；采样音色的强震段以 135Hz（音圈静置频率，≈共振点）
              * 铺音圈、发声段以 500Hz 铺扬声器并折进音圈（蓝牙通路没有
-             * 扬声器通道，两条承载的音圈行为保持一致）。 */
-            .hd = {.ops = 3, .rate_hz = 48000, .amp_peak = 24000, .cycle_ms = 15,
+             * 扬声器通道，两条承载的音圈行为保持一致）。amp_peak 取 30000
+             * （满量程 32767 的 91%）：音圈与喇叭的响度上限，游戏内振幅
+             * 低（实抓中位 6/255）不受裁剪影响。 */
+            .hd = {.ops = 3, .rate_hz = 48000, .amp_peak = 30000, .cycle_ms = 15,
                    .lf_min_hz = 20, .lf_max_hz = 500, .lf_default_hz = 80,
                    .hf_min_hz = 20, .hf_max_hz = 500, .hf_default_hz = 135,
                    .pulse_hz = 135, .beep_hz = 500},
@@ -105,7 +110,10 @@ static const pad_layout_t s_rows[] = {
         .out = {
             .report_id = 0x31,
             .len = 78,
-            .presets = {{2, 0x10}, {3, 0x03}, {4, 0x10}},
+            /* b3 带 0x20（更新喇叭音量）、b8 钉 100：与有线行同一理由——
+             * 蓝牙接入时 0x31 写回也要保住手柄喇叭的音量档（0x36 私有流的
+             * 状态块另带一份）。 */
+            .presets = {{2, 0x10}, {3, 0x23}, {4, 0x10}, {8, 100}},
             .rumble_off = {6, 5},
             .rumble_max = {255, 255},
             .rumble_band = {PAD_RUMBLE_LF, PAD_RUMBLE_HF},

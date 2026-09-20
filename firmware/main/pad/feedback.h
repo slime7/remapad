@@ -103,18 +103,30 @@ void pad_feedback_bt_seq_reset(void);
 
 /**
  * 采样音色在 age_ms 的当前段：返回段内幅度（0 = 停顿），remain_ms（可空）
- * 给出距下一段段边界的毫秒数。主机只发采样 ID、不带播放形态（实机抓包确认
- * 它以十几 Hz 重发同一 ID），真手柄的节奏由其内部音色库给出——本设备对应的
- * 就是这里的采样音色表：按 ID 登记各自的响/停时间线（段边界毫秒 → 段内
- * 幅度），未登记的采样回落缺省音色（一次短脉冲后静默）。登记条目按各自
- * 周期循环播放，缺省音色不循环（主机要重复播放就用 0x00 收掉再发）。
- * age_ms 是自采样起播（effective 值从无到有）起的毫秒数；数据面据此驱动
- * 板载蜂鸣器按段发声（USB 直插），蓝牙桥接路径不渲染采样。
+ * 给出距下一段段边界的毫秒数，tone_hz（可空）给出「发声」段的音高（Hz，
+ * 0 = 该段不发声或用布局行的 beep_hz 缺省）。主机只发采样 ID、不带播放形态
+ * （实机抓包确认它以十几 Hz 重发同一 ID），真手柄的节奏由其内部音色库给
+ * 出——本设备对应的就是这里的采样音色表：按 ID 登记各自的响/停时间线
+ * （段边界毫秒 → 段内幅度与音高），未登记的采样回落缺省音色（一次短脉冲
+ * 后静默）。登记条目按各自周期循环播放，缺省音色不循环（主机要重复播放就
+ * 用 0x00 收掉再发）。age_ms 是自采样起播（effective 值从无到有）起的
+ * 毫秒数；数据面据此驱动板载蜂鸣器按段发声（USB 直插），蓝牙桥接路径的
+ * 发声段由 HD 通路折进音圈。
  */
-uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_ms);
+uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_ms,
+                              uint16_t *tone_hz);
 
 /** 采样音色当前时刻的渲染幅度（pad_haptic_pulse_step 的只取幅度形态）。 */
 uint8_t pad_haptic_pulse_envelope(uint8_t sample, uint32_t age_ms);
+
+/**
+ * 采样「强震」段折进两侧马达（本地写回兜底用）：该条写回通路没有音频触觉
+ * 承载（蓝牙没开 0x32/0x36 私有流、音频端点开不起来）时，查找手柄的强震段
+ * 只剩马达这一条出路——把段幅度并进两侧马达（取 max 不降档，正在震的一侧
+ * 沿用更强的值），amp 为 0（发声/停顿段）不动马达。只改传入的帧，不动
+ * 持续帧与 FEEDBACK 状态帧：PC 侧合成看到的仍是主机的真实波形。
+ */
+void pad_feedback_fold_pulse_motors(pad_feedback_t *feedback, uint8_t amp);
 
 #ifdef __cplusplus
 }

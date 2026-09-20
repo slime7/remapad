@@ -38,10 +38,12 @@ typedef struct {
 
 /** 振荡器相位与子帧游标（跨块连续，换参数不重置相位，避免拼接处跳变）：
  *  每侧低频/高频各一相，扬声器另有一相；子帧游标按帧数倒数、到 0 切下一
- *  子帧（回绕），切帧不重置相位。 */
+ *  子帧（回绕），切帧不重置相位。speaker_env 是发声段音色的包络（Q15，
+ *  边沿触发的起音/收音，段边界硬切会在小喇叭上听成咔哒）。 */
 typedef struct {
     uint32_t phase[2][2];
     uint32_t speaker_phase;
+    uint16_t speaker_env;
     uint16_t slice_left;
     uint8_t key_index;
 } haptic_synth_state_t;

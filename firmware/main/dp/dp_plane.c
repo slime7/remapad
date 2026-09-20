@@ -318,9 +318,10 @@ static void send_neutral_report(const pad_state_t *pad)
 }
 
 /** 采样音色的当前播放位：持续帧的采样有效且没到超时自灭才给值，否则 0。
- *  remain_ms（可空）带距下一段段边界的毫秒数，蜂鸣器按段定鸣叫时长。
- *  幅度只按音色表的段边界变化（几百毫秒一档），蜂鸣的响/停跟着段走。 */
-static uint8_t held_haptic_envelope(int64_t now_us, uint32_t *remain_ms)
+ *  remain_ms（可空）带距下一段段边界的毫秒数，蜂鸣器按段定鸣叫时长；
+ *  tone_hz（可空）带「发声」段的音高。幅度只按音色表的段边界变化（几百
+ *  毫秒一档），蜂鸣的响/停跟着段走。 */
+static uint8_t held_haptic_envelope(int64_t now_us, uint32_t *remain_ms, uint16_t *tone_hz)
 {
     portENTER_CRITICAL(&s_feedback_mux);
     const bool active =
@@ -330,9 +331,13 @@ static uint8_t held_haptic_envelope(int64_t now_us, uint32_t *remain_ms)
     const int64_t last = s_haptic_last_us;
     portEXIT_CRITICAL(&s_feedback_mux);
     if (!active || now_us - last > DP_HAPTIC_HOLD_US) {
+        if (tone_hz != NULL) {
+            *tone_hz = 0;
+        }
         return 0;
     }
-    return pad_haptic_pulse_step(sample, (uint32_t)((now_us - start) / 1000), remain_ms);
+    return pad_haptic_pulse_step(sample, (uint32_t)((now_us - start) / 1000),
+                                 remain_ms, tone_hz);
 }
 
 /**
@@ -411,19 +416,24 @@ static void dp_task(void *param)
         }
         /* 采样音色的当前播放位：主机只重发采样 ID（0x0A 采样流），播放节奏
          *  由音色表给出。采样是主机点播的提示音（真手柄用 HD 马达放声），
-         *  本设备不把它转成震动：输入设备有线接入时由板载蜂鸣器按段发声，
-         *  蓝牙手柄直接丢弃——马达编码与触觉合成只吃 0x30 震动载波。 */
+         *  本设备不把它转成震动：输入设备有线接入时由板载蜂鸣器在「发声」
+         *  段按音高发声，蓝牙手柄由 HD 通路把发声段折进音圈——马达编码与
+         *  触觉合成只吃 0x30 震动载波。 */
         uint32_t haptic_remain_ms = 0;
+        uint16_t haptic_tone_hz = 0;
         const uint8_t haptic_env =
-            held_haptic_envelope(esp_timer_get_time(), &haptic_remain_ms);
+            held_haptic_envelope(esp_timer_get_time(), &haptic_remain_ms,
+                                 &haptic_tone_hz);
         if (haptic_env != buzzer_env) {
             buzzer_env = haptic_env;
-            if (haptic_buzzer_enabled() && haptic_env != 0) {
-                /* 蜂鸣器超 1 秒的鸣叫会被驱动改写成 120ms，先按上限截断。 */
+            /* 蜂鸣器只放「发声」段：强震段是给马达/音圈的震动，小喇叭跟着响
+             * 会把节奏搅成连续噪音。鸣叫时长跟段走，音高用音色表给的
+             * （定位呼叫的两声上行短鸣）；蜂鸣器超 1 秒的鸣叫会被驱动截断。 */
+            if (haptic_buzzer_enabled() && haptic_env == PAD_HAPTIC_BEEP) {
                 if (haptic_remain_ms > 1000u) {
                     haptic_remain_ms = 1000u;
                 }
-                buzzer_beep(haptic_remain_ms);
+                buzzer_beep_tone(haptic_tone_hz, haptic_remain_ms);
             }
         }
         if (s_feedback_pending) {
@@ -445,14 +455,16 @@ static void dp_task(void *param)
              *  传输，PC 会话循环才腾得出手转发输入。同代透传（NS2 手柄）的
              *  参数包原样在编码字节里，逐包纹理照常透传。 */
             uint8_t feedback_out[PAD_OUTPUT_MAX];
-            const size_t feedback_out_len =
+            size_t feedback_out_len =
                 encode_feedback_report(&feedback, feedback_out, sizeof(feedback_out));
             const pad_layout_t *feedback_layout =
                 feedback_out_len > 0 ? pad_feedback_last_layout() : NULL;
 
-            /* 采样音色的当前段随持续帧走：强震段铺音圈、发声段铺扬声器。
-             * 先落段再做 HD 渲染，子帧表才是这一拍的铺色结果。 */
+            /* 采样音色的当前段随持续帧走：强震段铺音圈、发声段铺扬声器
+             *  （音高随段带下）。先落段再做 HD 渲染，子帧表才是这一拍的
+             *  铺色结果。 */
             feedback.haptic_env = haptic_env;
+            feedback.haptic_tone_hz = haptic_env == PAD_HAPTIC_BEEP ? haptic_tone_hz : 0;
 
             /* HD 触觉映射（映射在布局内完成）：布局行声明了 HD 通路才把主机
              * 波形重整成本设备的时序子帧组——USB 直插走板上合成，桥接经 FEEDBACK
@@ -472,6 +484,19 @@ static void dp_task(void *param)
             const bool bridge_audio_engaged = input_source_attached() && feedback_layout != NULL &&
                                               feedback_layout->out.audio_haptic &&
                                               s_bridge_audio_haptics;
+            /* 没有音频承载时的兜底：强震段折进马达本地写回（蓝牙没开 0x32 流、
+             *  音频端点开不起来），查找手柄至少摸得到。折进只作用于写回帧，
+             *  FEEDBACK 状态帧仍带主机的真实波形。 */
+            const pad_feedback_t *writeback_fb = &feedback;
+            pad_feedback_t folded;
+            if (haptic_env == PAD_HAPTIC_PULSE && !usb_audio_engaged &&
+                !bridge_audio_engaged) {
+                folded = feedback;
+                pad_feedback_fold_pulse_motors(&folded, PAD_HAPTIC_PULSE);
+                writeback_fb = &folded;
+                feedback_out_len =
+                    encode_feedback_report(writeback_fb, feedback_out, sizeof(feedback_out));
+            }
             if (usb_audio_engaged) {
                 haptic_synth_params_t haptic;
                 haptic.amp_peak = feedback_layout->out.hd.amp_peak;

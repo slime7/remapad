@@ -153,6 +153,36 @@ class AudioCallbackTest(unittest.TestCase):
         self.assertEqual(max(abs(v) for v in ch1), 0)
         self.assertGreater(max(abs(v) for v in ch3), 10000)
 
+    def test_speaker_tone_fades_in_and_out(self):
+        """发声段带起音/收音包络：段边界硬切满幅/零幅会在小喇叭上听成咔哒
+        （查找手柄页刺耳声的来源之一）——起播第一个样本远小于满幅，包络在
+        起音时长内爬到满幅；增益归零后收音尾平滑落回静音。"""
+        audio = ds5_haptics.Ds5HapticsAudio()
+        audio.set_params({"hd": {
+            "l": {"count": 0, "keys": ()},
+            "r": {"count": 0, "keys": ()},
+            "speaker": (880, 255)}})
+        frames = 960
+        out = bytearray(frames * ds5_haptics.CHANNELS * 2)
+        audio._callback(out, frames, None, None)
+        block = memoryview(out).cast("h")
+        ch1 = [block[i * 4 + 0] for i in range(frames)]
+        self.assertLess(abs(ch1[0]), 4000)   # 起音：第一拍不是满幅硬切
+        self.assertGreater(max(abs(v) for v in ch1), 18000)  # 包络内爬到满幅
+
+        audio.set_params({"hd": {
+            "l": {"count": 0, "keys": ()},
+            "r": {"count": 0, "keys": ()},
+            "speaker": (0, 0)}})
+        out = bytearray(frames * ds5_haptics.CHANNELS * 2)
+        audio._callback(out, frames, None, None)
+        block = memoryview(out).cast("h")
+        ch1 = [block[i * 4 + 0] for i in range(frames)]
+        # 收音尾：起始处还有声，收音时长过后落回静音。
+        self.assertGreater(abs(ch1[0]), 1000)
+        release = round(ds5_haptics.SPEAKER_RELEASE_S * ds5_haptics.RATE)
+        self.assertEqual(max(abs(v) for v in ch1[release + 1:]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

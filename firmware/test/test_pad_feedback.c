@@ -23,9 +23,9 @@ static pad_feedback_t feedback_default(void)
  *  依次对应「左 255 / 右 128 / 1P」「停止震动 / 1P」「无震动 2P」「DS4 左 64 / 2P」。
  *  DS5 的三组是灯条退出反馈通道后的取值（valid_flag1 只置玩家灯、灯条设置与
  *  RGB 字节全零）。 */
-static const uint8_t s_crc_ds5_rumble[4] = {0x37, 0xe0, 0xa8, 0xda};
-static const uint8_t s_crc_ds5_stop[4] = {0xcf, 0x05, 0xcd, 0x06};
-static const uint8_t s_crc_ds5_2p[4] = {0x69, 0xe3, 0xde, 0x0e};
+static const uint8_t s_crc_ds5_rumble[4] = {0x2a, 0x6b, 0x1a, 0x26};
+static const uint8_t s_crc_ds5_stop[4] = {0xd2, 0x8e, 0x7f, 0xfa};
+static const uint8_t s_crc_ds5_2p[4] = {0x74, 0x68, 0x6c, 0xf2};
 static const uint8_t s_crc_ds4_bt[4] = {0xbc, 0xb2, 0x30, 0x41};
 
 static void dualsense_usb_encodes_rumble_and_led(void)
@@ -44,10 +44,11 @@ static void dualsense_usb_encodes_rumble_and_led(void)
                                            sizeof(out));
     CHECK_EQ(len, 48);
     CHECK_EQ(out[0], 0x02); /* 报告 ID */
-    CHECK_EQ(out[1], 0x03); /* valid_flag0：兼容震动 + 关音频触觉 */
+    CHECK_EQ(out[1], 0x23); /* valid_flag0：兼容震动 + 关音频触觉 + 更新喇叭音量 */
     CHECK_EQ(out[2], 0x10); /* valid_flag1：只置玩家指示灯，灯条不声明有效 */
     CHECK_EQ(out[3], 128);  /* 右小马达 */
     CHECK_EQ(out[4], 255);  /* 左大马达 */
+    CHECK_EQ(out[6], 100);  /* 喇叭音量钉在 PS5 缺省档（采样提示音不轻到听不见） */
     CHECK_EQ(out[39], 0x00); /* 不写灯条设置控制 */
     CHECK_EQ(out[42], 0x00); /* 不写灯条设置值 */
     CHECK_EQ(out[44], 0x04); /* 1P 灯位：只有中间一颗 */
@@ -108,10 +109,11 @@ static void dualsense_bt_encodes_framed_report(void)
     CHECK_EQ(out[0], 0x31); /* 蓝牙报告 ID */
     CHECK_EQ(out[1], 0x00); /* 序号与标签半字节 */
     CHECK_EQ(out[2], 0x10); /* 固定魔数 */
-    CHECK_EQ(out[3], 0x03);
+    CHECK_EQ(out[3], 0x23); /* 震动 + 关音频触觉 + 更新喇叭音量 */
     CHECK_EQ(out[4], 0x10); /* 只置玩家指示灯 */
     CHECK_EQ(out[5], 128); /* 右小马达 */
     CHECK_EQ(out[6], 255); /* 左大马达 */
+    CHECK_EQ(out[8], 100); /* 喇叭音量钉在 PS5 缺省档 */
     CHECK_EQ(out[41], 0x00); /* 不写灯条设置控制 */
     CHECK_EQ(out[44], 0x00); /* 不写灯条设置值 */
     CHECK_EQ(out[46], 0x04); /* 1P 灯位 */
@@ -247,24 +249,83 @@ static void lf_beep_sample_plays_documented_duration(void)
 static void pulse_step_reports_amplitude_and_remaining(void)
 {
     uint32_t remain = 0;
-    CHECK_EQ(pad_haptic_pulse_step(0x02, 0, &remain), 0xC0);
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 0, &remain, NULL), 0xC0);
     CHECK_EQ(remain, 220);
-    CHECK_EQ(pad_haptic_pulse_step(0x02, 50, &remain), 0xC0);
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 50, &remain, NULL), 0xC0);
     CHECK_EQ(remain, 170);
-    CHECK_EQ(pad_haptic_pulse_step(0x02, 220, &remain), 0x00); /* 停顿段 */
-    CHECK_EQ(pad_haptic_pulse_step(0x02, 450, &remain), 0x80);
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 220, &remain, NULL), 0x00); /* 停顿段 */
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 450, &remain, NULL), 0x80);
     CHECK_EQ(remain, 50);
-    CHECK_EQ(pad_haptic_pulse_step(0x02, 520, &remain), 0x00); /* 两声蜂鸣之间 */
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 520, &remain, NULL), 0x00); /* 两声蜂鸣之间 */
     CHECK_EQ(remain, 80);
-    CHECK_EQ(pad_haptic_pulse_step(0x02, 620, &remain), 0x80);
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 620, &remain, NULL), 0x80);
     CHECK_EQ(remain, 80);
-    CHECK_EQ(pad_haptic_pulse_step(0x02, 1250, &remain), 0xC0); /* 整周期回绕 */
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 1250, &remain, NULL), 0xC0); /* 整周期回绕 */
     CHECK_EQ(remain, 170);
 
-    CHECK_EQ(pad_haptic_pulse_step(0x1A, 0, &remain), 0xC0); /* 缺省音色 */
+    CHECK_EQ(pad_haptic_pulse_step(0x1A, 0, &remain, NULL), 0xC0); /* 缺省音色 */
     CHECK_EQ(remain, 120);
-    CHECK_EQ(pad_haptic_pulse_step(0x1A, 500, &remain), 0x00); /* 播完静默 */
+    CHECK_EQ(pad_haptic_pulse_step(0x1A, 500, &remain, NULL), 0x00); /* 播完静默 */
     CHECK_EQ(remain, 0);
+}
+
+/** 定位呼叫的形态（用户可见行为）：先一下强震，随后两声上行短鸣——
+ *  Joy-Con 真手柄的提示音是上行双音，本设备的音色表按段给出音高，
+ *  强震段不发声（震动归震动、声音归声音）。 */
+static void locate_call_chirps_two_rising_tones(void)
+{
+    uint32_t remain = 0;
+    uint16_t tone = 0xFFFF;
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 0, &remain, &tone), 0xC0);
+    CHECK_EQ(tone, 0); /* 强震段：只震不响 */
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 219, &remain, &tone), 0xC0);
+    CHECK_EQ(tone, 0);
+
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 400, &remain, &tone), 0x80);
+    CHECK_EQ(tone, 880); /* 第一声 */
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 499, &remain, &tone), 0x80);
+    CHECK_EQ(tone, 880);
+
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 600, &remain, &tone), 0x80);
+    CHECK_EQ(tone, 1175); /* 第二声：比第一声高 */
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 699, &remain, &tone), 0x80);
+    CHECK_EQ(tone, 1175);
+
+    CHECK_EQ(pad_haptic_pulse_step(0x02, 700, &remain, &tone), 0x00);
+    CHECK_EQ(tone, 0); /* 长停顿 */
+
+    /* 未登记采样与低频蜂鸣不带音高：回落布局行的 beep_hz 缺省。 */
+    CHECK_EQ(pad_haptic_pulse_step(0x1A, 0, &remain, &tone), 0xC0);
+    CHECK_EQ(tone, 0);
+    CHECK_EQ(pad_haptic_pulse_step(0x01, 0, &remain, &tone), 0xC0);
+    CHECK_EQ(tone, 0);
+}
+
+/** 查找手柄的强震段在没有音频触觉承载时要能摸得到：折进两侧马达写回
+ *  （蓝牙没开 0x32 流、或音频端点打不开时，采样提示只剩马达这一条出路）。
+ *  已有的震动不被降档，幅度 0（非强震段）不动马达。 */
+static void pulse_segment_folds_into_motors_without_audio_haptics(void)
+{
+    pad_feedback_t fb;
+    pad_feedback_defaults(&fb);
+
+    pad_feedback_fold_pulse_motors(&fb, PAD_HAPTIC_PULSE);
+    CHECK_EQ(fb.rumble_on[PAD_TRIGGER_L2], 1);
+    CHECK_EQ(fb.rumble_on[PAD_TRIGGER_R2], 1);
+    CHECK_EQ(fb.rumble_strength[PAD_TRIGGER_L2], PAD_HAPTIC_PULSE);
+    CHECK_EQ(fb.rumble_strength[PAD_TRIGGER_R2], PAD_HAPTIC_PULSE);
+
+    /* 正在震的一侧取 max：折进不降档。 */
+    fb.rumble_strength[PAD_TRIGGER_R2] = 255;
+    pad_feedback_fold_pulse_motors(&fb, PAD_HAPTIC_PULSE);
+    CHECK_EQ(fb.rumble_strength[PAD_TRIGGER_R2], 255);
+
+    /* 非强震段（发声/停顿）：不动马达。 */
+    pad_feedback_t quiet;
+    pad_feedback_defaults(&quiet);
+    pad_feedback_fold_pulse_motors(&quiet, 0);
+    CHECK_EQ(quiet.rumble_on[PAD_TRIGGER_L2], 0);
+    CHECK_EQ(quiet.rumble_strength[PAD_TRIGGER_L2], 0);
 }
 
 /** 采样提示音（0x0A 采样流）是主机点播的声音，真手柄用 HD 马达把它放成声，
@@ -618,6 +679,18 @@ static void hd_render_spreads_sample_segments(void)
     CHECK_EQ(render.speaker.freq, 500);
     CHECK_EQ(render.speaker.gain, 255);
 
+    /* 音色表带音高的段落（定位呼叫的两声上行短鸣）优先于布局缺省。 */
+    feedback.haptic_tone_hz = 880;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.speaker.freq, 880);
+    CHECK_EQ(render.speaker.gain, 255);
+    feedback.haptic_tone_hz = 1175;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.speaker.freq, 1175);
+    feedback.haptic_tone_hz = 0;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.speaker.freq, 500);
+
     feedback.haptic_env = 0;
     pad_feedback_hd_render(ds5, &feedback, &render);
     CHECK_EQ(render.key[0][0].lf_gain, 0);
@@ -717,6 +790,17 @@ static void equal_follows_quantized_ops_and_env(void)
 
     b = a;
     b.haptic_env = PAD_HAPTIC_BEEP; /* 段边界要投递给 HD 通路 */
+    CHECK(!pad_feedback_equal(&a, &b));
+
+    b = a;
+    b.haptic_env = PAD_HAPTIC_BEEP;
+    b.haptic_tone_hz = 880;
+    a.haptic_env = PAD_HAPTIC_BEEP;
+    a.haptic_tone_hz = 880;
+    CHECK(pad_feedback_equal(&a, &b));
+    /* 定位呼叫的两声蜂鸣同为发声段：第二声换音高也必须投递，否则 FEEDBACK
+     * 会把第一声的音高一直铺下去。 */
+    b.haptic_tone_hz = 1175;
     CHECK(!pad_feedback_equal(&a, &b));
 }
 
@@ -882,6 +966,10 @@ HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"协议清单的 0x01 低频蜂鸣按文档时长登记", lf_beep_sample_plays_documented_duration},
                 {"采样音色按段给出幅度与剩余毫秒（蜂鸣器按段发声）",
                  pulse_step_reports_amplitude_and_remaining},
+                {"没有音频承载时查找手柄的强震段折进马达",
+                 pulse_segment_folds_into_motors_without_audio_haptics},
+                {"定位呼叫先强震再两声上行短鸣（近似 Joy-Con 提示音）",
+                 locate_call_chirps_two_rising_tones},
                 {"DualSense 蓝牙输出报告的序号逐报递增", bt_reports_increment_seq_nibble},
                 {"DualShock 4 蓝牙报告头保持静态（没有序号字节）", ds4_bt_keeps_static_header},
                 {"主机震动振幅按感知曲线重映射", host_rumble_amp_is_remapped_perceptually},

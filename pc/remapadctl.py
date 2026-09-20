@@ -103,7 +103,7 @@ from link import (
     parse_ota_ack,
 )
 
-from ds5_haptics import Ds5HapticsAudio, Ds5HapticsBt
+from ds5_haptics import Bt36OpusEncoder, Ds5HapticsAudio, Ds5HapticsBt
 
 # 仓库统一 UTF-8；管道里按本地代码页输出会让中文变成乱码。
 for _stream in (sys.stdout, sys.stderr):
@@ -977,6 +977,8 @@ class Session:
         # 音频流开好后待发的「haptic audio on」：串口只允许主循环一个写者，
         # 后台线程只置这个标志。
         self._haptics_notify = False
+        # 触觉流写回失败（后台线程置位）：主循环收尾并回落 HID 震动写回。
+        self._haptics_lost = False
 
     # --- 手柄转发 --------------------------------------------------
 
@@ -995,8 +997,10 @@ class Session:
 
     def maybe_start_haptics(self) -> None:
         """DS5 接入时启用 PC 侧音频触觉：USB 直插走 4ch 音频端点（频道 3/4
-        触觉、1/2 发声），蓝牙接入走 0x32 私有触觉流（HID 上没有音频接口）。
-        两条通路都会告知固件把桥接写回的震动字段清零（haptic audio on）。
+        触觉、1/2 发声）。蓝牙接入默认不启用 0x32 私有触觉流（SAxense 142
+        字节原始形态，此前按 547 填充的写法实测手柄无反应，未做实机手感确认
+        前不冒险让位掉 HID 震动）——保持 0x31 震动写回；--bt-haptics 启用
+        0x32 流（写回被拒自动回落）。
         --no-audio-haptics / --no-rumble 或通路开不起来时静默回落 HID 震动。
         开流要秒级、且不能占着桥接热路径，启动放后台线程。"""
         if self.haptics is not None or self._haptics_starting:
@@ -1007,8 +1011,13 @@ class Session:
         if (info.get("vendor_id") != 0x054C
                 or info.get("product_id") not in (0x0CE6, 0x0DF2)):
             return
-        self._haptics_starting = True
         if conn_for(info) == CONN_BT:
+            if not getattr(self.args, "bt_haptics", False):
+                self.reporter.line(
+                    "蓝牙接入：默认保持 HID 震动写回（--bt-haptics 启用 0x36 "
+                    "私有触觉流：HD 触觉 + 手柄喇叭）")
+                return
+            self._haptics_starting = True
             threading.Thread(target=self._start_bt_haptics_worker, daemon=True).start()
             return
         if conn_for(info) != CONN_USB:
@@ -1024,11 +1033,22 @@ class Session:
         self._adopt_haptics(audio)
 
     def _start_bt_haptics_worker(self) -> None:
-        audio = Ds5HapticsBt(self.pad, self.reporter)
+        # 0x32 音圈流兜底；PyAV/libopus 可用时升级 0x36（HD 触觉 + 手柄喇叭
+        # 真声），编码器建不起来就按 0x32 走。
+        try:
+            encoder = Bt36OpusEncoder()
+        except Exception:  # noqa: BLE001 - 缺依赖/无 libopus 都按回落处理
+            encoder = None
+        audio = Ds5HapticsBt(self.pad, self.reporter, on_error=self._lose_haptics,
+                             speaker_encoder=encoder)
         if not audio.start():
             self._haptics_starting = False
             return
         self._adopt_haptics(audio)
+
+    def _lose_haptics(self, _exc) -> None:
+        """触觉流写回失败（后台线程调用）：主循环收尾回落 HID 震动。"""
+        self._haptics_lost = True
 
     def _adopt_haptics(self, audio) -> None:
         if self.pad is None:
@@ -1043,12 +1063,18 @@ class Session:
         self._haptics_notify = True
 
     def pump_haptics_notify(self) -> None:
+        if self._haptics_lost:
+            self._haptics_lost = False
+            if self.haptics is not None:
+                self.reporter.error("触觉流写回被拒，回落 HID 震动写回")
+                self.stop_haptics()
         if not self._haptics_notify or self.haptics is None:
             return
         self._haptics_notify = False
         try:
             self.send_cli("haptic audio on")
-            self.reporter.line(self.haptics.LABEL)
+            self.reporter.line(getattr(self.haptics, "label", None)
+                               or self.haptics.LABEL)
             self.reporter.event("haptics_audio", state="on")
         except OSError:
             self.stop_haptics()
@@ -1551,6 +1577,9 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="不把主机的震动/玩家灯写回手柄")
     parser.add_argument("--no-audio-haptics", action="store_true",
                         help="DS5 桥接时不走 PC 侧音频触觉（回落 HID 震动写回）")
+    parser.add_argument("--bt-haptics", action="store_true",
+                        help="蓝牙接入的 DS5 也启用私有触觉流（0x36 HD 触觉 + "
+                             "手柄喇叭，无 PyAV 时回落 0x32 音圈；写回被拒自动回落 HID 震动）")
     parser.add_argument("--no-pad", action="store_true",
                         help="任何模式都不转发手柄（只用命令行 / 截图 / 日志 / 升级）")
     parser.add_argument("--pad", action="store_true",

@@ -52,10 +52,12 @@ void pad_feedback_bt_seq_reset(void)
     s_ps_bt_seq = 0;
 }
 
-/** 采样音色的一个幅度段：段内幅度恒定，响/停切换只发生在段边界。 */
+/** 采样音色的一个幅度段：段内幅度恒定，响/停切换只发生在段边界；hz 是
+ *  「发声」段的音高（0 = 不发声或用布局行的 beep_hz 缺省）。 */
 typedef struct {
     uint16_t until_ms;
     uint8_t amp;
+    uint16_t hz;
 } haptic_env_step_t;
 
 /** 一档采样音色：周期内按段渲染；loop 决定播完周期后循环还是停住。 */
@@ -66,31 +68,33 @@ typedef struct {
     size_t step_count;
 } haptic_sound_t;
 
-/** 定位呼叫（0x02，「搜索手柄」长按，实机抓包建模）：真手柄上
- *  「强震、停顿、两声蜂鸣、长停顿」是 HD 马达放出的声与震，这里整段转成
- *  板载蜂鸣器的响/停节奏，整周期 1200ms 循环——主机长按期间持续重发，
- *  节奏只能由设备侧给出，恒定单一响法撑不出这个形态。 */
+/** 定位呼叫（0x02，「搜索手柄」长按，实机抓包建模）：真手柄（Joy-Con）上
+ *  是「一下强震、停顿、两声上行短鸣、长停顿」，震动由 HD 马达放出、鸣声
+ *  从它的喇叭出来；这里沿用同一形态，两声蜂鸣按上行双音给出音高（近似
+ *  Joy-Con 提示音的音色，起音/收音的柔化在合成端做），整周期 1200ms 循环
+ *  ——主机长按期间持续重发，节奏只能由设备侧给出，恒定单一响法撑不出
+ *  这个形态。 */
 static const haptic_env_step_t s_snd_locate[] = {
-    {220, PAD_HAPTIC_PULSE},
-    {400, 0},
-    {500, PAD_HAPTIC_BEEP},
-    {600, 0},
-    {700, PAD_HAPTIC_BEEP},
-    {1200, 0},
+    {220, PAD_HAPTIC_PULSE, 0},
+    {400, 0, 0},
+    {500, PAD_HAPTIC_BEEP, 880},
+    {600, 0, 0},
+    {700, PAD_HAPTIC_BEEP, 1175},
+    {1200, 0, 0},
 };
 
 /** 低频蜂鸣（0x01，子命令 0x02 的采样清单：约 1 秒低频蜂鸣）：一段强震
  *  后静默、不循环；时长按协议文档登记，播放形态待实机回填。 */
 static const haptic_env_step_t s_snd_lf_beep[] = {
-    {1000, PAD_HAPTIC_PULSE},
-    {1100, 0},
+    {1000, PAD_HAPTIC_PULSE, 0},
+    {1100, 0, 0},
 };
 
 /** 缺省音色：一次短脉冲后静默、不循环——未登记采样的兜底，重发同一 ID
  *  不重启节奏，主机要重复播放就用 0x00 收掉再发。 */
 static const haptic_env_step_t s_snd_default[] = {
-    {120, PAD_HAPTIC_PULSE},
-    {300, 0},
+    {120, PAD_HAPTIC_PULSE, 0},
+    {300, 0, 0},
 };
 
 /** 采样音色表：按 ID 登记，新增采样只加数据行。 */
@@ -102,8 +106,8 @@ static const haptic_sound_t s_haptic_bank[] = {
 /** 采样音色在 age_ms 的当前段：返回段内幅度，remain_ms（可空）给出距下一段
  *  边界的毫秒数——蜂鸣器按段发声用，鸣叫时长跟着段走而不是固定值。非循环
  *  音色播完或未登记采样走缺省音色同一条路径，静默段幅度为 0。 */
-uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_ms)
-{
+uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_ms,
+                              uint16_t *tone_hz){
     const haptic_env_step_t *steps = s_snd_default;
     size_t step_count = sizeof(s_snd_default) / sizeof(s_snd_default[0]);
     bool loop = false;
@@ -123,18 +127,39 @@ uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_
             if (remain_ms != NULL) {
                 *remain_ms = steps[i].until_ms - ms;
             }
+            if (tone_hz != NULL) {
+                *tone_hz = steps[i].amp != 0 ? steps[i].hz : 0;
+            }
             return steps[i].amp;
         }
     }
     if (remain_ms != NULL) {
         *remain_ms = 0;
     }
+    if (tone_hz != NULL) {
+        *tone_hz = 0;
+    }
     return 0;
 }
 
 uint8_t pad_haptic_pulse_envelope(uint8_t sample, uint32_t age_ms)
 {
-    return pad_haptic_pulse_step(sample, age_ms, NULL);
+    return pad_haptic_pulse_step(sample, age_ms, NULL, NULL);
+}
+
+void pad_feedback_fold_pulse_motors(pad_feedback_t *feedback, uint8_t amp)
+{
+    if (feedback == NULL || amp == 0) {
+        return;
+    }
+    for (size_t side = 0; side < PAD_TRIGGER_COUNT; side++) {
+        if (feedback->rumble_strength[side] >= amp) {
+            feedback->rumble_on[side] = true;
+            continue;
+        }
+        feedback->rumble_on[side] = true;
+        feedback->rumble_strength[side] = amp;
+    }
 }
 
 /** PS 蓝牙输出报告的 CRC32 种子字节（Linux hid-playstation.c 的
@@ -283,9 +308,12 @@ void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *fe
             }
         }
     }
-    /* 「发声」段铺到扬声器（音频映射为音频）：没有真正声音的时段保持静音。 */
+    /* 「发声」段铺到扬声器（音频映射为音频）：音色表带音高的段落用它的
+     * （定位呼叫的两声上行短鸣），没带的用布局缺省；没有真正声音的时段
+     * 保持静音。 */
     if (feedback->haptic_env == PAD_HAPTIC_BEEP && hd->beep_hz != 0) {
-        out->speaker.freq = hd->beep_hz;
+        out->speaker.freq = feedback->haptic_tone_hz != 0 ? feedback->haptic_tone_hz
+                                                          : hd->beep_hz;
         out->speaker.gain = 255u;
     }
 }
@@ -423,8 +451,10 @@ bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b)
             }
         }
     }
-    /* 采样音色的段边界（蜂鸣与停顿切换）也要投递：PC 侧的发声段铺色按它走。 */
-    return a->haptic_env == b->haptic_env;
+    /* 采样音色的段边界（蜂鸣与停顿切换）也要投递：PC 侧的发声段铺色按它走。
+     *  音高与幅度同段参与：定位呼叫的两声蜂鸣同为发声段，第二声换音高时
+     *  不投递的话 FEEDBACK 会把第一声的音高一直铺下去。 */
+    return a->haptic_env == b->haptic_env && a->haptic_tone_hz == b->haptic_tone_hz;
 }
 
 size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,

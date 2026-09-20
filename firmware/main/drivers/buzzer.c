@@ -70,13 +70,23 @@ esp_err_t buzzer_init(void)
 
 void buzzer_beep(uint32_t on_ms)
 {
+    buzzer_beep_tone(0, on_ms);
+}
+
+void buzzer_beep_tone(uint32_t freq_hz, uint32_t on_ms)
+{
     if (s_stop_timer == NULL) {
         return;
+    }
+    if (freq_hz == 0 || freq_hz < 200 || freq_hz > 8000) {
+        freq_hz = BUZZER_LEDC_FREQ_HZ;
     }
     if (on_ms == 0 || on_ms > 1000) {
         on_ms = 120;
     }
     esp_timer_stop(s_stop_timer);
+    /* 音高随段走：改 LEDC 定时器频率即可（通道独占该定时器，不影响背光）。 */
+    ledc_set_freq(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_TIMER, freq_hz);
     ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, BUZZER_LEDC_DUTY);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL);
     s_started = true;

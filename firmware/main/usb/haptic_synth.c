@@ -54,6 +54,14 @@ static uint32_t phase_step(uint16_t freq_hz)
     return (uint32_t)(((uint64_t)freq_hz << 32) / HAPTIC_SYNTH_RATE_HZ);
 }
 
+/** 发声段音色的包络时长（48kHz 帧数）：起音 6ms、收音 14ms——段边界硬切
+ *  满幅/零幅会在小喇叭上听成咔哒（查找手柄页刺耳声的来源之一）。 */
+#define SYNTH_SPEAKER_ATTACK_FRAMES 288u
+#define SYNTH_SPEAKER_RELEASE_FRAMES 672u
+/** 发声段音色的二次谐波比例（Q15）：给蜂鸣一点中空腔体，接近 Joy-Con
+ *  提示音的音色；谐波频率越过奈奎斯特界限就省去（混叠出不成调的杂音）。 */
+#define SYNTH_SPEAKER_HARMONIC2 3604u /* 0.22 × 32768 */
+
 uint16_t haptic_synth_band_freq(uint16_t freq_hz, bool high_band)
 {
     if (freq_hz == 0) {
@@ -98,14 +106,28 @@ static synth_osc_t osc_prepare(uint16_t freq_hz, uint8_t gain, uint16_t amp_peak
     return osc;
 }
 
+/** 发声段音色的二次谐波合成峰值回缩（Q15）：基频+谐波最坏相位叠加约
+ *  1.09 倍，压回峰值刻度。 */
+#define SYNTH_SPEAKER_SHAPE 30048u /* 0.917 × 32768 */
+
 void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t *params,
                        int16_t *pcm, size_t frames)
 {
     if (state == NULL || params == NULL || pcm == NULL) {
         return;
     }
-    const synth_osc_t speaker = osc_prepare(params->tones.speaker.freq,
-                                            params->tones.speaker.gain, params->amp_peak);
+    /* 发声段音色独立于 osc_prepare：包络的满幅带增益刻度（收音尾段增益
+     * 已归零但包络还在落），相位步进跟频率走。 */
+    const uint16_t speaker_freq = params->tones.speaker.freq;
+    const uint32_t speaker_step = speaker_freq != 0 ? phase_step(speaker_freq) : 0;
+    /* 包络满幅 = 增益刻度（Q15，钳在 65535：gain 255 的目标恰好差一位溢出）。 */
+    const uint32_t speaker_target32 = params->tones.speaker.gain * 65536u / 255u;
+    const uint16_t speaker_target =
+        (uint16_t)(speaker_target32 > 65535u ? 65535u : speaker_target32);
+    const int32_t speaker_harm =
+        speaker_freq != 0 && (uint32_t)speaker_freq * 2u < HAPTIC_SYNTH_RATE_HZ / 2u
+            ? (int32_t)SYNTH_SPEAKER_HARMONIC2
+            : 0;
     const uint16_t slice = params->slice_frames != 0 ? params->slice_frames : 1;
     /* 子帧游标从上一块的断点继续：循环内逐帧倒数、到 0 切下一子帧并按新
      * 子帧重算振荡器步进（切帧不重置相位，时间轴上是连续波形）。 */
@@ -139,9 +161,28 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
         left--;
         int16_t *frame = &pcm[i * HAPTIC_SYNTH_CHANNELS];
         int32_t speaker_sample = 0;
-        if (speaker.gain != 0) {
-            speaker_sample = (sine_q15(state->speaker_phase) * speaker.gain) >> 15;
-            state->speaker_phase += speaker.step;
+        if (speaker_target != 0 || state->speaker_env != 0) {
+            /* 包络朝目标（有声=带增益刻度的满幅、无声=零）逐帧推进：段边界
+             * 硬切满幅/零幅在小喇叭上听成咔哒，起音/收音各给一段过渡。 */
+            if (speaker_target != 0) {
+                const uint32_t env = (uint32_t)state->speaker_env + 228u;
+                state->speaker_env =
+                    (uint16_t)(env > speaker_target ? speaker_target : env);
+            } else {
+                state->speaker_env = state->speaker_env > 98u
+                                         ? (uint16_t)(state->speaker_env - 98u)
+                                         : 0u;
+            }
+            if (state->speaker_env != 0) {
+                int32_t wave = sine_q15(state->speaker_phase);
+                if (speaker_harm != 0) {
+                    wave += (sine_q15(state->speaker_phase * 2u) * speaker_harm) >> 15;
+                    wave = (wave * (int32_t)SYNTH_SPEAKER_SHAPE) >> 15;
+                }
+                speaker_sample = ((wave * params->amp_peak) >> 15) *
+                                 (int32_t)state->speaker_env >> 15;
+                state->speaker_phase += speaker_step;
+            }
         }
         if (speaker_sample > 32767) {
             speaker_sample = 32767;
