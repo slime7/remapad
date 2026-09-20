@@ -12,15 +12,13 @@
 ## 回放到手柄（pad_replay.py）
 
 [pad_replay.py](pad_replay.py) 把 .capture 样本按固件同一套转换规则回放成
-DualSense 的触觉/声音，也提供分段测试包（A = 0x31 双马达、B = 0x32 HD 触觉、
-C = 0x32 两声上行短鸣），用于核对 Windows 各条写回通路：
+DualSense 的触觉/声音：
 
 ```powershell
 cd pc
 uv run python tests/samples/pad_replay.py --list
 uv run python tests/samples/pad_replay.py ns2-search-page.capture --pad usb   # HD 全保真（WASAPI 4ch）
 uv run python tests/samples/pad_replay.py ns2-gameplay-rumble.capture --pad bt --speed 2
-uv run python tests/samples/pad_replay.py --test                              # 蓝牙分段写回探测
 ```
 
 落点：`usb` = 直插 DS5 的音频触觉（HD 全保真）；`bt` = 蓝牙 0x31
@@ -29,8 +27,8 @@ uv run python tests/samples/pad_replay.py --test                              # 
 547 是同族 0x39 的长度，填充反而让手柄收不到），发声段折进音圈（摸得到、
 听不到）；`bt36` = 蓝牙 0x36 私有触觉+喇叭流（vds 398 字节形态，发声段由手柄
 喇叭真声播放，需要 PyAV/libopus，缺失回落 bt32）。
-分段测试包（`--test`）依次发 A = 0x31 双马达、B = 0x32 HD 触觉、
-C = 0x32 短鸣（折进音圈）、D = 0x36 短鸣（喇叭真声）。
+各蓝牙落点回放结束会打印写回耗时统计（平均/最大单次耗时、超节拍份数）：
+平均越接近节拍说明链路越撑得住，明显超节拍说明报文被排队、触觉/声音会延迟。
 回放中 Ctrl-C 随时干净退出（音频流与 HID 句柄都会收尾）。
 
 ## 文件格式
