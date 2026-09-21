@@ -9,8 +9,10 @@ static const pad_layout_t s_rows[] = {
     {
         /* 有线（64 字节）：第 8 字节低四位是方向键帽子开关、高四位是面键，第 9 字节
          * 是肩键、Create/Options 与摇杆按下，第 10 字节是 PS、触摸板按下与静音键。
-         * 偏移由蓝牙那行的实测值减去两字节前缀换算，抓包核对前作初值；触摸点
-         * （每点 4 字节）与电量字节尚未核对，本轮不登记。 */
+         * 偏移由蓝牙那行的实测值减去两字节前缀换算，抓包核对前作初值；电量
+         * 字节尚未核对，本轮不登记。触摸点按 Linux hid-playstation.c 的公共段
+         * 布局登记（传感器时间戳与保留字节之后，每点 4 字节，第一个触点在偏移
+         * 33），实机抓包尚未核对。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_USB,
         .report_id = 0x01,
@@ -20,13 +22,16 @@ static const pad_layout_t s_rows[] = {
         .hat_off = 8,
         .trigger_off = {5, 6},
         .stick_off = {1, 2, 3, 4},
-        .touch_off = PAD_OFF_NONE,
+        .touch_off = 33,
         .motion_off = 16,
         .battery_off = PAD_OFF_NONE,
+        .touch_max_x = 1919,
+        .touch_max_y = 1079,
         /* 耳机状态字节按蓝牙行实测值减一字节前缀换算（本文件各字段的换算
          * 关系），有线形态尚未抓包核对，核对前不登记。 */
         .stick_style = PAD_STICK_U8,
-        .caps = PAD_CAP_MOTION | PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE | PAD_CAP_MIC,
+        .caps = PAD_CAP_MOTION | PAD_CAP_TOUCHPAD | PAD_CAP_TRIGGER_ANALOG |
+                PAD_CAP_RUMBLE | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
@@ -73,8 +78,9 @@ static const pad_layout_t s_rows[] = {
     {
         /* 蓝牙（0x31）：比 DS4 蓝牙的 0x11 整体后移一位。偏移为 DualSense Edge
          * 实测抓包：静止帧第 9 字节读作 0x08（帽子开关松开）、四轴落在死区内、
-         * 第 17-22 字节的角速度接近 0 而加速度有一轴约 1 g。触摸点尚未核对，
-         * 本轮不登记。第 55 字节是耳机状态：插拔差分实测 0x00（未插入）/
+         * 第 17-22 字节的角速度接近 0 而加速度有一轴约 1 g。触摸点按公共段
+         * 布局登记（第一个触点在偏移 34），实机抓包尚未核对。第 55 字节是
+         * 耳机状态：插拔差分实测 0x00（未插入）/
          * 0x01（插入）/ 0x03（插入带麦），第 56 字节跟着 bit0 走。电量在第
          * 54 字节：两份抓包分别读作 0x09（90%）与
          * 0x05（50%），同一期间耳机字节都在原位，与 DS4 的电量字节同一套
@@ -88,14 +94,16 @@ static const pad_layout_t s_rows[] = {
         .hat_off = 9,
         .trigger_off = {6, 7},
         .stick_off = {2, 3, 4, 5},
-        .touch_off = PAD_OFF_NONE,
+        .touch_off = 34,
         .motion_off = 17,
         .battery_off = 54,
+        .touch_max_x = 1919,
+        .touch_max_y = 1079,
         .headset_off = 55,
         .headset_style = PAD_HEADSET_PS,
         .stick_style = PAD_STICK_U8,
-        .caps = PAD_CAP_MOTION | PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE |
-                PAD_CAP_BATTERY | PAD_CAP_MIC,
+        .caps = PAD_CAP_MOTION | PAD_CAP_TOUCHPAD | PAD_CAP_TRIGGER_ANALOG |
+                PAD_CAP_RUMBLE | PAD_CAP_BATTERY | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},

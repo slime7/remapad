@@ -75,6 +75,7 @@
 | [0044](0044-amiibo-bridge-upload-nfc-tag-emulation.md) | active | amiibo 镜像经桥接帧（0x40-0x43，逐帧 ACK）上传落 storage 分区 SPIFFS 固定 200 槽（572B 记录 = 镜像 + 厂商签名），选中持久化、重启恢复；NFC 命令通路（Command 0x01）由 target/ns2/ns2_nfc.c 软件模拟 NTAG215 标签，应答体按抓包布局钉在主机端用例 |
 | [0045](0045-host-output-raw-capture.md) | active | 主机输出的原始字节（布局解析之前）经 dp_capture 环形队列与新桥接帧 0x12（HOST_RAW）回传 PC 落盘：默认关闭、串口 capture on\|off 开关，PC 侧 --capture / :capture 接住，与手柄转发同会话共存 |
 | [0046](0046-ns-waveform-to-ds5-pcm-hd-haptics.md) | active | NS2 波形（每侧 3 个时序子帧，SDL 位打包）经布局行 `hd` 规则重整为 DS5 的 PCM HD 触觉：USB 4ch 承载频道 3/4 音圈 + 1/2 发声、蓝牙走 0x32 私有报告（3kHz 2ch s8 + CRC32），映射与落地只在固件布局内、PC 哑渲染；延伸 0042/0043 的合成刻度与让位语义，FEEDBACK 扩到 57 字节 |
+| [0047](0047-ds-behavior-settings.md) | active | DS4/DS5 手柄行为两项设置（触摸板映射加减键默认关、截图键默认开）持久化在 NVS，数据面每拍按先触发半区改写触摸板按下的键位；触摸点改为 4 字节解析、按左右半区建模，四个 PS 布局行登记触摸偏移与量程 |
 
 ## 创建 ADR 脚本用法
 

@@ -103,6 +103,8 @@ rumble 200 0     手动震动（0-255 双侧，rumble off 停）；lamp 0xF 玩�
                  与主机反馈走同一条编码投递路径
 ui on            手柄操控屏幕模式（ui off 退出）
 backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode host USB 角色
+ds touchpad on   DS4/DS5 手柄行为：触摸板映射加减键（左半减号 / 右半加号）；
+                 ds capture off 让触摸板按下改发减号（默认开：发截图），两项都持久化
 capture on       主机输出原始采集（off 关；开启后主机写进输出特征值的原始字节
                  经 0x12 帧回传 PC，PC 侧用 --capture / :capture 接住落盘）
 amiibo list      amiibo 槽位列表（名称 + UID，当前选中带 *）；amiibo select 0 选用、

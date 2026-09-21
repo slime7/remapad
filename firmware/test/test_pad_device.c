@@ -106,9 +106,12 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     report.data[8] = 0xFF; /* L2 全按 */
     report.data[9] = 0x00; /* R2 松开 */
     report.data[30] = 0x1A; /* 电量 10 档 + 充电中（status[0] 在 0x1E） */
-    report.data[34] = 0x40; /* 触摸点 X 低位 */
-    report.data[35] = 0x05;
-    report.data[36] = 0x02;
+    /* 触摸点：偏移 35 起每点 4 字节（触点字节 + 12 位 X + 12 位 Y），
+     * X = 0x340 落在左半区。 */
+    report.data[35] = 0x05; /* 触点 5：bit7 为 0 表示有触点 */
+    report.data[36] = 0x40;
+    report.data[37] = 0x03;
+    report.data[38] = 0x02;
 
     pad_state_t state;
     pad_state_from_report(&report, &state);
@@ -125,6 +128,9 @@ static void ps_report_parses_hat_face_buttons_and_battery(void)
     CHECK_EQ(state.caps & PAD_CAP_MOTION, PAD_CAP_MOTION);
     CHECK(state.touch[PAD_TOUCH_LEFT].present);
     CHECK(state.touch[PAD_TOUCH_LEFT].pressed);
+    CHECK_EQ(state.touch[PAD_TOUCH_LEFT].raw_x, 0x340);
+    CHECK(state.touch[PAD_TOUCH_LEFT].x < PAD_AXIS_CENTER);
+    CHECK(!state.touch[PAD_TOUCH_RIGHT].pressed);
 
     /* DualSense 在 PS 键与触摸板按下之外还多一个静音位（byte7 bit2）。 */
     report.data[7] = 0x07;
@@ -683,6 +689,107 @@ static void dualsense_bt_battery_parses(void)
     CHECK(state.charging);
 }
 
+static pad_report_t dualshock4_usb_report(void)
+{
+    pad_report_t report;
+    memset(&report, 0, sizeof(report));
+    report.family = PAD_FAMILY_PS;
+    report.conn = PAD_CONN_USB;
+    report.vid = 0x054C;
+    report.pid = 0x09CC; /* DualShock 4 v2 */
+    report.report_id = 0x01;
+    report.len = 64;
+    report.data[0] = 0x01;
+    report.data[1] = 0x80; /* LX / LY / RX / RY 都在中位 */
+    report.data[2] = 0x80;
+    report.data[3] = 0x80;
+    report.data[4] = 0x80;
+    report.data[5] = 0x08; /* 帽子开关松开 */
+    return report;
+}
+
+/**
+ * 触摸板：DS4 与 DualSense 的触点是 4 字节（触点字节 + 12 位 X + 12 位 Y），
+ * 一帧两个触点按归一后的 X 分到左右半区，同一半区取先出现的那一路，未置
+ * 触点位的路不填。四种形态各锁一次偏移——两家的偏移都取自 Linux
+ * hid-playstation.c 的报告结构，实机抓包尚未核对。
+ */
+static void ps_touch_halves_split_by_position(void)
+{
+    /* DS4 有线：第一个触点在偏移 35（历史份数与时间戳之后）。 */
+    pad_report_t report = dualshock4_usb_report();
+    report.data[35] = 0x01; /* 触点 1 */
+    report.data[36] = 0x00; /* X 低 8 位 */
+    report.data[37] = 0x00; /* X 高 4 位 + Y 低 4 位 */
+    report.data[38] = 0x00; /* Y 高 8 位 */
+    report.data[39] = 0x80; /* 第二路没有触点 */
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.caps & PAD_CAP_TOUCHPAD, PAD_CAP_TOUCHPAD);
+    CHECK(state.touch[PAD_TOUCH_LEFT].pressed);
+    CHECK_EQ(state.touch[PAD_TOUCH_LEFT].x, PAD_AXIS_MIN);
+    CHECK(!state.touch[PAD_TOUCH_RIGHT].pressed);
+
+    /* 第二路放在右半：X = 1919（最右）。 */
+    report.data[39] = 0x02;
+    report.data[40] = 0x7F;
+    report.data[41] = 0x07; /* X 高 4 位 = 7 → X = 0x77F */
+    report.data[42] = 0x00;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.touch[PAD_TOUCH_RIGHT].raw_x, 1919);
+    CHECK_EQ(state.touch[PAD_TOUCH_RIGHT].x, PAD_AXIS_MAX);
+
+    /* 触点位（bit7）置位表示这一路没有手指：右半回到未按下。 */
+    report.data[39] = 0x82;
+    pad_state_from_report(&report, &state);
+    CHECK(!state.touch[PAD_TOUCH_RIGHT].pressed);
+    CHECK_EQ(state.touch[PAD_TOUCH_RIGHT].x, PAD_AXIS_MIN);
+
+    /* 同一半区两路触点：保留先出现的那一路（第一路的 X = 0）。 */
+    report.data[39] = 0x03; /* 触点 3 也在左半：X = 0x140 */
+    report.data[40] = 0x40;
+    report.data[41] = 0x01;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.touch[PAD_TOUCH_LEFT].raw_x, 0);
+    CHECK(!state.touch[PAD_TOUCH_RIGHT].pressed);
+
+    /* DualSense 有线：第一个触点在偏移 33；X = 960 正好落在半区边界上，
+     * 归一到中点 2048 后归右半。 */
+    report = dualsense_usb_report();
+    report.data[33] = 0x00;
+    report.data[34] = 0xC0; /* X 低 8 位 */
+    report.data[35] = 0x03; /* X 高 4 位 = 3 → X = 960 */
+    report.data[36] = 0x00;
+    report.data[37] = 0x80; /* 第二路没有触点 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.caps & PAD_CAP_TOUCHPAD, PAD_CAP_TOUCHPAD);
+    CHECK_EQ(state.touch[PAD_TOUCH_RIGHT].raw_x, 960);
+    CHECK_EQ(state.touch[PAD_TOUCH_RIGHT].x, PAD_AXIS_CENTER);
+    CHECK(!state.touch[PAD_TOUCH_LEFT].pressed);
+
+    /* DualSense 蓝牙：第一个触点在偏移 34（比有线整体后移一位）。 */
+    report = dualsense_bt_report();
+    report.data[34] = 0x00;
+    report.data[35] = 0x08; /* X 低 8 位 */
+    report.data[36] = 0x07; /* X 高 4 位 = 7 → X = 1800 */
+    report.data[37] = 0x00;
+    report.data[38] = 0x80; /* 第二路没有触点 */
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.touch[PAD_TOUCH_RIGHT].raw_x, 1800);
+    CHECK(state.touch[PAD_TOUCH_RIGHT].x > PAD_AXIS_CENTER);
+
+    /* DS4 蓝牙：第一个触点在偏移 37。 */
+    report = dualshock4_bt_report();
+    report.data[37] = 0x00;
+    report.data[38] = 0x00;
+    report.data[39] = 0x00;
+    report.data[40] = 0x00;
+    report.data[41] = 0x80; /* 第二路没有触点 */
+    pad_state_from_report(&report, &state);
+    CHECK(state.touch[PAD_TOUCH_LEFT].pressed);
+    CHECK_EQ(state.touch[PAD_TOUCH_LEFT].x, PAD_AXIS_MIN);
+}
+
 HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"Xbox 面键按位置映射（物理 A 下 → ✕、物理 B 右 → ○）",
                  xbox_face_buttons_map_by_position},
@@ -708,4 +815,6 @@ HOST_TEST_SUITE(suite_pad_device, "pad_device",
                 {"DualSense 蓝牙耳机状态按第 55 字节解析",
                  dualsense_bt_headset_state_parses},
                 {"DualSense 蓝牙电量按第 54 字节解析（低四位 0-10 档、bit4 充电）",
-                 dualsense_bt_battery_parses});
+                 dualsense_bt_battery_parses},
+                {"PS 触摸点按左右半区分流（DS4 有线/蓝牙、DualSense 有线/蓝牙）",
+                 ps_touch_halves_split_by_position});

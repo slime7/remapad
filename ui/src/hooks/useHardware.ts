@@ -13,6 +13,7 @@ import type {
   BatteryInfo,
   ControllerAddresses,
   ControllerConfig,
+  DsBehaviorConfig,
   DebugKey,
   DeviceMsg,
   PairingState,
@@ -39,6 +40,8 @@ export interface HardwareUiState {
   pairingMessage: PairingNotice;
   /** 手柄配色，持久化在固件 NVS。 */
   controllerConfig: ControllerConfig;
+  /** DS4 / DS5 手柄行为（触摸板映射加减键、截图键），持久化在固件 NVS。 */
+  dsBehavior: DsBehaviorConfig;
   /** 手柄对外的蓝牙地址（显示序；host 未同步时为空串）。 */
   controllerAddresses: ControllerAddresses;
   controller: string | null;
@@ -84,6 +87,12 @@ const DEFAULT_CONTROLLER_ADDRESSES: ControllerAddresses = {
   pro: '',
 };
 
+/** DS 手柄行为默认值：触摸板映射加减键关、截图键开（与固件出厂值一致）。 */
+const DEFAULT_DS_BEHAVIOR: DsBehaviorConfig = {
+  touchpadPlusMinus: false,
+  captureKey: true,
+};
+
 export const hw = reactive<HardwareUiState>({
   linkReady: false,
   chip: '',
@@ -98,6 +107,7 @@ export const hw = reactive<HardwareUiState>({
   pairing: 'idle',
   pairingMessage: '',
   controllerConfig: { ...DEFAULT_CONTROLLER_CONFIG },
+  dsBehavior: { ...DEFAULT_DS_BEHAVIOR },
   controllerAddresses: { ...DEFAULT_CONTROLLER_ADDRESSES },
   controller: null,
   usbRole: 'device',
@@ -303,6 +313,19 @@ export function setControllerConfig(config: ControllerConfig): void {
   });
 }
 
+/**
+ * DS4 / DS5 手柄行为两项开关：先本地落值（开关立刻翻到新状态），固件确认
+ * 后再以设备侧的值收敛。落盘与数据面生效都在固件侧。
+ */
+export function setDsBehavior(config: DsBehaviorConfig): void {
+  hw.dsBehavior = { ...config };
+  hardware.send({ t: 'setDsBehavior', config }, (msg) => {
+    if (msg.t === 'dsBehaviorSet' && msg.success) {
+      hw.dsBehavior = msg.config;
+    }
+  });
+}
+
 /** 调试页按键注入：onAck 在固件确认写入数据面后触发，用于按钮高亮反馈。 */
 export function sendDebugKey(key: DebugKey, onAck?: () => void): void {
   hardware.send({ t: 'debugKey', key }, (msg) => {
@@ -352,6 +375,11 @@ export function useHardware(): void {
     if (msg.t === 'controllerConfig') {
       hw.controllerConfig = msg.config;
       hw.controllerAddresses = msg.addresses;
+    }
+  });
+  hardware.send({ t: 'getDsBehavior' }, (msg) => {
+    if (msg.t === 'dsBehavior') {
+      hw.dsBehavior = msg.config;
     }
   });
 

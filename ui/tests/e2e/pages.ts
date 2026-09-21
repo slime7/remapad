@@ -46,14 +46,21 @@ export async function openPower(app: RemapadApp): Promise<void> {
   await expect.poll(() => app.hasVisibleText('重启')).toBe(true);
 }
 
-/** 打开第 5 页：系统信息页。 */
-export async function openSystemInfo(app: RemapadApp): Promise<void> {
+/** 打开第 5 页：DS4、DS5 设置页。 */
+export async function openDsSettings(app: RemapadApp): Promise<void> {
   await openPower(app);
+  await swipeNext(app);
+  await expect.poll(() => app.hasVisibleText('DS4、DS5 设置')).toBe(true);
+}
+
+/** 打开第 6 页：系统信息页。 */
+export async function openSystemInfo(app: RemapadApp): Promise<void> {
+  await openDsSettings(app);
   await swipeNext(app);
   await expect.poll(() => app.hasVisibleText('设备信息')).toBe(true);
 }
 
-/** 打开第 6 页：调试页。 */
+/** 打开第 7 页：调试页。 */
 export async function openDebug(app: RemapadApp): Promise<void> {
   await openSystemInfo(app);
   await swipeNext(app);

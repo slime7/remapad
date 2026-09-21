@@ -2,7 +2,7 @@
  * 系统功能测试：
  * 1. 第 1 页：背光调节（20%~100% 步进）；
  * 2. 第 4 页：电源管理（重启与关机确认弹窗）；
- * 3. 第 5 页：系统信息（固件版本与内存）。
+ * 3. 第 6 页：系统信息（固件版本与内存）。
  */
 import { test, expect } from './fixtures';
 import { goHome, openPower, openSystemInfo } from './pages';
@@ -75,7 +75,7 @@ test('第 4 页电源管理：点击关机唤起确认弹窗', async ({ app }) =
   await expect.poll(() => app.hasVisibleText('是否立即关闭 Remapad 设备？')).toBe(false);
 });
 
-test('第 5 页系统信息展示固件与内存参数', async ({ app }) => {
+test('第 6 页系统信息展示固件与内存参数', async ({ app }) => {
   await app.goto();
   await openSystemInfo(app);
 

@@ -8,6 +8,11 @@
 #define PAD_STICK_DEADZONE_PERCENT 8
 #define PAD_STICK_DEADZONE ((PAD_AXIS_CENTER * PAD_STICK_DEADZONE_PERCENT) / 100)
 
+/** 触摸点字节数与一帧里的触点数（DS4 与 DualSense 同一套：触点字节 +
+ *  12 位 X + 12 位 Y，一帧两份）。 */
+#define PAD_TOUCH_POINT_SIZE 4u
+#define PAD_TOUCH_POINTS 2u
+
 static bool range_ok(const pad_report_t *report, uint8_t off, uint8_t width)
 {
     return off != PAD_OFF_NONE && (uint16_t)off + width <= (uint16_t)report->len;
@@ -237,23 +242,49 @@ static void parse_motion(const pad_report_t *report, const pad_layout_t *layout,
     state->motion.present = true;
 }
 
+/**
+ * 触摸板：一帧里的两个触点按归一后的 X 落在哪一半，分别填进
+ * touch[PAD_TOUCH_LEFT] / touch[PAD_TOUCH_RIGHT]（私有格式按左右半区建模，
+ * 见 pad_state.h）；同一半区出现两个触点时保留先出现的那一路。半区边界取
+ * 归一量程的中点，设备分辨率只参与归一。
+ */
 static void parse_touch(const pad_report_t *report, const pad_layout_t *layout,
                         pad_state_t *state)
 {
-    if (!range_ok(report, layout->touch_off, 3)) {
+    if (layout->touch_max_x == 0 || layout->touch_max_y == 0 ||
+        !range_ok(report, layout->touch_off,
+                  (uint8_t)(PAD_TOUCH_POINT_SIZE * PAD_TOUCH_POINTS))) {
         return;
     }
-    const uint8_t b0 = report->data[layout->touch_off];
-    const uint8_t b1 = report->data[layout->touch_off + 1];
-    const uint8_t b2 = report->data[layout->touch_off + 2];
-    pad_touch_t *touch = &state->touch[PAD_TOUCH_LEFT];
-    touch->raw_x = (uint16_t)(b0 | ((uint16_t)(b1 & 0x0Fu) << 8));
-    touch->raw_y = (uint16_t)((b1 >> 4) | ((uint16_t)b2 << 4));
-    touch->present = true;
-    touch->pressed = (b2 & 0x80u) == 0;
-    if (layout->touch_max_x > 0 && layout->touch_max_y > 0) {
-        touch->x = (uint16_t)(((uint32_t)touch->raw_x * PAD_AXIS_MAX) / layout->touch_max_x);
-        touch->y = (uint16_t)(((uint32_t)touch->raw_y * PAD_AXIS_MAX) / layout->touch_max_y);
+    state->touch[PAD_TOUCH_LEFT].present = true;
+    state->touch[PAD_TOUCH_RIGHT].present = true;
+    for (size_t i = 0; i < PAD_TOUCH_POINTS; i++) {
+        const uint8_t *point = &report->data[layout->touch_off + i * PAD_TOUCH_POINT_SIZE];
+        /* 触点字节 bit7 置位表示这一路没有触点，位置字段无效。 */
+        if ((point[0] & 0x80u) != 0) {
+            continue;
+        }
+        const uint16_t raw_x = (uint16_t)(point[1] | ((uint16_t)(point[2] & 0x0Fu) << 8));
+        const uint16_t raw_y = (uint16_t)((point[2] >> 4) | ((uint16_t)point[3] << 4));
+        /* 12 位原始值可以越过面板量程（噪声与越界抓包）：归一后夹进 0-4095。 */
+        uint32_t x = ((uint32_t)raw_x * PAD_AXIS_MAX) / layout->touch_max_x;
+        uint32_t y = ((uint32_t)raw_y * PAD_AXIS_MAX) / layout->touch_max_y;
+        if (x > PAD_AXIS_MAX) {
+            x = PAD_AXIS_MAX;
+        }
+        if (y > PAD_AXIS_MAX) {
+            y = PAD_AXIS_MAX;
+        }
+        pad_touch_t *touch =
+            &state->touch[x < PAD_AXIS_CENTER ? PAD_TOUCH_LEFT : PAD_TOUCH_RIGHT];
+        if (touch->pressed) {
+            continue;
+        }
+        touch->pressed = true;
+        touch->raw_x = raw_x;
+        touch->raw_y = raw_y;
+        touch->x = (uint16_t)x;
+        touch->y = (uint16_t)y;
     }
 }
 

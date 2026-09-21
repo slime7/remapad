@@ -15,7 +15,9 @@ static const char *TAG = "remapad_config";
 
 /** 序列化格式：版本字节 + 字段（尾部保留对齐）。v1 长度 16；引入固件版本
  * 字段后扩到 24（[16..18] 固件版本），读回兼容 16 字节旧记录（新字段用
- * 默认值），首次保存即写新长度。 */
+ * 默认值），首次保存即写新长度。[14] 是 DS 手柄行为：bit7 是有效标记，
+ * bit0 触摸板映射加减键、bit1 截图键关闭——截图键默认是开，零值不能直接
+ * 当默认，因此这一字节带标记位（旧记录该字节为 0，两项都用默认值）。 */
 #define CONFIG_BLOB_LEN 24
 #define CONFIG_BLOB_VERSION 1
 /** 旧版（无固件版本字段）的记录长度。 */
@@ -60,6 +62,8 @@ static void serialize_locked(uint8_t blob[CONFIG_BLOB_LEN])
     blob[16] = s_appcfg.cfg.fw_version[0];
     blob[17] = s_appcfg.cfg.fw_version[1];
     blob[18] = s_appcfg.cfg.fw_version[2];
+    blob[14] = (uint8_t)(0x80u | (s_appcfg.cfg.ds_touchpad_plus_minus ? 0x01u : 0u) |
+                         (s_appcfg.cfg.ds_capture_key ? 0u : 0x02u));
     /* [19..21] 高光配色：后加字段，旧记录（同长度、该段为零）读出即「未配置」。 */
     blob[19] = (uint8_t)(s_appcfg.cfg.accent_color >> 16);
     blob[20] = (uint8_t)(s_appcfg.cfg.accent_color >> 8);
@@ -140,6 +144,9 @@ esp_err_t app_config_init(void)
     s_appcfg.cfg.fw_version[0] = CONFIG_DEFAULT_FW_VERSION_MAJOR;
     s_appcfg.cfg.fw_version[1] = CONFIG_DEFAULT_FW_VERSION_MINOR;
     s_appcfg.cfg.fw_version[2] = CONFIG_DEFAULT_FW_VERSION_REVISION;
+    /* DS 手柄行为：触摸板映射加减键默认关、截图键默认开。 */
+    s_appcfg.cfg.ds_touchpad_plus_minus = false;
+    s_appcfg.cfg.ds_capture_key = true;
 
     nvs_handle_t handle;
     const esp_err_t err = nvs_open(CONFIG_NS, NVS_READONLY, &handle);
@@ -178,6 +185,10 @@ esp_err_t app_config_init(void)
         s_appcfg.cfg.fw_version[2] = blob[18];
         s_appcfg.cfg.accent_color =
             ((uint32_t)blob[19] << 16) | ((uint32_t)blob[20] << 8) | blob[21];
+        if ((blob[14] & 0x80u) != 0) {
+            s_appcfg.cfg.ds_touchpad_plus_minus = (blob[14] & 0x01u) != 0;
+            s_appcfg.cfg.ds_capture_key = (blob[14] & 0x02u) == 0;
+        }
     }
     ESP_LOGI(TAG, "loaded config: brightness=%u screen=%u role=%u",
              s_appcfg.cfg.brightness, (unsigned)s_appcfg.cfg.screen_on,
@@ -239,6 +250,16 @@ void app_config_set_fw_version(const uint8_t ver[3])
         s_appcfg.cfg.fw_version[0] = ver[0];
         s_appcfg.cfg.fw_version[1] = ver[1];
         s_appcfg.cfg.fw_version[2] = ver[2];
+        xSemaphoreGive(s_appcfg.lock);
+    }
+    mark_dirty();
+}
+
+void app_config_set_ds_behavior(bool touchpad_plus_minus, bool capture_key)
+{
+    if (s_appcfg.lock != NULL && xSemaphoreTake(s_appcfg.lock, portMAX_DELAY) == pdTRUE) {
+        s_appcfg.cfg.ds_touchpad_plus_minus = touchpad_plus_minus;
+        s_appcfg.cfg.ds_capture_key = capture_key;
         xSemaphoreGive(s_appcfg.lock);
     }
     mark_dirty();

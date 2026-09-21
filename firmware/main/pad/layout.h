@@ -184,6 +184,13 @@ typedef struct {
     uint8_t hat_off;
     uint8_t trigger_off[PAD_TRIGGER_COUNT];
     uint8_t stick_off[PAD_AXIS_COUNT];
+    /** 第一个触点的起始偏移（PAD_OFF_NONE 表示该行没有触摸数据）：每个触点
+     *  4 字节，首字节 bit7 为 0 表示这一路有触点（低 7 位是触点 ID），其余
+     *  三字节是 12 位 X（低 8 位 + 高 4 位）与 12 位 Y（高 4 位 + 低 8 位），
+     *  DS4 与 DualSense 同一套约定。DS4 的一帧带多份触摸历史（每份 1 字节
+     *  时间戳 + 2 个触点，USB 三份、蓝牙四份），偏移取第一份；DualSense 只有
+     *  一份。登记了它的行必须同时给 touch_max_x / touch_max_y：归一到 0-4095
+     *  与左右半区判定都用这一对量程。 */
     uint8_t touch_off;
     uint8_t motion_off;
     uint8_t battery_off;

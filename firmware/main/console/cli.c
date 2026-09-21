@@ -66,6 +66,8 @@ static void cli_help(void)
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
     cli_print("  ctrl [body button accent grip]");
     cli_print("                      controller colors 0xRRGGBB, persisted (no arg = current)");
+    cli_print("  ds touchpad|capture [on|off]");
+    cli_print("                      DS4/DS5 behavior, persisted (no arg = current)");
     cli_print("  mode device|host    usb connection mode");
     cli_print("  connect             connection key: advertising window (PWR long press)");
     cli_print("  pairing start|stop  pair a new host: drop link + discovery advertising");
@@ -403,6 +405,47 @@ static void cli_ctrl(const char *arg)
              "ok ctrl body=0x%06x button=0x%06x accent=0x%06x grip=0x%06x",
              (unsigned)colors[0], (unsigned)colors[1], (unsigned)colors[2],
              (unsigned)colors[3]);
+    cli_print(line);
+}
+
+/**
+ * DS4 / DS5 手柄行为（「DS4、DS5 设置」页两项开关，见 pad/ds_behavior.h）：
+ * ds touchpad on|off（触摸板映射加减键）、ds capture on|off（触摸板按下发
+ * 截图），无参打印当前值。设置持久化，数据面下一拍按新值改写键位。
+ */
+static void cli_ds(const char *arg)
+{
+    const app_config_t *cfg = app_config_get();
+    bool touchpad_plus_minus = cfg->ds_touchpad_plus_minus;
+    bool capture_key = cfg->ds_capture_key;
+    const bool changing = arg[0] != '\0';
+    if (changing) {
+        char key[16];
+        const char *space = strchr(arg, ' ');
+        const size_t key_len = space != NULL ? (size_t)(space - arg) : sizeof(key);
+        const char *value = space != NULL ? space + 1 : "";
+        const bool on = strcmp(value, "on") == 0;
+        if (key_len >= sizeof(key) ||
+            (strcmp(value, "on") != 0 && strcmp(value, "off") != 0)) {
+            cli_print("err usage: ds touchpad|capture [on|off]");
+            return;
+        }
+        memcpy(key, arg, key_len);
+        key[key_len] = '\0';
+        if (strcmp(key, "touchpad") == 0) {
+            touchpad_plus_minus = on;
+        } else if (strcmp(key, "capture") == 0) {
+            capture_key = on;
+        } else {
+            cli_print("err usage: ds touchpad|capture [on|off]");
+            return;
+        }
+        app_config_set_ds_behavior(touchpad_plus_minus, capture_key);
+    }
+    char line[96];
+    snprintf(line, sizeof(line), "ds touchpad=%s capture=%s%s",
+             touchpad_plus_minus ? "on" : "off", capture_key ? "on" : "off",
+             changing ? " (persisted)" : "");
     cli_print(line);
 }
 
@@ -1212,6 +1255,8 @@ static void cli_dispatch(char *line)
         cli_screen(arg);
     } else if (strcmp(line, "ctrl") == 0) {
         cli_ctrl(arg);
+    } else if (strcmp(line, "ds") == 0) {
+        cli_ds(arg);
     } else if (strcmp(line, "beep") == 0) {
         cli_beep(arg);
     } else if (strcmp(line, "mode") == 0) {

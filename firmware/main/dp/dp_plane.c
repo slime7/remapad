@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "app_config.h"
 #include "battery.h"
 #include "battery_curve.h"
 #include "ble_controller.h"
@@ -19,6 +20,7 @@
 #include "dp_capture.h"
 #include "dp_source.h"
 #include "dp_ui.h"
+#include "ds_behavior.h"
 #include "feedback.h"
 #include "input_frame.h"
 #include "input_link.h"
@@ -375,6 +377,10 @@ static bool haptic_buzzer_enabled(void)
     return conn == PAD_CONN_USB;
 }
 
+/** DS4 / DS5 手柄行为的跨采样状态：触摸板按下的键位锁存与触点触发先后的
+ *  比较（见 pad/ds_behavior.h）。 */
+static pad_ds_state_t s_ds_behavior;
+
 static void dp_task(void *param)
 {
     (void)param;
@@ -404,6 +410,15 @@ static void dp_task(void *param)
              target_name());
     for (;;) {
         dp_source_sample(&pad);
+        /* DS4 / DS5 手柄行为（「DS4、DS5 设置」页两项开关）：触摸板按下的
+         *  键位在这一拍定一次（左半减号 / 右半加号 / 截图），下游的目标编码
+         *  与屏幕操控看到的都是改写后的键位。 */
+        const app_config_t *ds_cfg = app_config_get();
+        const pad_ds_config_t ds_config = {
+            .touchpad_plus_minus = ds_cfg->ds_touchpad_plus_minus,
+            .capture_key = ds_cfg->ds_capture_key,
+        };
+        pad_ds_apply(&s_ds_behavior, &ds_config, &pad);
         /* 实体手柄的 HOME：主机不在线时它就是「唤醒手柄」键——开唤醒窗口发
          *  0x81，睡下的主机被叫醒后自动连回来、醒着的直接连回来；在线时 HOME
          *  照常作为主页键进报文。按下那一刻触发一次，按住不重复（见

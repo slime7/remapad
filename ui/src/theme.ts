@@ -87,6 +87,14 @@ export const STYLE = {
   colorSwatch42: 'w-[42] h-[42] shrink-0 rounded-full flex-row items-center justify-center focus:border-2 focus:border-[#ffffff]',
   colorSwatchRing42: 'w-[36] h-[36] shrink-0 rounded-full border-2',
 
+  /** 设置页开关（MD3 风格，components/Switch）：36 × 20 轨道 + 14 滑块，只有
+   *  两个原生节点——滑块位置靠轨道的 justify-start / justify-end 翻转，不需要
+   *  额外的定位容器；选中态只换整条 class 字面量，不做透明度混合。 */
+  switchTrackOff: 'w-[36] h-[20] shrink-0 rounded-full bg-[#667692] flex-row items-center justify-start px-[3] active:bg-[#7d8ca6] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  switchTrackOn: 'w-[36] h-[20] shrink-0 rounded-full bg-[#1b416f] flex-row items-center justify-end px-[3] active:bg-[#264a79] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  switchThumbOff: 'w-[14] h-[14] shrink-0 rounded-full bg-[#d9e6ff]',
+  switchThumbOn: 'w-[14] h-[14] shrink-0 rounded-full bg-[#a6c8ff]',
+
   /** 四叶草角钮：64 圆形，圆心与背景瓣外弧同心（瓣外弧半径约 49.6，圆心落在
    *  256 卡片的 (82,82)/(174,82)/(82,174)/(174,174)，钮左上角取整到 50/142）。
    *  常规底色 secondaryContainer、内容 onSecondaryContainer；Error 变体给

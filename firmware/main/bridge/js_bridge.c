@@ -577,6 +577,35 @@ static void handle_set_controller_config(int id, const char *cmd)
              (unsigned long)grip);
 }
 
+static void handle_get_ds_behavior(int id)
+{
+    const app_config_t *cfg = app_config_get();
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"dsBehavior\",\"id\":%d,\"config\":{"
+             "\"touchpadPlusMinus\":%s,\"captureKey\":%s}}",
+             id, cfg->ds_touchpad_plus_minus ? "true" : "false",
+             cfg->ds_capture_key ? "true" : "false");
+    reply_raw(event);
+}
+
+/** DS 手柄行为（设置页两项开关）：落盘并在下一拍生效——数据面任务每拍按
+ *  最新配置改写触摸板按下的键位（见 pad/ds_behavior.h）。 */
+static void handle_set_ds_behavior(int id, const char *cmd)
+{
+    const bool touchpad_plus_minus = strstr(cmd, "\"touchpadPlusMinus\":true") != NULL;
+    const bool capture_key = strstr(cmd, "\"captureKey\":true") != NULL;
+    app_config_set_ds_behavior(touchpad_plus_minus, capture_key);
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"dsBehaviorSet\",\"id\":%d,\"success\":true,\"config\":{"
+             "\"touchpadPlusMinus\":%s,\"captureKey\":%s}}",
+             id, touchpad_plus_minus ? "true" : "false", capture_key ? "true" : "false");
+    reply_raw(event);
+    ESP_LOGI(TAG, "ds behavior -> touchpad +/-=%u capture=%u (persisted)",
+             (unsigned)touchpad_plus_minus, (unsigned)capture_key);
+}
+
 static void handle_cmd(const char *cmd)
 {
     const int id = cmd_id(cmd);
@@ -594,6 +623,10 @@ static void handle_cmd(const char *cmd)
         handle_get_controller_config(id);
     } else if (cmd_has(cmd, "\"t\":\"setControllerConfig\"")) {
         handle_set_controller_config(id, cmd);
+    } else if (cmd_has(cmd, "\"t\":\"getDsBehavior\"")) {
+        handle_get_ds_behavior(id);
+    } else if (cmd_has(cmd, "\"t\":\"setDsBehavior\"")) {
+        handle_set_ds_behavior(id, cmd);
     } else if (cmd_has(cmd, "\"t\":\"startPairing\"")) {
         handle_start_pairing(id);
     } else if (cmd_has(cmd, "\"t\":\"connect\"")) {

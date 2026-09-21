@@ -35,7 +35,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 - **前端 UI 工程 (`ui/`)**：
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法；样式用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
   - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，来源为 `@pocketjs/framework` 官方 npm 依赖。
-  - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部七个页面，切页只翻转各页根节点的 `hidden`，新增页面直接写进 JSX
+  - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部页面（发布构建六个，dev 构建含调试页七个），切页只翻转各页根节点的 `hidden`，新增页面直接写进 JSX
     （[ADR 0016](docs/adr/0016-mount-all-pages-before-first-frame.md)）。
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言；硬件绑定微雪 ESP32-S3-Touch-LCD-1.69
@@ -61,7 +61,8 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
     运行时角色切换见 [ADR 0027](docs/adr/0027-runtime-usb-role-switch.md)。
   - `ota/`：升级会话：非运行分区回写、窗口流控与回滚健康门槛（[ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)）。
   - `pad/`：处理段：私有格式 `pad_state_t`、解析与归一、按布局行编码的反馈；
-    家族布局表按系列拆在 `pad/layouts/`，契约与注册表是 `pad/layout.h` / `pad/layout.c`。
+    家族布局表按系列拆在 `pad/layouts/`，契约与注册表是 `pad/layout.h` / `pad/layout.c`；
+    DS4 / DS5 的触摸板按键行为在 `pad/ds_behavior.h` / `pad/ds_behavior.c`（[ADR 0047](docs/adr/0047-ds-behavior-settings.md)）。
   - `target/`：转换段：目标编码接口 `pad_target_t`；`target/ns2/` 负责 NS2 编码、序列号命名规则与输出封装。
   - `ble/`：NimBLE 手柄外设、双身份会话与分槽凭证。
   - `drivers/`：panel / touch / backlight / pwr_key / buzzer / battery；
@@ -93,7 +94,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 | **固件 OTA 升级** | `cd pc ; uv run python remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
 | **PC 手柄桥接** | `cd pc ; uv run python remapadctl.py -p COMx` | 读 PC 手柄原始报告按桥接帧转发给设备，同进程提供串口命令行、实机截图与 OTA；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移；转发默认只在交互模式开，`--pad` / `--no-pad` 控制 |
 | **PC 连接控制台** | `cd pc ; uv run python remapadgui.py` | 同一套会话的图形界面：选串口、连接/断开、手柄转发开关、实时日志、命令输入、实机截图与 OTA；与命令行不要同时连同一个口 |
-| **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`capture on\|off`、`amiibo list\|select\|del\|poll`、`version`、`rollback` |
+| **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`capture on\|off`、`ds touchpad\|capture on\|off`、`amiibo list\|select\|del\|poll`、`version`、`rollback` |
 | **主机输出原始采集** | `cd pc ; uv run python remapadctl.py -p COMx --capture host-raw.log` | 抓主机写进输出特征值的原始字节（震动/玩家灯/指令，解析与布局转换之前）落盘成文本；桥接帧 `0x12`（HOST_RAW）承载，串口 `capture on\|off` 开关，交互模式 `:capture <路径>\|off` 同能力，`--pad` 可与手柄转发同时进行，见 [ADR 0045](docs/adr/0045-host-output-raw-capture.md) |
 | **amiibo 镜像上传** | `cd pc ; uv run python remapadctl.py -p COMx --amiibo Alm.bin` | 经桥接帧（`0x40-0x43`）把 NTAG215 dump（540 纯镜像或 572 带厂商签名）传进设备 storage 分区 SPIFFS 槽位（200 槽，槽位名取文件名主干）；交互模式 `:amiibo <bin>` 同通道，选中持久化、重启恢复，标签模拟见 [ADR 0044](docs/adr/0044-amiibo-bridge-upload-nfc-tag-emulation.md) |
 | **实机截图** | `cd pc ; uv run python remapadctl.py -p COMx --shot` | 固件把当前画面整屏重渲染并按图像帧回传，PC 拼成 PNG（默认 `pc/shots/`，`--out` 指定路径；期间 UI 冻结约 0.2-1 秒，见 [ADR 0033](docs/adr/0033-pc-single-process-tool-and-device-screenshot.md)） |

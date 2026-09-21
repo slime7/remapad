@@ -8,7 +8,11 @@
 static const pad_layout_t s_rows[] = {
     {
         /* 有线：电量取 status[0]（0x1E），低四位是 0-10 档、bit4 表示充电中。
-         * DualSense 有线同样报 0x01，但在扳机之后多一个序号字节，另列一行。 */
+         * DualSense 有线同样报 0x01，但在扳机之后多一个序号字节，另列一行。
+         * 触摸点：公共段之后是 1 字节历史份数 + 每份 9 字节（1 字节时间戳 +
+         *  2 个触点，每点 4 字节），因此第一个触点在偏移 35，一帧带 3 份历史
+         *  （取第一份）。偏移与触点格式取自 Linux hid-playstation.c 的
+         *  dualshock4_input_report_usb，实机抓包尚未核对。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_USB,
         .report_id = 0x01,
@@ -18,7 +22,7 @@ static const pad_layout_t s_rows[] = {
         .hat_off = 5,
         .trigger_off = {8, 9},
         .stick_off = {1, 2, 3, 4},
-        .touch_off = 34,
+        .touch_off = 35,
         .motion_off = 13,
         .battery_off = 30,
         .touch_max_x = 1919,
@@ -54,7 +58,9 @@ static const pad_layout_t s_rows[] = {
         .hat_off = 7,
         .trigger_off = {10, 11},
         .stick_off = {3, 4, 5, 6},
-        .touch_off = 36,
+        /* 触摸点：公共段后移两位后，第一个触点在偏移 37（蓝牙一帧带 4 份历史，
+         *  USB 是 3 份）。 */
+        .touch_off = 37,
         .motion_off = 15,
         .battery_off = 32,
         .touch_max_x = 1919,

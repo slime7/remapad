@@ -45,6 +45,8 @@ BLE 私有协议（GATT/配对/连接参数）风险最高且必须依赖 Switch
   用 `cd pc ; uv run python remapadctl.py --dump` 抓 Xbox 有线与蓝牙 / DS3 / DS4 有线与蓝牙 / DualSense 有线 / Steam 原生布局的原始报告。
   核对 `firmware/main/pad/layouts/` 里对应系列的字段偏移。现有偏移都取自公开资料（只有 DualSense 蓝牙的 0x31 行按 Edge 实测核对过），待确认项：
   Xbox Series 的分享位、DS3 的按键极性（是否低电平有效）与蓝牙前缀长度、DualSense 的触摸板坐标（每点 4 字节，DS4 是 3 字节，当前不登记）。
+  PS 系的触摸点已按 Linux 驱动的报告结构登记为初值（每点 4 字节，DS4 在 35/37、DS5 在 33/34），
+  此前按 3 字节读的 DS4 行会整体错位一个字节，抓包时一并复核左右半区（见 [ADR 0047](adr/0047-ds-behavior-settings.md)）。
 
 **USB host 直插（手柄插在板卡上）　状态：代码完成，实机验收待做**
 

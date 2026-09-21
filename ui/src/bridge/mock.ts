@@ -3,6 +3,7 @@ import type {
   ControllerAddresses,
   ControllerConfig,
   ControllerMode,
+  DsBehaviorConfig,
   DeviceCmd,
   DeviceMsg,
   PairingState,
@@ -17,6 +18,7 @@ interface MockHardwareState {
   pairing: PairingState;
   controller: 'pro-controller-2' | null;
   controllerConfig: ControllerConfig;
+  dsBehavior: DsBehaviorConfig;
   usbRole: UsbRole;
   /** host 数据面未接入，mock 里只有 device 角色是"生效"的。 */
   usbRoleActive: boolean;
@@ -37,6 +39,12 @@ const DEFAULT_CONTROLLER_CONFIG: ControllerConfig = {
   gripColor: 0x323232,
 };
 
+/** 浏览器 mock 的 DS 手柄行为默认值：触摸板映射加减键关、截图键开（与固件一致）。 */
+const DEFAULT_DS_BEHAVIOR: DsBehaviorConfig = {
+  touchpadPlusMinus: false,
+  captureKey: true,
+};
+
 /** 浏览器 mock 的对外地址（公共伪装地址）。 */
 const MOCK_CONTROLLER_ADDRESSES: ControllerAddresses = {
   pro: '78:81:8C:1A:2B:3C',
@@ -54,6 +62,7 @@ const state: MockHardwareState = {
   pairing: 'idle',
   controller: null,
   controllerConfig: { ...DEFAULT_CONTROLLER_CONFIG },
+  dsBehavior: { ...DEFAULT_DS_BEHAVIOR },
   usbRole: 'device',
   usbRoleActive: true,
   playerLed: 0,
@@ -269,6 +278,15 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       }
       break;
     }
+
+    case 'getDsBehavior':
+      reply({ t: 'dsBehavior', id, config: { ...state.dsBehavior } });
+      break;
+
+    case 'setDsBehavior':
+      state.dsBehavior = { ...cmd.config };
+      reply({ t: 'dsBehaviorSet', id, config: { ...state.dsBehavior }, success: true });
+      break;
 
     case 'connect':
       /* 连接键：已配对发回连形态等主机连回来，未配对进配对流程发发现广播。 */

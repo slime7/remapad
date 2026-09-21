@@ -150,11 +150,15 @@ enum {
     PAD_CAP_FALLBACK_LAYOUT = 1u << 7,
 };
 
+/**
+ * 触摸板的一路触点。present 表示这一帧解析到了触摸板数据（字段可读），
+ * pressed 表示这一路这一帧真的贴着手指；没有手指时坐标保持 0。
+ */
 typedef struct {
     bool present;
     bool pressed;
-    uint16_t x;     /**< 0-4095（按设备分辨率归一）。 */
-    uint16_t y;     /**< 0-4095。 */
+    uint16_t x;     /**< 0-4095（按设备分辨率归一），pressed 为假时是 0。 */
+    uint16_t y;     /**< 0-4095，pressed 为假时是 0。 */
     uint16_t raw_x; /**< 设备原始值，诊断与标定用。 */
     uint16_t raw_y;
 } pad_touch_t;

@@ -21,6 +21,7 @@ import { useHardware, hw, powerOffDevice, rebootDevice } from './hooks/useHardwa
 import { usePadControl } from './hooks/usePadControl';
 import { BrightnessPage } from './pages/BrightnessPage';
 import { ControllerSettingsPage } from './pages/ControllerSettingsPage';
+import { DsSettingsPage } from './pages/DsSettingsPage';
 import { PairingPage } from './pages/PairingPage';
 import { PowerPage } from './pages/PowerPage';
 import { SystemInfoPage } from './pages/SystemInfoPage';
@@ -56,8 +57,8 @@ export default function App() {
   const rebootAsk = ref(false);
   const powerOffAsk = ref(false);
 
-  // 页面总数（若开启 dev 编译选项则包含第 6 页调试页）
-  const pageCount = () => (IS_DEV ? 6 : 5);
+  // 页面总数（若开启 dev 编译选项则包含第 7 页调试页）
+  const pageCount = () => (IS_DEV ? 7 : 6);
 
   const prevPageIndex = () => {
     const total = pageCount();
@@ -88,7 +89,7 @@ export default function App() {
   // 卡片节点与过渡控制器。isAnimating 必须是响应式引用：提交路径（onPanEnd）
   // 里 transitionTarget 不变、只有它翻转，普通变量对类绑定不可见，新卡会在
   // 整个放大动画期间保持隐藏，动画跑完才随 pageIndex 瞬间换页。
-  const cardNodes: (NodeMirror | null)[] = [null, null, null, null, null, null];
+  const cardNodes: (NodeMirror | null)[] = [null, null, null, null, null, null, null];
   let fromIndex = -1;
   const isAnimating = ref(false);
   let isDragging = false;
@@ -367,26 +368,37 @@ export default function App() {
           </View>
         </View>
 
-        {/* 第 5 页：系统信息 (几何中心 x: 120, y: 104) */}
+        {/* 第 5 页：DS4、DS5 设置 (几何中心 x: 120, y: 104) */}
         <View
           nodeRef={setCardRef(4)}
           class={isCardVisible(4) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
           <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
-            <SystemInfoPage active={() => isPageActive(4)} interactive={interactive(4)} />
+            <DsSettingsPage active={() => isPageActive(4)} interactive={interactive(4)} />
           </View>
         </View>
 
-        {/* 第 6 页：调试指令 (开发模式) */}
+        {/* 第 6 页：系统信息 (几何中心 x: 120, y: 104) */}
+        <View
+          nodeRef={setCardRef(5)}
+          class={isCardVisible(5) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
+        >
+          <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+            <SystemInfoPage active={() => isPageActive(5)} interactive={interactive(5)} />
+          </View>
+        </View>
+
+        {/* 第 7 页：调试指令 (开发模式) */}
         {IS_DEV ? (
           <View
-            nodeRef={setCardRef(5)}
-            class={isCardVisible(5) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
+            nodeRef={setCardRef(6)}
+            class={isCardVisible(6) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
           >
             <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
             <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
-              <DebugPage active={() => isPageActive(5)} interactive={interactive(5)} />
+              <DebugPage active={() => isPageActive(6)} interactive={interactive(6)} />
             </View>
           </View>
         ) : null}

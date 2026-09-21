@@ -48,6 +48,7 @@ idf_component_register(
         "pad/layouts/ds5.c"
         "pad/layouts/ns.c"
         "pad/pad_device.c"
+        "pad/ds_behavior.c"
         "pad/feedback.c"
         "input/input_frame.c"
         "input/input_source.c"

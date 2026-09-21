@@ -42,6 +42,14 @@ export interface ControllerAddresses {
   pro: string;
 }
 
+/** DS4 / DS5 手柄行为设置（「DS4、DS5 设置」页两项开关，持久化在固件 NVS）。 */
+export interface DsBehaviorConfig {
+  /** 触摸板映射加减键：按下触摸板按先触发的半区发减号（左半）或加号（右半）。 */
+  touchpadPlusMinus: boolean;
+  /** 截图键：触摸板按下发截图；关掉后这一路改发减号。 */
+  captureKey: boolean;
+}
+
 /** 调试注入的按键（调试页按键指令区）：home 就是实体手柄的 HOME——注入按下后
  *  由固件按同一条语义处理（主机在线时当主页键上报，未连接时开唤醒窗口把主机
  *  叫起来并连上），ui 是手柄操控屏幕的组合键（L1+R1+L3+R3）。 */
@@ -84,6 +92,8 @@ export type DeviceCmd =
   | { t: 'setUsbRole'; id: number; role: UsbRole }
   | { t: 'getControllerConfig'; id: number }
   | { t: 'setControllerConfig'; id: number; config: ControllerConfig }
+  | { t: 'getDsBehavior'; id: number }
+  | { t: 'setDsBehavior'; id: number; config: DsBehaviorConfig }
   | { t: 'connect'; id: number }
   | { t: 'disconnect'; id: number }
   | { t: 'startPairing'; id: number }
@@ -132,6 +142,8 @@ export type DeviceMsg =
       addresses: ControllerAddresses;
     }
   | { t: 'controllerConfigSet'; id: number; config: ControllerConfig; success: boolean }
+  | { t: 'dsBehavior'; id: number; config: DsBehaviorConfig }
+  | { t: 'dsBehaviorSet'; id: number; config: DsBehaviorConfig; success: boolean }
   /* 这三条应答只回状态，不回可上屏的文案：屏幕文本一律取自 ui/src 里的
    * 字面量（构建期字体字符集按源码字面量扫描烘焙），固件回发的文本直接
    * 渲染会显示成豆腐块。 */

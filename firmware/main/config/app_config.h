@@ -21,7 +21,7 @@ extern "C" {
 
 /**
  * 用户设置持久化（NVS 命名空间 "remapad"，键 "cfg"）：背光亮度、手柄机身
- * 配色与上报固件版本。USB 连接模式只在内存中生效、
+ * 配色、DS 手柄行为与上报固件版本。USB 连接模式只在内存中生效、
  * 不落盘，开机恒为串口。内存表在 app_config_init 时读入，setter 只改内存
  * 表并置脏标记；落盘由内部 RAM 栈的提交任务每 1 分钟检查一次，确有改动才
  * 写一次 NVS（每次写入都要擦 flash 页，切选项这类高频改动不能改一次写一
@@ -56,6 +56,12 @@ typedef struct {
      * 是否重启伪装成「已升级」由串口 fwapply 一次性武装。
      */
     uint8_t fw_version[3];
+    /**
+     * DS4 / DS5 手柄行为（见 pad/ds_behavior.h）：触摸板映射加减键（默认关）、
+     * 触摸板按下发截图（默认开）。
+     */
+    bool ds_touchpad_plus_minus;
+    bool ds_capture_key;
 } app_config_t;
 
 /** 读入 NVS 配置到内存表（无记录时用默认值）。须在 nvs_init 之后调用。 */
@@ -73,6 +79,9 @@ void app_config_set_controller_colors(uint32_t body_rgb, uint32_t button_rgb,
 
 /** 覆盖上报固件版本（假升级完成时递增），随周期检查落盘。 */
 void app_config_set_fw_version(const uint8_t ver[3]);
+
+/** DS 手柄行为两项开关（默认：触摸板映射关、截图键开）。 */
+void app_config_set_ds_behavior(bool touchpad_plus_minus, bool capture_key);
 
 /** 立即叫醒提交任务落盘（默认每 1 分钟检查一次）。用于「改完就要重启」的
  * 场景：不落盘直接重启会丢掉刚改的版本。 */
