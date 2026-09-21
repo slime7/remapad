@@ -1,0 +1,2441 @@
+[   0.01s] I (7769) remapad_dp_ui: pad ui mode on (requested)
+[   0.01s] ok pad ui mode on
+[   0.01s] I (7770) remapad_dp: pad output paused
+[   1.51s] I (9273) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[   1.51s] ok key injected
+[   1.51s] I (9275) remapad_dp: buttons 0x00000000 -> 0x00000020
+[   2.71s] I (10475) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[   2.71s] ok key injected
+[   2.71s] I (10475) remapad_dp: buttons 0x00000000 -> 0x00000010
+[   3.92s] I (11680) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[   3.92s] ok key injected
+[   3.92s] I (11685) remapad_dp: buttons 0x00000000 -> 0x00000020
+[   5.12s] I (12883) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[   5.12s] ok key injected
+[   5.12s] I (12886) remapad_dp: buttons 0x00000000 -> 0x00000010
+[   6.32s] I (14085) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[   6.32s] ok key injected
+[   6.32s] I (14085) remapad_dp: buttons 0x00000000 -> 0x00000020
+[   7.53s] I (15290) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[   7.53s] ok key injected
+[   7.53s] I (15290) remapad_dp: buttons 0x00000000 -> 0x00000010
+[   8.50s] I (16264) remapad_pocketjs: js heap after eval: used=3213kB limit=7372kB
+[   8.50s] I (16265) remapad_pocketjs: strip buffers: 3 x 15360 bytes in internal, internal free=161987 psram free=2549448
+[   8.50s] I (16266) remapad_pocketjs: native bridge ready: __nativeBridge.postMessage -> js_bridge
+[   8.57s] I (16339) remapad_pocketjs: PocketJS UI ready, boot splash handed over
+[   8.57s] I (16340) remapad_pocketjs: PocketJS owner task running at 60 Hz (stack 294912 bytes)
+[   8.73s] I (16490) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[   8.73s] ok key injected
+[   8.73s] I (16490) remapad_dp: buttons 0x00000000 -> 0x00000020
+[   8.78s] I (16546) remapad_pocketjs: PocketJS frame ready: 240x280 @1x, damage regions=1
+[   8.88s] I (16638) remapad_bridge: pairing state -> advertising
+[   8.88s] I (16644) remapad_bridge: player led -> 0x0
+[   8.95s] I (16714) remapad_bridge: pad ui mode -> on
+[   8.99s] I (16749) remapad_bridge: hello -> ready (psram=8388608)
+[   9.93s] I (17693) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[   9.93s] ok key injected
+[   9.93s] I (17695) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  11.14s] I (18898) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  11.14s] ok key injected
+[  11.14s] I (18900) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  12.34s] I (20101) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  12.34s] ok key injected
+[  12.34s] I (20105) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  13.54s] I (21303) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  13.54s] ok key injected
+[  13.54s] I (21305) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  13.89s] I (21657) remapad_pocketjs: frames=54 avg_turn_us=58083 avg_render_us=28697 avg_damage_px=20160 max_turn_us=250276 max_render_us=108451
+[  14.74s] I (22506) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  14.74s] ok key injected
+[  14.75s] I (22510) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  15.94s] I (23707) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  15.94s] ok key injected
+[  15.94s] I (23710) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  17.15s] I (24908) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  17.15s] ok key injected
+[  17.15s] I (24910) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  18.35s] I (26109) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  18.35s] ok key injected
+[  18.35s] I (26110) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  18.72s] I (26481) remapad_pocketjs: frames=104 avg_turn_us=60443 avg_render_us=34595 avg_damage_px=24192 max_turn_us=250276 max_render_us=108451
+[  19.55s] I (27311) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  19.55s] ok key injected
+[  19.55s] I (27315) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  20.75s] I (28515) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  20.75s] ok key injected
+[  20.75s] I (28515) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  21.96s] I (29718) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  21.96s] ok key injected
+[  21.96s] I (29720) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  23.16s] I (30920) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  23.16s] ok key injected
+[  23.16s] I (30920) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  23.62s] I (31379) remapad_bridge: pairing state -> paired
+[  23.62s] I (31380) remapad_pocketjs: frames=153 avg_turn_us=61430 avg_render_us=35311 avg_damage_px=24685 max_turn_us=250276 max_render_us=108451
+[  24.36s] I (32125) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  24.36s] ok key injected
+[  24.36s] I (32125) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  24.50s] I (32261) remapad_blses: advertising window expired: silent
+[  24.50s] I (32264) remapad_blses: silent: identity 0 advertising stopped
+[  25.57s] I (33329) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  25.57s] ok key injected
+[  25.57s] I (33330) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  26.77s] I (34534) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  26.77s] ok key injected
+[  26.77s] I (34535) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  27.97s] I (35736) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  27.97s] ok key injected
+[  27.97s] I (35740) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  28.63s] I (36391) remapad_pocketjs: frames=313 avg_turn_us=16535 avg_render_us=12936 avg_damage_px=8820 max_turn_us=250276 max_render_us=108451
+[  29.17s] I (36937) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  29.17s] ok key injected
+[  29.17s] I (36940) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  30.38s] I (38140) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  30.38s] ok key injected
+[  30.38s] I (38145) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  31.58s] I (39341) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  31.58s] ok key injected
+[  31.58s] I (39345) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  32.78s] I (40546) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  32.78s] ok key injected
+[  32.79s] I (40550) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  33.70s] I (41467) remapad_pocketjs: frames=472 avg_turn_us=17264 avg_render_us=11631 avg_damage_px=7945 max_turn_us=250276 max_render_us=108451
+[  33.99s] I (41750) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  33.99s] I (41750) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  33.99s] ok key injected
+[  35.19s] I (42951) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  35.19s] ok key injected
+[  35.19s] I (42955) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  36.39s] I (44153) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  36.39s] ok key injected
+[  36.39s] I (44155) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  37.59s] I (45355) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  37.59s] I (45355) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  37.59s] ok key injected
+[  38.58s] I (46347) remapad_pocketjs: frames=638 avg_turn_us=15913 avg_render_us=10626 avg_damage_px=7286 max_turn_us=250276 max_render_us=108451
+[  38.79s] I (46557) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  38.79s] ok key injected
+[  38.79s] I (46560) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  40.00s] I (47759) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  40.00s] ok key injected
+[  40.00s] I (47761) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  41.20s] I (48961) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  41.20s] ok key injected
+[  41.20s] I (48965) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  42.40s] I (50163) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  42.40s] ok key injected
+[  42.40s] I (50165) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  43.58s] I (51349) remapad_pocketjs: frames=818 avg_turn_us=15101 avg_render_us=9815 avg_damage_px=6720 max_turn_us=250276 max_render_us=108451
+[  43.60s] I (51365) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  43.60s] ok key injected
+[  43.60s] I (51365) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  44.81s] I (52569) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  44.81s] ok key injectedI (52570) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  46.01s] I (53772) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  46.01s] ok key injected
+[  46.01s] I (53775) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  47.21s] I (54972) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  47.21s] ok key injected
+[  47.21s] I (54975) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  48.41s] I (56177) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  48.41s] ok key injected
+[  48.41s] I (56180) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  48.71s] I (56477) remapad_pocketjs: frames=976 avg_turn_us=17578 avg_render_us=11676 avg_damage_px=8081 max_turn_us=250276 max_render_us=108451
+[  49.62s] I (57382) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  49.62s] ok key injected
+[  49.62s] I (57385) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  50.82s] I (58587) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  50.82s] ok key injected
+[  50.82s] I (58590) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  52.03s] I (59790) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  52.03s] ok key injected
+[  52.03s] I (59795) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  53.23s] I (60995) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  53.23s] ok key injected
+[  53.23s] I (60995) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  53.61s] I (61373) remapad_pocketjs: frames=1135 avg_turn_us=16255 avg_render_us=11521 avg_damage_px=7945 max_turn_us=250276 max_render_us=108451
+[  54.43s] I (62198) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  54.43s] ok key injected
+[  54.43s] I (62200) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  55.64s] I (63402) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  55.64s] ok key injected
+[  55.64s] I (63405) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  56.84s] I (64606) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  56.84s] ok key injected
+[  56.85s] I (64610) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  58.04s] I (65808) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  58.04s] ok key injected
+[  58.04s] I (65810) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  58.58s] I (66348) remapad_pocketjs: frames=1294 avg_turn_us=16230 avg_render_us=11972 avg_damage_px=8283 max_turn_us=250276 max_render_us=108451
+[  59.25s] I (67013) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  59.25s] ok key injected
+[  59.25s] I (67015) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  60.45s] I (68215) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  60.45s] ok key injected
+[  60.45s] I (68220) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  61.65s] I (69417) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  61.65s] ok key injected
+[  61.65s] I (69420) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  62.86s] I (70621) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  62.86s] ok key injected
+[  62.86s] I (70625) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  63.66s] I (71427) remapad_pocketjs: frames=1455 avg_turn_us=17153 avg_render_us=11384 avg_damage_px=7846 max_turn_us=250276 max_render_us=108451
+[  64.06s] I (71824) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  64.06s] ok key injected
+[  64.06s] I (71825) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  65.26s] I (73026) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  65.26s] ok key injected
+[  65.26s] I (73030) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  66.47s] I (74230) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  66.47s] ok key injected
+[  66.47s] I (74230) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  67.67s] I (75431) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  67.67s] ok key injected
+[  67.67s] I (75435) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  68.58s] I (76346) remapad_pocketjs: frames=1626 avg_turn_us=15669 avg_render_us=10323 avg_damage_px=7073 max_turn_us=250276 max_render_us=108451
+[  68.87s] I (76635) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  68.87s] ok key injected
+[  68.87s] I (76635) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  69.20s] I (76963) remapad_pocketjs: mem: js_heap=3056kB(pre 3236kB)/7372kB psram_free=2397936 internal_free=165167 allocs=55270 obj_n=15482 prop_n=52094 arr_n=717
+[  70.07s] I (77835) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  70.07s] ok key injected
+[  70.07s] I (77840) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  71.27s] I (79037) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  71.27s] ok key injected
+[  71.27s] I (79040) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  72.47s] I (80238) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  72.47s] ok key injected
+[  72.47s] I (80240) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  73.58s] I (81349) remapad_pocketjs: frames=1788 avg_turn_us=12931 avg_render_us=7083 avg_damage_px=5226 max_turn_us=250276 max_render_us=108451
+[  73.68s] I (81442) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  73.68s] ok key injected
+[  73.68s] I (81445) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  74.88s] I (82646) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  74.88s] ok key injected
+[  74.89s] I (82650) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  76.09s] I (83851) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  76.09s] ok key injected
+[  76.09s] I (83855) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  77.29s] I (85055) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  77.29s] ok key injectedI (85055) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  78.49s] I (86259) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  78.49s] ok key injected
+[  78.49s] I (86260) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  78.75s] I (86516) remapad_pocketjs: frames=1942 avg_turn_us=16376 avg_render_us=10314 avg_damage_px=7767 max_turn_us=250276 max_render_us=108451
+[  79.70s] I (87463) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  79.70s] ok key injected
+[  79.70s] I (87465) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  80.90s] I (88668) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  80.90s] ok key injected
+[  80.90s] I (88670) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  82.11s] I (89872) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  82.11s] ok key injected
+[  82.11s] I (89875) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  83.31s] I (91077) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  83.31s] ok key injected
+[  83.31s] I (91080) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  83.65s] I (91413) remapad_pocketjs: frames=2094 avg_turn_us=15430 avg_render_us=10367 avg_damage_px=7781 max_turn_us=250276 max_render_us=108451
+[  84.52s] I (92281) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  84.52s] ok key injected
+[  84.52s] I (92285) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  85.72s] I (93484) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  85.72s] ok key injectedI (93485) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  86.92s] I (94689) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  86.92s] I (94690) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  86.92s] ok key injected
+[  88.12s] I (95889) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  88.12s] I (95890) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  88.12s] ok key injected
+[  88.61s] I (96373) remapad_pocketjs: frames=2246 avg_turn_us=15369 avg_render_us=10856 avg_damage_px=8134 max_turn_us=250276 max_render_us=108451
+[  89.33s] I (97091) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  89.33s] ok key injected
+[  89.33s] I (97095) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  90.53s] I (98296) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  90.53s] ok key injected
+[  90.53s] I (98300) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  91.73s] I (99499) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  91.73s] I (99500) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  91.73s] ok key injected
+[  92.94s] I (100703) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  92.94s] ok key injected
+[  92.94s] I (100705) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  93.69s] I (101455) remapad_pocketjs: frames=2399 avg_turn_us=16506 avg_render_us=10336 avg_damage_px=7730 max_turn_us=250276 max_render_us=108451
+[  94.14s] I (101903) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  94.14s] ok key injected
+[  94.14s] I (101905) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  95.34s] I (103109) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  95.34s] ok key injected
+[  95.34s] I (103111) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  96.54s] I (104309) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  96.54s] ok key injected
+[  96.54s] I (104310) remapad_dp: buttons 0x00000000 -> 0x00000010
+[  97.75s] I (105514) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[  97.75s] ok key injected
+[  97.75s] I (105515) remapad_dp: buttons 0x00000000 -> 0x00000020
+[  98.58s] I (106350) remapad_pocketjs: frames=2556 avg_turn_us=15177 avg_render_us=9605 avg_damage_px=7190 max_turn_us=250276 max_render_us=108451
+[  98.95s] I (106714) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[  98.95s] ok key injected
+[  98.95s] I (106715) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 100.15s] I (107914) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 100.15s] ok key injected
+[ 100.15s] I (107915) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 101.35s] I (109116) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 101.35s] ok key injected
+[ 101.35s] I (109120) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 102.55s] I (110320) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 102.55s] I (110320) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 102.55s] ok key injected
+[ 103.58s] I (111349) remapad_pocketjs: frames=2717 avg_turn_us=14942 avg_render_us=9404 avg_damage_px=7012 max_turn_us=250276 max_render_us=108451
+[ 103.76s] I (111522) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 103.76s] ok key injected
+[ 103.76s] I (111525) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 104.96s] I (112726) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 104.96s] ok key injected
+[ 104.97s] I (112730) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 106.16s] I (113928) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 106.16s] ok key injected
+[ 106.16s] I (113931) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 107.36s] I (115129) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 107.36s] ok key injected
+[ 107.36s] I (115130) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 108.57s] I (116334) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 108.57s] I (116335) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 108.57s] ok key injected
+[ 108.87s] I (116640) remapad_pocketjs: frames=2878 avg_turn_us=16239 avg_render_us=9905 avg_damage_px=7429 max_turn_us=250276 max_render_us=108451
+[ 109.77s] I (117535) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 109.77s] ok key injected
+[ 109.77s] I (117540) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 110.97s] I (118740) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 110.97s] ok key injected
+[ 110.98s] I (118745) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 112.18s] I (119941) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 112.18s] ok key injected
+[ 112.18s] I (119945) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 113.38s] I (121143) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 113.38s] ok key injected
+[ 113.38s] I (121145) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 113.69s] I (121457) remapad_pocketjs: frames=3028 avg_turn_us=15545 avg_render_us=10042 avg_damage_px=7526 max_turn_us=250276 max_render_us=108451
+[ 114.58s] I (122346) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 114.58s] ok key injected
+[ 114.58s] I (122350) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 115.78s] I (123547) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 115.78s] ok key injected
+[ 115.78s] I (123550) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 116.98s] I (124749) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 116.98s] I (124750) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 116.98s] ok key injected
+[ 118.19s] I (125951) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 118.19s] ok key injected
+[ 118.19s] I (125955) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 118.65s] I (126415) remapad_pocketjs: frames=3180 avg_turn_us=15428 avg_render_us=10845 avg_damage_px=8134 max_turn_us=250276 max_render_us=108451
+[ 119.39s] I (127156) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 119.39s] ok key injected
+[ 119.40s] I (127160) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 120.59s] I (128358) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 120.59s] ok key injected
+[ 120.59s] I (128360) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 121.80s] I (129562) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 121.80s] ok key injected
+[ 121.80s] I (129565) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 123.00s] I (130766) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 123.00s] ok key injected
+[ 123.00s] I (130770) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 123.62s] I (131387) remapad_pocketjs: frames=3332 avg_turn_us=15448 avg_render_us=10851 avg_damage_px=8134 max_turn_us=250276 max_render_us=108451
+[ 124.20s] I (131968) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 124.20s] ok key injected
+[ 124.20s] I (131970) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 125.40s] I (133170) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 125.40s] ok key injected
+[ 125.41s] I (133175) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 126.61s] I (134372) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 126.61s] ok key injected
+[ 126.61s] I (134375) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 127.81s] I (135575) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 127.81s] ok key injected
+[ 127.81s] I (135580) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 128.57s] I (136341) remapad_pocketjs: frames=3485 avg_turn_us=16096 avg_render_us=9860 avg_damage_px=7378 max_turn_us=250276 max_render_us=108451
+[ 129.01s] I (136779) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 129.01s] ok key injected
+[ 129.01s] I (136780) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 129.16s] I (136933) remapad_pocketjs: mem: js_heap=3055kB(pre 3067kB)/7372kB psram_free=2399304 internal_free=165167 allocs=55252 obj_n=15473 prop_n=52031 arr_n=717
+[ 130.22s] I (137983) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 130.22s] ok key injected
+[ 130.22s] I (137985) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 131.42s] I (139184) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 131.42s] ok key injectedI (139185) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 132.62s] I (140385) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 132.62s] ok key injected
+[ 132.62s] I (140390) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 133.57s] I (141342) remapad_pocketjs: frames=3658 avg_turn_us=12125 avg_render_us=7221 avg_damage_px=5360 max_turn_us=250276 max_render_us=108451
+[ 133.82s] I (141589) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 133.82s] I (141590) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 133.82s] ok key injected
+[ 135.02s] I (142791) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 135.02s] ok key injected
+[ 135.03s] I (142795) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 136.23s] I (143992) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 136.23s] ok key injected
+[ 136.23s] I (143995) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 137.43s] I (145197) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 137.43s] ok key injected
+[ 137.43s] I (145200) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 138.58s] I (146349) remapad_pocketjs: frames=3837 avg_turn_us=13829 avg_render_us=9006 avg_damage_px=6757 max_turn_us=250276 max_render_us=108451
+[ 138.63s] I (146400) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 138.63s] I (146400) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 138.63s] ok key injected
+[ 139.84s] I (147603) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 139.84s] ok key injected
+[ 139.84s] I (147605) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 141.04s] I (148805) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 141.04s] ok key injected
+[ 141.04s] I (148810) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 142.24s] I (150007) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 142.24s] ok key injected
+[ 142.24s] I (150010) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 143.44s] I (151208) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 143.44s] ok key injected
+[ 143.44s] I (151210) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 143.74s] I (151507) remapad_pocketjs: frames=4008 avg_turn_us=15197 avg_render_us=9896 avg_damage_px=7466 max_turn_us=250276 max_render_us=108451
+[ 144.64s] I (152408) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 144.64s] ok key injected
+[ 144.64s] I (152410) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 145.84s] I (153608) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 145.84s] ok key injected
+[ 145.84s] I (153610) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 147.04s] I (154809) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 147.04s] ok key injected
+[ 147.04s] I (154811) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 148.24s] I (156009) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 148.24s] ok key injected
+[ 148.24s] I (156011) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 148.61s] I (156383) remapad_pocketjs: frames=4174 avg_turn_us=14294 avg_render_us=10109 avg_damage_px=7610 max_turn_us=250276 max_render_us=108451
+[ 149.44s] I (157209) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 149.44s] ok key injected
+[ 149.44s] I (157210) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 150.64s] I (158409) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 150.64s] ok key injected
+[ 150.64s] I (158410) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 151.84s] I (159612) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 151.84s] ok key injected
+[ 151.84s] I (159615) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 153.05s] I (160816) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 153.05s] ok key injected
+[ 153.05s] I (160820) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 153.65s] I (161418) remapad_pocketjs: frames=4343 avg_turn_us=14187 avg_render_us=10777 avg_damage_px=8111 max_turn_us=250276 max_render_us=108451
+[ 154.25s] I (162018) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 154.25s] ok key injected
+[ 154.25s] I (162020) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 155.45s] I (163221) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 155.45s] ok key injected
+[ 155.45s] I (163225) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 156.66s] I (164423) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 156.66s] ok key injected
+[ 156.66s] I (164425) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 157.86s] I (165625) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 157.86s] ok key injected
+[ 157.86s] I (165630) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 158.59s] I (166359) remapad_pocketjs: frames=4510 avg_turn_us=14895 avg_render_us=9639 avg_damage_px=7243 max_turn_us=250276 max_render_us=108451
+[ 159.06s] I (166826) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 159.06s] ok key injected
+[ 159.06s] I (166830) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 160.26s] I (168028) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 160.26s] ok key injected
+[ 160.26s] I (168030) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 161.46s] I (169230) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 161.46s] ok key injected
+[ 161.46s] I (169230) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 162.66s] I (170432) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 162.66s] ok key injected
+[ 162.66s] I (170435) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 163.58s] I (171349) remapad_pocketjs: frames=4695 avg_turn_us=13500 avg_render_us=8742 avg_damage_px=6538 max_turn_us=250276 max_render_us=108451
+[ 163.87s] I (171634) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 163.87s] ok key injectedI (171635) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 165.07s] I (172835) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 165.07s] ok key injected
+[ 165.07s] I (172840) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 166.27s] I (174036) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 166.27s] ok key injected
+[ 166.27s] I (174040) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 167.47s] I (175236) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 167.47s] ok key injected
+[ 167.47s] I (175240) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 168.58s] I (176349) remapad_pocketjs: frames=4870 avg_turn_us=13891 avg_render_us=9207 avg_damage_px=6912 max_turn_us=250276 max_render_us=108451
+[ 168.67s] I (176440) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 168.67s] ok key injected
+[ 168.68s] I (176445) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 169.87s] I (177642) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 169.87s] ok key injected
+[ 169.87s] I (177645) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 171.08s] I (178845) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 171.08s] ok key injected
+[ 171.08s] I (178845) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 172.28s] I (180049) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 172.28s] I (180050) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 172.28s] ok key injected
+[ 173.48s] I (181252) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 173.48s] ok key injected
+[ 173.48s] I (181255) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 173.73s] I (181501) remapad_pocketjs: frames=5043 avg_turn_us=14839 avg_render_us=9784 avg_damage_px=7380 max_turn_us=250276 max_render_us=108451
+[ 174.69s] I (182454) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 174.69s] ok key injectedI (182455) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 175.89s] I (183657) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 175.89s] ok key injected
+[ 175.89s] I (183660) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 177.09s] I (184862) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 177.09s] ok key injected
+[ 177.09s] I (184865) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 178.29s] I (186063) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 178.29s] ok key injected
+[ 178.29s] I (186065) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 178.64s] I (186413) remapad_pocketjs: frames=5211 avg_turn_us=14110 avg_render_us=10099 avg_damage_px=7600 max_turn_us=250276 max_render_us=108451
+[ 179.50s] I (187268) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 179.50s] ok key injected
+[ 179.50s] I (187270) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 180.70s] I (188472) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 180.70s] ok key injected
+[ 180.70s] I (188475) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 181.91s] I (189677) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 181.91s] ok key injected
+[ 181.91s] I (189680) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 183.11s] I (190879) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 183.11s] ok key injected
+[ 183.11s] I (190880) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 183.66s] I (191424) remapad_pocketjs: frames=5380 avg_turn_us=14112 avg_render_us=10548 avg_damage_px=7952 max_turn_us=250276 max_render_us=108451
+[ 184.32s] I (192084) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 184.32s] ok key injected
+[ 184.32s] I (192085) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 185.52s] I (193285) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 185.52s] I (193285) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 185.52s] ok key injected
+[ 186.72s] I (194486) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 186.72s] ok key injected
+[ 186.72s] I (194490) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 187.92s] I (195688) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 187.92s] ok key injected
+[ 187.92s] I (195690) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 188.70s] I (196466) remapad_pocketjs: frames=5548 avg_turn_us=15124 avg_render_us=9992 avg_damage_px=7520 max_turn_us=250276 max_render_us=108451
+[ 189.12s] I (196889) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 189.12s] ok key injected
+[ 189.12s] I (196890) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 189.29s] I (197058) remapad_pocketjs: mem: js_heap=3056kB(pre 3068kB)/7372kB psram_free=2396740 internal_free=165167 allocs=55266 obj_n=15479 prop_n=52073 arr_n=717
+[ 190.32s] I (198090) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 190.32s] ok key injected
+[ 190.33s] I (198095) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 191.52s] I (199293) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 191.52s] ok key injected
+[ 191.52s] I (199295) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 192.73s] I (200497) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 192.73s] ok key injected
+[ 192.73s] I (200500) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 193.61s] I (201373) remapad_pocketjs: frames=5699 avg_turn_us=13982 avg_render_us=9192 avg_damage_px=6230 max_turn_us=250276 max_render_us=108451
+[ 193.93s] I (201700) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 193.93s] I (201700) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 193.93s] ok key injected
+[ 195.14s] I (202904) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 195.14s] I (202905) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 195.14s] ok key injected
+[ 196.34s] I (204107) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 196.34s] ok key injected
+[ 196.34s] I (204110) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 197.54s] I (205311) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 197.54s] ok key injected
+[ 197.55s] I (205315) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 198.57s] I (206346) remapad_pocketjs: frames=5882 avg_turn_us=14643 avg_render_us=9897 avg_damage_px=6903 max_turn_us=250276 max_render_us=108451
+[ 198.74s] I (206512) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 198.74s] ok key injected
+[ 198.74s] I (206515) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 199.94s] I (207714) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 199.94s] ok key injected
+[ 199.94s] I (207715) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 201.15s] I (208915) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 201.15s] I (208915) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 201.15s] ok key injected
+[ 202.35s] I (210115) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 202.35s] ok key injected
+[ 202.35s] I (210120) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 203.55s] I (211320) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 203.55s] ok key injected
+[ 203.56s] I (211325) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 203.85s] I (211626) remapad_pocketjs: frames=6064 avg_turn_us=15738 avg_render_us=10403 avg_damage_px=7310 max_turn_us=250276 max_render_us=108451
+[ 204.75s] I (212521) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 204.75s] ok key injected
+[ 204.75s] I (212525) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 205.95s] I (213723) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 205.95s] ok key injected
+[ 205.95s] I (213725) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 207.16s] I (214926) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 207.16s] ok key injected
+[ 207.16s] I (214930) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 208.36s] I (216130) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 208.36s] ok key injected
+[ 208.37s] I (216135) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 208.66s] I (216429) remapad_pocketjs: frames=6228 avg_turn_us=15543 avg_render_us=11012 avg_damage_px=7703 max_turn_us=250276 max_render_us=108451
+[ 209.56s] I (217334) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 209.56s] ok key injected
+[ 209.56s] I (217335) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 210.77s] I (218536) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 210.77s] ok key injected
+[ 210.77s] I (218540) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 211.97s] I (219736) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 211.97s] ok key injected
+[ 211.97s] I (219740) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 213.17s] I (220939) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 213.17s] I (220940) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 213.17s] ok key injected
+[ 213.65s] I (221417) remapad_pocketjs: frames=6394 avg_turn_us=15402 avg_render_us=11916 avg_damage_px=8420 max_turn_us=250276 max_render_us=108451
+[ 214.37s] I (222140) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 214.37s] ok key injected
+[ 214.38s] I (222145) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 215.58s] I (223345) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 215.58s] ok key injected
+[ 215.58s] I (223345) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 216.78s] I (224547) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 216.78s] ok key injected
+[ 216.78s] I (224550) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 217.98s] I (225748) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 217.98s] ok key injected
+[ 217.98s] I (225750) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 218.63s] I (226406) remapad_pocketjs: frames=6561 avg_turn_us=15411 avg_render_us=11750 avg_damage_px=8289 max_turn_us=250276 max_render_us=108451
+[ 219.18s] I (226948) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 219.18s] ok key injected
+[ 219.18s] I (226950) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 220.38s] I (228151) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 220.38s] ok key injected
+[ 220.38s] I (228155) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 221.58s] I (229354) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 221.58s] I (229355) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 221.58s] ok key injected
+[ 222.79s] I (230556) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 222.79s] ok key injected
+[ 222.79s] I (230560) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 223.62s] I (231392) remapad_pocketjs: frames=6725 avg_turn_us=16373 avg_render_us=11008 avg_damage_px=7703 max_turn_us=250276 max_render_us=108451
+[ 223.99s] I (231757) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 223.99s] ok key injected
+[ 223.99s] I (231760) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 225.19s] I (232958) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 225.19s] ok key injected
+[ 225.19s] I (232960) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 226.39s] I (234159) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 226.39s] ok key injected
+[ 226.39s] I (234161) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 227.59s] I (235360) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 227.59s] ok key injected
+[ 227.59s] I (235360) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 228.58s] I (236347) remapad_pocketjs: frames=6903 avg_turn_us=14872 avg_render_us=10162 avg_damage_px=7097 max_turn_us=250276 max_render_us=108451
+[ 228.79s] I (236564) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 228.79s] ok key injected
+[ 228.79s] I (236565) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 230.00s] I (237769) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 230.00s] I (237770) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 230.00s] ok key injected
+[ 231.20s] I (238974) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 231.20s] I (238975) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 231.20s] ok key injected
+[ 232.41s] I (240176) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 232.41s] ok key injected
+[ 232.41s] I (240180) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 233.58s] I (241349) remapad_pocketjs: frames=7088 avg_turn_us=14536 avg_render_us=9801 avg_damage_px=6828 max_turn_us=250276 max_render_us=108451
+[ 233.61s] I (241378) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 233.61s] ok key injected
+[ 233.61s] I (241380) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 234.81s] I (242580) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 234.81s] ok key injected
+[ 234.82s] I (242585) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 236.01s] I (243781) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 236.01s] ok key injected
+[ 236.01s] I (243785) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 237.21s] I (244983) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 237.21s] ok key injected
+[ 237.21s] I (244985) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 238.42s] I (246188) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 238.42s] ok key injected
+[ 238.42s] I (246190) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 238.71s] I (246487) remapad_pocketjs: frames=7255 avg_turn_us=16551 avg_render_us=11373 avg_damage_px=7967 max_turn_us=250276 max_render_us=108451
+[ 239.62s] I (247388) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 239.62s] ok key injected
+[ 239.62s] I (247390) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 240.82s] I (248593) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 240.82s] ok key injected
+[ 240.82s] I (248595) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 242.03s] I (249799) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 242.03s] ok key injectedI (249800) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 243.23s] I (251000) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 243.23s] I (251000) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 243.23s] ok key injected
+[ 243.64s] I (251412) remapad_pocketjs: frames=7421 avg_turn_us=15449 avg_render_us=11471 avg_damage_px=8015 max_turn_us=250276 max_render_us=108451
+[ 244.43s] I (252205) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 244.43s] ok key injected
+[ 244.43s] I (252205) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 245.64s] I (253408) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 245.64s] ok key injected
+[ 245.64s] I (253410) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 246.84s] I (254613) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 246.84s] ok key injected
+[ 246.84s] I (254615) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 248.05s] I (255816) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 248.05s] ok key injected
+[ 248.05s] I (255820) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 248.66s] I (256430) remapad_pocketjs: frames=7586 avg_turn_us=15397 avg_render_us=12067 avg_damage_px=8389 max_turn_us=250276 max_render_us=108451
+[ 249.25s] I (257019) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 249.25s] ok key injected
+[ 249.25s] I (257020) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 249.25s] I (257022) remapad_pocketjs: mem: js_heap=3056kB(pre 3069kB)/7372kB psram_free=2396088 internal_free=165167 allocs=55269 obj_n=15479 prop_n=52073 arr_n=717
+[ 250.45s] I (258223) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 250.45s] ok key injected
+[ 250.45s] I (258225) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 251.66s] I (259428) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 251.66s] ok key injected
+[ 251.66s] I (259430) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 252.86s] I (260632) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 252.86s] ok key injected
+[ 252.86s] I (260635) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 253.73s] I (261503) remapad_pocketjs: frames=7746 avg_turn_us=14477 avg_render_us=9482 avg_damage_px=6132 max_turn_us=250276 max_render_us=108451
+[ 254.06s] I (261834) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 254.06s] I (261835) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 254.06s] ok key injected
+[ 255.27s] I (263040) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 255.27s] ok key injected
+[ 255.27s] I (263040) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 256.47s] I (264244) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 256.47s] I (264245) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 256.47s] ok key injected
+[ 257.67s] I (265446) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 257.67s] ok key injected
+[ 257.68s] I (265450) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 258.58s] I (266348) remapad_pocketjs: frames=7910 avg_turn_us=15444 avg_render_us=11575 avg_damage_px=7539 max_turn_us=250276 max_render_us=108451
+[ 258.88s] I (266650) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 258.88s] ok key injected
+[ 258.88s] I (266655) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 260.08s] I (267855) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 260.08s] ok key injected
+[ 260.09s] I (267860) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 261.29s] I (269058) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 261.29s] ok key injected
+[ 261.29s] I (269060) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 262.49s] I (270263) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 262.49s] ok key injected
+[ 262.49s] I (270265) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 263.57s] I (271341) remapad_pocketjs: frames=8092 avg_turn_us=14499 avg_render_us=10454 avg_damage_px=6793 max_turn_us=250276 max_render_us=108451
+[ 263.69s] I (271467) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 263.69s] ok key injected
+[ 263.69s] I (271470) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 264.90s] I (272667) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 264.90s] ok key injected
+[ 264.90s] I (272670) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 266.10s] I (273871) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 266.10s] ok key injected
+[ 266.10s] I (273875) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 267.31s] I (275077) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 267.31s] ok key injected
+[ 267.31s] I (275080) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 268.51s] I (276279) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 268.51s] ok key injected
+[ 268.51s] I (276280) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 268.81s] I (276585) remapad_pocketjs: frames=8262 avg_turn_us=16233 avg_render_us=11734 avg_damage_px=7668 max_turn_us=250276 max_render_us=108451
+[ 269.71s] I (277480) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 269.71s] ok key injected
+[ 269.71s] I (277481) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 270.91s] I (278680) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 270.91s] ok key injected
+[ 270.91s] I (278685) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 272.11s] I (279882) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 272.11s] ok key injected
+[ 272.11s] I (279885) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 273.31s] I (281083) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 273.31s] ok key injectedI (281085) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 273.61s] I (281382) remapad_pocketjs: frames=8421 avg_turn_us=15733 avg_render_us=11922 avg_damage_px=7776 max_turn_us=250276 max_render_us=108451
+[ 274.51s] I (282284) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 274.51s] ok key injected
+[ 274.51s] I (282285) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 275.71s] I (283485) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 275.71s] ok key injected
+[ 275.72s] I (283490) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 276.92s] I (284690) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 276.92s] I (284689) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 276.92s] ok key injected
+[ 278.12s] I (285891) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 278.12s] ok key injected
+[ 278.12s] I (285895) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 278.63s] I (286405) remapad_pocketjs: frames=8584 avg_turn_us=15408 avg_render_us=12769 avg_damage_px=8327 max_turn_us=250276 max_render_us=108451
+[ 279.32s] I (287093) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 279.32s] ok key injected
+[ 279.32s] I (287095) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 280.52s] I (288294) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 280.52s] ok key injected
+[ 280.52s] I (288295) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 281.72s] I (289497) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 281.72s] ok key injected
+[ 281.72s] I (289500) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 282.93s] I (290698) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 282.93s] ok key injected
+[ 282.93s] I (290700) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 283.63s] I (291406) remapad_pocketjs: frames=8744 avg_turn_us=15700 avg_render_us=13018 avg_damage_px=8484 max_turn_us=250276 max_render_us=108451
+[ 284.13s] I (291900) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 284.13s] ok key injected
+[ 284.13s] I (291905) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 285.33s] I (293104) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 285.33s] I (293105) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 285.33s] ok key injected
+[ 286.54s] I (294308) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 286.54s] ok key injected
+[ 286.54s] I (294310) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 287.74s] I (295509) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 287.74s] ok key injected
+[ 287.74s] I (295511) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 288.61s] I (296388) remapad_pocketjs: frames=8906 avg_turn_us=16405 avg_render_us=11700 avg_damage_px=7632 max_turn_us=250276 max_render_us=108451
+[ 288.94s] I (296714) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 288.94s] ok key injected
+[ 288.94s] I (296715) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 290.14s] I (297916) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 290.14s] ok key injected
+[ 290.14s] I (297920) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 291.35s] I (299120) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 291.35s] ok key injected
+[ 291.35s] I (299125) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 292.55s] I (300323) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 292.55s] ok key injected
+[ 292.55s] I (300325) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 293.57s] I (301341) remapad_pocketjs: frames=9083 avg_turn_us=14735 avg_render_us=10742 avg_damage_px=6985 max_turn_us=250276 max_render_us=108451
+[ 293.75s] I (301526) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 293.75s] ok key injected
+[ 293.75s] I (301530) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 294.96s] I (302730) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 294.96s] ok key injected
+[ 294.96s] I (302730) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 296.16s] I (303935) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 296.16s] ok key injected
+[ 296.17s] I (303940) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 297.36s] I (305138) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 297.36s] ok key injected
+[ 297.36s] I (305140) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 298.57s] I (306339) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 298.57s] I (306340) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 298.57s] ok key injected
+[ 298.86s] I (306637) remapad_pocketjs: frames=9262 avg_turn_us=15783 avg_render_us=11152 avg_damage_px=7283 max_turn_us=250276 max_render_us=108451
+[ 299.77s] I (307541) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 299.77s] ok key injected
+[ 299.77s] I (307545) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 300.97s] I (308745) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 300.97s] ok key injected
+[ 300.98s] I (308750) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 302.18s] I (309948) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 302.18s] ok key injected
+[ 302.18s] I (309950) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 303.38s] I (311152) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 303.38s] ok key injected
+[ 303.38s] I (311155) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 303.68s] I (311455) remapad_pocketjs: frames=9421 avg_turn_us=15767 avg_render_us=11924 avg_damage_px=7776 max_turn_us=250276 max_render_us=108451
+[ 304.58s] I (312355) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 304.58s] I (312355) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 304.58s] ok key injected
+[ 305.78s] I (313555) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 305.78s] ok key injected
+[ 305.79s] I (313560) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 306.98s] I (314757) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 306.98s] ok key injected
+[ 306.98s] I (314760) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 308.18s] I (315957) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 308.18s] ok key injected
+[ 308.18s] I (315960) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 308.60s] I (316379) remapad_pocketjs: frames=9583 avg_turn_us=15577 avg_render_us=12313 avg_damage_px=8047 max_turn_us=250276 max_render_us=108451
+[ 309.20s] I (316970) remapad_pocketjs: mem: js_heap=3057kB(pre 3070kB)/7372kB psram_free=2395336 internal_free=165167 allocs=55273 obj_n=15480 prop_n=52080 arr_n=717
+[ 309.38s] I (317158) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 309.38s] ok key injected
+[ 309.38s] I (317160) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 310.59s] I (318359) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 310.59s] ok key injected
+[ 310.59s] I (318360) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 311.79s] I (319564) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 311.79s] ok key injected
+[ 311.79s] I (319565) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 312.99s] I (320764) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 312.99s] ok key injected
+[ 312.99s] I (320765) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 313.67s] I (321448) remapad_pocketjs: frames=9727 avg_turn_us=16111 avg_render_us=11994 avg_damage_px=7560 max_turn_us=262972 max_render_us=108451
+[ 314.19s] I (321966) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 314.19s] ok key injected
+[ 314.19s] I (321970) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 315.39s] I (323167) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 315.39s] ok key injected
+[ 315.39s] I (323170) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 316.60s] I (324372) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 316.60s] ok key injected
+[ 316.60s] I (324375) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 317.80s] I (325573) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 317.80s] ok key injected
+[ 317.80s] I (325575) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 318.60s] I (326373) remapad_pocketjs: frames=9838 avg_turn_us=23533 avg_render_us=19188 avg_damage_px=12229 max_turn_us=264083 max_render_us=108451
+[ 319.00s] I (326777) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 319.00s] ok key injected
+[ 319.00s] I (326780) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 320.21s] I (327983) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 320.21s] ok key injected
+[ 320.21s] I (327985) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 321.41s] I (329187) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 321.41s] ok key injected
+[ 321.41s] I (329190) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 322.62s] I (330390) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 322.62s] ok key injected
+[ 322.62s] I (330391) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 323.64s] I (331415) remapad_pocketjs: frames=9948 avg_turn_us=25522 avg_render_us=18394 avg_damage_px=11729 max_turn_us=264083 max_render_us=108451
+[ 323.82s] I (331593) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 323.82s] ok key injected
+[ 323.82s] I (331595) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 325.02s] I (332795) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 325.02s] ok key injected
+[ 325.02s] I (332795) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 326.22s] I (333995) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 326.22s] ok key injected
+[ 326.23s] I (334000) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 327.42s] I (335197) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 327.42s] ok key injected
+[ 327.42s] I (335200) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 328.58s] I (336355) remapad_pocketjs: frames=10068 avg_turn_us=22631 avg_render_us=16971 avg_damage_px=10752 max_turn_us=264083 max_render_us=108451
+[ 328.63s] I (336399) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 328.63s] ok key injected
+[ 328.63s] I (336400) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 329.83s] I (337603) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 329.83s] ok key injected
+[ 329.83s] I (337605) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 331.03s] I (338806) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 331.03s] ok key injected
+[ 331.04s] I (338810) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 332.24s] I (340009) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 332.24s] ok key injected
+[ 332.24s] I (340010) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 333.44s] I (341214) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 333.44s] ok key injected
+[ 333.44s] I (341215) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 333.81s] I (341583) remapad_pocketjs: frames=10184 avg_turn_us=25132 avg_render_us=18307 avg_damage_px=11702 max_turn_us=264798 max_render_us=108451
+[ 334.64s] I (342417) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 334.64s] ok key injected
+[ 334.64s] I (342420) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 335.84s] I (343619) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 335.84s] ok key injected
+[ 335.84s] I (343620) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 337.05s] I (344824) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 337.05s] ok key injected
+[ 337.05s] I (344825) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 338.25s] I (346026) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 338.25s] ok key injected
+[ 338.25s] I (346030) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 338.62s] I (346393) remapad_pocketjs: frames=10291 avg_turn_us=24118 avg_render_us=18885 avg_damage_px=12058 max_turn_us=264970 max_render_us=108451
+[ 339.46s] I (347231) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 339.46s] ok key injected
+[ 339.46s] I (347235) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 340.66s] I (348435) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 340.66s] ok key injected
+[ 340.67s] I (348440) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 341.86s] I (349637) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 341.86s] ok key injected
+[ 341.86s] I (349640) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 343.06s] I (350837) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 343.06s] ok key injected
+[ 343.06s] I (350840) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 343.64s] I (351410) remapad_pocketjs: frames=10404 avg_turn_us=23246 avg_render_us=19509 avg_damage_px=12488 max_turn_us=264970 max_render_us=108451
+[ 344.27s] I (352040) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 344.27s] ok key injected
+[ 344.27s] I (352040) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 345.47s] I (353242) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 345.47s] ok key injected
+[ 345.47s] I (353245) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 346.67s] I (354445) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 346.67s] ok key injected
+[ 346.68s] I (354450) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 347.88s] I (355650) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 347.88s] ok key injected
+[ 347.88s] I (355655) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 348.64s] I (356418) remapad_pocketjs: frames=10514 avg_turn_us=23612 avg_render_us=20052 avg_damage_px=12829 max_turn_us=264970 max_render_us=108451
+[ 349.08s] I (356855) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 349.08s] I (356855) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 349.08s] ok key injected
+[ 350.28s] I (358058) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 350.28s] ok key injected
+[ 350.28s] I (358060) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 351.49s] I (359260) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 351.49s] ok key injected
+[ 351.49s] I (359260) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 352.69s] I (360462) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 352.69s] ok key injected
+[ 352.69s] I (360465) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 353.62s] I (361401) remapad_pocketjs: frames=10627 avg_turn_us=24601 avg_render_us=17916 avg_damage_px=11418 max_turn_us=264970 max_render_us=108451
+[ 353.89s] I (361666) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 353.89s] ok key injected
+[ 353.90s] I (361670) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 355.09s] I (362869) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 355.09s] ok key injected
+[ 355.09s] I (362870) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 356.30s] I (364072) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 356.30s] ok key injected
+[ 356.30s] I (364075) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 357.50s] I (365274) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 357.50s] ok key injected
+[ 357.50s] I (365275) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 358.57s] I (366342) remapad_pocketjs: frames=10753 avg_turn_us=21480 avg_render_us=16101 avg_damage_px=10240 max_turn_us=264970 max_render_us=108451
+[ 358.70s] I (366476) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 358.70s] ok key injected
+[ 358.71s] I (366480) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 359.90s] I (367678) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 359.90s] ok key injected
+[ 359.90s] I (367680) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 361.11s] I (368883) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 361.11s] ok key injected
+[ 361.11s] I (368885) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 362.31s] I (370085) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 362.31s] ok key injected
+[ 362.31s] I (370085) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 363.51s] I (371285) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 363.51s] ok key injected
+[ 363.52s] I (371290) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 363.83s] I (371611) remapad_pocketjs: frames=10877 avg_turn_us=23391 avg_render_us=17154 avg_damage_px=10947 max_turn_us=264970 max_render_us=108451
+[ 364.71s] I (372488) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 364.71s] ok key injected
+[ 364.71s] I (372490) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 365.91s] I (373690) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 365.91s] ok key injected
+[ 365.91s] I (373690) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 367.12s] I (374892) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 367.12s] ok key injected
+[ 367.12s] I (374895) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 368.32s] I (376093) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 368.32s] ok key injected
+[ 368.32s] I (376096) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 368.64s] I (376417) remapad_pocketjs: frames=10988 avg_turn_us=23478 avg_render_us=18231 avg_damage_px=11623 max_turn_us=264970 max_render_us=108451
+[ 369.23s] I (377008) remapad_pocketjs: mem: js_heap=3058kB(pre 3071kB)/7372kB psram_free=2306236 internal_free=165167 allocs=55275 obj_n=15479 prop_n=52073 arr_n=717
+[ 369.52s] I (377295) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 369.52s] ok key injected
+[ 369.53s] I (377300) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 370.72s] I (378496) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 370.72s] ok key injected
+[ 370.73s] I (378500) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 371.92s] I (379699) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 371.92s] ok key injected
+[ 371.92s] I (379700) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 373.13s] I (380904) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 373.13s] ok key injectedI (380905) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 373.59s] I (381373) remapad_pocketjs: frames=11095 avg_turn_us=22080 avg_render_us=16160 avg_damage_px=9922 max_turn_us=264970 max_render_us=108451
+[ 374.33s] I (382109) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 374.33s] ok key injected
+[ 374.33s] I (382110) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 375.54s] I (383313) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 375.54s] ok key injected
+[ 375.54s] I (383315) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 376.74s] I (384519) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 376.74s] ok key injected
+[ 376.74s] I (384520) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 377.94s] I (385719) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 377.94s] ok key injected
+[ 377.94s] I (385720) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 378.64s] I (386412) remapad_pocketjs: frames=11198 avg_turn_us=24536 avg_render_us=22239 avg_damage_px=14092 max_turn_us=264970 max_render_us=108451
+[ 379.14s] I (386920) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 379.14s] ok key injected
+[ 379.15s] I (386925) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 380.35s] I (388121) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 380.35s] ok key injected
+[ 380.35s] I (388125) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 381.55s] I (389324) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 381.55s] ok key injected
+[ 381.55s] I (389325) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 382.75s] I (390526) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 382.75s] ok key injected
+[ 382.76s] I (390530) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 383.72s] I (391494) remapad_pocketjs: frames=11304 avg_turn_us=25604 avg_render_us=20506 avg_damage_px=12932 max_turn_us=264970 max_render_us=108451
+[ 383.95s] I (391731) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 383.95s] ok key injected
+[ 383.96s] I (391735) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 385.16s] I (392934) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 385.16s] ok key injected
+[ 385.16s] I (392935) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 386.36s] I (394135) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 386.36s] ok key injected
+[ 386.36s] I (394136) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 387.56s] I (395336) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 387.56s] ok key injected
+[ 387.56s] I (395340) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 388.57s] I (396346) remapad_pocketjs: frames=11412 avg_turn_us=23660 avg_render_us=19298 avg_damage_px=12195 max_turn_us=264970 max_render_us=108451
+[ 388.76s] I (396538) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 388.76s] ok key injected
+[ 388.76s] I (396540) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 389.96s] I (397740) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 389.96s] ok key injected
+[ 389.97s] I (397745) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 391.16s] I (398941) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 391.16s] ok key injected
+[ 391.17s] I (398945) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 392.37s] I (400144) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 392.37s] ok key injected
+[ 392.37s] I (400145) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 393.57s] I (401345) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 393.57s] ok key injected
+[ 393.57s] I (401347) remapad_pocketjs: frames=11538 avg_turn_us=21374 avg_render_us=16613 avg_damage_px=10453 max_turn_us=264970 max_render_us=108451
+[ 393.57s] I (401345) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 394.77s] I (402549) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 394.77s] ok key injected
+[ 394.77s] I (402550) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 395.97s] I (403750) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 395.97s] ok key injected
+[ 395.97s] I (403751) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 397.18s] I (404952) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 397.18s] ok key injected
+[ 397.18s] I (404955) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 398.38s] I (406156) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 398.38s] ok key injected
+[ 398.38s] I (406160) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 398.70s] I (406482) remapad_pocketjs: frames=11645 avg_turn_us=25753 avg_render_us=20397 avg_damage_px=12937 max_turn_us=264970 max_render_us=108451
+[ 399.58s] I (407359) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 399.58s] ok key injected
+[ 399.58s] I (407360) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 400.79s] I (408563) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 400.79s] ok key injected
+[ 400.79s] I (408565) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 401.99s] I (409765) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 401.99s] ok key injected
+[ 401.99s] I (409765) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 403.19s] I (410967) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 403.19s] ok key injected
+[ 403.19s] I (410970) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 403.63s] I (411405) remapad_pocketjs: frames=11723 avg_turn_us=30198 avg_render_us=27968 avg_damage_px=17747 max_turn_us=264970 max_render_us=108451
+[ 404.39s] I (412168) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 404.39s] ok key injected
+[ 404.39s] I (412170) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 405.59s] I (413370) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 405.59s] I (413370) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 405.59s] ok key injected
+[ 406.80s] I (414574) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 406.80s] ok key injected
+[ 406.80s] I (414575) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 408.00s] I (415775) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 408.00s] ok key injected
+[ 408.00s] I (415776) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 408.56s] I (416344) remapad_pocketjs: frames=11805 avg_turn_us=29236 avg_render_us=26707 avg_damage_px=16881 max_turn_us=264970 max_render_us=108451
+[ 409.20s] I (416975) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 409.20s] ok key injected
+[ 409.20s] I (416980) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 410.40s] I (418179) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 410.40s] ok key injected
+[ 410.40s] I (418180) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 411.60s] I (419380) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 411.60s] ok key injected
+[ 411.60s] I (419380) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 412.80s] I (420581) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 412.80s] ok key injected
+[ 412.80s] I (420585) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 413.61s] I (421384) remapad_pocketjs: frames=11887 avg_turn_us=29342 avg_render_us=27953 avg_damage_px=17701 max_turn_us=264970 max_render_us=108451
+[ 414.01s] I (421784) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 414.01s] ok key injected
+[ 414.01s] I (421786) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 415.21s] I (422989) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 415.21s] I (422990) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 415.21s] ok key injected
+[ 416.41s] I (424190) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 416.41s] ok key injected
+[ 416.41s] I (424190) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 417.62s] I (425393) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 417.62s] ok key injected
+[ 417.62s] I (425395) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 418.65s] I (426425) remapad_pocketjs: frames=11969 avg_turn_us=31861 avg_render_us=25380 avg_damage_px=16062 max_turn_us=264970 max_render_us=108451
+[ 418.82s] I (426593) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 418.82s] ok key injected
+[ 418.82s] I (426595) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 420.02s] I (427793) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 420.02s] ok key injected
+[ 420.02s] I (427795) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 421.22s] I (428994) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 421.22s] ok key injected
+[ 421.22s] I (428995) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 422.42s] I (430194) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 422.42s] ok key injected
+[ 422.42s] I (430195) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 423.56s] I (431341) remapad_pocketjs: frames=12056 avg_turn_us=28361 avg_render_us=24010 avg_damage_px=15139 max_turn_us=264970 max_render_us=108451
+[ 423.62s] I (431400) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 423.62s] ok key injected
+[ 423.62s] I (431400) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 424.82s] I (432600) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 424.82s] I (432600) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 424.82s] ok key injected
+[ 426.02s] I (433802) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 426.02s] ok key injected
+[ 426.02s] I (433805) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 427.23s] I (435007) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 427.23s] ok key injected
+[ 427.23s] I (435010) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 428.43s] I (436211) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 428.43s] ok key injected
+[ 428.43s] I (436215) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 428.80s] I (436578) remapad_pocketjs: frames=12142 avg_turn_us=31464 avg_render_us=25380 avg_damage_px=16096 max_turn_us=264970 max_render_us=108451
+[ 429.39s] I (437169) remapad_pocketjs: mem: js_heap=3058kB(pre 3072kB)/7372kB psram_free=2305228 internal_free=165167 allocs=55287 obj_n=15485 prop_n=52115 arr_n=717
+[ 429.64s] I (437414) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 429.64s] ok key injected
+[ 429.64s] I (437415) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 430.84s] I (438614) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 430.84s] ok key injected
+[ 430.84s] I (438615) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 432.04s] I (439819) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 432.04s] ok key injected
+[ 432.04s] I (439820) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 433.24s] I (441022) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 433.24s] ok key injected
+[ 433.24s] I (441025) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 433.62s] I (441404) remapad_pocketjs: frames=12281 avg_turn_us=14758 avg_render_us=10437 avg_damage_px=7058 max_turn_us=264970 max_render_us=108451
+[ 434.45s] I (442226) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 434.45s] ok key injected
+[ 434.45s] I (442230) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 435.65s] I (443427) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 435.65s] ok key injected
+[ 435.65s] I (443430) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 436.85s] I (444631) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 436.85s] ok key injected
+[ 436.85s] I (444635) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 438.05s] I (445832) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 438.05s] ok key injected
+[ 438.05s] I (445835) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 438.59s] I (446364) remapad_pocketjs: frames=12439 avg_turn_us=16357 avg_render_us=12042 avg_damage_px=8336 max_turn_us=264970 max_render_us=108451
+[ 439.26s] I (447035) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 439.26s] ok key injected
+[ 439.26s] I (447040) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 440.46s] I (448239) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 440.46s] I (448240) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 440.46s] ok key injected
+[ 441.66s] I (449441) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 441.66s] ok key injected
+[ 441.66s] I (449445) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 442.86s] I (450643) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 442.86s] ok key injected
+[ 442.86s] I (450646) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 443.67s] I (451444) remapad_pocketjs: frames=12599 avg_turn_us=17280 avg_render_us=11447 avg_damage_px=7896 max_turn_us=264970 max_render_us=108451
+[ 444.07s] I (451846) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 444.07s] ok key injected
+[ 444.07s] I (451850) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 445.27s] I (453048) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 445.27s] ok key injected
+[ 445.27s] I (453050) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 446.47s] I (454249) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 446.47s] I (454250) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 446.47s] ok key injected
+[ 447.67s] I (455453) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 447.67s] ok key injected
+[ 447.67s] I (455455) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 448.57s] I (456349) remapad_pocketjs: frames=12768 avg_turn_us=15656 avg_render_us=10439 avg_damage_px=7157 max_turn_us=264970 max_render_us=108451
+[ 448.88s] I (456658) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 448.88s] ok key injected
+[ 448.88s] I (456660) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 450.08s] I (457861) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 450.08s] ok key injected
+[ 450.09s] I (457865) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 451.29s] I (459065) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 451.29s] ok key injected
+[ 451.29s] I (459070) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 452.49s] I (460269) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 452.49s] ok key injected
+[ 452.49s] I (460270) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 453.57s] I (461349) remapad_pocketjs: frames=12940 avg_turn_us=15622 avg_render_us=10253 avg_damage_px=7032 max_turn_us=264970 max_render_us=108451
+[ 453.69s] I (461472) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 453.69s] ok key injected
+[ 453.69s] I (461475) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 454.89s] I (462672) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 454.89s] ok key injected
+[ 454.89s] I (462675) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 456.09s] I (463872) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 456.09s] ok key injected
+[ 456.09s] I (463875) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 457.30s] I (465076) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 457.30s] ok key injected
+[ 457.30s] I (465080) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 458.50s] I (466278) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 458.50s] ok key injected
+[ 458.50s] I (466280) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 458.83s] I (466604) remapad_pocketjs: frames=13106 avg_turn_us=17149 avg_render_us=11190 avg_damage_px=7691 max_turn_us=264970 max_render_us=108451
+[ 459.70s] I (467479) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 459.70s] ok key injected
+[ 459.70s] I (467480) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 460.91s] I (468684) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 460.91s] ok key injected
+[ 460.91s] I (468685) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 462.11s] I (469886) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 462.11s] ok key injected
+[ 462.11s] I (469890) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 463.31s] I (471091) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 463.31s] ok key injected
+[ 463.32s] I (471095) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 463.64s] I (471423) remapad_pocketjs: frames=13265 avg_turn_us=16345 avg_render_us=11065 avg_damage_px=7607 max_turn_us=264970 max_render_us=108451
+[ 464.52s] I (472296) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 464.52s] ok key injected
+[ 464.52s] I (472300) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 465.72s] I (473501) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 465.72s] ok key injected
+[ 465.72s] I (473505) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 466.92s] I (474702) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 466.92s] ok key injected
+[ 466.92s] I (474705) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 468.12s] I (475903) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 468.12s] ok key injected
+[ 468.12s] I (475905) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 468.66s] I (476445) remapad_pocketjs: frames=13424 avg_turn_us=16302 avg_render_us=12343 avg_damage_px=8452 max_turn_us=264970 max_render_us=108451
+[ 469.33s] I (477104) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 469.33s] I (477105) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 469.33s] ok key injected
+[ 470.53s] I (478309) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 470.53s] ok key injected
+[ 470.53s] I (478310) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 471.73s] I (479511) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 471.73s] ok key injected
+[ 471.73s] I (479515) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 472.93s] I (480713) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 472.93s] ok key injected
+[ 472.93s] I (480715) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 473.59s] I (481373) remapad_pocketjs: frames=13587 avg_turn_us=16112 avg_render_us=11448 avg_damage_px=7833 max_turn_us=264970 max_render_us=108451
+[ 474.14s] I (481916) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 474.14s] ok key injected
+[ 474.14s] I (481920) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 475.34s] I (483118) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 475.34s] ok key injected
+[ 475.34s] I (483120) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 476.54s] I (484323) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 476.54s] ok key injected
+[ 476.54s] I (484325) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 477.75s] I (485526) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 477.75s] ok key injected
+[ 477.75s] I (485530) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 478.67s] I (486452) remapad_pocketjs: frames=13746 avg_turn_us=17271 avg_render_us=11632 avg_damage_px=7945 max_turn_us=264970 max_render_us=108451
+[ 478.95s] I (486731) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 478.95s] ok key injected
+[ 478.95s] I (486735) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 480.15s] I (487933) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 480.15s] ok key injected
+[ 480.15s] I (487935) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 481.36s] I (489136) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 481.36s] ok key injected
+[ 481.36s] I (489140) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 482.56s] I (490337) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 482.56s] ok key injected
+[ 482.56s] I (490340) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 483.56s] I (491344) remapad_pocketjs: frames=13913 avg_turn_us=15815 avg_render_us=10557 avg_damage_px=7243 max_turn_us=264970 max_render_us=108451
+[ 483.76s] I (491541) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 483.76s] ok key injected
+[ 483.77s] I (491545) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 484.97s] I (492746) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 484.97s] ok key injected
+[ 484.97s] I (492750) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 486.17s] I (493950) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 486.17s] ok key injected
+[ 486.18s] I (493955) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 487.37s] I (495152) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 487.37s] ok key injected
+[ 487.37s] I (495155) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 488.57s] I (496349) remapad_pocketjs: frames=14091 avg_turn_us=15313 avg_render_us=9915 avg_damage_px=6795 max_turn_us=264970 max_render_us=108451
+[ 488.57s] I (496354) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 488.57s] ok key injected
+[ 488.57s] I (496355) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 489.16s] I (496941) remapad_pocketjs: mem: js_heap=3057kB(pre 3070kB)/7372kB psram_free=2306264 internal_free=165167 allocs=55274 obj_n=15479 prop_n=52073 arr_n=717
+[ 489.77s] I (497554) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 489.77s] I (497555) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 489.77s] ok key injected
+[ 490.98s] I (498756) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 490.98s] ok key injected
+[ 490.98s] I (498760) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 492.18s] I (499957) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 492.18s] ok key injected
+[ 492.18s] I (499960) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 493.38s] I (501157) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 493.38s] ok key injected
+[ 493.38s] I (501160) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 493.74s] I (501523) remapad_pocketjs: frames=14188 avg_turn_us=24088 avg_render_us=17423 avg_damage_px=10945 max_turn_us=264970 max_render_us=108451
+[ 494.58s] I (502361) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 494.58s] ok key injected
+[ 494.59s] I (502365) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 495.78s] I (503561) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 495.78s] ok key injected
+[ 495.78s] I (503565) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 496.98s] I (504763) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 496.98s] ok key injectedI (504765) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 498.19s] I (505967) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 498.19s] ok key injected
+[ 498.19s] I (505970) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 498.67s] I (506449) remapad_pocketjs: frames=14270 avg_turn_us=29176 avg_render_us=26606 avg_damage_px=16881 max_turn_us=264970 max_render_us=108451
+[ 499.39s] I (507171) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 499.39s] ok key injected
+[ 499.39s] I (507175) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 500.59s] I (508372) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 500.59s] ok key injected
+[ 500.59s] I (508375) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 501.79s] I (509571) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 501.79s] ok key injected
+[ 501.79s] I (509575) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 502.99s] I (510775) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 502.99s] ok key injected
+[ 502.99s] I (510775) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 503.58s] I (511361) remapad_pocketjs: frames=14351 avg_turn_us=29411 avg_render_us=26933 avg_damage_px=17090 max_turn_us=264970 max_render_us=108451
+[ 504.20s] I (511979) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 504.20s] ok key injected
+[ 504.20s] I (511980) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 505.40s] I (513182) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 505.40s] ok key injected
+[ 505.40s] I (513185) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 506.60s] I (514383) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 506.60s] ok key injected
+[ 506.60s] I (514385) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 507.81s] I (515588) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 507.81s] ok key injected
+[ 507.81s] I (515590) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 508.61s] I (516389) remapad_pocketjs: frames=14434 avg_turn_us=28992 avg_render_us=27411 avg_damage_px=17326 max_turn_us=264970 max_render_us=108451
+[ 509.01s] I (516789) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 509.01s] I (516790) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 509.01s] ok key injected
+[ 510.21s] I (517993) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 510.21s] ok key injected
+[ 510.21s] I (517995) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 511.42s] I (519197) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 511.42s] ok key injected
+[ 511.42s] I (519200) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 512.62s] I (520398) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 512.62s] ok key injected
+[ 512.62s] I (520400) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 513.56s] I (521347) remapad_pocketjs: frames=14515 avg_turn_us=31273 avg_render_us=25715 avg_damage_px=16260 max_turn_us=264970 max_render_us=108451
+[ 513.82s] I (521599) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 513.82s] ok key injected
+[ 513.82s] I (521600) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 515.02s] I (522802) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 515.02s] ok key injected
+[ 515.02s] I (522805) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 516.22s] I (524004) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 516.22s] ok key injected
+[ 516.22s] I (524005) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 517.43s] I (525207) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 517.43s] ok key injected
+[ 517.43s] I (525210) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 518.57s] I (526349) remapad_pocketjs: frames=14609 avg_turn_us=26240 avg_render_us=22172 avg_damage_px=14011 max_turn_us=264970 max_render_us=108451
+[ 518.63s] I (526408) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 518.63s] ok key injected
+[ 518.63s] I (526411) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 519.83s] I (527612) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 519.83s] ok key injected
+[ 519.83s] I (527615) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 521.03s] I (528816) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 521.03s] ok key injected
+[ 521.03s] I (528820) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 522.24s] I (530017) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 522.24s] ok key injected
+[ 522.24s] I (530020) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 523.44s] I (531220) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 523.44s] ok key injected
+[ 523.44s] I (531225) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 523.77s] I (531555) remapad_pocketjs: frames=14695 avg_turn_us=30539 avg_render_us=25341 avg_damage_px=16096 max_turn_us=264970 max_render_us=108451
+[ 524.64s] I (532425) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 524.64s] ok key injected
+[ 524.64s] I (532425) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 525.85s] I (533629) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 525.85s] ok key injected
+[ 525.85s] I (533630) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 527.05s] I (534832) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 527.05s] ok key injected
+[ 527.05s] I (534835) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 528.25s] I (536035) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 528.25s] ok key injected
+[ 528.25s] I (536040) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 528.57s] I (536355) remapad_pocketjs: frames=14771 avg_turn_us=30781 avg_render_us=27318 avg_damage_px=17330 max_turn_us=264970 max_render_us=108451
+[ 529.46s] I (537237) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 529.46s] ok key injected
+[ 529.46s] I (537240) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 530.66s] I (538439) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 530.66s] I (538440) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 530.66s] ok key injected
+[ 531.86s] I (539642) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 531.86s] ok key injected
+[ 531.86s] I (539645) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 533.06s] I (540844) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 533.06s] ok key injected
+[ 533.06s] I (540845) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 533.63s] I (541410) remapad_pocketjs: frames=14854 avg_turn_us=29039 avg_render_us=27661 avg_damage_px=17488 max_turn_us=264970 max_render_us=108451
+[ 534.27s] I (542048) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 534.27s] ok key injected
+[ 534.27s] I (542050) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 535.47s] I (543248) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 535.47s] ok key injected
+[ 535.47s] I (543250) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 536.67s] I (544449) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 536.67s] ok key injected
+[ 536.67s] I (544450) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 537.87s] I (545651) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 537.87s] ok key injected
+[ 537.87s] I (545655) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 538.67s] I (546452) remapad_pocketjs: frames=14936 avg_turn_us=29255 avg_render_us=28000 avg_damage_px=17701 max_turn_us=264970 max_render_us=108451
+[ 539.07s] I (546852) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 539.07s] ok key injected
+[ 539.07s] I (546855) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 540.27s] I (548054) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 540.27s] ok key injected
+[ 540.27s] I (548055) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 541.47s] I (549256) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 541.47s] ok key injected
+[ 541.48s] I (549260) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 542.67s] I (550456) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 542.67s] ok key injected
+[ 542.67s] I (550460) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 543.71s] I (551491) remapad_pocketjs: frames=15018 avg_turn_us=31817 avg_render_us=25383 avg_damage_px=16062 max_turn_us=264970 max_render_us=108451
+[ 543.88s] I (551662) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 543.88s] ok key injected
+[ 543.88s] I (551665) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 545.08s] I (552863) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 545.08s] ok key injected
+[ 545.08s] I (552865) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 546.28s] I (554066) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 546.28s] ok key injected
+[ 546.29s] I (554070) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 547.49s] I (555271) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 547.49s] ok key injected
+[ 547.49s] I (555275) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 548.56s] I (556341) remapad_pocketjs: frames=15101 avg_turn_us=29090 avg_render_us=25111 avg_damage_px=15868 max_turn_us=264970 max_render_us=108451
+[ 548.69s] I (556473) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 548.69s] ok key injected
+[ 548.69s] I (556475) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 549.15s] I (556932) remapad_pocketjs: mem: js_heap=3058kB(pre 3072kB)/7372kB psram_free=2305204 internal_free=165167 allocs=55286 obj_n=15485 prop_n=52115 arr_n=717
+[ 549.89s] I (557676) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 549.89s] ok key injected
+[ 549.90s] I (557680) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 551.10s] I (558880) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 551.10s] ok key injected
+[ 551.10s] I (558880) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 552.30s] I (560080) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 552.30s] ok key injected
+[ 552.30s] I (560085) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 553.50s] I (561284) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 553.50s] ok key injected
+[ 553.50s] I (561286) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 553.83s] I (561607) remapad_pocketjs: frames=15241 avg_turn_us=19526 avg_render_us=11714 avg_damage_px=7296 max_turn_us=264970 max_render_us=108451
+[ 554.71s] I (562489) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 554.71s] I (562490) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 554.71s] ok key injected
+[ 555.91s] I (563693) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 555.91s] ok key injected
+[ 555.91s] I (563695) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 557.11s] I (564893) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 557.11s] ok key injected
+[ 557.11s] I (564895) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 558.32s] I (566099) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 558.32s] ok key injected
+[ 558.32s] I (566100) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 558.64s] I (566426) remapad_pocketjs: frames=15352 avg_turn_us=23291 avg_render_us=18208 avg_damage_px=11623 max_turn_us=264970 max_render_us=108451
+[ 559.52s] I (567303) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 559.52s] ok key injected
+[ 559.52s] I (567305) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 560.73s] I (568508) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 560.73s] ok key injected
+[ 560.73s] I (568510) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 561.93s] I (569713) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 561.93s] ok key injected
+[ 561.93s] I (569715) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 563.13s] I (570917) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 563.13s] ok key injected
+[ 563.13s] I (570920) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 563.58s] I (571357) remapad_pocketjs: frames=15465 avg_turn_us=23213 avg_render_us=18839 avg_damage_px=12012 max_turn_us=264970 max_render_us=108451
+[ 564.34s] I (572120) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 564.34s] ok key injected
+[ 564.34s] I (572120) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 565.54s] I (573322) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 565.54s] ok key injected
+[ 565.54s] I (573325) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 566.74s] I (574526) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 566.74s] ok key injected
+[ 566.75s] I (574530) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 567.95s] I (575728) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 567.95s] ok key injected
+[ 567.95s] I (575730) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 568.62s] I (576408) remapad_pocketjs: frames=15578 avg_turn_us=23266 avg_render_us=19794 avg_damage_px=12607 max_turn_us=264970 max_render_us=108451
+[ 569.15s] I (576932) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 569.15s] ok key injected
+[ 569.15s] I (576935) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 570.35s] I (578135) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 570.35s] ok key injected
+[ 570.36s] I (578140) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 571.55s] I (579337) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 571.55s] ok key injected
+[ 571.55s] I (579340) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 572.76s] I (580539) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 572.76s] ok key injected
+[ 572.76s] I (580540) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 573.56s] I (581343) remapad_pocketjs: frames=15686 avg_turn_us=23802 avg_render_us=19703 avg_damage_px=12568 max_turn_us=264970 max_render_us=108451
+[ 573.96s] I (581742) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 573.96s] ok key injected
+[ 573.96s] I (581745) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 575.16s] I (582947) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 575.16s] ok key injected
+[ 575.16s] I (582950) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 576.37s] I (584150) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 576.37s] ok key injected
+[ 576.37s] I (584155) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 577.57s] I (585351) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 577.57s] ok key injected
+[ 577.57s] I (585355) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 578.59s] I (586377) remapad_pocketjs: frames=15799 avg_turn_us=25072 avg_render_us=17933 avg_damage_px=11418 max_turn_us=264970 max_render_us=108451
+[ 578.77s] I (586553) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 578.77s] ok key injected
+[ 578.77s] I (586555) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 579.97s] I (587756) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 579.97s] ok key injected
+[ 579.98s] I (587760) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 581.18s] I (588961) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 581.18s] ok key injected
+[ 581.18s] I (588965) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 582.38s] I (590163) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 582.38s] ok key injected
+[ 582.38s] I (590165) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 583.57s] I (591355) remapad_pocketjs: frames=15916 avg_turn_us=23037 avg_render_us=17392 avg_damage_px=11027 max_turn_us=264970 max_render_us=108451
+[ 583.58s] I (591367) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 583.58s] ok key injected
+[ 583.58s] I (591370) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 584.78s] I (592568) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 584.78s] ok key injected
+[ 584.78s] I (592570) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 585.99s] I (593773) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 585.99s] ok key injected
+[ 585.99s] I (593775) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 587.19s] I (594977) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 587.19s] ok key injected
+[ 587.19s] I (594980) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 588.39s] I (596178) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 588.39s] ok key injected
+[ 588.39s] I (596180) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 588.77s] I (596549) remapad_pocketjs: frames=16031 avg_turn_us=25163 avg_render_us=18423 avg_damage_px=11803 max_turn_us=264970 max_render_us=108451
+[ 589.60s] I (597382) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 589.60s] ok key injected
+[ 589.60s] I (597385) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 590.80s] I (598583) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 590.80s] ok key injected
+[ 590.80s] I (598585) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 592.00s] I (599788) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 592.00s] ok key injected
+[ 592.00s] I (599790) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 593.21s] I (600993) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 593.21s] ok key injected
+[ 593.21s] I (600996) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 593.58s] I (601364) remapad_pocketjs: frames=16143 avg_turn_us=23327 avg_render_us=18064 avg_damage_px=11520 max_turn_us=264970 max_render_us=108451
+[ 594.41s] I (602198) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 594.41s] ok key injected
+[ 594.41s] I (602200) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 595.62s] I (603403) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 595.62s] ok key injected
+[ 595.62s] I (603405) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 596.82s] I (604606) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 596.82s] ok key injected
+[ 596.83s] I (604610) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 598.02s] I (605807) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 598.02s] ok key injected
+[ 598.02s] I (605810) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 598.60s] I (606377) remapad_pocketjs: frames=16240 avg_turn_us=25965 avg_render_us=22679 avg_damage_px=14548 max_turn_us=264970 max_render_us=108451
+[ 599.23s] I (607011) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 599.23s] ok key injected
+[ 599.23s] I (607015) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 600.43s] I (608211) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 600.43s] ok key injected
+[ 600.43s] I (608215) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 601.63s] I (609413) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 601.63s] ok key injected
+[ 601.63s] I (609415) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 602.83s] I (610615) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 602.83s] ok key injected
+[ 602.84s] I (610620) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 603.59s] I (611380) remapad_pocketjs: frames=16353 avg_turn_us=23149 avg_render_us=19557 avg_damage_px=12488 max_turn_us=264970 max_render_us=108451
+[ 604.03s] I (611817) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 604.03s] ok key injected
+[ 604.03s] I (611820) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 605.23s] I (613019) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 605.23s] ok key injected
+[ 605.23s] I (613020) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 606.44s] I (614221) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 606.44s] ok key injected
+[ 606.44s] I (614225) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 607.64s] I (615423) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 607.64s] ok key injected
+[ 607.64s] I (615425) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 608.58s] I (616362) remapad_pocketjs: frames=16466 avg_turn_us=24565 avg_render_us=17914 avg_damage_px=11418 max_turn_us=264970 max_render_us=108451
+[ 608.84s] I (616628) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 608.84s] ok key injected
+[ 608.84s] I (616630) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 609.17s] I (616955) remapad_pocketjs: mem: js_heap=3058kB(pre 3071kB)/7372kB psram_free=2306124 internal_free=165167 allocs=55276 obj_n=15480 prop_n=52080 arr_n=717
+[ 610.04s] I (617829) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 610.04s] ok key injected
+[ 610.04s] I (617830) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 611.24s] I (619029) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 611.24s] ok key injected
+[ 611.24s] I (619030) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 612.45s] I (620231) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 612.45s] ok key injected
+[ 612.45s] I (620235) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 613.56s] I (621348) remapad_pocketjs: frames=16634 avg_turn_us=13155 avg_render_us=8586 avg_damage_px=5520 max_turn_us=264970 max_render_us=108451
+[ 613.65s] I (621433) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 613.65s] ok key injected
+[ 613.65s] I (621435) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 614.85s] I (622633) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 614.85s] ok key injected
+[ 614.85s] I (622635) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 616.05s] I (623838) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 616.05s] ok key injected
+[ 616.05s] I (623840) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 617.26s] I (625041) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 617.26s] ok key injected
+[ 617.26s] I (625045) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 618.46s] I (626242) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 618.46s] ok key injected
+[ 618.46s] I (626245) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 618.79s] I (626579) remapad_pocketjs: frames=16801 avg_turn_us=16498 avg_render_us=11924 avg_damage_px=7806 max_turn_us=264970 max_render_us=108451
+[ 619.66s] I (627443) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 619.66s] ok key injected
+[ 619.66s] I (627445) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 620.86s] I (628647) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 620.86s] ok key injected
+[ 620.86s] I (628650) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 622.07s] I (629853) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 622.07s] ok key injected
+[ 622.07s] I (629855) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 623.27s] I (631054) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 623.27s] ok key injected
+[ 623.27s] I (631055) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 623.57s] I (631354) remapad_pocketjs: frames=16960 avg_turn_us=15738 avg_render_us=11919 avg_damage_px=7776 max_turn_us=264970 max_render_us=108451
+[ 624.47s] I (632257) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 624.47s] ok key injected
+[ 624.47s] I (632260) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 625.68s] I (633460) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 625.68s] ok key injected
+[ 625.68s] I (633465) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 626.88s] I (634663) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 626.88s] ok key injected
+[ 626.88s] I (634665) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 628.08s] I (635867) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 628.08s] ok key injected
+[ 628.08s] I (635870) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 628.58s] I (636370) remapad_pocketjs: frames=17123 avg_turn_us=15520 avg_render_us=12753 avg_damage_px=8327 max_turn_us=264970 max_render_us=108451
+[ 629.29s] I (637072) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 629.29s] ok key injected
+[ 629.29s] I (637075) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 630.49s] I (638274) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 630.49s] ok key injected
+[ 630.49s] I (638275) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 631.69s] I (639476) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 631.69s] ok key injected
+[ 631.70s] I (639480) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 632.90s] I (640681) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 632.90s] ok key injected
+[ 632.90s] I (640685) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 633.60s] I (641388) remapad_pocketjs: frames=17286 avg_turn_us=15497 avg_render_us=12764 avg_damage_px=8327 max_turn_us=264970 max_render_us=108451
+[ 634.10s] I (641883) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 634.10s] ok key injected
+[ 634.10s] I (641885) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 635.30s] I (643083) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 635.30s] ok key injected
+[ 635.30s] I (643085) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 636.50s] I (644284) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 636.50s] ok key injected
+[ 636.50s] I (644285) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 637.70s] I (645484) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 637.70s] ok key injectedI (645485) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 638.57s] I (646357) remapad_pocketjs: frames=17445 avg_turn_us=16742 avg_render_us=11915 avg_damage_px=7776 max_turn_us=264970 max_render_us=108451
+[ 638.90s] I (646684) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 638.90s] I (646685) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 638.90s] ok key injected
+[ 640.10s] I (647889) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 640.10s] I (647890) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 640.10s] ok key injected
+[ 641.31s] I (649090) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 641.31s] ok key injected
+[ 641.31s] I (649095) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 642.51s] I (650294) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 642.51s] ok key injected
+[ 642.51s] I (650295) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 643.56s] I (651347) remapad_pocketjs: frames=17626 avg_turn_us=14690 avg_render_us=10511 avg_damage_px=6831 max_turn_us=264970 max_render_us=108451
+[ 643.71s] I (651499) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 643.71s] ok key injected
+[ 643.71s] I (651500) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 644.92s] I (652702) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 644.92s] ok key injected
+[ 644.92s] I (652705) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 646.12s] I (653904) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 646.12s] I (653905) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 646.12s] ok key injected
+[ 647.32s] I (655109) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 647.32s] ok key injected
+[ 647.32s] I (655110) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 648.53s] I (656314) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 648.53s] ok key injected
+[ 648.53s] I (656315) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 648.84s] I (656620) remapad_pocketjs: frames=17802 avg_turn_us=16020 avg_render_us=11329 avg_damage_px=7407 max_turn_us=264970 max_render_us=108451
+[ 649.73s] I (657516) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 649.73s] ok key injected
+[ 649.73s] I (657520) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 650.94s] I (658721) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 650.94s] ok key injected
+[ 650.94s] I (658725) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 652.14s] I (659921) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 652.14s] ok key injected
+[ 652.14s] I (659925) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 653.34s] I (661122) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 653.34s] ok key injected
+[ 653.34s] I (661125) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 653.65s] I (661437) remapad_pocketjs: frames=17963 avg_turn_us=15627 avg_render_us=11771 avg_damage_px=7680 max_turn_us=264970 max_render_us=108451
+[ 654.54s] I (662327) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 654.54s] ok key injected
+[ 654.54s] I (662330) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 655.74s] I (663530) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 655.74s] ok key injected
+[ 655.74s] I (663530) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 656.95s] I (664735) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 656.95s] ok key injected
+[ 656.95s] I (664740) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 658.15s] I (665937) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 658.15s] ok key injected
+[ 658.15s] I (665940) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 658.56s] I (666347) remapad_pocketjs: frames=18122 avg_turn_us=15764 avg_render_us=12544 avg_damage_px=8199 max_turn_us=264970 max_render_us=108451
+[ 659.35s] I (667138) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 659.35s] ok key injected
+[ 659.35s] I (667140) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 660.55s] I (668339) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 660.55s] I (668340) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 660.55s] ok key injected
+[ 661.75s] I (669539) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 661.75s] I (669540) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 661.75s] ok key injected
+[ 662.96s] I (670742) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 662.96s] ok key injected
+[ 662.96s] I (670745) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 663.58s] I (671363) remapad_pocketjs: frames=18285 avg_turn_us=15544 avg_render_us=12766 avg_damage_px=8327 max_turn_us=264970 max_render_us=108451
+[ 664.16s] I (671945) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 664.16s] ok key injected
+[ 664.16s] I (671945) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 665.36s] I (673146) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 665.36s] ok key injected
+[ 665.36s] I (673150) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 666.56s] I (674347) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 666.56s] ok key injected
+[ 666.56s] I (674350) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 667.77s] I (675551) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 667.77s] ok key injected
+[ 667.77s] I (675555) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 668.64s] I (676422) remapad_pocketjs: frames=18446 avg_turn_us=16622 avg_render_us=12313 avg_damage_px=8013 max_turn_us=264970 max_render_us=108451
+[ 668.97s] I (676752) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 668.97s] ok key injected
+[ 668.97s] I (676755) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 669.23s] I (677014) remapad_pocketjs: mem: js_heap=3057kB(pre 3070kB)/7372kB psram_free=2306260 internal_free=165167 allocs=55274 obj_n=15479 prop_n=52073 arr_n=717
+[ 670.17s] I (677956) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 670.17s] ok key injected
+[ 670.17s] I (677960) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 671.37s] I (679159) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 671.37s] ok key injected
+[ 671.37s] I (679160) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 672.58s] I (680364) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 672.58s] ok key injected
+[ 672.58s] I (680365) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 673.56s] I (681348) remapad_pocketjs: frames=18604 avg_turn_us=13716 avg_render_us=8455 avg_damage_px=6039 max_turn_us=264970 max_render_us=108451
+[ 673.78s] I (681566) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 673.78s] ok key injected
+[ 673.78s] I (681570) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 674.98s] I (682768) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 674.98s] ok key injected
+[ 674.98s] I (682770) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 676.19s] I (683972) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 676.19s] ok key injected
+[ 676.19s] I (683975) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 677.39s] I (685176) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 677.39s] ok key injected
+[ 677.39s] I (685180) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 678.56s] I (686349) remapad_pocketjs: frames=18791 avg_turn_us=14501 avg_render_us=9688 avg_damage_px=6755 max_turn_us=264970 max_render_us=108451
+[ 678.59s] I (686378) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 678.59s] ok key injected
+[ 678.59s] I (686380) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 679.79s] I (687582) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 679.79s] ok key injected
+[ 679.79s] I (687585) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 681.00s] I (688784) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 681.00s] ok key injected
+[ 681.00s] I (688785) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 682.20s] I (689988) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 682.20s] ok key injected
+[ 682.20s] I (689990) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 683.40s] I (691189) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 683.40s] I (691190) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 683.40s] ok key injected
+[ 683.70s] I (691488) remapad_pocketjs: frames=18957 avg_turn_us=16662 avg_render_us=11427 avg_damage_px=8015 max_turn_us=264970 max_render_us=108451
+[ 684.60s] I (692390) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 684.60s] ok key injected
+[ 684.61s] I (692395) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 685.81s] I (693594) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 685.81s] ok key injected
+[ 685.81s] I (693595) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 687.01s] I (694795) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 687.01s] ok key injected
+[ 687.01s] I (694796) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 688.21s] I (696000) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 688.21s] ok key injected
+[ 688.21s] I (696005) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 688.63s] I (696412) remapad_pocketjs: frames=19123 avg_turn_us=15429 avg_render_us=11476 avg_damage_px=8015 max_turn_us=264970 max_render_us=108451
+[ 689.41s] I (697201) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 689.41s] ok key injected
+[ 689.41s] I (697205) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 690.62s] I (698406) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 690.62s] ok key injected
+[ 690.62s] I (698410) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 691.82s] I (699606) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 691.82s] ok key injected
+[ 691.82s] I (699610) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 693.02s] I (700806) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 693.02s] ok key injected
+[ 693.02s] I (700810) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 693.65s] I (701433) remapad_pocketjs: frames=19289 avg_turn_us=15455 avg_render_us=11984 avg_damage_px=8339 max_turn_us=264970 max_render_us=108451
+[ 694.22s] I (702010) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 694.22s] ok key injected
+[ 694.22s] I (702011) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 695.42s] I (703212) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 695.42s] ok key injected
+[ 695.42s] I (703215) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 696.63s] I (704415) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 696.63s] ok key injected
+[ 696.63s] I (704420) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 697.83s] I (705616) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 697.83s] ok key injected
+[ 697.83s] I (705620) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 698.70s] I (706492) remapad_pocketjs: frames=19455 avg_turn_us=16415 avg_render_us=11381 avg_damage_px=7934 max_turn_us=264970 max_render_us=108451
+[ 699.03s] I (706817) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 699.03s] ok key injected
+[ 699.03s] I (706820) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 700.23s] I (708017) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 700.23s] ok key injected
+[ 700.23s] I (708020) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 701.43s] I (709218) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 701.43s] ok key injected
+[ 701.43s] I (709220) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 702.63s] I (710420) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 702.63s] ok key injected
+[ 702.63s] I (710425) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 703.55s] I (711340) remapad_pocketjs: frames=19624 avg_turn_us=15322 avg_render_us=10683 avg_damage_px=7475 max_turn_us=264970 max_render_us=108451
+[ 703.84s] I (711623) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 703.84s] ok key injected
+[ 703.84s] I (711625) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 705.04s] I (712823) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 705.04s] ok key injected
+[ 705.04s] I (712825) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 706.24s] I (714028) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 706.24s] ok key injected
+[ 706.24s] I (714030) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 707.44s] I (715232) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 707.44s] ok key injected
+[ 707.44s] I (715235) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 708.56s] I (716347) remapad_pocketjs: frames=19806 avg_turn_us=14735 avg_render_us=9935 avg_damage_px=6941 max_turn_us=264970 max_render_us=108451
+[ 708.65s] I (716438) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 708.65s] ok key injected
+[ 708.65s] I (716440) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 709.85s] I (717638) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 709.85s] ok key injected
+[ 709.85s] I (717640) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 711.05s] I (718842) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 711.05s] ok key injected
+[ 711.05s] I (718845) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 712.26s] I (720045) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 712.26s] ok key injected
+[ 712.26s] I (720050) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 713.46s] I (721246) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 713.46s] ok key injected
+[ 713.46s] I (721250) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 713.76s] I (721543) remapad_pocketjs: frames=19983 avg_turn_us=16017 avg_render_us=10685 avg_damage_px=7517 max_turn_us=264970 max_render_us=108451
+[ 714.66s] I (722449) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 714.66s] I (722450) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 714.66s] ok key injected
+[ 715.86s] I (723651) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 715.86s] ok key injected
+[ 715.86s] I (723655) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 717.06s] I (724851) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 717.06s] ok key injected
+[ 717.06s] I (724855) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 718.27s] I (726056) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 718.27s] ok key injected
+[ 718.27s] I (726060) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 718.57s] I (726359) remapad_pocketjs: frames=20148 avg_turn_us=15489 avg_render_us=10921 avg_damage_px=7656 max_turn_us=264970 max_render_us=108451
+[ 719.47s] I (727260) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 719.47s] ok key injected
+[ 719.47s] I (727260) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 720.67s] I (728461) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 720.67s] ok key injected
+[ 720.68s] I (728465) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 721.88s] I (729666) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 721.88s] ok key injected
+[ 721.88s] I (729670) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 723.08s] I (730867) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 723.08s] ok key injected
+[ 723.08s] I (730870) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 723.56s] I (731351) remapad_pocketjs: frames=20314 avg_turn_us=15484 avg_render_us=11908 avg_damage_px=8420 max_turn_us=264970 max_render_us=108451
+[ 724.28s] I (732071) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 724.28s] ok key injected
+[ 724.28s] I (732075) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 725.49s] I (733274) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 725.49s] ok key injected
+[ 725.49s] I (733275) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 726.69s] I (734476) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 726.69s] ok key injected
+[ 726.69s] I (734480) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 727.89s] I (735677) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 727.89s] ok key injected
+[ 727.89s] I (735680) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 728.56s] I (736343) remapad_pocketjs: frames=20481 avg_turn_us=15421 avg_render_us=11746 avg_damage_px=8289 max_turn_us=264970 max_render_us=108451
+[ 729.09s] I (736878) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 729.09s] ok key injected
+[ 729.09s] I (736880) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 729.14s] I (736935) remapad_pocketjs: mem: js_heap=3058kB(pre 3071kB)/7372kB psram_free=2306188 internal_free=165167 allocs=55275 obj_n=15479 prop_n=52073 arr_n=717
+[ 730.30s] I (738084) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 730.30s] ok key injected
+[ 730.30s] I (738085) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 731.50s] I (739285) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 731.50s] ok key injected
+[ 731.50s] I (739290) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 732.70s] I (740485) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 732.70s] ok key injected
+[ 732.70s] I (740490) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 733.55s] I (741342) remapad_pocketjs: frames=20609 avg_turn_us=18068 avg_render_us=13989 avg_damage_px=9870 max_turn_us=264970 max_render_us=108451
+[ 733.90s] I (741688) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 733.90s] ok key injected
+[ 733.90s] I (741690) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 735.10s] I (742891) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 735.10s] ok key injected
+[ 735.10s] I (742895) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 736.30s] I (744091) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 736.30s] ok key injected
+[ 736.30s] I (744095) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 737.50s] I (745294) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 737.50s] ok key injected
+[ 737.50s] I (745295) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 738.56s] I (746344) remapad_pocketjs: frames=20795 avg_turn_us=14529 avg_render_us=9738 avg_damage_px=6792 max_turn_us=264970 max_render_us=108451
+[ 738.71s] I (746495) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 738.71s] ok key injected
+[ 738.71s] I (746495) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 739.91s] I (747696) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 739.91s] ok key injected
+[ 739.91s] I (747700) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 741.11s] I (748896) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 741.11s] ok key injected
+[ 741.11s] I (748900) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 742.31s] I (750097) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 742.31s] ok key injected
+[ 742.31s] I (750100) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 743.51s] I (751297) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 743.51s] ok key injected
+[ 743.51s] I (751300) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 743.82s] I (751604) remapad_pocketjs: frames=20971 avg_turn_us=16119 avg_render_us=10800 avg_damage_px=7560 max_turn_us=264970 max_render_us=108451
+[ 744.71s] I (752501) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 744.71s] ok key injected
+[ 744.71s] I (752505) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 745.91s] I (753701) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 745.91s] ok key injected
+[ 745.91s] I (753705) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 747.11s] I (754901) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 747.11s] ok key injected
+[ 747.11s] I (754905) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 748.31s] I (756104) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 748.31s] ok key injected
+[ 748.31s] I (756105) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 748.62s] I (756405) remapad_pocketjs: frames=21135 avg_turn_us=15535 avg_render_us=10994 avg_damage_px=7703 max_turn_us=264970 max_render_us=108451
+[ 749.52s] I (757308) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 749.52s] ok key injected
+[ 749.52s] I (757310) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 750.72s] I (758510) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 750.72s] ok key injected
+[ 750.72s] I (758510) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 751.92s] I (759714) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 751.92s] ok key injected
+[ 751.92s] I (759715) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 753.13s] I (760917) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 753.13s] ok key injected
+[ 753.13s] I (760920) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 753.58s] I (761374) remapad_pocketjs: frames=21301 avg_turn_us=15449 avg_render_us=11466 avg_damage_px=8015 max_turn_us=264970 max_render_us=108451
+[ 754.33s] I (762117) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 754.33s] ok key injected
+[ 754.33s] I (762120) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 755.53s] I (763320) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 755.53s] ok key injected
+[ 755.54s] I (763325) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 756.73s] I (764524) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 756.73s] I (764525) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 756.73s] ok key injected
+[ 757.94s] I (765728) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 757.94s] ok key injected
+[ 757.94s] I (765730) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 758.56s] I (766349) remapad_pocketjs: frames=21465 avg_turn_us=15578 avg_render_us=12123 avg_damage_px=8440 max_turn_us=264970 max_render_us=108451
+[ 759.14s] I (766931) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 759.14s] ok key injected
+[ 759.14s] I (766935) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 760.34s] I (768132) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 760.34s] ok key injected
+[ 760.34s] I (768135) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 761.54s] I (769334) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 761.54s] ok key injected
+[ 761.54s] I (769335) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 762.75s] I (770536) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 762.75s] ok key injected
+[ 762.75s] I (770540) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 763.62s] I (771407) remapad_pocketjs: frames=21631 avg_turn_us=16374 avg_render_us=11376 avg_damage_px=7934 max_turn_us=264970 max_render_us=108451
+[ 763.95s] I (771737) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 763.95s] ok key injected
+[ 763.95s] I (771740) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 765.15s] I (772937) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 765.15s] ok key injected
+[ 765.15s] I (772940) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 766.35s] I (774141) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 766.35s] ok key injected
+[ 766.36s] I (774145) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 767.55s] I (775342) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 767.55s] ok key injected
+[ 767.55s] I (775345) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 768.55s] I (776343) remapad_pocketjs: frames=21810 avg_turn_us=14811 avg_render_us=10102 avg_damage_px=7057 max_turn_us=264970 max_render_us=108451
+[ 768.75s] I (776544) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 768.75s] ok key injected
+[ 768.75s] I (776546) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 769.96s] I (777747) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 769.96s] ok key injected
+[ 769.96s] I (777750) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 771.16s] I (778952) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 771.16s] ok key injected
+[ 771.16s] I (778955) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 772.36s] I (780155) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 772.36s] ok key injected
+[ 772.37s] I (780160) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 773.56s] I (781349) remapad_pocketjs: frames=21994 avg_turn_us=14628 avg_render_us=9835 avg_damage_px=6866 max_turn_us=264970 max_render_us=108451
+[ 773.57s] I (781357) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 773.57s] ok key injected
+[ 773.57s] I (781360) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 774.77s] I (782560) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 774.77s] ok key injected
+[ 774.77s] I (782560) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 775.97s] I (783765) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 775.97s] ok key injected
+[ 775.97s] I (783766) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 777.18s] I (784969) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 777.18s] ok key injected
+[ 777.18s] I (784970) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 778.38s] I (786172) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 778.38s] ok key injected
+[ 778.38s] I (786175) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 778.68s] I (786478) remapad_pocketjs: frames=22161 avg_turn_us=16541 avg_render_us=11310 avg_damage_px=7967 max_turn_us=264970 max_render_us=108451
+[ 779.58s] I (787376) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 779.58s] ok key injected
+[ 779.59s] I (787380) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 780.79s] I (788577) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 780.79s] ok key injected
+[ 780.79s] I (788580) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 781.99s] I (789779) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 781.99s] ok key injected
+[ 781.99s] I (789780) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 783.19s] I (790980) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 783.19s] ok key injected
+[ 783.20s] I (790985) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 783.58s] I (791374) remapad_pocketjs: frames=22324 avg_turn_us=15646 avg_render_us=11590 avg_damage_px=8162 max_turn_us=264970 max_render_us=108451
+[ 784.39s] I (792182) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 784.39s] ok key injected
+[ 784.39s] I (792185) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 785.59s] I (793383) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 785.59s] ok key injected
+[ 785.59s] I (793385) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 786.80s] I (794587) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 786.80s] ok key injected
+[ 786.80s] I (794590) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 788.00s] I (795789) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 788.00s] I (795790) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 788.00s] ok key injected
+[ 788.57s] I (796363) remapad_pocketjs: frames=22490 avg_turn_us=15426 avg_render_us=11911 avg_damage_px=8420 max_turn_us=264970 max_render_us=108451
+[ 789.16s] I (796954) remapad_pocketjs: mem: js_heap=3058kB(pre 3071kB)/7372kB psram_free=2306204 internal_free=165167 allocs=55275 obj_n=15479 prop_n=52073 arr_n=717
+[ 789.20s] I (796991) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 789.20s] ok key injected
+[ 789.20s] I (796995) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 790.40s] I (798192) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 790.40s] ok key injected
+[ 790.40s] I (798195) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 791.61s] I (799396) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 791.61s] ok key injected
+[ 791.61s] I (799400) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 792.81s] I (800600) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 792.81s] ok key injected
+[ 792.81s] I (800605) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 793.63s] I (801422) remapad_pocketjs: frames=22617 avg_turn_us=18224 avg_render_us=14676 avg_damage_px=10371 max_turn_us=264970 max_render_us=108451
+[ 794.01s] I (801802) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 794.01s] ok key injected
+[ 794.01s] I (801805) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 795.21s] I (803003) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 795.21s] ok key injected
+[ 795.21s] I (803005) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 796.41s] I (804204) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 796.41s] I (804205) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 796.41s] ok key injected
+[ 797.62s] I (805410) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 797.62s] ok key injected
+[ 797.62s] I (805410) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 798.55s] I (806347) remapad_pocketjs: frames=22794 avg_turn_us=14879 avg_render_us=10206 avg_damage_px=7137 max_turn_us=264970 max_render_us=108451
+[ 798.82s] I (806615) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 798.82s] ok key injected
+[ 798.83s] I (806620) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 800.03s] I (807819) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 800.03s] ok key injected
+[ 800.03s] I (807820) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 801.23s] I (809020) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 801.23s] I (809020) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 801.23s] ok key injected
+[ 802.43s] I (810224) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 802.43s] I (810225) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 802.43s] ok key injected
+[ 803.56s] I (811349) remapad_pocketjs: frames=22978 avg_turn_us=14652 avg_render_us=9840 avg_damage_px=6866 max_turn_us=264970 max_render_us=108451
+[ 803.64s] I (811428) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 803.64s] ok key injected
+[ 803.64s] I (811430) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 804.84s] I (812630) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 804.84s] ok key injected
+[ 804.84s] I (812635) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 806.04s] I (813835) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 806.04s] ok key injected
+[ 806.04s] I (813840) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 807.25s] I (815041) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 807.25s] ok key injected
+[ 807.25s] I (815045) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 808.45s] I (816243) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 808.45s] ok key injected
+[ 808.45s] I (816245) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 808.76s] I (816553) remapad_pocketjs: frames=23149 avg_turn_us=16368 avg_render_us=11101 avg_damage_px=7781 max_turn_us=264970 max_render_us=108451
+[ 809.65s] I (817443) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 809.65s] ok key injected
+[ 809.65s] I (817445) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 810.85s] I (818644) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 810.85s] ok key injected
+[ 810.85s] I (818645) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 812.06s] I (819847) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 812.06s] ok key injected
+[ 812.06s] I (819850) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 813.26s] I (821051) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 813.26s] ok key injected
+[ 813.26s] I (821055) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 813.56s] I (821355) remapad_pocketjs: frames=23313 avg_turn_us=15582 avg_render_us=10999 avg_damage_px=7703 max_turn_us=264970 max_render_us=108451
+[ 814.46s] I (822253) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 814.46s] ok key injected
+[ 814.46s] I (822255) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 815.66s] I (823454) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 815.66s] ok key injected
+[ 815.66s] I (823455) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 816.86s] I (824654) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 816.86s] I (824655) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 816.86s] ok key injected
+[ 818.07s] I (825859) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 818.07s] ok key injected
+[ 818.07s] I (825861) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 818.58s] I (826372) remapad_pocketjs: frames=23480 avg_turn_us=15379 avg_render_us=11899 avg_damage_px=8289 max_turn_us=264970 max_render_us=108451
+[ 819.27s] I (827059) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 819.27s] ok key injected
+[ 819.27s] I (827060) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 820.47s] I (828263) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 820.47s] ok key injected
+[ 820.47s] I (828265) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 821.67s] I (829463) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 821.67s] ok key injected
+[ 821.67s] I (829465) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 822.88s] I (830668) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 822.88s] ok key injected
+[ 822.88s] I (830670) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 823.58s] I (831376) remapad_pocketjs: frames=23646 avg_turn_us=15353 avg_render_us=11991 avg_damage_px=8339 max_turn_us=264970 max_render_us=108451
+[ 824.08s] I (831873) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 824.08s] ok key injected
+[ 824.08s] I (831875) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 825.29s] I (833077) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 825.29s] ok key injected
+[ 825.29s] I (833080) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 826.49s] I (834281) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 826.49s] ok key injected
+[ 826.49s] I (834285) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 827.69s] I (835483) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 827.69s] ok key injected
+[ 827.69s] I (835485) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 828.56s] I (836354) remapad_pocketjs: frames=23812 avg_turn_us=16265 avg_render_us=10875 avg_damage_px=7610 max_turn_us=264970 max_render_us=108451
+[ 828.89s] I (836686) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 828.89s] ok key injected
+[ 828.89s] I (836690) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 830.10s] I (837887) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 830.10s] ok key injected
+[ 830.10s] I (837890) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 831.30s] I (839089) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 831.30s] I (839090) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 831.30s] ok key injected
+[ 832.50s] I (840289) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 832.50s] I (840290) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 832.50s] ok key injected
+[ 833.55s] I (841342) remapad_pocketjs: frames=23998 avg_turn_us=14382 avg_render_us=9747 avg_damage_px=6792 max_turn_us=264970 max_render_us=108451
+[ 833.70s] I (841491) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 833.70s] ok key injected
+[ 833.70s] I (841495) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 834.90s] I (842692) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 834.90s] ok key injected
+[ 834.90s] I (842695) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 836.10s] I (843895) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 836.10s] ok key injected
+[ 836.11s] I (843900) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 837.31s] I (845098) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 837.31s] ok key injected
+[ 837.31s] I (845100) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 838.51s] I (846299) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 838.51s] I (846300) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 838.51s] ok key injected
+[ 838.80s] I (846592) remapad_pocketjs: frames=24176 avg_turn_us=15978 avg_render_us=10627 avg_damage_px=7475 max_turn_us=264970 max_render_us=108451
+[ 839.71s] I (847504) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 839.71s] ok key injected
+[ 839.71s] I (847505) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 840.92s] I (848709) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 840.92s] ok key injected
+[ 840.92s] I (848711) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 842.12s] I (849913) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 842.12s] ok key injected
+[ 842.12s] I (849915) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 843.32s] I (851113) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 843.32s] ok key injected
+[ 843.32s] I (851115) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 843.62s] I (851411) remapad_pocketjs: frames=24339 avg_turn_us=15664 avg_render_us=11049 avg_damage_px=7750 max_turn_us=264970 max_render_us=108451
+[ 844.52s] I (852313) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 844.52s] ok key injected
+[ 844.52s] I (852315) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 845.72s] I (853516) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 845.72s] ok key injected
+[ 845.72s] I (853520) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 846.93s] I (854720) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 846.93s] ok key injected
+[ 846.93s] I (854725) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 848.13s] I (855922) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 848.13s] ok key injected
+[ 848.13s] I (855925) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 848.63s] I (856419) remapad_pocketjs: frames=24506 avg_turn_us=15401 avg_render_us=11843 avg_damage_px=8369 max_turn_us=264970 max_render_us=108451
+[ 849.22s] I (857010) remapad_pocketjs: mem: js_heap=3058kB(pre 3071kB)/7372kB psram_free=2306216 internal_free=165167 allocs=55275 obj_n=15479 prop_n=52073 arr_n=717
+[ 849.33s] I (857125) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 849.33s] ok key injected
+[ 849.34s] I (857130) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 850.54s] I (858331) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 850.54s] ok key injected
+[ 850.54s] I (858335) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 851.74s] I (859534) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 851.74s] I (859535) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 851.74s] ok key injected
+[ 852.95s] I (860739) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 852.95s] I (860740) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 852.95s] ok key injected
+[ 853.62s] I (861408) remapad_pocketjs: frames=24638 avg_turn_us=16589 avg_render_us=14781 avg_damage_px=10487 max_turn_us=264970 max_render_us=108451
+[ 854.15s] I (861942) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 854.15s] ok key injected
+[ 854.15s] I (861945) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 855.35s] I (863146) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 855.35s] ok key injected
+[ 855.36s] I (863150) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 856.56s] I (864351) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 856.56s] ok key injected
+[ 856.56s] I (864355) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 857.76s] I (865553) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 857.76s] ok key injected
+[ 857.76s] I (865555) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 858.58s] I (866373) remapad_pocketjs: frames=24803 avg_turn_us=16478 avg_render_us=10929 avg_damage_px=7656 max_turn_us=264970 max_render_us=108451
+[ 858.96s] I (866754) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 858.96s] ok key injected
+[ 858.96s] I (866755) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 860.16s] I (867957) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 860.16s] ok key injected
+[ 860.16s] I (867960) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 861.37s] I (869162) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 861.37s] ok key injected
+[ 861.37s] I (869165) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 862.57s] I (870365) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 862.57s] ok key injected
+[ 862.57s] I (870370) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 863.55s] I (871344) remapad_pocketjs: frames=24985 avg_turn_us=14694 avg_render_us=9938 avg_damage_px=6941 max_turn_us=264970 max_render_us=108451
+[ 863.77s] I (871568) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 863.77s] ok key injected
+[ 863.77s] I (871570) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 864.98s] I (872772) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 864.98s] ok key injected
+[ 864.98s] I (872775) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 866.18s] I (873978) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 866.18s] ok key injected
+[ 866.18s] I (873980) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 867.39s] I (875181) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 867.39s] ok key injected
+[ 867.39s] I (875185) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 868.56s] I (876349) remapad_pocketjs: frames=25167 avg_turn_us=14673 avg_render_us=9944 avg_damage_px=6941 max_turn_us=264970 max_render_us=108451
+[ 868.59s] I (876384) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 868.59s] ok key injected
+[ 868.59s] I (876385) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 869.80s] I (877589) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 869.80s] I (877590) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 869.80s] ok key injected
+[ 871.00s] I (878790) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 871.00s] ok key injected
+[ 871.00s] I (878795) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 872.20s] I (879992) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 872.20s] ok key injected
+[ 872.20s] I (879995) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 873.40s] I (881193) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 873.40s] ok key injected
+[ 873.40s] I (881195) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 873.71s] I (881502) remapad_pocketjs: frames=25335 avg_turn_us=16388 avg_render_us=11294 avg_damage_px=7920 max_turn_us=264970 max_render_us=108451
+[ 874.60s] I (882394) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 874.60s] ok key injected
+[ 874.60s] I (882395) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 875.80s] I (883597) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 875.80s] ok key injected
+[ 875.80s] I (883600) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 877.00s] I (884799) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 877.00s] ok key injected
+[ 877.00s] I (884800) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 878.21s] I (886000) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 878.21s] ok key injected
+[ 878.21s] I (886005) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 878.66s] I (886457) remapad_pocketjs: frames=25500 avg_turn_us=15469 avg_render_us=11522 avg_damage_px=8064 max_turn_us=264970 max_render_us=108451
+[ 879.41s] I (887200) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 879.41s] ok key injected
+[ 879.41s] I (887205) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 880.61s] I (888406) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 880.61s] ok key injected
+[ 880.62s] I (888410) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 881.81s] I (889609) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 881.81s] ok key injected
+[ 881.81s] I (889611) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 883.02s] I (890811) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 883.02s] ok key injected
+[ 883.02s] I (890815) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 883.64s] I (891431) remapad_pocketjs: frames=25664 avg_turn_us=15570 avg_render_us=12131 avg_damage_px=8440 max_turn_us=264970 max_render_us=108451
+[ 884.22s] I (892013) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 884.22s] ok key injected
+[ 884.22s] I (892015) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 885.42s] I (893215) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 885.42s] I (893216) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 885.42s] ok key injected
+[ 886.62s] I (894418) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 886.62s] ok key injected
+[ 886.62s] I (894420) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 887.83s] I (895621) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 887.83s] ok key injected
+[ 887.83s] I (895625) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 888.55s] I (896343) remapad_pocketjs: frames=25830 avg_turn_us=15452 avg_render_us=11379 avg_damage_px=7934 max_turn_us=264970 max_render_us=108451
+[ 889.03s] I (896824) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 889.03s] ok key injectedI (896825) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 890.23s] I (898026) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 890.23s] ok key injected
+[ 890.24s] I (898030) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 891.44s] I (899230) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 891.44s] ok key injected
+[ 891.44s] I (899231) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 892.64s] I (900435) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 892.64s] ok key injected
+[ 892.64s] I (900440) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 893.55s] I (901341) remapad_pocketjs: frames=25999 avg_turn_us=16202 avg_render_us=10683 avg_damage_px=7475 max_turn_us=264970 max_render_us=108451
+[ 893.84s] I (901638) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 893.84s] ok key injected
+[ 893.84s] I (901640) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 895.05s] I (902841) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 895.05s] ok key injected
+[ 895.05s] I (902845) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 896.25s] I (904043) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 896.25s] ok key injected
+[ 896.25s] I (904045) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 897.45s] I (905243) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 897.45s] ok key injected
+[ 897.45s] I (905245) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 898.55s] I (906346) remapad_pocketjs: frames=26186 avg_turn_us=14479 avg_render_us=9678 avg_damage_px=6755 max_turn_us=264970 max_render_us=108451
+[ 898.65s] I (906446) remapad_dp_src: debug key inject: mask=0x00000020 hold=60ms
+[ 898.65s] ok key injected
+[ 898.66s] I (906450) remapad_dp: buttons 0x00000000 -> 0x00000020
+[ 899.86s] I (907651) remapad_dp_src: debug key inject: mask=0x00000010 hold=60ms
+[ 899.86s] ok key injected
+[ 899.86s] I (907655) remapad_dp: buttons 0x00000000 -> 0x00000010
+[ 900.00s] presses=748
