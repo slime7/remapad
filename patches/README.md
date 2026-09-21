@@ -67,6 +67,16 @@ turn 不会延迟，`pocketjs_guest_interrupt` 的终止语义原样保留。CMa
 组件时重新对账，不需要执行 `git apply`。升级组件时应确认上游是否已在长 eval
 场景处理空闲任务喂狗，处理后可回退本补丁。
 
+## 0005-guest-heap-limit-kconfig
+
+上游 PR `pocket-stack/pocketjs#460`（对应 issue #429）把 guest 的 QuickJS 堆上限做成组件 Kconfig：
+新增 `CONFIG_POCKETJS_GUEST_HEAP_LIMIT`（默认 4194304 字节），`pocketjs_guest_config_defaults()` 改为读取它，
+显式赋值 `config.heap_limit` 仍可覆盖。它只改预算来源与默认值，不改变 GC 调度。
+
+本仓库副本已按该 PR 落地：`firmware/components/pocketjs_guest/Kconfig` 与 `src/guest.c` 的默认值取值方式
+一致；产品固件不再在 `pocketjs_host.c` 里写死上限，取值回到 `firmware/sdkconfig.defaults`。
+升级组件到含该 PR 的版本后，本条目只剩「预算取值写在 sdkconfig.defaults」这一条本仓库约定。
+
 ## 重新对账的方法
 
 升级 `firmware/components/` 中的组件、或 Registry 的 `espressif/quickjs-ng` 内容发生变化时：

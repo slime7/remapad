@@ -689,10 +689,8 @@ static esp_err_t remapad_pocketjs_init(remapad_pocketjs_runtime_t *runtime)
     stage = boot_stage(2);
     pocketjs_guest_config_t guest_config;
     pocketjs_guest_config_defaults(&guest_config);
-    /* JS 堆预算：7 个常驻页面挂载与 PocketJS 0.12.0 devtools 飞行记录仪
-     * （首次触屏分配 36000 元素 tapeTouch）需要充足堆空间，设为 7.2MB；
-     * ESP32-S3 具有 8MB PSRAM，该值留有运行期余量。 */
-    guest_config.heap_limit = 7372U * 1024U;
+    /* JS 堆预算走 CONFIG_POCKETJS_GUEST_HEAP_LIMIT（取值在 sdkconfig.defaults），
+     * 7 个常驻页面挂载与 devtools 飞行记录仪的峰值都算在这份预算里。 */
     guest_config.stack_limit = REMAPAD_POCKETJS_STACK_LIMIT;
     guest_config.prefer_psram = true;
     result = pocketjs_guest_create(&guest_config, &runtime->guest);
