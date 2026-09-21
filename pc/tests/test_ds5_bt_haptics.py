@@ -331,6 +331,161 @@ class SenderLoopTest(unittest.TestCase):
         self.assertEqual(ds5_haptics.to_s8(0), 0)
 
 
+class _FakeClock:
+    """假时钟：等到期的等待按它推进，用例瞬间跑完一整段节拍。"""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class _GridSender(ds5_haptics.Ds5HapticsBt):
+    """假时钟驱动的发送线程：等到期的等待把假时钟推到到期时刻，空闲等待
+    推进一个兜底轮询拍（可经 on_idle 在这期间喂新内容）。"""
+
+    def __init__(self, device, clock, on_idle=None, **kwargs) -> None:
+        super().__init__(device, clock=clock, **kwargs)
+        self.clock = clock
+        self.idle_rounds = 0
+        self._on_idle = on_idle
+
+    def _wait_until_due(self, due: float) -> bool:
+        self.clock.advance(max(0.0, due - self.clock()))
+        return self._stop.is_set()
+
+    def _wait_for_content(self, timeout: float) -> None:
+        self.idle_rounds += 1
+        self.clock.advance(timeout)
+        if self._on_idle is not None:
+            self._on_idle(self.idle_rounds)
+        if self._wake.wait(0):
+            self._wake.clear()
+
+
+class SenderTimingTest(unittest.TestCase):
+    """发送节拍：每个报文的发送时刻钉在固定网格上，节拍 = 一报里触觉 PCM 的
+    时长（32 帧 / 3000Hz ≈ 10.67ms）。假时钟下写回都落在网格点上，用例几毫秒
+    跑完一整段节拍。"""
+
+    @staticmethod
+    def _coil_params() -> dict:
+        return {"hd": {"l": {"count": 3, "keys": (((55, 200), (0, 0)),) * 3},
+                       "r": silent_side(), "speaker": (0, 0)}}
+
+    @staticmethod
+    def _speaker_params() -> dict:
+        return {"hd": {"l": silent_side(), "r": silent_side(),
+                       "speaker": (880, 200)}}
+
+    def test_slow_writes_do_not_stretch_the_beat(self):
+        """写回慢的链路上节拍不被写回耗时推长：每次写回花 3ms，相邻两报的
+        间隔仍是 10.67ms——周期由网格决定，触觉 PCM 才供得上控制器的
+        3kHz 消耗（周期被推长就是短震动被吞、震感被拉长）。"""
+        clock = _FakeClock()
+
+        class SlowDevice:
+            def __init__(self, clock) -> None:
+                self._clock = clock
+                self.stamps = []
+
+            def write(self, report):
+                self.stamps.append(self._clock.now)
+                self._clock.advance(0.003)
+                if self._clock.now > 0.5:
+                    raise OSError("done")
+
+        device = SlowDevice(clock)
+        sender = _GridSender(device, clock)
+        sender.set_params(self._coil_params())
+        sender._run()
+        self.assertGreater(len(device.stamps), 40)
+        gaps = [b - a for a, b in zip(device.stamps, device.stamps[1:])]
+        for gap in gaps:
+            self.assertAlmostEqual(gap, ds5_haptics.BT_INTERVAL_S, places=9)
+
+    def test_pcm_frames_per_second_match_the_carrier_rate(self):
+        """每秒送出的触觉 PCM 帧数与承载采样率一致（3000 帧/秒）：0x32 与
+        0x36 两条承载都按一报 32 帧的时长出报——出快了就是往控制器的 PCM
+        队列里多塞帧（震动被拉长、长震收不住），出慢了就是欠喂。"""
+
+        class FakeEncoder:
+            def encode(self, pcm: bytes) -> bytes:
+                return bytes(ds5_haptics.BT36_SPEAKER_BYTES)
+
+        class CountingDevice:
+            def __init__(self, clock) -> None:
+                self._clock = clock
+                self.stamps = []
+
+            def write(self, report):
+                self.stamps.append(self._clock.now)
+                if self._clock.now > 0.5:
+                    raise OSError("done")
+
+        lanes = (("0x32", self._coil_params(), {}),
+                 ("0x36", self._speaker_params(),
+                  {"speaker_encoder": FakeEncoder()}))
+        for lane, params, kwargs in lanes:
+            with self.subTest(lane=lane):
+                clock = _FakeClock()
+                device = CountingDevice(clock)
+                sender = _GridSender(device, clock, **kwargs)
+                sender.set_params(params)
+                sender._run()
+                self.assertGreater(len(device.stamps), 20)
+                span = device.stamps[-1] - device.stamps[0]
+                frames = (len(device.stamps) - 1) * ds5_haptics.BT_FRAMES
+                self.assertAlmostEqual(frames / span, ds5_haptics.BT_RATE,
+                                       delta=ds5_haptics.BT_RATE * 0.002)
+
+    def test_idle_wake_does_not_backfill_the_grid(self):
+        """空闲唤醒后第一拍立刻发出、第二拍起仍按节拍，不连发补报：空闲前的
+        网格早就过期，唤醒后一口气连发几份会把控制器的 PCM 队列一次塞满
+        （短震动先抢跑后拖尾）。"""
+        clock = _FakeClock()
+        silent = {"hd": {"l": silent_side(), "r": silent_side(),
+                         "speaker": (0, 0)}}
+        state = {"wake_at": None}
+
+        class QuietDevice:
+            def __init__(self, clock) -> None:
+                self._clock = clock
+                self.stamps = []
+
+            def write(self, report):
+                self.stamps.append(self._clock.now)
+                if state["wake_at"] is None and self._clock.now >= 0.2:
+                    # 震动停了：等收音尾过期，发送线程转入空闲
+                    sender.set_params(silent)
+                if (state["wake_at"] is not None and
+                        self._clock.now > state["wake_at"] + 0.05):
+                    raise OSError("done")
+
+        device = QuietDevice(clock)
+
+        def on_idle(_rounds):
+            if state["wake_at"] is None:
+                state["wake_at"] = clock.now
+                sender.set_params(self._coil_params())
+
+        sender = _GridSender(device, clock, on_idle=on_idle)
+        sender.set_params(self._coil_params())
+        sender._run()
+        self.assertGreater(sender.idle_rounds, 0)
+        self.assertIsNotNone(state["wake_at"])
+        gaps = [b - a for a, b in zip(device.stamps, device.stamps[1:])]
+        idle_at = next(i for i, gap in enumerate(gaps)
+                       if gap > 1.5 * ds5_haptics.BT_INTERVAL_S)
+        self.assertGreater(len(gaps) - idle_at, 2)  # 唤醒后又跑了几拍
+        for gap in gaps[idle_at + 1:]:
+            self.assertAlmostEqual(gap, ds5_haptics.BT_INTERVAL_S, places=9)
+
+
 class BuildBt36ReportTest(unittest.TestCase):
     """0x36 报文（DS5Dongle/vds 的蓝牙触觉+喇叭形态，398 字节）：配置包 +
     63 字节状态块 + 64 字节触觉 PCM + 200 字节 Opus 喇叭块 + CRC32。"""
@@ -423,9 +578,23 @@ class BuildBt36ReportTest(unittest.TestCase):
     def test_speaker_encoder_unavailable_falls_back_to_0x32(self):
         """没有 Opus 编码器（PyAV 缺失等）：speaker 模式回落 0x32 音圈流，
         发声段折进音圈，蓝牙不至于整路哑掉。"""
-        sender = ds5_haptics.Ds5HapticsBt(object(), speaker_encoder=None)
+        class FakeDevice:
+            def __init__(self) -> None:
+                self.writes = []
+
+            def write(self, report):
+                self.writes.append(report)
+                raise OSError("done")
+
+        device = FakeDevice()
+        sender = ds5_haptics.Ds5HapticsBt(device, speaker_encoder=None)
         self.assertFalse(sender.speaker_active)
-        self.assertEqual(sender._interval_s, ds5_haptics.BT_INTERVAL_S)
+        sender.set_params({"hd": {"l": silent_side(), "r": silent_side(),
+                                  "speaker": (880, 255)}})
+        sender._run()
+        self.assertEqual(len(device.writes), 1)
+        self.assertEqual(device.writes[0][0], ds5_haptics.BT_REPORT_ID)
+        self.assertNotEqual(device.writes[0][13:77], SILENT_PCM)  # 发声段折进音圈
 
     def test_speaker_pcm_renders_48k_blocks(self):
         """48kHz 喇叭块的哑渲染：10ms = 480 帧，发声段音色爬起音包络，

@@ -275,15 +275,15 @@ def run_bt_32(dev, sim, total_ms, speed):
 
 
 def run_bt_36(dev, sim, total_ms, speed, encoder):
-    """蓝牙 0x36 HD+喇叭落点：vds 398 字节形态，10ms 节拍，触觉不折喇叭、
-    发声段由手柄喇叭真声播放。"""
+    """蓝牙 0x36 HD+喇叭落点：vds 398 字节形态，节拍按一报里触觉 PCM 的时长
+    （10.67ms），触觉不折喇叭、发声段由手柄喇叭真声播放。"""
     print("蓝牙 0x36 私有触觉+喇叭回放（HD 触觉 + 手柄喇叭真声）")
     state = ds5_haptics._VoiceState()
     state48 = ds5_haptics._VoiceState()
     seq = 0
     packet_seq = 0
     durations = []
-    interval = ds5_haptics.BT36_INTERVAL_S
+    interval = ds5_haptics.BT_INTERVAL_S
     next_due = time.monotonic()
     tick_ms = 0.0
     while tick_ms <= total_ms:

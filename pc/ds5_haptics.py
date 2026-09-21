@@ -411,7 +411,9 @@ BT_REPORT_ID = 0x32
 BT_PCM_BYTES = 64
 BT_FRAMES = BT_PCM_BYTES // 2
 BT_RATE = 3000
-#: 发送节拍：32 帧 / 3000Hz ≈ 10.67ms（约 94 报/秒）。
+#: 发送节拍 = 一报承载的 PCM 时长：32 帧 / 3000Hz ≈ 10.67ms（约 94 报/秒）。
+#: 0x32 与 0x36 两条承载共用它：节拍比块时长快就是过喂（控制器的 PCM 队列
+#: 越积越多、震动被拉长），比块时长慢就是欠喂（短震动被截、起止不稳）。
 BT_INTERVAL_S = BT_FRAMES / BT_RATE
 #: CRC32 种子字节（PS 输出报告的 hidp 传输头，与 0x31 同一规则）。
 BT_CRC_SEED = 0xA2
@@ -472,6 +474,10 @@ def bt_render_pcm(left_v: dict, right_v: dict, speaker: tuple,
 BT36_REPORT_LEN = 398
 BT36_REPORT_ID = 0x36
 #: 喇叭块：48kHz 立体声 10ms（480 帧），Opus CBR 码率 = 200B × 8 × 100 包/s。
+#: 它跟着 BT_INTERVAL_S 的节拍出（10.67ms），每秒比真声少 6.25%——与
+#: DS5Dongle 的实机跑法同量级（它每个 21.33ms 的报里带 2 个 10ms 帧，同样
+#: 少 6.25%）；发声段是合成提示音，时轴短这一点听不出来，而触觉块按 3kHz
+#: 严格对表才不会在控制器里积压。
 BT36_SPEAKER_RATE = 48000
 BT36_SPEAKER_FRAMES = 480
 BT36_SPEAKER_BYTES = 200
@@ -485,9 +491,6 @@ BT36_STATE = bytes([
 ] + [0] * 27 + [
     0x01, 0x07, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00,
 ]) + bytes(16)
-#: 发送节拍：喇叭块 10ms 一报（触觉块 64B = 32 帧 ≈ 10.67ms，按喇叭节拍走，
-#: vds 的取法——按触觉时长对表会让喇叭周期性欠喂）。
-BT36_INTERVAL_S = 0.010
 #: 喇叭静默多少秒后从 0x36 退回 0x32：发声段之间的短停顿不切换承载。
 #: 不做「采样按住期间保温」——那会让 0x36 在整个按住期间满速（100% 空口），
 #: 同频段无线鼠标全程被骚扰（实机复测）；空口让给鼠标，冷启动延迟只在
@@ -580,23 +583,28 @@ class Ds5HapticsBt:
     """蓝牙连接的 DualSense 私有触觉流：有内容时按 10.67ms 节拍把子帧序列渲染
     成 0x32 报告（142 字节 SAxense 形态，发声段折进两侧音圈——蓝牙没有扬声器
     通道，音圈是它唯一的载体）；给了 speaker_encoder（Bt36OpusEncoder）时发声段
-    改走 0x36 报文（398 字节，vds 形态）：10ms 节拍、触觉块不折喇叭，由真正的
-    手柄喇叭出声。空闲整流停发——蓝牙无线电是 2.4GHz 公共介质，常驻空包会和
-    同频段设备互相干扰（实机：无线鼠标卡顿、触控板幻手势），触觉块到手即播、
-    无会话可保活；停发期间 set_params 带新内容时即时唤醒发送线程（短震动的
-    第一拍不等 20ms 兜底轮询才被看见）。发送线程独立于会话主循环（蓝牙 HID
-    写回慢，不能占桥接热路径）。写回被拒时经 on_error 通知会话（回落 HID
-    震动写回），蓝牙不至于整路静默。"""
+    改走 0x36 报文（398 字节，vds 形态）：同样按一报里触觉 PCM 的时长（10.67ms）
+    出报、触觉块不折喇叭，由真正的手柄喇叭出声。空闲整流停发——蓝牙无线电是
+    2.4GHz 公共介质，常驻空包会和同频段设备互相干扰（实机：无线鼠标卡顿、
+    触控板幻手势），触觉块到手即播、无会话可保活；停发期间 set_params 带新内容
+    时即时唤醒发送线程（短震动的第一拍不等 20ms 兜底轮询才被看见）。发送线程
+    独立于会话主循环（蓝牙 HID 写回慢，不能占桥接热路径）。写回被拒时经
+    on_error 通知会话（回落 HID 震动写回），蓝牙不至于整路静默。
+
+    发送时刻钉在固定网格上（`_run`）：渲染与写回的耗时不计入周期，落后超过
+    一拍就重新对表、不连发追赶；空闲唤醒也从当前时刻重新对表。clock 是取时刻
+    的入口（默认 time.monotonic），主机端用例用假时钟把整条节拍瞬间跑完。"""
 
     LABEL = "DS5 蓝牙触觉流已启用（0x32 私有报文，HID 震动让位）"
     LABEL_36 = "DS5 蓝牙触觉流已启用（0x36 HD 触觉 + 手柄喇叭，HID 震动让位）"
 
     def __init__(self, device, reporter=None, on_error=None,
-                 speaker_encoder=None) -> None:
+                 speaker_encoder=None, clock=time.monotonic) -> None:
         self._device = device
         self._reporter = reporter
         self._on_error = on_error
         self._speaker_encoder = speaker_encoder
+        self._clock = clock
         self._lock = threading.Lock()
         self._params: dict = {}
         self._state = _VoiceState()
@@ -604,7 +612,8 @@ class Ds5HapticsBt:
         self._last_speaker_at = 0.0
         self._last_coil_at = 0.0
         self._stats = {"writes": 0, "write_ms_total": 0.0,
-                       "write_ms_max": 0.0, "late": 0}
+                       "write_ms_max": 0.0, "late": 0,
+                       "first_at": 0.0, "last_at": 0.0}
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._thread: threading.Thread | None = None
@@ -618,22 +627,23 @@ class Ds5HapticsBt:
         return self._speaker_encoder is not None
 
     @property
-    def _interval_s(self) -> float:
-        return BT36_INTERVAL_S if self._speaker_encoder is not None else BT_INTERVAL_S
-
-    @property
     def label(self) -> str:
         return self.LABEL_36 if self._speaker_encoder is not None else self.LABEL
 
     def stats(self) -> str:
-        """写回链路统计（平均/最大单次写回耗时、超节拍占比）：蓝牙 HID 写回
-        慢于节拍说明链路吞吐撑不住当前速率，声音/触觉会被排队延迟播放。"""
+        """写回链路统计（份数、平均/最大单次写回耗时、超节拍份数、实际节拍）：
+        实际节拍要从头到尾贴着 BT_INTERVAL_S——比它长说明写回或渲染吃掉了周期
+        （触觉 PCM 供不上控制器的 3kHz 消耗，短震动被拉长），比它短说明在连发
+        追赶（控制器的 PCM 队列被一次塞满）。"""
         s = self._stats
         if s["writes"] == 0:
             return "写回统计：无写回"
         avg = s["write_ms_total"] / s["writes"]
+        span_ms = (s["last_at"] - s["first_at"]) * 1000.0
+        beat = f"{span_ms / (s['writes'] - 1):.2f}ms" if s["writes"] > 1 else "—"
         return (f"写回统计：{s['writes']} 份，平均 {avg:.1f}ms/份，"
-                f"最大 {s['write_ms_max']:.1f}ms，超节拍 {s['late']} 份")
+                f"最大 {s['write_ms_max']:.1f}ms，超节拍 {s['late']} 份，"
+                f"实际节拍 {beat}（目标 {BT_INTERVAL_S * 1000.0:.2f}ms）")
 
     def start(self) -> bool:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -664,11 +674,25 @@ class Ds5HapticsBt:
         """当前拍音圈是否有内容（任一子帧增益非零）。"""
         return left_v is not None and (_side_active(left_v) or _side_active(right_v))
 
+    def _wait_until_due(self, due: float) -> bool:
+        """等到下一拍（到点就是等 0）：返回 True 表示该收尾了（停止位）。"""
+        return self._stop.wait(max(0.0, due - self._clock()))
+
+    def _wait_for_content(self, timeout: float) -> None:
+        """空闲等待：内容到达（`set_params` 唤醒）或兜底轮询超时后返回。"""
+        if self._wake.wait(timeout):
+            self._wake.clear()
+
     def _run(self) -> None:
-        next_due = time.monotonic()
+        clock = self._clock
+        next_due = clock()
         seq = 0
         packet_seq = 0
         while not self._stop.is_set():
+            # 到点才产报：等待排在渲染之前，周期只由网格决定——渲染、编码与
+            # 写回的耗时都落在节拍内，写回慢也只让这一拍晚一点发出。
+            if self._wait_until_due(next_due):
+                break
             with self._lock:
                 params = dict(self._params)
             hd = _hd_voices(params)
@@ -678,7 +702,7 @@ class Ds5HapticsBt:
                 # 没有 HD 段（老固件 / 未接入）：等同于空闲，不发报。
                 left_v = right_v = None
                 speaker = ()
-            now = time.monotonic()
+            now = clock()
             tone = speaker[0] if speaker else (0, 0)
             if tone[1]:
                 self._last_speaker_at = now
@@ -705,7 +729,6 @@ class Ds5HapticsBt:
                                            packet_seq=packet_seq)
                 seq = (seq + 1) & 0xF
                 packet_seq = (packet_seq + 1) & 0xFF
-                interval = BT36_INTERVAL_S
             elif haptic_recent:
                 if left_v is None:
                     pcm = bytes(BT_PCM_BYTES)
@@ -713,31 +736,36 @@ class Ds5HapticsBt:
                     pcm = bt_render_pcm(left_v, right_v, speaker, self._state)
                 report = bt_build_report(pcm, seq)
                 seq = (seq + 1) & 0xFF
-                interval = BT_INTERVAL_S
             else:
                 # 空闲：一报不发，等 set_params 的内容唤醒或 20ms 兜底轮询
-                # （新震动的第一拍不等下一个轮询拍才被看见）；next_due 由
-                # 苏醒后的重对表兜底，不在这里推进。
-                if self._wake.wait(0.02):
-                    self._wake.clear()
+                # （新震动的第一拍不等下一个轮询拍才被看见）；醒来把节拍网格
+                # 挪到当前时刻：空闲时长不定，续用空闲前的网格会连着补几拍，
+                # 把控制器的 PCM 队列一次塞满。
+                self._wait_for_content(0.02)
+                next_due = clock()
                 continue
             try:
-                t0 = time.monotonic()
+                t0 = clock()
                 self._device.write(report)
-                write_ms = (time.monotonic() - t0) * 1000.0
-                self._stats["writes"] += 1
-                self._stats["write_ms_total"] += write_ms
-                self._stats["write_ms_max"] = max(self._stats["write_ms_max"],
-                                                  write_ms)
-                if write_ms > interval * 1000.0:
-                    self._stats["late"] += 1
+                done = clock()
+                write_ms = (done - t0) * 1000.0
+                s = self._stats
+                if s["writes"] == 0:
+                    s["first_at"] = t0
+                s["writes"] += 1
+                s["last_at"] = done
+                s["write_ms_total"] += write_ms
+                s["write_ms_max"] = max(s["write_ms_max"], write_ms)
+                if write_ms > BT_INTERVAL_S * 1000.0:
+                    s["late"] += 1
             except OSError as exc:
                 self._warn(f"DS5 蓝牙触觉流写回失败：{exc}")
                 if self._on_error is not None:
                     self._on_error(exc)
                 break
-            next_due += interval
-            if now - next_due > 0.1:
-                # 落后超过一个容限（挂起/断连后追不上）：从当前时刻重新对表。
-                next_due = now
-            self._stop.wait(max(0.0, next_due - now))
+            next_due += BT_INTERVAL_S
+            after = clock()
+            if after - next_due > BT_INTERVAL_S:
+                # 落后超过一拍（系统挂起、写回卡住）：网格挪到当前时刻，
+                # 不做连发追赶。
+                next_due = after
