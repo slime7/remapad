@@ -10,11 +10,8 @@ extern "C" {
 #endif
 
 /**
- * 控制器数据面（ADR 0011）：启动 BLE host 任务与数据面任务。
- * 数据面任务固定 5ms 周期执行 输入源采样 -> 规范化 -> NS2 编码 -> BLE 通知，
- * 高频路径不经过 PocketJS turn / JSON bridge。
- * 输入源有三种：合成测试源（静置无按键，BLE 链路验证用）、USB host 直插与
- * PC 桥接，按键也可以经下方的调试注入叠加。
+ * 控制器数据面：启动 BLE host 任务与数据面任务。数据面固定 5ms 周期做
+ * 输入源采样 -> 规范化 -> NS2 编码 -> BLE 通知，高频路径不经过 PocketJS turn 与 JSON bridge。
  */
 
 esp_err_t dp_plane_start(void);
@@ -28,11 +25,8 @@ esp_err_t dp_plane_start(void);
 void dp_plane_debug_key(uint32_t buttons_mask, uint32_t hold_ms);
 
 /**
- * 手动反馈注入（串口联调用）：把一次反馈事件叠加进持续帧（fields 用
- * pad/feedback.h 的 PAD_FEEDBACK_FIELD_* 位），数据面任务下一拍按接入设备的
- * 布局编码并投递——与主机反馈走完全同一条路径。可用于没有主机在场时，
- * 从串口脚本验证震动 / 玩家灯到实体手柄的整条反馈链路；触觉采样注入走的是
- * 板载蜂鸣器（输入设备有线接入时按音色表发声，蓝牙手柄丢弃）。
+ * 手动反馈注入（串口联调用）：事件叠加进持续帧（fields 用 pad/feedback.h 的位），
+ * 数据面下一拍按接入设备的布局编码投递，与主机反馈走同一条路径。
  */
 void dp_plane_inject_feedback(uint8_t fields, const pad_feedback_t *event);
 

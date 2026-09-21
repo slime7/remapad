@@ -9,22 +9,9 @@ extern "C" {
 #endif
 
 /**
- * amiibo 镜像上传的桥接帧会话纯逻辑（不依赖 ESP-IDF，可主机端测试）：把 PC
- * 经桥接帧发来的 BEGIN/DATA/END 拼成一份完整镜像，收齐后经存储回调落库。
- * 真正的 NVS 写入由 `amiibo_store_fn` 回调与 amiibo_session（设备侧胶水）
- * 承担，载荷布局 PC 端在 pc/link.py 镜像一份。
- *
- * 载荷布局：
- *   BEGIN: name_len(u8) + name(UTF-8，最长 31 字节) + 镜像大小(u32 LE)
- *   DATA:  offset(u16 LE) + 数据（最多 200 字节；偏移越过已收字节数报错，
- *          完全落在已收区间的重复帧按幂等处理——PC 一次突发三帧、按 ACK
- *          续传，ACK 在共享串口上被挤掉时整段重发）
- *   END:   无载荷
- *   ACK:   state(1) + code(1) + received(u32 LE) + slot(1，仅 DONE 有意义)
- *
- * 镜像大小：540（纯 NTAG215 镜像）或 572（镜像 + 尾部 32 字节厂商签名，
- * 进读缓冲头区）。与 OTA 帧（0x30-0x33）同构但更简单：逐帧回 ACK，没有
- * 窗口流控（572 字节三帧数据就发完）；ACK 的 received 就是续传起点。
+ * amiibo 镜像上传的桥接帧会话纯逻辑（不依赖 ESP-IDF，可主机端测试）：把 PC 经桥接帧发来的
+ * BEGIN/DATA/END 拼成完整镜像，收齐后经存储回调落库。帧载荷与 ACK 语义见 ABSTRACTIONS 的桥接帧表；
+ * 重复的 DATA 帧按幂等处理，ACK 的 received 就是续传起点。
  */
 
 #include "ns2_nfc.h"

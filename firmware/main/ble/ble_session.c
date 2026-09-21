@@ -85,22 +85,21 @@ static struct {
 } s_ses;
 
 /** 当前手柄身份集合：设备只模拟 Pro Controller 2，因此只有一个身份。
- *  真机手柄一律用 public 地址，而主机只接受 public 地址的广播（controller.md
- *  「广播过滤与配对记录」，实机对账），一台控制器只有一个 public 地址。 */
+ *  一台控制器只有一个 public 地址，主机也只接受 public 地址的广播。 */
 static size_t mode_identities(ns2_identity_t *out)
 {
     out[0] = NS2_ID_PRO;
     return 1;
 }
 
-/** 实机对账开关：广播地址形态（ns2_adv_addr_form_t），默认 auto。不落盘，
+/** 对账开关：广播地址形态（ns2_adv_addr_form_t），默认 auto。不落盘，
  *  只影响本轮广播——用于分辨主机是否按地址形态（public / 静态随机）过滤
- *  广播：真机手柄一律用 public 地址，本机派生的都是静态随机地址。 */
+ *  广播：手柄一律用 public 地址，本机派生的都是静态随机地址。 */
 static uint8_t s_adv_addr_form;
 
 /** 是否用公共伪装地址广播：auto 与 public 都用公共地址——主机的芯片过滤只
- *  接受 public 地址的广播（见 controller.md「广播过滤与配对记录」），派生的静态随机地址在主机侧完全看不见，
- *  因此派生形态只留作实机对账开关。 */
+ *  接受 public 地址的广播，派生的静态随机地址在主机侧完全看不见，
+ *  因此派生形态只留作对账开关。 */
 static bool adv_uses_public_addr(void)
 {
     return s_adv_addr_form != NS2_ADV_ADDR_RANDOM;
@@ -117,27 +116,26 @@ static const uint8_t *adv_addr_for(void)
     return s_addr;
 }
 
-/** Pro Controller 2 的 PID（controller.md 手柄型号表）。 */
+/** Pro Controller 2 的 PID。 */
 #define NS2_PRO_PID 0x2069u
 
-/** Pro Controller 2 的序列号（3 字母前缀 + 10 位数字，末位校验位由
- *  ns2_serial_build 补齐，命名规则见 controller.md「出厂数据区定义」）。 */
+/** Pro Controller 2 的序列号（3 字母前缀 + 10 位数字，末位校验位由 ns2_serial_build 补齐）。 */
 #define NS2_PRO_SERIAL_PREFIX "HEJ"
 #define NS2_PRO_SERIAL_DIGITS "7100112345"
 
 static uint8_t s_factory[FACTORY_SIZE];
 
-/** 0x13000 出厂数据块（实机抓包布局）：`01 00` + 序列号@2 + `00 00`
+/** 0x13000 出厂数据块（布局）：`01 00` + 序列号@2 + `00 00`
  * + VID/PID@18 + 版本@22 + 机身配色@25，尾部 0xFF。按身份分槽存放，
  * 指令处理按连接身份取用。 */
 #define MEM_FACTORY_MAX NS2_ID_COUNT
 static uint8_t s_mem_factory[MEM_FACTORY_MAX][64];
 
-/** 0x7E40 首块（实机抓包：主机初始化经 0x02/0x04 读取）：6B 头 + 14B
+/** 0x7E40 首块（主机初始化经 0x02/0x04 读取）：6B 头 + 14B
  * 序列号@6 + 2B 保留@20 + 4B VID/PID@22 + 3B 版本@26 + 12B 配色@29。 */
 static uint8_t s_mem_7e40[MEM_FACTORY_MAX][64];
 
-/** 0x13080 / 0x130C0 摇杆校准块（实机抓包字节，64B）。 */
+/** 0x13080 / 0x130C0 摇杆校准块（64B）。 */
 static const uint8_t s_mem_cal80[64] = {
     0x01, 0xad, 0xd9, 0x9a, 0x55, 0x56, 0x65, 0xa0, 0x00, 0x0a, 0xa0, 0x00,
     0x0a, 0xe2, 0x20, 0x0e, 0xe2, 0x20, 0x0e, 0x9a, 0xad, 0xd9, 0x9a, 0xad,
@@ -155,7 +153,7 @@ static const uint8_t s_mem_calc0[64] = {
     0xff, 0xff, 0xff, 0xff,
 };
 
-/** 帧内字节序列整体反转（MAC、AES 挑战与注入 LTK 的字节序变换，controller.md「密码学计算详细算法」）。 */
+/** 帧内字节序列整体反转（MAC、AES 挑战与注入 LTK 的字节序变换）。 */
 static void reverse_bytes(const uint8_t *in, uint8_t *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
@@ -189,7 +187,7 @@ static bool aes_ecb_block(const uint8_t key[16], const uint8_t in[16], uint8_t o
     return status == PSA_SUCCESS && olen == 16;
 }
 
-/** 出厂数据区（序列号、VID/PID、机身配色与摇杆校准，controller.md「出厂数据区定义」）。
+/** 出厂数据区（序列号、VID/PID、机身配色与摇杆校准）。
  * 校准取中位 2048、行程 ±2047/2048，与编码器 0-4095 直发语义保持 1:1。
  * 序列号、版本与配色按当前模式的每个身份各生成一份。 */
 static void factory_init(void)
@@ -200,8 +198,8 @@ static void factory_init(void)
     memcpy(&s_factory[0x00E8], stick_cal, sizeof(stick_cal));
 
     const uint8_t *ver = app_config_get()->fw_version;
-    /* 四段配色（真机 0x13019 机身 / 0x1301C 按键 / 0x1301F 高光 / 0x13022 握把）：
-     * 未配置的段取 Pro Controller 2 的抓包值（机身深灰、按键浅灰、高光近白、
+    /* 四段配色（0x13019 机身 / 0x1301C 按键 / 0x1301F 高光 / 0x13022 握把）：
+     * 未配置的段取 Pro Controller 2 的原厂值（机身深灰、按键浅灰、高光近白、
      * 握把深灰），界面上选配色时四段一起覆盖。 */
     const uint32_t body = s_ses.body_color != 0 ? s_ses.body_color : 0x232323u;
     const uint32_t button = s_ses.button_color != 0 ? s_ses.button_color : 0xA0A0A0u;
@@ -216,8 +214,8 @@ static void factory_init(void)
     char serial[15];
     ns2_serial_build(NS2_PRO_SERIAL_PREFIX, NS2_PRO_SERIAL_DIGITS, serial);
 
-    /* 0x7E40 首块：布局按实机抓包注释；6B 头内容未验证，取 `01 00`
-     * 前缀填零。此前未提供该块，主机初始化读取失败可能正是固件更新
+    /* 0x7E40 首块：6B 头内容未验证，取 `01 00` 前缀填零。
+     * 此前未提供该块时主机初始化读取失败，可能是固件更新
      * 提示的诱因（版本读不到即视为旧固件）。 */
     uint8_t *blk = s_mem_7e40[NS2_ID_PRO];
     memset(blk, 0xFF, 64);
@@ -252,7 +250,7 @@ static void factory_init(void)
 
 /** 休眠看门狗：已订阅输入但主机始终没发 0x0c/0x04（启用特性）持续这么多
  *  秒（tick 每 1 秒一次），判定为主机不采用输入的休眠连接——握把页的快捷
- *  回连正是这个形态（实测 itvl=4 但未启用的链路按键同样无效）。正常握手
+ *  回连正是这个形态（itvl=4 但未启用的链路按键同样无效）。正常握手
  *  在订阅前后一两秒内就会启用特性，15 秒足够宽。 */
 #define NS2_DORMANT_TICKS 15
 
@@ -271,7 +269,7 @@ static int64_t s_pairing_until_us;
 static bool s_user_explicit_disconnect;
 static ns2_adv_mode_t s_last_applied_adv_mode = NS2_ADV_OFF;
 
-/** 窗口内形态的实机对账开关（串口 `adv auto|wake|reconnect`）：钉住一种形态
+/** 窗口内形态的对账开关（串口 `adv auto|wake|reconnect`）：钉住一种形态
  *  做 A/B 对账，auto 时按窗口来源决策。 */
 static ns2_window_form_t s_window_form = NS2_WINDOW_FORM_AUTO;
 
@@ -493,7 +491,7 @@ static void log_session_normal(const session_slot_t *ses)
  * 注册证据到齐就把会话从等待态提升为已注册（判据见 ns2_adv_host_registered）。
  * 三条证据分别在连接时、配对握手上、以及主机启用特性时出现，三条都走这里——
  * 只认地址的那条会让「主机换了随机地址」或「主机不再重跑 0x15」的链路一直停在
- * 等待态：屏幕停在「配对中…」，配新主机的流程也退不出来（实机现场）。
+ * 等待态：屏幕停在「配对中…」，配新主机的流程也退不出来。
  */
 static void promote_if_host_registered(session_slot_t *ses)
 {
@@ -569,7 +567,7 @@ static void inject_ltk_to_ble_store(const uint8_t host_mac[6], const uint8_t ltk
          * 转回主机存储形态（zhantss/ESP32-BLE5-NSController-Emulator）。 */
         reverse_bytes(ltk, sec.ltk, 16);
     } else {
-        /* 研究仓库的 .ltk（用于解密真机链路）恰是反序形态：按原样写入。 */
+        /* 研究仓库的 .ltk（用于解密链路）恰是反序形态：按原样写入。 */
         memcpy(sec.ltk, ltk, 16);
     }
     memcpy(sec.peer_addr.val, host_mac, 6);
@@ -670,7 +668,7 @@ void ns2_session_on_connect(uint16_t conn_handle, uint8_t identity)
     slot->conn_handle = conn_handle;
     slot->identity = identity;
     /* 专用输入通道上的报文体固定 0x09：主机不会下发「选择输入报告格式」
-     * （0x03/0x0A）的命令，一台真机只暴露自己型号那一种报文。 */
+     * （0x03/0x0A）的命令，一台主机只暴露自己型号那一种报文。 */
     slot->report_format = NS2_REPORT_ID_09;
 
     uint8_t peer[6] = {0};
@@ -740,7 +738,7 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity)
     apply_advertising();
 }
 
-/** SPI 模拟内存映射块。0x13040 与 0x13100 为实机固定内容；0x13060 与
+/** SPI 模拟内存映射块。0x13040 与 0x13100 为固定内容；0x13060 与
  * 用户自定义校准区（0x1FC000 运动 / 0x1FC040 主摇杆 / 0x1FC060 副摇杆）
  * 未经写入即未初始化，长度 0、读出为全 0xFF。出厂数据块按当前连接的
  * 身份提供（序列号 / PID / 配色）。 */
@@ -833,7 +831,7 @@ static size_t handle_flash_cmd(uint8_t identity, const uint8_t *req, size_t len,
     return NS2_FRAME_HEADER_LEN + 8 + rlen;
 }
 
-/** Command 0x03 初始化与连接建立（controller.md「控制指令系统」）。 */
+/** Command 0x03 初始化与连接建立。 */
 static size_t handle_init_cmd(session_slot_t *ses, const uint8_t *req, size_t len,
                               uint8_t subcmd, uint8_t *resp)
 {
@@ -957,9 +955,9 @@ static size_t handle_feature_cmd(session_slot_t *ses, const uint8_t *req, size_t
     return NS2_FRAME_HEADER_LEN + 4;
 }
 
-/** Command 0x15 私有配对四步（controller.md「自定义安全配对与密钥协商协议」）：MAC 交换 -> 公钥交换 ->
+/** Command 0x15 私有配对四步：MAC 交换 -> 公钥交换 ->
  * AES-128-ECB 挑战 -> 确认保存；全程不涉及标准 SMP。请求体以 0x00 前缀、
- * 应答体以 0x01 前缀（实机抓包，ndeadly/switch2_controller_research）。 */
+ * 应答体以 0x01 前缀（ndeadly/switch2_controller_research）。 */
 static size_t handle_pairing_cmd(session_slot_t *ses, const uint8_t *req, size_t len,
                                  uint8_t subcmd, uint8_t *resp, size_t cap)
 {
@@ -977,7 +975,7 @@ static size_t handle_pairing_cmd(session_slot_t *ses, const uint8_t *req, size_t
         resp[8] = 0x01;
         resp[9] = 0x04;
         resp[10] = 0x01;
-        /* 抓包应答的地址即 NimBLE 存储序原样，不做反转。 */
+        /* 应答里的地址即 NimBLE 存储序原样，不做反转。 */
         memcpy(&resp[11], s_ses.own_mac, 6);
         return NS2_FRAME_HEADER_LEN + 9;
     case 0x04:
@@ -1053,7 +1051,7 @@ static const char *hex_prefix(const uint8_t *data, size_t len, char *out, size_t
     return out;
 }
 
-/** 按帧 16 字节一行留痕一段字节（上限 max），供升级等协议的实机对账。 */
+/** 按帧 16 字节一行留痕一段字节（上限 max），供升级等协议的对账。 */
 static void log_hex_block(const char *what, const uint8_t *data, size_t len, size_t max)
 {
     const size_t n = len < max ? len : max;
@@ -1088,11 +1086,11 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     }
     char resp_hex[3 * 16 + 4];
     char rsp_hex[3 * 16 + 4];
-    /* 主机初始化与运行期的每一步命令都留痕：真机排查「连上但没输入」时，
-     * 对不上抓包的握手步骤一眼可见。应答体同样留前 16 字节，用于对照
+    /* 主机初始化与运行期的每一步命令都留痕：排查「连上但没输入」时，
+     * 对不上的握手步骤一眼可见。应答体同样留前 16 字节，用于对照
      * 主机重复轮询某条命令（重复轮询说明该应答没被主机接受）。
      * 例外是 0x0A 触觉采样：运行期热路径（游戏里接近输入上报的频率），
-     * 逐包日志会把发送环灌满、拖住输入通知（实机现场），只按
+     * 逐包日志会把发送环灌满、拖住输入通知，只按
      * 秒聚合。 */
     const bool hot_path = cmd_is_hot_path(data[0]);
     if (!hot_path) {
@@ -1112,13 +1110,13 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     size_t resp_len;
     switch (cmd) {
     case 0x01:
-        /* NFC 命令通路（controller.md「NFC 与 Amiibo 数据交互协议规范」）：
+        /* NFC 命令通路（协议见 docs/controller-switch2.md）：
          * 软件模拟的 NTAG215 标签，镜像由 amiibo 存储层预置。 */
         resp_len = ns2_nfc_on_command(data, len, subcmd, frame,
                                       sizeof(resp) - ANSWER_PREFIX_LEN);
         break;
     case 0x07:
-        /* 初始握手（controller.md「通信交互与报告上报时序」阶段 1）：应答体 1 字节 0x00。 */
+        /* 初始握手（阶段 1）：应答体 1 字节 0x00。 */
         frame[8] = 0x00;
         resp_len = NS2_FRAME_HEADER_LEN + 1;
         break;
@@ -1155,7 +1153,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         resp_len = handle_feature_cmd(ses, data, len, subcmd, frame);
         break;
     case 0x0D:
-        /* 手柄固件更新流程（实机抓包）：0x01 进入、0x02/0x03 参数、0x04 数据帧
+        /* 手柄固件更新流程：0x01 进入、0x02/0x03 参数、0x04 数据帧
          * （经 0x0018 分记录推送，由假升级会话应答）、0x05/0x06 收尾与校验、
          * 0x07 应用。主机接受空应答体；0x07 之后主机在等控制器带着新固件回来，
          * 这里补一次伪装重启。 */
@@ -1165,7 +1163,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         resp_len = NS2_FRAME_HEADER_LEN;
         break;
     case 0x11:
-        /* 抓包样例：0x11/0x01 返回 4B 确认字，0x11/0x03 返回 0x1C 传感器块。 */
+        /* 0x11/0x01 返回 4B 确认字，0x11/0x03 返回 0x1C 传感器块。 */
         if (subcmd == 0x03) {
             static const uint8_t sensor_block[28] = {
                 0x01, 0x20, 0x03, 0x00, 0x00, 0x0a, 0xe8, 0x1c,
@@ -1182,14 +1180,14 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         }
         break;
     case 0x16:
-        /* 未知功能命令（实机抓包：应答体 24 字节 0）。 */
+        /* 未知功能命令（应答体 24 字节 0）。 */
         memset(&frame[8], 0, 24);
         resp_len = NS2_FRAME_HEADER_LEN + 24;
         break;
     case 0x13:
         /* 0x13/0x01：回空体时主机不发 0x0c/0x04、也不订阅输入通道；回 4 字节
-         *  `01 00 00 00` 后主机立刻启用特性并开始收输入（实机验证）。
-         *  语义与长度未知，`01 00 00 00` 是实测能走通的形态（controller.md「Command 0x13 / 0x18」）。 */
+         *  `01 00 00 00` 后主机立刻启用特性并开始收输入。
+         *  语义与长度未知，`01 00 00 00` 是能走通的形态。 */
         {
             static const uint8_t body[4] = {0x01, 0x00, 0x00, 0x00};
             memcpy(&frame[8], body, sizeof(body));
@@ -1198,7 +1196,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
         break;
     case 0x18:
         /* 主机在会话中每约 10 秒轮询一次 0x18/0x01，期望 8 字节应答体
-         * （controller.md「控制指令系统」与已验证实现一致）。不回这个体，主机不会把
+         * （与已验证实现一致）。不回这个体，主机不会把
          * 这台手柄当成可用输入源——「连上、订阅了、上报也在发，但按键没
          * 反应」正是这个现象。0x18/0x03 只回显请求里的那一字节。 */
         if (subcmd == 0x01) {
@@ -1238,7 +1236,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
     }
     ns2_frame_response_header(frame, cmd, transport, subcmd);
     if (cmd == 0x01) {
-        /* NFC 应答的 Status/ACK 字节按子命令取抓包值（0x05 一族 00/F8、
+        /* NFC 应答的 Status/ACK 字节按子命令取固定值（0x05 一族 00/F8、
          * 0x0C/0x15 10/78）；未命中的子命令沿用通用帧头。 */
         uint8_t nfc_status = 0;
         uint8_t nfc_ack = 0;
@@ -1281,7 +1279,7 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
 
 void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle)
 {
-    /* Output Report 0x02：2x16B LRA 参数包（controller.md「输出报告格式」）。板卡无震动马达：
+    /* Output Report 0x02：2x16B LRA 参数包。板卡无震动马达：
      * 解析为结构化震动事件经 ns2_output 分发给监听者，
      * 由监听者转发给 USB 源手柄 / 桥接 PC。 */
     (void)conn_handle;
@@ -1309,9 +1307,8 @@ void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle
 
 void ns2_session_on_composite(const uint8_t *data, size_t len, uint16_t conn_handle)
 {
-    /* 实机抓包：复合输出 = 1 字节 0x00 填充 + 左右两条 16 字节 LRA 参数包 +
-     * 命令帧（BlueRetro sw2 的 out_cmd 布局；Switch 1 的「0x00 + 2×16B 震动 +
-     * 命令」布局未被 Switch 2 主机观测到，此处是 Switch 2 的原生形态）。 */
+    /* 复合输出 = 1 字节 0x00 填充 + 左右两条 16 字节 LRA 参数包 + 命令帧
+     * （BlueRetro sw2 的 out_cmd 布局，Switch 2 主机的原生形态）。 */
     if (len < 33 + NS2_FRAME_HEADER_LEN) {
         ESP_LOGW(TAG, "composite too short (%u)", (unsigned)len);
         return;
@@ -1339,7 +1336,7 @@ bool ns2_session_rumble_enabled(void)
 
 void ns2_session_start_pairing_mode(void)
 {
-    /* 配对新主机（相当于真机按住配对键）：先断开当前主机，再发标准发现广播
+    /* 配对新主机（相当于按住配对键）：先断开当前主机，再发标准发现广播
      * 等新主机搜索——目标是配一台新主机，不能带着旧主机的地址广播。
      * 设备只有一台 Pro，直接进发现广播。 */
     s_ses.pairing_mode = true;
@@ -1421,7 +1418,7 @@ static struct {
     ns2_upgrade_t up;
 } s_fwupd;
 
-/** 升级记录的应答体（帧装配完成时回给主机）：主机更新流程无公开文档，实测
+/** 升级记录的应答体（帧装配完成时回给主机）：主机更新流程无公开文档，
  *  主机在数据帧后停住等应答；应答体经串口 fwack 现场替换做 A/B 对账。 */
 static uint8_t s_fwupd_ack[FWUPD_ACK_BODY_MAX];
 static size_t s_fwupd_ack_len;
@@ -1464,11 +1461,11 @@ void ns2_session_fw_post_version(uint8_t out[3])
 }
 
 /** 伪装重启分两拍：先改写上报版本并落盘（等一拍让 NVS 写完），再重启让主机
- *  看到控制器断开后带着新版本回来——真机在这一步重启进新固件。
+ *  看到控制器断开后带着新版本回来。
  *
- *  默认不重启：实测主机把「控制器重启」当成更新没生效，会自动重推整包，
+ *  默认不重启：主机把「控制器重启」当成更新没生效、会自动重推整包，
  *  形成「推包 → 重启 → 再推包」的循环；重启因此改为一次性武装（串口
- *  fwapply on），只用于实机对账的那一次，触发后自动撤防。 */
+ *  fwapply on），触发后自动撤防。 */
 static int64_t s_fwupd_apply_us;
 static int64_t s_fwupd_restart_us;
 static bool s_fwupd_restart_armed;
@@ -1626,7 +1623,7 @@ void ns2_session_tick(void)
 
     const int64_t now = esp_timer_get_time();
 
-    /* 广播窗口到期（连接窗口 / 唤醒窗口）：设备回到静默——真机不会一直发
+    /* 广播窗口到期（连接窗口 / 唤醒窗口）：设备回到静默——不会一直发
      * 信号，想再连一次就再按一次连接键或 HOME。 */
     if (s_adv_win.until_us != 0 && !ns2_adv_window_active(&s_adv_win, now)) {
         ns2_adv_window_close(&s_adv_win);
@@ -1654,7 +1651,7 @@ void ns2_session_tick(void)
     }
 
     /* 配对流程收尾：主机真的配好并连上（当前形态每个身份都凭证在手、会话
-     * 注册完成）才自动退出——真机配完就处于已连接状态，不需要用户再按；
+     * 注册完成）才自动退出——配完就处于已连接状态，不需要用户再按；
      * 没有主机来配就一直挂着发现广播，等用户按停止或主机来配。 */
     if (s_ses.pairing_mode && pairing_flow_done()) {
         s_ses.pairing_mode = false;
@@ -1740,9 +1737,9 @@ void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *
             const uint16_t conn = slot->conn_handle;
             /* 特性启用（0x0c/0x04）前不发输入通知：对齐参考实现的 DEV_READY
              *  门槛——主机不采用未启用链路上的输入，提前灌报文只会挤占发送
-             *  队列（休眠连接上曾实测近半数通知因拥塞失败）。
+             *  队列（休眠连接上曾见近半数通知因拥塞失败）。
              *  但 READ 缓存要跟着刷新：主机在握把页的行只发了 0x0c/0x02、
-             *  没订阅输入通道，靠 READ 轮询取输入值（实机）——
+             *  没订阅输入通道，靠 READ 轮询取输入值——
              *  缓存不刷新，主机读到的永远是全零。 */
             if (!slot->features_enabled) {
                 ble_controller_store_input(conn, report_id, body);

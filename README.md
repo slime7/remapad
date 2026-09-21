@@ -6,6 +6,8 @@ Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控�
 屏幕 UI 基于 PocketJS 框架与 Vue 3 Vapor 语法；
 固件运行于 ESP-IDF，通过官方 ESP-IDF host 组件驱动屏幕显示，并在原生任务与队列中承载控制器数据面。
 
+本项目仅为娱乐用途，实现类似功能不需要 ESP32 带有屏幕。
+
 ## 功能清单
 
 - [x] PC 手柄桥接
@@ -63,7 +65,8 @@ flowchart LR
 - 固件工作区（`firmware/`）承载 PocketJS 宿主运行时与原生数据面：
   高频控制器接收、规范化、协议编码及 BLE 广播/GATT 状态机均在 ESP-IDF 原生任务中运行；
   Bridge 控制面仅用于传递低频设备状态和交互指令。
-- 通信协议细节与规范参见 [控制器协议参考 (docs/controller.md)](docs/controller.md)。
+- 主机协议细节见 [Switch 2 手柄协议规范 (docs/controller-switch2.md)](docs/controller-switch2.md)；
+  输入设备数据见 [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)。
 
 ## 目录结构
 
@@ -136,7 +139,8 @@ uv run python remapadgui.py
 - [系统架构与技术实现 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)：双工作区数据流与设计方案
 - [核心概念与领域抽象 (docs/ABSTRACTIONS.md)](docs/ABSTRACTIONS.md)：渲染模型与软硬件契约
 - [新手开发与上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)：开发环境与常见问题排查
-- [控制器协议规范 (docs/controller.md)](docs/controller.md)：USB、NS2 报告与 BLE 细节
+- [Switch 2 手柄协议规范 (docs/controller-switch2.md)](docs/controller-switch2.md)：广播、GATT、HID 报告、配对、指令集与 NFC
+- [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置
 - [目标硬件技术参考 (docs/hardware.md)](docs/hardware.md)：芯片引脚、外设与电气特性
 - [测试策略与回归规则 (docs/TESTING.md)](docs/TESTING.md)：自动化测试与用例规范
 - [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：历史架构决策与选型取舍

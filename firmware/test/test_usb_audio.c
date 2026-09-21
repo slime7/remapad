@@ -1,12 +1,7 @@
 /**
- * UAC1 音频流 OUT 接口解析（usb/usb_audio_parse.c）：用 DualSense Edge 实机
- * 描述符（pyusb 无驱动抓取）钉住挑选规则——跳过音频控制接口、
- * 麦克风流（IN 端点）与 HID 接口，只认 PCM 格式（wFormatTag 0x0001）、
- * Type I 16 位、带等时 OUT 端点的非 0 备用设置。
- *
- * 夹具按实机布局重建：接口 0 是音频控制（AC），接口 1 alt 1 是 4ch 播放流
- * （端点 0x01、MPS 392、48kHz），接口 2 alt 1 是 2ch 麦克风流（IN 端点
- * 0x82），接口 3 是 HID。各字节段的偏移见用例内的截断/改写位置。
+ * UAC1 音频流 OUT 接口解析（usb/usb_audio_parse.c）主机端用例：用 DualSense Edge 的描述符样本
+ * 钉住挑选规则——跳过音频控制接口、麦克风流与 HID 接口，只认 Type I 16 位 PCM、
+ * 带等时 OUT 端点的非 0 备用设置。
  */
 #include "host_test.h"
 
@@ -82,7 +77,7 @@ static void truncated_descriptor_is_rejected(void)
 }
 
 HOST_TEST_SUITE(suite_usb_audio, "usb_audio",
-                {"DualSense 实机描述符里挑出播放流（接口 1 alt 1，4ch/16bit/48k）",
+                {"DualSense 描述符里挑出播放流（接口 1 alt 1，4ch/16bit/48k）",
                  finds_dualsense_playback_stream},
                 {"非 PCM 格式不当作可合成通道", non_pcm_format_is_rejected},
                 {"截断或空描述符只报找不到", truncated_descriptor_is_rejected});

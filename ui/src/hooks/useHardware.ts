@@ -56,7 +56,7 @@ export interface HardwareUiState {
   roleMessage: RoleNotice;
   /** 本地推算的实时开机时长。 */
   uptimeMs: number;
-  /** 实测帧率（帧/秒）：只在系统页可见时采样，null = 尚无样本。 */
+  /** 当前帧率（帧/秒）：只在系统页可见时采样，null = 尚无样本。 */
   fps: number | null;
   /** 已发送重启命令。 */
   rebooting: boolean;
@@ -172,7 +172,7 @@ function refreshStatus(): void {
 
 /**
  * 采一次实时帧率：向设备要一份状态，用应答里的设备时钟和本地帧计数算
- * 上一个窗口的实测帧率。进页后的第一个窗口只建立锚点，所以数字要等
+ * 上一个窗口的帧率。进页后的第一个窗口只建立锚点，所以数字要等
  * 约一秒；设备不回或命令失败时锚点不动，下一个窗口继续请求，不会卡住。
  */
 function requestFrameRateSample(): void {

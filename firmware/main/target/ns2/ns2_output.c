@@ -22,7 +22,7 @@ static struct {
     bool rumble_enabled; /* 主机开启了触觉特性 */
 
     /* 耳机状态字节（0x09 偏移 0x0D，同时决定 0x05 的插入位）：派生值来自
-     * 输入设备的 3.5mm 状态，覆盖值供实机 A/B（串口 headset 命令）。 */
+     * 输入设备的 3.5mm 状态，覆盖值供对照（串口 headset 命令）。 */
     bool headset_override_on;
     uint8_t headset_override;
     uint8_t headset_derived;
@@ -189,13 +189,8 @@ void ns2_output_emit_rumble(const ns2_rumble_event_t *event)
  *  任何马达上都感知不到，归一强度不超过它的参数包也不算在震。 */
 #define NS2_RUMBLE_CARRIER_MAX 2u
 
-/** 一个时序子帧的位串（5 字节小端，BlueRetro sw2.h 的 sw2_lra_op_t）：
- *  低频频率 bit0-8、低频使能音 bit9、低频振幅 bit10-19、高频频率 bit20-28、
- *  高频使能音 bit29、保留 bit30、使能 bit31、高频振幅 bit32-39（独立 8 位）。
- *  BlueRetro 是真机验证过的参照：它的静止包常量 0x1E100000（高频频率
- *  0x1E1）与我们实机抓包的静止字一致，实机主动子帧的 bit31 使能位为 1；
- *  SDL_hidapi_switch2.c 的 10/10/10/10 对称位表是没上过真机的逆向猜测，
- *  按它读会把频率位错认成振幅、错认振幅的刻度。 */
+/** 一个时序子帧的位串（5 字节小端）：低频频率 bit0-8、低频振幅 bit10-19、高频频率 bit20-28、
+ *  使能 bit31、高频振幅 bit32-39；位布局与频率刻度见 docs/controller-switch2.md 的输出报告一节。 */
 #define NS2_KEY_LF_FREQ_SHIFT 0u
 #define NS2_KEY_LF_FREQ_MASK 0x1FFu
 #define NS2_KEY_LF_AMP_SHIFT 10u
@@ -347,7 +342,7 @@ size_t ns2_rumble_keys(const uint8_t raw[16], ns2_rumble_key_t keys[PAD_RUMBLE_K
         key->lf_amp = (uint16_t)((v >> NS2_KEY_LF_AMP_SHIFT) & NS2_KEY_LF_AMP_MASK);
     }
     if (raw != NULL) {
-        /* 状态字 bit4-5 是有效子帧数（实机载波包为 1、游戏包为 3）；0 表示
+        /* 状态字 bit4-5 是有效子帧数（载波包为 1、游戏包为 3）；0 表示
          * 未声明，按满 3 帧处理。 */
         const size_t declared = (raw[0] >> 4) & 0x3u;
         if (declared != 0 && declared < count) {
@@ -362,20 +357,16 @@ bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out)
     if (data == NULL || out == NULL) {
         return false;
     }
-    /* 32 字节 = BLE 形态（实机写入即是此长度，不带 Report ID）；
+    /* 32 字节 = BLE 形态（此长度不带 Report ID）；
      * 33 字节及以上 = 多带 1 字节 Report ID/占位前缀的形态。 */
     const size_t body = len >= 1 + 32 ? 1 : 0;
     if (len < body + 32) {
         return false;
     }
     memcpy(out->raw, &data[body], sizeof(out->raw));
-    /* LRA 状态字 bit6 = 启用标志（controller.md「输出报告格式」）。游戏里主机以接近输入
-     * 上报的频率持续刷「保活包」：使能位为 1、三个子帧振幅全 0，真机收到同样毫无
-     * 动静。「在震」必须是使能且归一强度非零——把使能位直接当在震，输入手柄
-     * 会被写上一场主机根本没有的震动。非零的门槛还要高过载波电平：「查找
-     * 手柄」页的参数包带着零振幅的静止包维持 LRA 通路（蜂鸣本体走 0x0A
-     * 采样流），极低振幅任何马达都感知不到，判成在震会把采样退化出的短震动
-     * 压掉（实机：点击手柄毫无动静）。 */
+    /* LRA 状态字 bit6 = 启用标志。游戏里主机以接近输入
+     * 上报的频率持续刷零幅度保活包，参数包的低有效位也常在抖：判据因此是使能且归一强度
+     * 高过载波电平，否则会把主机根本没在震的状态写给输入手柄。 */
     out->left_on = (out->raw[0] & 0x40) != 0 &&
                    ns2_rumble_strength(out->raw) > NS2_RUMBLE_CARRIER_MAX;
     out->right_on = (out->raw[16] & 0x40) != 0 &&
@@ -402,7 +393,7 @@ bool ns2_haptic_sample_parse(const uint8_t *frame, size_t len, uint8_t *sample)
     if (frame == NULL || sample == NULL || len < 4 || frame[0] != 0x0A) {
         return false;
     }
-    /* 实机抓包（ns2-search-page.capture）：命令帧 = 头 4 字节
+    /* 命令帧 = 头 4 字节
      * `0A 91 01 02` + 值段，采样 ID 在值段第 5 字节（帧内偏移 8），「查找
      * 手柄」页以约 16-18 Hz 重发 0x02、收尾发 0x00。子命令非 0x02 时帧内
      * 不带值段，采样 ID 就是子命令本身。 */

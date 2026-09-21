@@ -1,7 +1,7 @@
 # Remapad 系统架构与技术实现
 
 Remapad 的目标平台是微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16 MB Flash + 8 MB Octal PSRAM，板载 240 × 280 ST7789V2 触摸屏）；
-板卡事实见 [hardware.md](hardware.md)。最终产品是 USB 到 NS2 BLE 的手柄网关，同时提供本机状态 UI：
+板卡事实见 [hardware.md](hardware.md)。本设备是 USB 到 NS2 BLE 的手柄网关，同时提供本机状态 UI：
 架构由 PocketJS UI 工程、PocketJS 官方 ESP-IDF host 和产品控制器数据面组成。
 PocketJS 的包格式、host profile 校验、QuickJS guest、UI binding 和 RGB565 renderer 均使用官方实现。
 
@@ -16,7 +16,7 @@ PSP 仅用于理解 PocketJS 的官方 host 示例；本项目不使用 PSP targ
 4. **固件拥有硬件边界**：PocketJS 运行时不假设某个屏幕控制器、GPIO 或输入总线。固件负责采样输入、创建显示 DMA 缓冲区、提交 RGB565 strip 和调度设备任务。
 5. **渲染采用事务模型**：`prepare` 后逐个渲染 damage region；面板传输全部成功后 `commit`，出现错误时 `abort`。
 6. **控制器数据面与 UI 解耦**：USB 接收、输入规范化、NS2 报告编码、BLE 广播/GATT 和配对状态机运行在 ESP-IDF 原生任务/队列中，不通过 PocketJS 每帧 UI 接口传输高频报告。
-   协议范围见 [controller.md](controller.md)。
+   协议范围见 [controller-switch2.md](controller-switch2.md)。
 
 ## 系统组成
 
@@ -88,7 +88,7 @@ flowchart LR
 | UI binding | `pocketjs_ui_core`、`pocketjs_ui_qjs` | 保留 UI 节点、加载资源并暴露 `globalThis.ui` |
 | 调度 | 产品 owner task | `remapad-pjs` 固定 tick 任务，承载 guest 生命周期与每帧 UI turn；官方 `pocketjs_runner` 保留在 `firmware/components/` 但当前未接入 |
 | 渲染 | `pocketjs_render_rgb565` | 软件 RGB565 renderer、damage plan 和事务提交 |
-| 控制器数据面 | ESP-IDF USB/BLE/GATT/FreeRTOS（规划） | USB 输入接收、输入规范化、NS2 报告编码、BLE 广播/GATT/配对和状态持久化；协议见 [controller.md](controller.md) |
+| 控制器数据面 | ESP-IDF USB/BLE/GATT/FreeRTOS | USB 输入接收、输入规范化、NS2 报告编码、BLE 广播/GATT/配对和状态持久化；协议见 [controller-switch2.md](controller-switch2.md) |
 | 升级 | `pc/remapadctl.py --upgrade` + `main/ota/` | 经桥接帧推送整包应用镜像，写非运行分区、`esp_ota_end` 校验后切启动分区并重启；回滚健康门槛见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md) |
 | 硬件 | 产品 BSP + ESP-IDF | 输入采样、面板初始化、DMA 传输、电源和其他外设 |
 
@@ -101,7 +101,7 @@ flowchart TB
     Root --> Scripts["scripts/：create_adr.py / pocketjs.mjs（官方工具链与触摸预览入口）/ preview-server.mjs"]
     Root --> Patches["patches/：上游 PocketJS 对账记录与发布说明"]
     Root --> PC["pc/：PC 侧工具 remapadctl（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）与图形入口 remapadgui"]
-    Root --> Docs["docs/：VISION / ARCHITECTURE / ABSTRACTIONS / GETTING-STARTED / controller / hardware / adr/"]
+    Root --> Docs["docs/：VISION / ARCHITECTURE / ABSTRACTIONS / GETTING-STARTED / controller-switch2 / controller-ps / hardware / adr/"]
     Root --> UI["ui/：PocketJS 前端工作区"]
     Root --> Firmware["firmware/：ESP-IDF 固件工作区"]
 
@@ -125,7 +125,8 @@ flowchart TB
     FwMain --> MainOta["ota/：升级会话（分区回写与回滚门槛）"]
 ```
 
-仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，前端通过官方 `@pocketjs/framework` 与 `@pocketjs/cli` npm 依赖获得编译器与浏览器运行时；
+仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，
+前端通过官方 `@pocketjs/framework` 与 `@pocketjs/cli` npm 依赖获得编译器与浏览器运行时；
 上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。
 `scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。
 `ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；
@@ -170,6 +171,17 @@ flowchart LR
 团队的可复现构建入口是先运行 `pnpm run build` 再运行 `idf.py build`。这样 ESP-IDF 构建阶段只消费已生成的包，不需要在 CMake 中重复实现编译器逻辑。
 
 ## 固件运行时生命周期
+
+```mermaid
+flowchart TB
+    Boot["上电：启动画面点亮背光并显示阶段进度"] --> Owner["创建 remapad-pjs owner task（栈在 PSRAM）"]
+    Owner --> Mount["同一任务内创建 package / guest / ui_core / binding 并 mount"]
+    Mount --> Eval["eval bundle"]
+    Eval --> Turn["每帧：处理 bridge 队列 → guest eval → pocketjs_ui_turn"]
+    Turn --> Gc["按 PSRAM 压力触发 JS GC"]
+    Gc --> Turn
+    Turn --> Submit["渲染条带 → panel_transfer_async 提交"]
+```
 
 `firmware/main/pocketjs_host.c` 按官方 smoke 示例组织资源生命周期，但把整套流程放在产品自己的 `remapad-pjs` owner task 上运行：
 
@@ -234,18 +246,24 @@ flowchart LR
     Feedback -.-> Bridge
 ```
 
-该数据面由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，高频报告不经过 UI bridge，也不经过每帧 `pocketjs_ui_turn`。
-PocketJS UI 只读取低频连接/电量/配对状态，并发出开始配对、停止配对、背光等控制命令。
+该数据面由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，高频报告不经过 UI bridge，也不经过每帧 `pocketjs_ui_turn`；
+PocketJS UI 只读取低频连接/电量/配对状态，并通过 `ui/src/bridge/` 与 `firmware/main/bridge/` 的控制面发出配对、背光等命令。
+三段划分、私有格式字段与反馈编码的展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
 
-三段之间只有两种数据：`pad_report_t`（原始报告 + 设备标识）与 `pad_state_t`（私有格式）。
-新增一种手柄时，在 `pad/layouts/` 下对应系列的文件里加一行；新系列则加一个文件并在 `pad/layout.c` 登记。
-取舍见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)。新增一个目标（例如 NS1）在 `target/` 下加一个 `pad_target_t` 实现；
-桥接 PC 与 USB host 直插共用 `pad/` 与 `target/` 两段，按键位置映射与轴归一只有一份；
-设备自带报告语言与目标一致时由目标原样转发报文体（同代透传，见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)）。
-展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
+### USB 角色切换
 
-现有 `ui/src/bridge/` 和 `firmware/main/bridge/` 是这一控制面已接入的实现（UI 命令/事件 + 供 PWR 按键与串口 CLI 使用的外部队列入口）。
-NS2 的广播字段、GATT、HID 报告、配对和震动命令见 [controller.md](controller.md)，实现前必须用真实设备抓包和互操作测试确认。
+USB 角色（`device` = 插电脑 COM 口，`host` = 插手柄）在运行时真实切换，角色只在本次运行有效、不写 NVS：
+
+```mermaid
+stateDiagram-v2
+    [*] --> Device
+    Device: device 角色（USB-Serial/JTAG：桥接帧 + 日志 + CLI）
+    Host: host 角色（OTG host 收手柄 HID，日志与 CLI 改走 UART0）
+    Device --> Host: mode host（先迁日志与 CLI 到 UART0，再放掉 USJ）
+    Host --> Device: mode device（还原 USJ，日志与 CLI 迁回）/ 复位
+```
+
+切到 host 后 PC 上的 COM 口消失直到复位；取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
 
 ## OTA 升级通路
 
@@ -291,6 +309,15 @@ flowchart LR
 
 ## 内存与显示策略
 
+```mermaid
+flowchart LR
+    Turn["每帧 pocketjs_ui_turn"] --> Plan["prepare：算出 damage plan"]
+    Plan --> Strip["逐行带 render_strip（240 × 条高，RGB565）"]
+    Strip --> Submit["panel_transfer_async：只入队并交回完成序号"]
+    Submit --> Wait["轮到该 strip 槽时 panel_wait_seq 等上一笔传输"]
+    Wait --> Commit["全部传输成功 → commit；出错 → abort"]
+```
+
 - JavaScript guest 和资源优先使用 8 MB Octal PSRAM。
 - `remapad-pjs` owner task 的栈（288 KB）同样分配在 PSRAM，因为 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。主任务栈保持 32 KB，只负责启动 owner task。
   内部 RAM 因此留给 DMA 缓冲和协议栈，启动后可用量约 360 KB。
@@ -335,6 +362,7 @@ flowchart LR
 - [ADR 0002：旧 bridge/自定义打包方案（已被取代）](adr/0002-adopt-hardware-bridge-and-packaging-architecture.md)
 - [ADR 0003：采用官方 PocketJS ESP-IDF host 构建链路](adr/0003-use-official-esp-idf-host.md)
 - [ADR 0022：OTA 升级复用桥接帧（USB-Serial/JTAG 双分区回写）与回滚健康门槛](adr/0022-ota-over-bridge-frames-with-rollback.md)
-- [Switch 2 / NS2 手柄通信协议与数据交互技术规范](controller.md)
+- [Switch 2 手柄通信协议与数据交互技术规范](controller-switch2.md)
+- [PS 家族手柄数据规范（DualShock 3 / DualShock 4 / DualSense）](controller-ps.md)
 - [PocketJS ESP-IDF 官方指南](https://pocketjs.dev/docs/esp-idf/)
 - [PocketJS ESP-IDF 官方 README](https://github.com/pocket-stack/pocketjs/blob/main/hosts/esp-idf/README.md)

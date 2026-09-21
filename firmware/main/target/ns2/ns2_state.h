@@ -41,7 +41,7 @@ enum {
 #define NS2_STICK_MAX 4095
 
 /** 0x09 报文的耳机音频状态字节（偏移 0x0D）取值：未插入 / 纯耳机 / 带麦。
- *  controller.md 另记了 0x0D / 0x0F 一档（未确认语义），实机 A/B 用串口
+ *  另有 0x0D / 0x0F 一档（未确认语义），用串口
  *  `headset 0x0d` 之类的覆盖值。 */
 #define NS2_HEADSET_NONE 0x00
 #define NS2_HEADSET_STEREO 0x05
@@ -50,24 +50,22 @@ enum {
 #define NS2_05_BTN3_HEADSET 0x10
 
 /** 0x09 运动块填充方式。真机在特性位 bit2（IMU）开启后发 40 字节传感器
- *  数据；板卡没有 IMU，只能用占位。实机排查「连上但主机不采用输入」时用
- *  CLI `motion` 在几种占位间切换，确认主机是否校验运动块内容。 */
+ *  数据；板卡没有 IMU，只能用占位。CLI `motion` 可在几种占位间切换，
+ *  确认主机是否校验运动块内容。 */
 typedef enum {
     NS2_MOTION_ZERO = 0,  /**< 长度 0x28 + 全零块（默认） */
-    NS2_MOTION_CAPTURE = 1, /**< 长度 0x28 + 真机抓包块（时间戳按节奏推进） */
+    NS2_MOTION_CAPTURE = 1, /**< 长度 0x28 + 样本块（时间戳按节奏推进） */
     NS2_MOTION_NONE = 2,  /**< 长度 0x00，不带运动数据 */
     /** 长度 0x28 + 输入设备的真实样本：按 NS1 的三份 12 字节样本风格排布。
-     *  0x09 运动块的内部结构没有公开资料，这一档只用于实机 A/B 与后续抓包
+     *  0x09 运动块的内部结构没有公开资料，这一档只用于对照与后续
      *  解码，默认不启用（串口 CLI 的 motion 3 打开）。 */
     NS2_MOTION_SENSOR = 3,
 } ns2_motion_mode_t;
 
 /**
- * 手柄身份：本设备只模拟 Pro Controller 2。真主机给一只 Joy-Con 配对要一个
- * 独立的公共蓝牙地址，而一台控制器的芯片只有一个 public 地址（主机也只接受
- * public 地址的广播，见 controller.md「广播过滤与配对记录」），左右两只无法各自寻址，Joy-Con
- * 形态在本硬件上不可行。枚举因此只有一个取值；凭证表与出厂块仍按身份分槽，
- * 将来真要再加型号时不用改存储与广播层的分槽方式。
+ * 手柄身份：本设备只模拟 Pro Controller 2。一台控制器只有一个 public 地址，主机也只接受
+ * public 地址的广播，左右两只 Joy-Con 无法各自寻址。枚举因此只有一个取值；
+ * 凭证表与出厂块仍按身份分槽，将来真要再加型号时不用改存储与广播层的分槽方式。
  */
 typedef enum {
     NS2_ID_PRO = 0,

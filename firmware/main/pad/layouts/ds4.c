@@ -7,12 +7,8 @@
  */
 static const pad_layout_t s_rows[] = {
     {
-        /* 有线：电量取 status[0]（0x1E），低四位是 0-10 档、bit4 表示充电中。
-         * DualSense 有线同样报 0x01，但在扳机之后多一个序号字节，另列一行。
-         * 触摸点：公共段之后是 1 字节历史份数 + 每份 9 字节（1 字节时间戳 +
-         *  2 个触点，每点 4 字节），因此第一个触点在偏移 35，一帧带 3 份历史
-         *  （取第一份）。偏移与触点格式取自 Linux hid-playstation.c 的
-         *  dualshock4_input_report_usb，实机抓包尚未核对。 */
+        /* 有线：电量取 status[0]；触摸点为公共段之后 1 字节历史份数 + 每份 9 字节，取第一份历史。
+         * 偏移与核对状态见 docs/controller-ps.md。 */
         .family = PAD_FAMILY_PS,
         .conn = PAD_CONN_USB,
         .report_id = 0x01,
@@ -33,9 +29,8 @@ static const pad_layout_t s_rows[] = {
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
-        /* 输出报告 0x05（32 字节）：b1 是 flags（0x01 震动、0x02 灯条颜色），
-         * b4/b5 是右小马达与左大马达强度，b6-b8 是灯条 RGB。偏移取自公开实现
-         * （Linux hid-playstation.c），未实机核对。 */
+        /* 输出报告 0x05（32 字节）：b1 是 flags（震动 + 灯条颜色）、b4/b5 是两个马达强度、
+         * b6-b8 是灯条 RGB；偏移取自公开实现。 */
         .out = {
             .report_id = 0x05,
             .len = 32,
@@ -58,8 +53,7 @@ static const pad_layout_t s_rows[] = {
         .hat_off = 7,
         .trigger_off = {10, 11},
         .stick_off = {3, 4, 5, 6},
-        /* 触摸点：公共段后移两位后，第一个触点在偏移 37（蓝牙一帧带 4 份历史，
-         *  USB 是 3 份）。 */
+        /* 触摸点取第一份历史（蓝牙一帧带 4 份，USB 是 3 份）。 */
         .touch_off = 37,
         .motion_off = 15,
         .battery_off = 32,
@@ -71,10 +65,8 @@ static const pad_layout_t s_rows[] = {
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
         .motion = {.samples = 1, .stride = 12},
-        /* 蓝牙形态 0x11（78 字节）：b1 是 hw_control（0xC0 = HID + CRC32，
-         * 低 6 位是轮询间隔）、b2 是音频控制，公共段从 b3 起（b6/b7 是右小
-         * 马达与左大马达、b8-b10 是灯条 RGB），末 4 字节是 CRC32。偏移取
-         * Linux hid-playstation.c 的 dualshock4_output_report_bt。 */
+        /* 蓝牙形态 0x11（78 字节）：b1 是 hw_control（0xC0 = HID + CRC32）、b2 是音频控制，
+         * 公共段从 b3 起，末 4 字节是 CRC32。 */
         .out = {
             .report_id = 0x11,
             .len = 78,

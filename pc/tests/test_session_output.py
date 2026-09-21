@@ -80,6 +80,42 @@ class QueueReporterTest(unittest.TestCase):
         self.assertEqual(sink.get_nowait()["text"], "ok half line")
 
 
+class FeedbackWriteBackTest(unittest.TestCase):
+    """写回手柄的短写判定：Windows 的 hidapi 把短于描述符声明长度的写回补齐到
+    OutputReportByteLength 再交驱动（DS5 蓝牙集合声明 547，0x31 的 78 字节写法
+    因此返回 547）——返回值比载荷长是常态，按「不等于载荷长度」判定会把每一次
+    写回都记成失败（写回手柄计数恒为零、日志刷短写告警）。"""
+
+    class FakePad:
+        def __init__(self, written):
+            self.written = written
+            self.reports: list[bytes] = []
+
+        def write(self, payload):
+            self.reports.append(bytes(payload))
+            if isinstance(self.written, Exception):
+                raise self.written
+            return self.written
+
+    def _session_with_pad(self, written):
+        sink: queue.Queue = queue.Queue()
+        session_obj, _link = session(remapadgui.QueueReporter(sink))
+        session_obj.pad = self.FakePad(written)
+        return session_obj, sink
+
+    def test_padded_write_counts_as_success(self):
+        session_obj, sink = self._session_with_pad(547)
+        self.assertTrue(session_obj.send_output_report(bytes(78)))
+        self.assertEqual(session_obj.writeback_short, 0)
+        self.assertTrue(sink.empty())
+
+    def test_short_write_is_counted_and_reported(self):
+        session_obj, sink = self._session_with_pad(77)
+        self.assertFalse(session_obj.send_output_report(bytes(78)))
+        self.assertEqual(session_obj.writeback_short, 1)
+        self.assertIn("短写", sink.get_nowait()["text"])
+
+
 class LocalCommandTest(unittest.TestCase):
     """run_local 收到的是去掉冒号后的文本（pump_commands 已经剥掉 ':'）。"""
 

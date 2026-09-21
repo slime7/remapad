@@ -1,10 +1,10 @@
 /**
- * 转换段（target/ns2）：私有格式到 NS2 报文的映射错了，真机上表现为
+ * 转换段（target/ns2）：私有格式到 NS2 报文的映射错了，表现为
  * 「按 A 出了 B」「扳机没反应」或「背键丢失」，这几条正是桥接验收要看的
  * 现象。这里把会话通道换成捕获回调，驱动真实的 ns2_output 编码后断言报文字节，
  * 因此面键位置、背键折并、扳机阈值与电量折叠都在真实编码路径上验证。
  */
-/* 抓包回放只读一份本地样本，fopen/sscanf 的 MSVC 安全替换对本用例没有意义；
+/* 样本回放只读一份本地文件，fopen/sscanf 的 MSVC 安全替换对本用例没有意义；
  * 必须在任何 CRT 头之前定义，corecrt.h 随首个 MSVC 头定死弃用注记。 */
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -263,7 +263,7 @@ static void unknown_model_still_reports_keys(void)
     CHECK_EQ(s_capture.body[0x02], 0x01);
 }
 
-/** 主机在 0x0012 上按 BLE 形态下发 Output Report 0x02：实机写入的载荷是
+/** 主机在 0x0012 上按 BLE 形态下发 Output Report 0x02：写入的载荷是
  *  32 字节（左右各 16 字节 LRA 参数包，不带 Report ID）。把长度判成
  *  33 字节会把每一包震动都丢掉，表现为「主机下发震动，设备毫无反应」，
  *  同时每 20-30 ms 刷一条告警把串口日志淹掉。 */
@@ -307,8 +307,8 @@ static void rumble_payload_accepts_ble_form(void)
 
 /** 主机的震动流是连续包络：低频给冲击、高频给纹理，两颗马达各跟一个频带。
  *  把两带压成单一归一值写进两颗马达，高频纹理会被低频冲掉、手感糊成一片。
- *  LRA 参数包 3 个时序子帧的位串按 BlueRetro sw2.h（真机验证过的参照，
- *  静止包常量与我们实机抓包一致）：低频振幅 10 位在 bit10-19、高频振幅
+ *  LRA 参数包 3 个时序子帧的位串按 BlueRetro sw2.h（已互操作的参照，
+ *  静止包常量与我们的样本一致）：低频振幅 10 位在 bit10-19、高频振幅
  *  8 位在子帧第 5 字节，逐带取三帧最大值、压到 8 位刻度。 */
 static void rumble_amplitudes_come_out_per_band(void)
 {
@@ -378,14 +378,14 @@ static void rumble_frequencies_decode_per_band(void)
 /** NS2 的震动是波形描述而不是马达信号：每侧最多 3 个时序子帧（按时间顺序
  *  各播 1/3 周期），每帧一条高频音与一条低频音（频率 + 振幅）。HD 触觉映射
  *  要按它逐帧重整波形，这里把解码逐字段钉住——含 BlueRetro 静止包常量
- *  0x1E100000（高频频率 0x1E1、零振幅，落在音圈静置频率 135Hz）与实机抓包
+ *  0x1E100000（高频频率 0x1E1、零振幅，落在音圈静置频率 135Hz）与样本
  *  样例 `04 80 01 97 63`。 */
 static void rumble_keys_decode_the_full_waveform(void)
 {
     uint8_t raw[16];
     memset(raw, 0, sizeof(raw));
-    raw[0] = 0x7C; /* 实机抓包状态字：tid 12、有效子帧 3、使能 */
-    /* 子帧 0（实机样例 04 80 01 97 63）：低频码 4（10Hz 垫底）、低频振幅
+    raw[0] = 0x7C; /* 状态字样本：tid 12、有效子帧 3、使能 */
+    /* 子帧 0（样例 04 80 01 97 63）：低频码 4（10Hz 垫底）、低频振幅
      * 10 位 = 96；高频码 368（74Hz）、高频振幅 8 位 = 99；使能位为 1。 */
     raw[1] = 0x04;
     raw[2] = 0x80;
@@ -422,7 +422,7 @@ static void rumble_keys_decode_the_full_waveform(void)
 }
 
 /** 游戏里主机会以接近输入上报的频率持续刷「保活包」：状态字使能位为 1、
- *  三帧振幅全 0。真机手柄收到同样的包毫无动静（同一场游戏里实体 JoyCon
+ *  三帧振幅全 0。手柄收到同样的包毫无动静（同一场游戏里实体 JoyCon
  *  不震），把使能位直接当成「在震」转发给输入手柄，就成了一场主机根本没有
  *  的震动。「在震」必须是使能且该路振幅非零。 */
 static void zero_amplitude_enable_is_not_rumbling(void)
@@ -461,7 +461,7 @@ static void carrier_level_envelope_is_not_rumbling(void)
 {
     uint8_t ble[32];
     memset(ble, 0, sizeof(ble));
-    ble[0] = 0x52;  /* 实机载波包状态字：使能位为 1、有效子帧 1 */
+    ble[0] = 0x52;  /* 载波包状态字样本：使能位为 1、有效子帧 1 */
     ble[16] = 0x52; /* 右路同样使能 */
     /* 载波段（BlueRetro 静止包）：高频频率 0x1E1、零振幅。 */
     ble[8] = 0x10;
@@ -504,7 +504,7 @@ static void carrier_level_envelope_is_not_rumbling(void)
 static void haptic_sample_parse_follows_the_frame(void)
 {
     uint8_t sample = 0xFF;
-    /* 实机抓包（ns2-search-page.capture）的定位呼叫帧。 */
+    /* 定位呼叫帧（pc/tests/samples/ns2-search-page.capture）。 */
     static const uint8_t locate[] = {0x0A, 0x91, 0x01, 0x02, 0x00, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00};
     REQUIRE(ns2_haptic_sample_parse(locate, sizeof(locate), &sample));
     CHECK_EQ(sample, 0x02);
@@ -521,7 +521,7 @@ static void haptic_sample_parse_follows_the_frame(void)
 /** 用 pc/tests/samples/ns2-search-page.capture 回放「查找手柄」页的 20 秒主机
  *  输出：223 条复合输出全部带静置的 LRA 参数包段（搜索页不震），采样流以
  *  约 16 Hz 重发定位呼叫 0x02、收尾用 0x00 停止——发声规则（音色表节奏）
- *  与「载波不算震动」的判据都以此抓包为锚。 */
+ *  与「载波不算震动」的判据都以此样本为锚。 */
 static void search_page_capture_replays_to_samples_only(void)
 {
     FILE *cap = fopen("pc/tests/samples/ns2-search-page.capture", "rb");
@@ -714,13 +714,13 @@ HOST_TEST_SUITE(suite_target_ns2, "target_ns2",
                 {"震动载荷接受 BLE 形态的 32 字节", rumble_payload_accepts_ble_form},
                 {"LRA 参数包按低频/高频频带分别给出振幅", rumble_amplitudes_come_out_per_band},
                 {"LRA 参数包按频带解出 log2 频率码并落地 Hz", rumble_frequencies_decode_per_band},
-                {"LRA 参数包逐帧解出完整波形（含静止包与实机样例）",
+                {"LRA 参数包逐帧解出完整波形（含静止包与样例）",
                  rumble_keys_decode_the_full_waveform},
                 {"零幅度的使能保活包不算在震", zero_amplitude_enable_is_not_rumbling},
                 {"查找手柄页的载波不算在震（频率位不再漏进振幅）",
                  carrier_level_envelope_is_not_rumbling},
                 {"触觉采样 ID 按命令帧解出", haptic_sample_parse_follows_the_frame},
-                {"搜索页抓包回放：只发采样流、震动段全程静置",
+                {"搜索页样本回放：只发采样流、震动段全程静置",
                  search_page_capture_replays_to_samples_only},
                 {"耳机状态按输入设备的 3.5mm 状态派生（0x09 的 0x0D，只报插入）",
                  headset_state_follows_the_input_device},

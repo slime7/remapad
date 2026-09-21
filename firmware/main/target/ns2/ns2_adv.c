@@ -85,9 +85,8 @@ static bool mac_usable(const uint8_t mac[6])
 const uint8_t *ns2_adv_choose_host_mac(const uint8_t *recorded,
                                        const uint8_t *const creds[], size_t cred_count)
 {
-    /* 记录值优先：配对交换给的是主机两条只差一位的地址，本设备实测凭证里存的
-     * 那条（末字节 0x8c）发出去主机不理，而主机连接时在用的那条（末字节 0x8d）
-     * 才能把它叫回来——连接对端地址是唯一有实证的判据。 */
+    /* 记录值优先：配对交换给的是主机两条只差一位的地址，只有主机连接时在用的
+     * 那条能把它叫回来——连接对端地址是唯一有实证的判据。 */
     if (mac_usable(recorded)) {
         return recorded;
     }
@@ -99,7 +98,7 @@ const uint8_t *ns2_adv_choose_host_mac(const uint8_t *recorded,
     return NULL;
 }
 
-/** 广播载荷骨架：厂商数据字段布局见 controller.md「Bluetooth LE 广播帧规范」；[12]/[13] 为 PID
+/** 广播载荷骨架：厂商数据字段布局见 docs/controller-switch2.md；[12]/[13] 为 PID
  *  占位，[16] 为状态位，[17..22] 为主机地址，[23] 为尾部标志 0x0F。 */
 static const uint8_t s_template[NS2_ADV_PAYLOAD_LEN] = {
     0x02, 0x01, 0x06,
@@ -122,8 +121,8 @@ void ns2_adv_payload(uint8_t out[NS2_ADV_PAYLOAD_LEN], uint16_t pid,
         return;
     }
     memcpy(&out[5 + NS2_ADV_MFR_HOST_MAC_OFFSET], host_mac, 6);
-    /* 状态位只在显式唤醒形态置 0x81：真机抓包里回连形态恒为 0x00，把 0x81
-     * 写进回连广播会让休眠中的主机被每一次回连广播立刻唤醒。 */
+    /* 状态位只在显式唤醒形态置 0x81：回连形态恒为 0x00，把 0x81 写进回连广播
+     * 会让休眠中的主机被每一次回连广播立刻唤醒。 */
     out[5 + NS2_ADV_MFR_STATUS_OFFSET] =
         mode == NS2_ADV_WAKE ? NS2_ADV_STATUS_WAKE : NS2_ADV_STATUS_NORMAL;
 }

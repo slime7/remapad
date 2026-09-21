@@ -2,7 +2,7 @@
  * 帧节奏的公共来源：整份 UI 只从这里取「一帧等于多久」。
  *
  * 速率由 PocketJS 在构建期按 host profile（firmware/pocket.host.json）的
- * tickHz 烘进 bundle，真机 mount 时框架会断言它等于固件声明的 ui.__tickHz
+ * tickHz 烘进 bundle，设备端 mount 时框架会断言它等于固件声明的 ui.__tickHz
  * （framework/src/host.ts 的 assertNativeHostContract），所以这里读到的值
  * 就是设备实际驱动的节奏。
  *

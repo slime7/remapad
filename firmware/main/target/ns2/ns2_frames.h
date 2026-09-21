@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-/** 指令帧头长度（controller.md「通用指令帧头格式」）。 */
+/** 指令帧头长度。 */
 #define NS2_FRAME_HEADER_LEN 8
 
 #define NS2_FRAME_TRANSPORT_USB 0x00
@@ -21,7 +21,7 @@ extern "C" {
 #define NS2_CMD_VERSION 0x10
 #define NS2_CMD_PAIRING 0x15
 
-/** 手柄固定公钥 B1（controller.md「密码学计算详细算法」），LTK = A1 XOR B1。 */
+/** 手柄固定公钥 B1，LTK = A1 XOR B1。 */
 #define NS2_PAIR_PUBKEY_LEN 16
 extern const uint8_t ns2_pair_pubkey_b1[NS2_PAIR_PUBKEY_LEN];
 

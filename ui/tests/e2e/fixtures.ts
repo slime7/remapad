@@ -149,8 +149,8 @@ export class TouchDriver {
 
 /**
  * 手柄按键驱动：预览页把键盘当成设备按键位（方向键 / WASD 类比十字键，
- * 回车 / 空格类比圆圈键，见 ui/preview/index.html），真机上产生这些位的是
- * 手柄本身。按键至少要跨过一次采样帧，应用才看得到这次按下。
+ * 回车 / 空格类比圆圈键，见 ui/preview/index.html），设备端这些位来自手柄本身。
+ * 按键至少要跨过一次采样帧，应用才看得到这次按下。
  */
 export class PadDriver {
   constructor(private readonly app: RemapadApp) {}

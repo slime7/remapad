@@ -1,11 +1,6 @@
 /**
- * NS2 输入报告编码（ns2_report.c）：线格式最容易出现「只错一位」的缺陷，
- * 而一位错位在真机上表现为某个按键失灵或摇杆偏移，很难靠肉眼定位。
- *
- * 用例分三层：
- *   1. 定长黄金报文——静置状态整包 63 字节逐字节比对；
- *   2. 按键位表——21 个按键在 0x09 / 0x05 上各自的字节与位；
- *   3. 字段规则——摇杆打包、身份切分、电源字节、USB 前缀与计数器宽度。
+ * NS2 输入报告编码（ns2_report.c）主机端用例：定长黄金报文、按键位表与字段规则三层钉住线格式，
+ * 一位错位表现为按键失灵或摇杆偏移、很难靠肉眼定位。
  */
 #include "host_test.h"
 
@@ -281,7 +276,7 @@ static void motion_block_can_be_disabled(void)
     CHECK_EQ(out[0x0E], 0x00);
 }
 
-/** 抓包占位：长度 40，块内两处时间戳按 5ms 节奏推进，其余字节是抓包原值。 */
+/** 样本占位：长度 40，块内两处时间戳按 5ms 节奏推进，其余字节是样本原值。 */
 static void motion_capture_mode_is_monotonic(void)
 {
     ns2_controller_state_t state;
@@ -306,7 +301,7 @@ static void motion_capture_mode_is_monotonic(void)
     CHECK_EQ(b0 - a0, 2500u);
     CHECK_EQ(a1 - a0, 5000u);
 
-    /* 时间戳之外的字节来自抓包：块首 0x06、尾段首字节 0x6C。 */
+    /* 时间戳之外的字节来自样本：块首 0x06、尾段首字节 0x6C。 */
     CHECK_EQ(first[0x0F], 0x06);
     CHECK_EQ(first[0x13], 0x34);
     CHECK_EQ(first[0x35], 0x07);
@@ -331,4 +326,4 @@ HOST_TEST_SUITE(suite_ns2_report, "ns2_report",
                 {"USB 形态只多一个 Report ID", usb_form_prepends_report_id},
                 {"计数器宽度：0x09 8 位 / 0x05 32 位小端", counter_widths},
                 {"运动块可整体关闭（长度 0）", motion_block_can_be_disabled},
-                {"运动块抓包占位的时间戳推进", motion_capture_mode_is_monotonic});
+                {"运动块样本占位的时间戳推进", motion_capture_mode_is_monotonic});

@@ -5,38 +5,11 @@
 同一个进程持有这个口，因此转发手柄、敲命令、抓实机截图与推固件可以同时进行；
 固件侧 input/input_link.c 按帧头分流，非帧字节交给 CLI 解析。
 
-用法（在 pc/ 目录执行）：
-    uv run python remapadctl.py --list                    # 枚举手柄接口
-    uv run python remapadctl.py --dump --seconds 10       # 抓原始报告（不接串口）
-    uv run python remapadctl.py -p COM3                   # 桥接 + 交互命令行
-    uv run python remapadctl.py -p COM3 --no-pad          # 只当串口命令行用
-    uv run python remapadctl.py -p COM3 status            # 一次性命令后退出
-    uv run python remapadctl.py -p COM3 --all             # 拉取设备全部观测数据
-    uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
-    uv run python remapadctl.py -p COM3 --log --seconds 20
-    uv run python remapadctl.py -p COM3 --capture host.log --seconds 30 --pad
-                                          # 抓主机原始输出（布局转换前），手柄转发照常
-    uv run python remapadctl.py -p COM3 --upgrade --wait
-    uv run python remapadctl.py -p COM3 --amiibo Alm.bin  # 上传 amiibo 后退出
-
-交互模式里不是 `:` 开头的行按固件 CLI 原样发送，手柄功能由此完整可控：
-输入注入 key/stick、身份 ctrl、配对 pairing/wake/adv/drop、上报内容
-motion/headset/fwver/fwpost/fwack/fwapply、链路 ltk/relay、反馈测试
-rumble/lamp/haptic、amiibo 槽位 list/select/del/poll、屏幕 ui/backlight/screen、
-模式 mode（固件侧 help 有全表）。
-数据命令都由固件现场读数应答，不经过 UI 层——UI 冻结（截图期间、页面门控
-不取数）不影响 status/mem 等数据的实时性。
-`:` 开头的是本工具命令：
-    :help  :all  :shot [路径]  :log [秒]  :capture [路径|off]  :ota [镜像]  :amiibo <bin>  :quit
-
-手柄转发默认只在交互模式里开：一次性命令、截图、只读日志、升级与 amiibo 上传不碰手柄
-（否则主机会看到手柄闪一下），要在这些模式里也转发就加 --pad，任何模式下都用 --no-pad
-彻底关掉。
-
-图形界面入口见同目录的 remapadgui.py：界面复用这里的会话循环与所有命令处理，
-只是把输出换成队列、把键盘输入换成按钮与输入框；两边不要同时打开同一个串口。
-
-依赖 hidapi（读手柄）与 link.py（串口 + 帧编解码）；细节见 pc/README.md。
+用法、交互命令与桥接帧格式见 pc/README.md 与 --help；常用入口：--list（枚举手柄）、
+--dump（抓原始报告）、-p COMx（桥接 + 交互命令行）、--shot（实机截图）、--upgrade（OTA）、
+--amiibo <bin>（上传镜像）。`:` 开头的是本工具命令（:help 看全表），其余行按固件 CLI 原样发送；
+手柄转发默认只在交互模式里开，--pad / --no-pad 控制。图形界面入口见 remapadgui.py，
+两边不要同时打开同一个串口。
 """
 
 from __future__ import annotations
@@ -323,6 +296,16 @@ def conn_for(info: dict) -> int:
     return CONN_UNKNOWN
 
 
+def bt_haptics_wanted(args) -> bool:
+    """蓝牙接入的 DualSense 是否启用私有触觉流（0x32/0x36）。
+
+    默认启用：DS5 的 HD 触觉与手柄喇叭只有这条流承载，0x31 的 HID 写回只剩两带
+    震动（发声段直接丢）。--no-bt-haptics 显式关掉回落 HID 写回；写回被驱动拒绝
+    时也会自动回落（见 Session._lose_haptics）。
+    """
+    return not getattr(args, "no_bt_haptics", False)
+
+
 def describe(info: dict) -> str:
     return (f"{info.get('product_string') or '?'} "
             f"{info['vendor_id']:04x}:{info['product_id']:04x} "
@@ -400,8 +383,8 @@ class FeedbackThrottle:
 
 class WriteBackGate:
     """桥接写回限速：游戏内震动包络逐包都变，设备侧「字节变了才发」压不住
-    写回量，蓝牙 HID 写回又慢（实机：蓝牙手柄游戏内约 100 条/秒，
-    会话循环被拖到输入转发卡顿无法操作）。把写回钉在 min_interval_s 上限：
+    写回量，蓝牙 HID 写回又慢，会把会话循环拖到输入转发卡顿。把写回钉在
+    min_interval_s 上限：
     窗口内只放行第一条，被挡下的帧不丢、留作最新待写帧，窗口到期由 poll
     放行——收尾状态（比如停震的最后一帧）因此一定落地，马达不会被钉住。"""
 
@@ -1082,6 +1065,8 @@ class Session:
         self.captured = 0
         self.stop = False
         self.stop_code = 0
+        #: 0x31 写回的短写计数（hidapi 返回值 < 报告长度 = 驱动没收下）。
+        self.writeback_short = 0
         # 反馈帧打印限频（不影响写回手柄，见 FeedbackThrottle）。
         self.feedback_gate = FeedbackThrottle()
         # 写回手柄的限速门（蓝牙 HID 写回慢，见 WriteBackGate）。
@@ -1112,10 +1097,10 @@ class Session:
 
     def maybe_start_haptics(self) -> None:
         """DS5 接入时启用 PC 侧音频触觉：USB 直插走 4ch 音频端点（频道 3/4
-        触觉、1/2 发声）。蓝牙接入默认不启用 0x32 私有触觉流（SAxense 142
-        字节原始形态，此前按 547 填充的写法实测手柄无反应，未做实机手感确认
-        前不冒险让位掉 HID 震动）——保持 0x31 震动写回；--bt-haptics 启用
-        0x32 流（写回被拒自动回落）。
+        触觉、1/2 发声）。蓝牙接入默认启用私有触觉流（0x36 HD 触觉 + 手柄
+        喇叭真声，无 PyAV/libopus 时回落 0x32 音圈）——DS5 的 HD 触觉与手柄
+        喇叭只有这条流承载，HID 的 0x31 只剩两带震动；--no-bt-haptics 关掉
+        回落 HID 写回，写回被驱动拒绝时也会自动回落。
         --no-audio-haptics / --no-rumble 或通路开不起来时静默回落 HID 震动。
         开流要秒级、且不能占着桥接热路径，启动放后台线程。"""
         if self.haptics is not None or self._haptics_starting:
@@ -1127,10 +1112,10 @@ class Session:
                 or info.get("product_id") not in (0x0CE6, 0x0DF2)):
             return
         if conn_for(info) == CONN_BT:
-            if not getattr(self.args, "bt_haptics", False):
+            if not bt_haptics_wanted(self.args):
                 self.reporter.line(
-                    "蓝牙接入：默认保持 HID 震动写回（--bt-haptics 启用 0x36 "
-                    "私有触觉流：HD 触觉 + 手柄喇叭）")
+                    "蓝牙接入：--no-bt-haptics 保持 HID 震动写回"
+                    "（HD 触觉与手柄喇叭不启用）")
                 return
             self._haptics_starting = True
             threading.Thread(target=self._start_bt_haptics_worker, daemon=True).start()
@@ -1173,9 +1158,9 @@ class Session:
             return
         self.haptics = audio
         self._haptics_starting = False
-        # 「haptic audio on」由主循环发：串口句柄不跨线程写（worker 与主循环
-        # 并发写会把命令字节冲烂，实机抓到 err unknown command）。
-        self._haptics_notify = True
+        # 「haptic audio on」由主循环发：串口句柄不跨线程写（并发写会把命令字节冲烂）。
+        # 让位要等私有流真的接到 HD 子帧（见 pump_haptics_notify）。
+        self._haptics_notify = False
 
     def pump_haptics_notify(self) -> None:
         if self._haptics_lost:
@@ -1183,9 +1168,14 @@ class Session:
             if self.haptics is not None:
                 self.reporter.error("触觉流写回被拒，回落 HID 震动写回")
                 self.stop_haptics()
-        if not self._haptics_notify or self.haptics is None:
+        if self.haptics is None or self._haptics_notify:
             return
-        self._haptics_notify = False
+        # 让位（haptic audio on）等私有流真的接到 HD 子帧之后再发：没接到内容
+        # 的通路不驱动音圈（老固件、布局行没声明 HD 通路），提前让位会把手柄
+        # 留在「HID 震动已清零、音频也没有内容」的静默状态。
+        if not getattr(self.haptics, "engaged", False):
+            return
+        self._haptics_notify = True
         try:
             self.send_cli("haptic audio on")
             self.reporter.line(getattr(self.haptics, "label", None)
@@ -1261,9 +1251,20 @@ class Session:
 
     def send_output_report(self, payload: bytes) -> bool:
         try:
-            self.pad.write(payload)
+            written = self.pad.write(payload)
         except OSError as exc:
             self.reporter.error(f"反馈写回失败：{exc}")
+            return False
+        # hidapi 用返回值报「实际交给驱动的字节数」。Windows 后端会把短于
+        # 描述符声明长度的写回补齐到 OutputReportByteLength 再交驱动（DS5 蓝牙
+        # 集合声明 547，0x31 的 78 字节写法因此返回 547）——返回值比载荷长是
+        # 常态，只有真的少交（< 载荷长度）才是这一份没写进去（LED/震动写回
+        # 静默丢失，只捕异常看不出来）。
+        if isinstance(written, int) and written < len(payload):
+            self.writeback_short += 1
+            if self.writeback_short == 1 or self.writeback_short % 200 == 0:
+                self.reporter.error(f"反馈写回短写：{written}/{len(payload)} 字节"
+                                    f"（累计 {self.writeback_short} 份）")
             return False
         return True
 
@@ -1696,8 +1697,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--no-audio-haptics", action="store_true",
                         help="DS5 桥接时不走 PC 侧音频触觉（回落 HID 震动写回）")
     parser.add_argument("--bt-haptics", action="store_true",
-                        help="蓝牙接入的 DS5 也启用私有触觉流（0x36 HD 触觉 + "
-                             "手柄喇叭，无 PyAV 时回落 0x32 音圈；写回被拒自动回落 HID 震动）")
+                        help="蓝牙接入的 DS5 启用私有触觉流（默认已启用，保留作显式声明："
+                             "0x36 HD 触觉 + 手柄喇叭，无 PyAV 时回落 0x32 音圈）")
+    parser.add_argument("--no-bt-haptics", action="store_true",
+                        help="蓝牙接入的 DS5 不用私有触觉流，回落 0x31 HID 两带震动"
+                             "（HD 触觉与手柄喇叭都不启用）")
     parser.add_argument("--no-pad", action="store_true",
                         help="任何模式都不转发手柄（只用命令行 / 截图 / 日志 / 升级）")
     parser.add_argument("--pad", action="store_true",

@@ -10,7 +10,7 @@ DualSense 的 USB 音频接口后两路直连触觉音圈（PS5 同款用法，�
 
 ## 决策
 
-在 usb/ 自写最小 UAC1 音频流客户端（usb_audio.c + 纯逻辑 usb_audio_parse.c）：只认 Type I PCM 4ch/16bit/48kHz，claim 音频流 OUT 接口后持续送板上合成的 PCM（haptic_synth.c，两带相位连续正弦 + 采样脉冲蜂鸣，扬声器两路恒零，每毫秒 384B、3 传输 × 4ms 排队）。布局行以 out.audio_haptic 声明能力；音频接手时数据面把 USB 路 HID 报告的震动字段清零，桥接路径照旧完整报告。
+在 usb/ 自写最小 UAC1 音频流客户端（usb_audio.c + 纯逻辑 usb_audio_parse.c）：只认 Type I PCM 4ch/16bit/48kHz，claim 音频流 OUT 接口后持续送板上合成的 PCM（haptic_synth.c，两带相位连续正弦走触觉两路、采样提示音的发声段走扬声器两路，每毫秒 384B、3 传输 × 4ms 排队）。布局行以 out.audio_haptic 声明能力；音频接手时数据面把 USB 路 HID 报告的震动字段清零，桥接路径照旧完整报告。
 
 ## 考虑的方案
 
@@ -20,4 +20,7 @@ DualSense 的 USB 音频接口后两路直连触觉音圈（PS5 同款用法，�
 
 ## 影响
 
-- 直插场景震动与采样退化升为真音频驱动（频率随参数包、相位连续）；等时流引入实时性依赖，3×4ms 排队容忍客户端任务调度延迟；桥接路径（PC 持有音频接口）不受影响；通道 3/4 与左右音圈的对应、10 位频率字段的单位是待实机核对的假设。
+- 直插场景震动与采样从两个振幅字节升级为真音频驱动（频率随参数包、相位连续）；等时流引入实时性依赖，排队的多传输容忍客户端任务调度延迟；桥接路径（PC 持有音频接口）不受影响。
+- 「让位」写回用布局行 `quiet_presets`，震动位段取「带 `COMPATIBLE_VIBRATION`、不带 `HAPTICS_SELECT`」，
+  语义与实测结论见 [controller-ps.md](../controller-ps.md)；让位要等通路真的接到 HD 子帧之后再发。
+- 通道 3/4 与左右音圈的对应、频率字段的单位是待实机核对的假设。

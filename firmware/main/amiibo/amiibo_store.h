@@ -12,15 +12,9 @@ extern "C" {
 #endif
 
 /**
- * amiibo 镜像存储：storage 分区（SPIFFS，挂载在 /amiibo）里的固定槽位文件
- * 表——槽位镜像 "a<i>"（572 字节 = 540 镜像 + 32 字节厂商签名，不带签名的
- * 上传签名区补零）、名称 "n<i>"、选中号 "sel"。选中即经 ns2_nfc_stage 把
- * 整份记录预置进 NFC 模拟层并持久化，重启后自动恢复；主机写卡的存档经
- * ns2_nfc 的写回回调写回选中槽位文件的镜像段。
- *
- * 上传入口在 amiibo_session（桥接帧会话），列表与选择由串口 CLI（以及以后
- * 的屏幕 UI）经这里的接口取数。容量按 AMIIBO_SLOTS_MAX 封顶（每槽 572 字节
- * + 名称，storage 分区约 8MB，远用不完；NVS 只留设备设置，不再存 amiibo）。
+ * amiibo 镜像存储：storage 分区（SPIFFS，挂载 /amiibo）里的固定槽位文件表——槽位镜像 "a<i>"、
+ * 名称 "n<i>"、选中号 "sel"，容量按 AMIIBO_SLOTS_MAX 封顶。选中即预置进 NFC 模拟层并持久化，
+ * 重启自动恢复；主机写卡的存档经 ns2_nfc 的写回回调写回选中槽位。
  */
 
 /** storage 分区里最多保留的 amiibo 数量。 */

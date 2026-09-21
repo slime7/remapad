@@ -1,9 +1,6 @@
 /**
- * 本机像素加速回调（render_accel.c）：官方渲染器把填充、A8 掩码混合与
- * PSM5650 直拷交给这组回调，结果必须与软件路径逐像素一致——差一位就是
- * 屏幕上的色带或错行。主机端直接按像素比对，比在真机上盯画面快得多。
- *
- * 调用参数顺序见 pocketjs/render_types.h 的三个函数指针类型。
+ * 本机像素加速回调（render_accel.c）主机端用例：按像素比对填充、A8 掩码混合与 PSM5650 直拷
+ * 三条路径与软件渲染结果一致；调用参数顺序见 pocketjs/render_types.h 的函数指针类型。
  */
 #include "host_test.h"
 
@@ -286,4 +283,3 @@ HOST_TEST_SUITE(suite_render_accel, "render_accel",
                 {"PSM5650 直拷交换通道序", srm_swaps_channels},
                 {"PSM5650 直拷支持镜像与子矩形", srm_mirror_and_subrect},
                 {"PSM5650 直拷拒绝旋转缩放与越界", srm_rejects_transform_and_oversize});
-

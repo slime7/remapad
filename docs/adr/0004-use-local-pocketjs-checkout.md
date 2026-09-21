@@ -6,7 +6,8 @@
 
 ## 背景
 
-此前固件只能停留在无法构建的状态：firmware/main/idf_component.yml 声明的 pocket-stack/pocketjs_* 组件并未发布到 ESP Component Registry，firmware/components/ 下的组件副本又与官方实现逐步漂移，其中 pocketjs_guest 的 QuickJS 源码哈希已经过期。ESP Component Registry 当前提供的 espressif/quickjs-ng 0.14.0 源码哈希与 pocketjs_guest 使用的校验值也不一致，configure 阶段会直接失败。前端方面，仓库自建的 WASM 模拟器页面和 ui/scripts 适配层与官方 hosts/web 开发主机并存，两套预览路径都要自行维护。
+固件此前无法构建：声明的组件没有发布到 ESP Component Registry，仓库内的副本又与官方实现漂移，QuickJS 源码哈希过期导致 configure 阶段直接失败。
+前端同时维护仓库自建的 WASM 模拟器页面与官方 hosts/web 开发主机两套预览路径。
 
 ## 决策
 
@@ -20,4 +21,5 @@
 
 ## 影响
 
-- 固件与 UI 都使用官方实现，组件和编译器升级只发生在 PocketJS checkout；2.16 MB 与 2.24 MB 的 S3 原生归档需要一次性用固定 Rust 工具链构建。代价是构建环境必须存在可用的 PocketJS checkout，ESP-IDF 构建不再是自包含仓库；QuickJS 补丁在 PocketJS 更新该常量或更换 quickjs-ng 版本后必须移除。
+- 固件与 UI 都使用官方实现，组件和编译器升级只发生在 PocketJS checkout。
+- 代价：构建环境必须存在可用的 PocketJS checkout，仓库不再自包含；QuickJS 补丁在 PocketJS 更新校验常量或更换 quickjs-ng 版本后必须移除。

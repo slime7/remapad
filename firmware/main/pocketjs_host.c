@@ -53,21 +53,15 @@ static const char *TAG = "remapad_pocketjs";
  *  是鉴别「JS 堆滞留 vs 原生 ui_core 增长」的唯一仪表（ui_core 分配不走
  *  QuickJS 上限，PSRAM 涨满时它 abort 重启）。 */
 #define REMAPAD_MEM_REPORT_WINDOWS 12
-/** 显式 GC 的触发步长（256 KiB，PSP host 同款，见上游 hosts/psp/src/main.rs
- *  的 arena-pressure GC）：帧循环里 PSRAM 余量比上次回收点再跌过一个步长，
- *  就 JS_RunGC 一次并把基线钉回回收后的余量。不这样做的话，引擎内部的阈值
- *  式 GC 每触发一次就把阈值抬到存活堆的 1.5 倍——bundle eval 上来堆就有
- *  ~3.8MB，此后 GC 实际上不再触发，Vue 响应式链路的环垃圾在两次 GC 之间积
- *  到兆级，最终把物理 PSRAM 顶到 ui_core 分配失败而 abort 重启。压力触发与
- *  PSP 的 arena bump 同构：稳态 guest 余量走平，一次 GC 都不跑；环垃圾最多
- *  积到一个步长就被收掉。GC 与 eval 同在 owner task 执行，无并发问题。 */
+/** 显式 GC 的触发步长（256 KiB）：帧循环里 PSRAM 余量比上次回收点再跌过一个步长就 JS_RunGC 一次，
+ *  并把基线钉回回收后的余量。引擎内部阈值式 GC 在常驻大堆上不再触发，环垃圾会把物理 PSRAM 顶满；
+ *  GC 与 eval 同在 owner task 执行，无并发问题（见 ADR 0036）。 */
 #define REMAPAD_GC_BUMP_STEP (256U * 1024U)
 /** strip 缓冲数量：渲染下一条时，前几条仍在被 DMA 读取。 */
 #define REMAPAD_STRIP_BUFFER_COUNT 3
 /** 单条 strip 的逻辑高度：整屏 damage 会被切成这个高度的条带。一条
  * 240 × 32 × 2 = 15 kB，三条共 45 kB，能稳定落进内部 RAM（PSRAM 的写入
- * 带宽会拖住渲染）；实测把这个值放大到 140 行并不会更快，说明渲染成本
- * 主要不在缓冲位置上，条带小一些更省内部 RAM。 */
+ * 带宽会拖住渲染）；条带小一些更省内部 RAM。 */
 #define REMAPAD_STRIP_ROWS 32
 /** 面板单次提交的等待上限，整帧 240x280 在 80 MHz 下约 13.5 ms。 */
 #define REMAPAD_PANEL_TRANSFER_TIMEOUT_MS 200
@@ -113,7 +107,7 @@ static const char *const REMAPAD_BOOT_STAGES[] = {
 #define REMAPAD_BOOT_STAGE_COUNT \
     (sizeof(REMAPAD_BOOT_STAGES) / sizeof(REMAPAD_BOOT_STAGES[0]))
 
-/* 与阶段表一一对应的预计耗时（毫秒，实机测量值）：启动画面的进度条按它把
+/* 与阶段表一一对应的预计耗时（毫秒）：启动画面的进度条按它把
  * 时间轴拉开，避免十几个阶段挤在同一格里或者长阶段停在原地。阶段耗时变化
  * 时只需调整这里的权重，进度条依旧由经过时间驱动。 */
 static const uint32_t REMAPAD_BOOT_STAGE_MS[REMAPAD_BOOT_STAGE_COUNT] = {
@@ -379,7 +373,7 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
     bool shot_failed = false;
 
     /* damage 折成行带表：行带是渲染与提交的最小单位，一条行带内多个 region 的
-     * 横向范围合并成一个区间。本帧的每条行带都在本帧画完——隔行刷新在实机滚动
+     * 横向范围合并成一个区间。本帧的每条行带都在本帧画完——隔行刷新在滚动
      * 时留下相邻行带相差一帧的纵向错位，观感上不可接受，因此不做字段切分。
      * 切点落在绝对行网格上，同一块屏幕在连续帧里恒属同一条行带。 */
     const uint32_t logical_height = frame->logical_height;
@@ -531,14 +525,9 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
                 shot_failed = true;
             }
         }
-        /* renderer 先把条带缓冲里 region 覆盖的那块填成背景色，再画内容，
-         * 调用方因此不必预先清零：传输范围永远落在它填过的那块里。
-         *
-         * strip 的行距是视口全宽，面板只按窗口尺寸线性读走一块连续数据，
-         * 所以窗口只要窄于视口就得按行压成紧凑布局——与它起始于哪一列无关
-         * （x=0 而宽度不足时会整体错行，实机表现为斜向/竖向条纹）。压缩时
-         * 目标地址恒不高于源地址，逐元素前向复制不会覆盖尚未读出的像素；
-         * 字节序转换由面板传输统一负责。 */
+        /* renderer 先把 region 覆盖的那块填成背景色，调用方不必预先清零。
+         * strip 行距是视口全宽，窗口窄于视口时必须按行压成紧凑布局（x=0 的窗口同样要压），
+         * 否则面板读到错行内容；压缩时目标地址恒不高于源地址，前向复制安全。 */
         if (band_width != physical_width) {
             /* 逐行前向压缩（目标地址恒不高于源地址），按 32 位成对搬运。 */
             for (size_t line = 0; line < band_height; ++line) {
@@ -868,11 +857,8 @@ static void mem_line(const char *text, size_t len)
 }
 
 /**
- * 实时内存全景（串口 mem 命令的应答）：PSRAM / 内部堆的当前余量与历史最低、
- * QuickJS 记账与对象计数、JS turn 峰值耗时。全部在 owner task 上现场读取——
- * 不经过 UI 层，截图冻结或页面门控（系统页隐藏时停止取数）都不影响这里的
- * 实时性；guest 不在（启动失败）时只报堆账。整份报告拼成一块一次写出：
- * 中间的全堆遍历要花上百毫秒，分两行写会让 PC 侧的应答窗断在两行中间。
+ * 实时内存全景（串口 mem 命令的应答）：PSRAM / 内部堆余量与历史最低、QuickJS 记账与对象计数、
+ * JS turn 峰值耗时，全部在 owner task 上现场读取。整份报告拼成一块一次写出，避免 PC 侧应答窗断在中间。
  */
 static void mem_report_print(const remapad_pocketjs_runtime_t *runtime)
 {

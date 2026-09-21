@@ -1,28 +1,13 @@
 """DS5 音频触觉的 PC 侧合成（桥接路径）。
 
-DualSense 连在 PC 上时有两条投递通路，共用同一份哑渲染：
-- USB 直插：音频接口由 Windows 持有（usbaudio.sys），对它的 4ch 扬声器端点
-  开 WASAPI 共享流——频道 3/4（RL/RR）直连左右触觉音圈，频道 1/2 是手柄
-  小喇叭（采样提示音的发声段，没有真正的声音时恒零）。
-- 蓝牙：HID 之外没有音频接口，触觉走 SAxense 逆向的私有报告 0x32（142 字节
-  = 报文头 + packet 0x11 配置/序号 + packet 0x12 承载 64 字节 PCM + 尾部
-  CRC32），3000Hz / 2 声道 / 8-bit，每 10.67ms 一报由发送线程推送。
+DualSense 连在 PC 上时音频接口被系统持有，触觉与喇叭改由 PC 侧送，两条通路共用同一份哑渲染：
+- USB 直插：对 4ch 扬声器端点开 WASAPI 共享流（频道 3/4 是触觉音圈、1/2 是小喇叭）。
+- 蓝牙：走私有报告（触觉 0x32 与成对音频+触觉的 0x36），每 10.67ms 一报由发送线程推送。
 
-两条通路共用同一份哑渲染，行为一致：NS2 的震动是波形描述，每侧最多 3 个
-时序子帧，按时间顺序各播 1/3 周期；采样发声段铺扬声器之外同时折进两侧音圈
-（蓝牙没有扬声器通道，音圈是它唯一的载体）。震动的起止经音圈包络门平滑：
-起音 1ms、收音 15ms（收音锁定最后发声的子帧淡出）——只占一块的短震动不再
-被承载块边界截没，收震落点平滑有界；整段静默后的新震动从子帧 0 重播。
-声部参数来自设备的 FEEDBACK 帧
-（57 字节 HD 版）：固件已按布局行把子帧序列重整好（震动映音圈、采样发声段
-映扬声器，频率落地在固件里算好），这里只做哑渲染——振荡器相位跨块连续，
-子帧按 slice 帧数轮播；老固件的 16 字节帧回落两带正弦（扬声器恒零）。
-实机验证：共享流 4ch 独立可控、扬声器不漏音。
-
-用 RawOutputStream 而不是 OutputStream：后者的回调走 numpy 数组，而 numpy
-的原生扩展在会话进程里加载会卡死（cffi/PortAudio 都正常，仅 numpy 如此，
-faulthandler 抓栈定位）；raw 模式回调收字节缓冲，struct 直写 int16，
-与固件的 PCM 语义一致。
+声部参数来自设备 FEEDBACK 帧的 57 字节 HD 版（固件已按布局行重整好，这里只做哑渲染；
+老固件的 16 字节帧回落两带正弦），采样发声段铺扬声器之外同时折进两侧音圈。
+用 RawOutputStream 而不是 OutputStream：后者的回调走 numpy 数组，而 numpy 原生扩展在本进程加载会卡死。
+报文布局、包络门与让位语义见 docs/controller-ps.md。
 """
 from __future__ import annotations
 
@@ -50,12 +35,8 @@ CYCLE_MS = 15.0
 #: 听成咔哒（查找手柄页刺耳声的来源之一），包络在边沿内平滑过渡。
 SPEAKER_ATTACK_S = 0.006
 SPEAKER_RELEASE_S = 0.014
-#: 音圈包络门的起音/收音时长（秒）：NS 震动的起止落在承载块边界上是硬切，
-#: 只占一块（USB 10ms / 蓝牙 10.67ms）的短震动会被截得几乎不剩、收震又可能
-#: 多播半块——起音 1ms 爬满（启动及时），收音 15ms 锁定最后发声的子帧淡出
-#: （短震动被拉到可感知的长度，长震动的结尾多 15ms 感知不到）。门控只在
-#: 「有增益的参数 ↔ 全零参数」的边沿发生，子帧序列内部的静默切片原样保留，
-#: 主机排的时间轴不变。
+#: 音圈包络门的起音/收音时长（秒）：起音 1ms 爬满、收音 15ms 锁定最后发声的子帧淡出，
+#: 避免块对齐硬切把短震动截没；与固件 haptic_synth 同一条曲线，门控只在有无增益的边沿发生。
 COIL_ATTACK_S = 0.001
 COIL_RELEASE_S = 0.015
 #: 发声段音色的二次谐波比例与合成峰值回缩：给蜂鸣一点中空腔体，接近
@@ -117,9 +98,11 @@ def _render_keys(side: dict, phases: list[float], cursor: list, frames: int,
                  rate: int, peak: int, slice_samples: int,
                  gate: _CoilGate | None = None) -> list[int]:
     """一条时序子帧序列的渲染：首帧从子帧 0 起播整一切片，其后每
-    slice_samples 帧切下一子帧（回绕），有效子帧数之外的切片静默——主机排
-    好的时间轴原样保留。相位跨块与跨子帧都连续（切子帧只换频率与增益，
-    不重置相位）。
+    slice_samples 帧切下一子帧（回绕），回绕长度就是该侧声明的子帧数——主机
+    是 200Hz 的单子帧流（实抓 94% 的包只声明 1 个子帧），声明之外的槽位不
+    占时间；固定按 3 槽轮播会把持续震动切成「5ms 有声 + 10ms 静默」的 66Hz
+    断续（音圈的细腻手感退化成普通马达的粗糙震动），合成的强震段同理。
+    相位跨块与跨子帧都连续（切子帧只换频率与增益，不重置相位）。
 
     gate 是音圈包络门（`_CoilGate`，跨块连续），不传按直渲处理（主机收震的
     下一块立刻全静）：带增益的参数到达且门开着（env 已落到 0）时游标与相位
@@ -128,21 +111,22 @@ def _render_keys(side: dict, phases: list[float], cursor: list, frames: int,
     被拉到可感知的长度，结尾落点平滑且有界。门控只看参数级的有/无增益，
     子帧序列内部的静默切片不参与（时间轴不变）。"""
     count = side["count"]
+    slots = count if 1 <= count <= KEY_MAX else KEY_MAX
     keys = side["keys"]
     lf_phase, hf_phase = phases
     idx, left = cursor
-    if left == 0 or idx >= KEY_MAX:
+    if left == 0 or idx >= slots:
         idx = 0
         left = slice_samples
     out = [0] * frames
     if gate is None:
         for i in range(frames):
             if left == 0:
-                idx = (idx + 1) % KEY_MAX
+                idx = (idx + 1) % slots
                 left = slice_samples
             left -= 1
             total = 0.0
-            if idx < count:
+            if idx < len(keys):
                 (lf, lg), (hf, hg) = keys[idx]
                 if lg:
                     total += lg * peak / 255.0 * math.sin(lf_phase)
@@ -155,7 +139,7 @@ def _render_keys(side: dict, phases: list[float], cursor: list, frames: int,
         phases[0], phases[1] = lf_phase, hf_phase
         return out
     active_key = None
-    for k in range(min(count, KEY_MAX)):
+    for k in range(min(len(keys), slots)):
         (lf, lg), (hf, hg) = keys[k]
         if lg or hg:
             active_key = keys[k]
@@ -175,7 +159,7 @@ def _render_keys(side: dict, phases: list[float], cursor: list, frames: int,
     env = gate.env
     for i in range(frames):
         if left == 0:
-            idx = (idx + 1) % KEY_MAX
+            idx = (idx + 1) % slots
             left = slice_samples
         left -= 1
         if target > env:
@@ -185,7 +169,7 @@ def _render_keys(side: dict, phases: list[float], cursor: list, frames: int,
         total = 0.0
         if env > 0.0:
             if target == 1.0:
-                key = keys[idx] if idx < count else None
+                key = keys[idx] if idx < len(keys) else None
             else:
                 key = gate.latch
             if key is not None:
@@ -218,24 +202,24 @@ class _CoilGate:
 class _VoiceState:
     """两侧振荡器相位 + 扬声器相位/包络 + 各侧子帧游标与音圈包络门（跨块连续）。
 
-    speaker 是 3kHz 蓝牙承载（发声段折进音圈）的声部，speaker48 是 0x36 的
-    48kHz 喇叭块专用声部——两路采样率不同、相位与包络不能混用。gates 是
-    左右音圈的包络门（`_CoilGate`），挂各自的子帧游标走。"""
+    speaker 是 3kHz 蓝牙承载（发声段折进音圈）的声部，speaker_beat 是 0x36
+    喇叭块专用声部——两路采样率不同、相位与包络不能混用。gates 是左右音圈的
+    包络门（`_CoilGate`），挂各自的子帧游标走。"""
 
     def __init__(self) -> None:
         self.key_phase = [[0.0, 0.0], [0.0, 0.0]]
         self.speaker = [0.0]
         self.speaker_env = 0.0
-        self.speaker48 = [0.0]
-        self.speaker48_env = 0.0
+        self.speaker_beat = [0.0]
+        self.speaker_beat_env = 0.0
         self.cursor = [[0, 0], [0, 0]]  # 每侧 [子帧序号, 距下次切换的样本数]
         self.gates = (_CoilGate(), _CoilGate())
 
 
 def _render_speaker(tone: tuple, state: _VoiceState, frames: int, rate: int,
-                    peak: int, hi: bool = False) -> list[int]:
+                    peak: int, beat: bool = False) -> list[int]:
     """发声段音色的哑渲染：基频 + 二次谐波，边沿触发起音/收音包络。
-    state.speaker（3kHz，折进音圈）或 state.speaker48（48kHz 喇叭块）是
+    state.speaker（3kHz，折进音圈）或 state.speaker_beat（喇叭块）是
     跨块连续的相位与包络（幅度刻度）——增益从 0 变非 0 时按起音时长爬升，
     归零时按收音时长衰落；谐波频率越过奈奎斯特界限就只出基频。"""
     freq, gain = tone
@@ -244,8 +228,8 @@ def _render_speaker(tone: tuple, state: _VoiceState, frames: int, rate: int,
     harm = SPEAKER_HARMONIC2 if freq and 2 * freq < rate / 2 else 0.0
     attack = max(1.0, SPEAKER_ATTACK_S * rate)
     release = max(1.0, SPEAKER_RELEASE_S * rate)
-    phase = state.speaker48[0] if hi else state.speaker[0]
-    env = state.speaker48_env if hi else state.speaker_env
+    phase = state.speaker_beat[0] if beat else state.speaker[0]
+    env = state.speaker_beat_env if beat else state.speaker_env
     out = [0] * frames
     for i in range(frames):
         if full > 0.0:
@@ -257,9 +241,9 @@ def _render_speaker(tone: tuple, state: _VoiceState, frames: int, rate: int,
         value = (math.sin(phase) + harm * math.sin(phase * 2)) * _SPEAKER_SHAPE
         out[i] = _clamp16(round(value * env))
         phase = (phase + step) % _TAU
-    if hi:
-        state.speaker48[0] = phase
-        state.speaker48_env = env
+    if beat:
+        state.speaker_beat[0] = phase
+        state.speaker_beat_env = env
     else:
         state.speaker[0] = phase
         state.speaker_env = env
@@ -346,6 +330,14 @@ class Ds5HapticsAudio:
         with self._lock:
             self._params = dict(params)
 
+    @property
+    def engaged(self) -> bool:
+        """音频流是否已经接到 HD 子帧（固件按布局行重整过时序子帧）。让位
+        （`haptic audio on`）要等它置位：没接到内容的通路不驱动音圈，提前让位
+        会把手柄留在「HID 震动已清零、音频也没有内容」的静默状态。"""
+        with self._lock:
+            return self._params.get("hd") is not None
+
     @staticmethod
     def _find_ds5(sd):
         """在所有 hostapi 里找 DualSense 的输出端点，优先 WASAPI（延迟低、
@@ -422,12 +414,8 @@ BT_CRC_SEED = 0xA2
 def bt_build_report(pcm: bytes, seq: int) -> bytes:
     """把 64 字节 PCM（32 帧交错双声道 s8）装进 0x32 私有报告。
 
-    布局（SAxense.c，与真机互通的公开实现）：共 142 字节，[0]=0x32、
-    [1]=tag/seq 字节保持 0（递增序号在 packet 0x11 内）、[2]=0x91（packet
-    0x11 + sized 位）、[3]=长度 7、[4:11] = 配置 `FE 00 00 00 00 FF <seq>`
-    （序号在 [10]，逐报递增）、[11]=0x92（packet 0x12 + sized）、[12]=0x40、
-    [13:77] = PCM、其后补零到 138 字节，尾部 4 字节是 CRC32（种子 0xA2 先过
-    一遍、小端，覆盖 [0:138] 共 138 字节）。
+    142 字节报文：包头 + packet 0x11 的配置与逐报递增序号 + packet 0x12 承载
+    64 字节 PCM + 补零 + CRC32（种子 0xA2、小端，覆盖前 138 字节）。
     """
     if len(pcm) != BT_PCM_BYTES:
         raise ValueError(f"pcm 需要 {BT_PCM_BYTES} 字节，收到 {len(pcm)}")
@@ -447,21 +435,22 @@ def bt_build_report(pcm: bytes, seq: int) -> bytes:
 
 
 def bt_render_pcm(left_v: dict, right_v: dict, speaker: tuple,
-                  state: _VoiceState) -> bytes:
+                  state: _VoiceState, frames: int = BT_FRAMES) -> bytes:
     """子帧序列 → 一块 32 帧的触觉 PCM（交错左/右音圈 s8）：蓝牙上没有扬声器
     通道，发声段折进两侧音圈——与 USB 直插的音圈行为一致。两侧各过一道音圈
-    包络门（起音/收音插值，见 `_render_keys`）。"""
+    包络门（起音/收音插值，见 `_render_keys`）。frames 是这一块的帧数：成对
+    形态（0x39）一报两块，传 2 × BT_FRAMES。"""
     peak = AMP_PEAK_BT
     left = _render_keys(left_v, state.key_phase[0], state.cursor[0],
-                        BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE),
+                        frames, BT_RATE, peak, _slice_samples(BT_RATE),
                         state.gates[0])
     right = _render_keys(right_v, state.key_phase[1], state.cursor[1],
-                         BT_FRAMES, BT_RATE, peak, _slice_samples(BT_RATE),
+                         frames, BT_RATE, peak, _slice_samples(BT_RATE),
                          state.gates[1])
     sp = _render_speaker(speaker[0] if speaker else (0, 0), state,
-                         BT_FRAMES, BT_RATE, peak)
-    out = bytearray(BT_PCM_BYTES)
-    for i in range(BT_FRAMES):
+                         frames, BT_RATE, peak)
+    out = bytearray(frames * 2)
+    for i in range(frames):
         out[i * 2] = to_s8(left[i] + sp[i]) & 0xFF
         out[i * 2 + 1] = to_s8(right[i] + sp[i]) & 0xFF
     return bytes(out)
@@ -473,14 +462,15 @@ def bt_render_pcm(left_v: dict, right_v: dict, speaker: tuple,
 #: 4 字节 CRC32。蓝牙描述符声明 0x36 为 397 字节数据，Windows 短写直达。
 BT36_REPORT_LEN = 398
 BT36_REPORT_ID = 0x36
-#: 喇叭块：48kHz 立体声 10ms（480 帧），Opus CBR 码率 = 200B × 8 × 100 包/s。
-#: 它跟着 BT_INTERVAL_S 的节拍出（10.67ms），每秒比真声少 6.25%——与
-#: DS5Dongle 的实机跑法同量级（它每个 21.33ms 的报里带 2 个 10ms 帧，同样
-#: 少 6.25%）；发声段是合成提示音，时轴短这一点听不出来，而触觉块按 3kHz
-#: 严格对表才不会在控制器里积压。
+#: 喇叭块：Opus CBR 160kbit → 每帧 200 字节；48kHz 声明下帧长 480 样本
+#: （10ms 是 Opus 的帧长语法，不等于播放时长）。
 BT36_SPEAKER_RATE = 48000
 BT36_SPEAKER_FRAMES = 480
 BT36_SPEAKER_BYTES = 200
+#: 喇叭块的合成时钟：手柄按「一块对一拍」消耗 PCM，480 样本铺满整个 BT_INTERVAL_S 节拍
+#: （约 45kHz 在播），因此一帧必须装下整拍内容——直接按节拍时钟合成 480 样本，
+#: 等价于参考实现的重采样且没有欠喂误差。
+BT36_SPEAKER_BEAT_RATE = round(BT36_SPEAKER_FRAMES / BT_INTERVAL_S)
 #: 0x36 的状态块（vds kInitialSetStateData 经 set_audio_out_stream_active
 #: 改写后的形态 + 16 字节保留零）：喇叭音量 100（PS5 缺省档）、音频控制字节
 #: 的输出路径位段钉在手柄喇叭（0x30，初始 0x09 是耳机/自动——不路由的话
@@ -493,20 +483,22 @@ BT36_STATE = bytes([
 ]) + bytes(16)
 #: 喇叭静默多少秒后从 0x36 退回 0x32：发声段之间的短停顿不切换承载。
 #: 不做「采样按住期间保温」——那会让 0x36 在整个按住期间满速（100% 空口），
-#: 同频段无线鼠标全程被骚扰（实机复测）；空口让给鼠标，冷启动延迟只在
-#: 每个循环的第一声出现且被拥塞消除的大头抵消。
+#: 挤占同频段的无线鼠标；冷启动延迟只在每个循环的第一声出现。
 BT36_SPEAKER_TAIL_S = 0.3
 #: 触觉静默多少秒后整条私有流停发：蓝牙无线电是 2.4GHz 公共介质，常驻空包
-#: 会和同频段的无线鼠标互相干扰（实机：鼠标卡、触控板幻手势弹 OSK/开始
-#: 菜单）。触觉块到手即播、没有需要保活的会话，空闲就一报不发。
+#: 会和同频段设备互相干扰。触觉块到手即播、没有需要保活的会话，空闲就一报不发。
 BT_HAPTIC_TAIL_S = 0.15
 
 
 def bt36_build_report(pcm: bytes, speaker: bytes, report_seq: int,
                       packet_seq: int) -> bytes:
-    """装一份 0x36 报告：配置包（关麦克风、开喇叭）+ 状态块 + 触觉 PCM +
-    Opus 喇叭块；report_seq 是报告序号高半字节、packet_seq 是配置包内滚动
-    序号。CRC32 与 0x31/0x32 同一条规则（种子 0xA2、覆盖除 CRC 外全部字节）。"""
+    """装一份 0x36 报告：配置包 0x11 + 状态块 0x10 + 触觉 PCM 0x12 + Opus
+    喇叭块 0x13；report_seq 是报告序号高半字节、packet_seq 是配置包内滚动
+    序号（公开实现的同形布局：397 字节声明、[2]=0x91/[11]=0x90/[76]=0x92/
+    [142]=0x93，[344:394] 保留零）。配置包第 4 字节取 0xFE（bit0 = 麦克风
+    采集/双工模式，置位后手柄会把麦克风音频塞回 0x31 输入报告，被 Windows
+    与 Steam 当成摇杆满偏——「手柄自己乱动」的幻输入来源；我们只要喇叭）。
+    CRC32 与 0x31/0x32 同一条规则（种子 0xA2、覆盖前 394 字节、小端）。"""
     if len(pcm) != BT_PCM_BYTES:
         raise ValueError(f"pcm 需要 {BT_PCM_BYTES} 字节，收到 {len(pcm)}")
     if len(speaker) != BT36_SPEAKER_BYTES:
@@ -516,7 +508,7 @@ def bt36_build_report(pcm: bytes, speaker: bytes, report_seq: int,
     report[1] = (report_seq & 0xF) << 4
     report[2] = 0x11 | 0x80
     report[3] = 7
-    report[4] = 0xFF  # 音频段全开（vds 实发值；0xFE 是关麦克风的变体）
+    report[4] = 0xFE  # 音频段全开、不开麦克风采集（0xFF 会打开双工幻输入）
     report[5:10] = bytes([64] * 5)  # 音频缓冲长度
     report[10] = packet_seq & 0xFF
     report[11] = 0x10 | 0x80  # 状态块
@@ -533,11 +525,71 @@ def bt36_build_report(pcm: bytes, speaker: bytes, report_seq: int,
     return bytes(report)
 
 
-def render_speaker_48k(tone: tuple, state: _VoiceState) -> bytes:
-    """发声段音色 → 一块 10ms 的 48kHz 立体声 int16（小端）：0x36 的喇叭块
-    输入。相位与包络挂在 state.speaker48 上，与 3kHz 音圈通路互不干扰。"""
-    sp = _render_speaker(tone, state, BT36_SPEAKER_FRAMES, BT36_SPEAKER_RATE,
-                         AMP_PEAK_USB, hi=True)
+def render_speaker_beat(tone: tuple, state: _VoiceState) -> bytes:
+    """发声段音色 → 一块整节拍（480 样本 × 立体声 int16 小端）：0x36 的喇叭块
+    输入。按节拍时钟（BT36_SPEAKER_BEAT_RATE）合成，一块装下整拍的实时内容；
+    相位与包络挂在 state.speaker_beat 上，与 3kHz 音圈通路互不干扰。"""
+    sp = _render_speaker(tone, state, BT36_SPEAKER_FRAMES,
+                         BT36_SPEAKER_BEAT_RATE, AMP_PEAK_USB, beat=True)
+    out = bytearray(BT36_SPEAKER_FRAMES * 4)
+    for i, v in enumerate(sp):
+        struct.pack_into("<hh", out, i * 4, v, v)
+    return bytes(out)
+
+
+#: 蓝牙「成对」音频+触觉流（547 字节）：一报带 2 个触觉块与 2 个 Opus 喇叭帧、
+#: 节拍 21.33ms，多带的那一块是链路抖动的水垫；没有状态块，
+#: 音频路由由会话开始时那一份 0x31 预置保持。
+BT39_REPORT_LEN = 547
+BT39_REPORT_ID = 0x39
+BT39_HAPTIC_BYTES = BT_PCM_BYTES * 2
+BT39_SPEAKER_BYTES = BT36_SPEAKER_BYTES * 2
+BT39_INTERVAL_S = BT_INTERVAL_S * 2.0
+
+
+def bt39_build_report(coil: bytes, speaker: bytes, report_seq: int,
+                      packet_seq: int) -> bytes:
+    """装一份 0x39 成对报告：配置包 0x11（长度 6）+ 触觉包 0x12（2 块 64 字节
+    PCM）+ 喇叭包 0x13（2 个 200 字节 Opus 帧）+ 尾部 CRC32（种子 0xA2、覆盖
+    前 543 字节，与 0x31/0x32/0x36 同一条规则）。偏移对齐 DS5Dongle 的
+    audio_bt_task：[2]=0x91、[10]=0x92、[11]=64、[12:140] 触觉、[140]=0x93、
+    [141]=200、[142:542] 喇叭。"""
+    if len(coil) != BT39_HAPTIC_BYTES:
+        raise ValueError(f"触觉 PCM 需要 {BT39_HAPTIC_BYTES} 字节，收到 {len(coil)}")
+    if len(speaker) != BT39_SPEAKER_BYTES:
+        raise ValueError(f"喇叭块需要 {BT39_SPEAKER_BYTES} 字节，收到 {len(speaker)}")
+    report = bytearray(BT39_REPORT_LEN)
+    report[0] = BT39_REPORT_ID
+    report[1] = (report_seq & 0xF) << 4
+    report[2] = 0x11 | 0x80
+    report[3] = 6
+    report[4] = 0xFE  # 音频段全开、不开麦克风采集（0xFF 会打开双工幻输入）
+    report[5:9] = bytes([64] * 4)  # 音频缓冲长度
+    report[9] = packet_seq & 0xFF
+    report[10] = 0x12 | 0x80
+    report[11] = BT_PCM_BYTES
+    report[12:12 + BT39_HAPTIC_BYTES] = coil
+    report[140] = 0x13 | 0x80
+    report[141] = BT36_SPEAKER_BYTES
+    report[142:142 + BT39_SPEAKER_BYTES] = speaker
+    crc = zlib.crc32(bytes([BT_CRC_SEED]) + bytes(report[:BT39_REPORT_LEN - 4]))
+    report[BT39_REPORT_LEN - 4:BT39_REPORT_LEN] = struct.pack("<I", crc)
+    return bytes(report)
+
+
+def render_speaker_pair(tone: tuple, state: _VoiceState) -> bytes:
+    """一报两块喇叭内容：连着合成 2 个 480 样本的帧（21.33ms），相位与包络跨帧
+    连续（第二帧接着第一帧走），按 1920 字节一帧切开、交给同一个 48kHz 声明值
+    的编码器逐帧编码（编码器一次只吃一帧）。"""
+    first = render_speaker_beat(tone, state)
+    second = render_speaker_beat(tone, state)
+    return first + second
+
+    """发声段音色 → 一块整节拍（480 样本 × 立体声 int16 小端）：0x36 的喇叭块
+    输入。按节拍时钟（BT36_SPEAKER_BEAT_RATE）合成，一块装下整拍的实时内容；
+    相位与包络挂在 state.speaker_beat 上，与 3kHz 音圈通路互不干扰。"""
+    sp = _render_speaker(tone, state, BT36_SPEAKER_FRAMES,
+                         BT36_SPEAKER_BEAT_RATE, AMP_PEAK_USB, beat=True)
     out = bytearray(BT36_SPEAKER_FRAMES * 4)
     for i, v in enumerate(sp):
         struct.pack_into("<hh", out, i * 4, v, v)
@@ -581,15 +633,13 @@ class Bt36OpusEncoder:
 
 class Ds5HapticsBt:
     """蓝牙连接的 DualSense 私有触觉流：有内容时按 10.67ms 节拍把子帧序列渲染
-    成 0x32 报告（142 字节 SAxense 形态，发声段折进两侧音圈——蓝牙没有扬声器
-    通道，音圈是它唯一的载体）；给了 speaker_encoder（Bt36OpusEncoder）时发声段
-    改走 0x36 报文（398 字节，vds 形态）：同样按一报里触觉 PCM 的时长（10.67ms）
-    出报、触觉块不折喇叭，由真正的手柄喇叭出声。空闲整流停发——蓝牙无线电是
-    2.4GHz 公共介质，常驻空包会和同频段设备互相干扰（实机：无线鼠标卡顿、
-    触控板幻手势），触觉块到手即播、无会话可保活；停发期间 set_params 带新内容
-    时即时唤醒发送线程（短震动的第一拍不等 20ms 兜底轮询才被看见）。发送线程
-    独立于会话主循环（蓝牙 HID 写回慢，不能占桥接热路径）。写回被拒时经
-    on_error 通知会话（回落 HID 震动写回），蓝牙不至于整路静默。
+    成 0x32 报告（发声段折进两侧音圈——蓝牙没有扬声器通道，音圈是它唯一的载体）；
+    给了 speaker_encoder（Bt36OpusEncoder）时发声段改走 0x36 报文：同样按一报里
+    触觉 PCM 的时长（10.67ms）出报、触觉块不折喇叭，由真正的手柄喇叭出声。
+    空闲整流停发——常驻空包会和同频段设备互相干扰，触觉块到手即播、无会话可保活；
+    停发期间 set_params 带新内容时即时唤醒发送线程（短震动的第一拍不等 20ms
+    兜底轮询才被看见）。发送线程独立于会话主循环（蓝牙 HID 写回慢，不能占桥接
+    热路径）。写回被拒时经 on_error 通知会话（回落 HID 震动写回），蓝牙不至于整路静默。
 
     发送时刻钉在固定网格上（`_run`）：渲染与写回的耗时不计入周期，落后超过
     一拍就重新对表、不连发追赶；空闲唤醒也从当前时刻重新对表。clock 是取时刻
@@ -599,21 +649,37 @@ class Ds5HapticsBt:
     LABEL_36 = "DS5 蓝牙触觉流已启用（0x36 HD 触觉 + 手柄喇叭，HID 震动让位）"
 
     def __init__(self, device, reporter=None, on_error=None,
-                 speaker_encoder=None, clock=time.monotonic) -> None:
+                 speaker_encoder=None, clock=time.monotonic, pair=False) -> None:
         self._device = device
         self._reporter = reporter
         self._on_error = on_error
         self._speaker_encoder = speaker_encoder
+        #: 成对形态（0x39）：一报 2 块触觉 + 2 帧喇叭、节拍 21.33ms。链路抖动
+        #: 的容差翻倍（单块形态下一拍迟到 10.67ms 就断音），报数减半也少一半
+        #: 链路开销；需要编码器（喇叭块随报固定带 2 帧）。
+        self._pair = bool(pair) and speaker_encoder is not None
+        self._interval = BT39_INTERVAL_S if self._pair else BT_INTERVAL_S
         self._clock = clock
         self._lock = threading.Lock()
         self._params: dict = {}
         self._state = _VoiceState()
-        self._state48 = _VoiceState()  # 0x36 喇叭块的 48kHz 声部
+        self._state_beat = _VoiceState()  # 0x36 喇叭块专用声部（每拍一块）
         self._last_speaker_at = 0.0
         self._last_coil_at = 0.0
         self._stats = {"writes": 0, "write_ms_total": 0.0,
                        "write_ms_max": 0.0, "late": 0,
+                       "beat_s": BT_INTERVAL_S,
+                       "short": 0,
+                       "short_recovered": 0,
                        "first_at": 0.0, "last_at": 0.0}
+        #: 起震延迟统计（内容到达 → 首报写出）：空闲整流停发期间靠 set_params
+        #: 唤醒，正在按节拍推流时则要等下一个节拍点，这一段延迟是「不及时」的
+        #: 主要来源，统计它才能判断要不要动节拍。
+        self._pending_since: float | None = None
+        self._onset_ms_total = 0.0
+        self._onset_ms_max = 0.0
+        self._onsets = 0
+        self._engaged = False
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._thread: threading.Thread | None = None
@@ -632,18 +698,25 @@ class Ds5HapticsBt:
 
     def stats(self) -> str:
         """写回链路统计（份数、平均/最大单次写回耗时、超节拍份数、实际节拍）：
-        实际节拍要从头到尾贴着 BT_INTERVAL_S——比它长说明写回或渲染吃掉了周期
-        （触觉 PCM 供不上控制器的 3kHz 消耗，短震动被拉长），比它短说明在连发
-        追赶（控制器的 PCM 队列被一次塞满）。"""
+        实际节拍要从头到尾贴着当前形态的节拍（单块 10.67ms / 成对 21.33ms）
+        ——比它长说明写回或渲染吃掉了周期（触觉 PCM 供不上控制器的 3kHz 消耗，
+        短震动被拉长），比它短说明在连发追赶（控制器的 PCM 队列被一次塞满）。"""
         s = self._stats
         if s["writes"] == 0:
             return "写回统计：无写回"
         avg = s["write_ms_total"] / s["writes"]
         span_ms = (s["last_at"] - s["first_at"]) * 1000.0
         beat = f"{span_ms / (s['writes'] - 1):.2f}ms" if s["writes"] > 1 else "—"
+        onset = (f"，起震延迟 平均 {self._onset_ms_total / self._onsets:.1f}ms/"
+                 f"最大 {self._onset_ms_max:.1f}ms（{self._onsets} 次）"
+                 if self._onsets else "")
+        # 短写：hidapi 用返回值报「实际交给驱动的字节数」，写满才算这一拍真的
+        # 出去了——只捕异常看不出静默丢失（蓝牙输出队列满时正是这种表现）。
+        short = (f"，短写 {s['short']} 份（重发成功 {s['short_recovered']}）"
+                 if s["short"] else "")
         return (f"写回统计：{s['writes']} 份，平均 {avg:.1f}ms/份，"
                 f"最大 {s['write_ms_max']:.1f}ms，超节拍 {s['late']} 份，"
-                f"实际节拍 {beat}（目标 {BT_INTERVAL_S * 1000.0:.2f}ms）")
+                f"实际节拍 {beat}（目标 {s['beat_s'] * 1000.0:.2f}ms）{onset}{short}")
 
     def start(self) -> bool:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -663,16 +736,41 @@ class Ds5HapticsBt:
         # 新内容到达即时唤醒空闲的发送线程：整流停发期间的第一拍震动不等
         # 20ms 兜底轮询才被看见——短震动的启动延迟少掉一个轮询拍。
         if _has_content(params):
+            if self._pending_since is None:
+                self._pending_since = self._clock()
             self._wake.set()
+
+    @property
+    def engaged(self) -> bool:
+        """私有流是否已经接到 HD 子帧（真的在驱动音圈）。让位（`haptic audio
+        on`）要等它置位：没接到内容的流一报不发，提前让位会把手柄留在「HID
+        震动已清零、音频也没有内容」的静默状态。"""
+        return self._engaged
 
     def _warn(self, text: str) -> None:
         if self._reporter is not None:
             self._reporter.error(text)
 
+    def _note(self, text: str) -> None:
+        """一条普通提示（仅在 reporter 支持 line 时输出）：启用行只说明流对象开起来了，
+        收到 HD 子帧才是真的在驱动触觉音圈。"""
+        line = getattr(self._reporter, "line", None)
+        if line is not None:
+            line(text)
+
     @staticmethod
     def _coil_active(left_v, right_v) -> bool:
         """当前拍音圈是否有内容（任一子帧增益非零）。"""
         return left_v is not None and (_side_active(left_v) or _side_active(right_v))
+
+    @staticmethod
+    def _describe(side: dict) -> str:
+        """子帧序列的可读描述（诊断用）：每子帧「低频/增益 + 高频/增益」，没有内容给「静默」。
+        这一行给出固件下发的档位——增益仍在 5 上下说明布局行的放大没进固件，20 上下才是标定值。"""
+        keys = tuple(side["keys"])[:max(0, side["count"])]
+        if not keys:
+            return "静默"
+        return " ".join(f"{lf}Hz/{lg}+{hf}Hz/{hg}" for (lf, lg), (hf, hg) in keys)
 
     def _wait_until_due(self, due: float) -> bool:
         """等到下一拍（到点就是等 0）：返回 True 表示该收尾了（停止位）。"""
@@ -702,6 +800,12 @@ class Ds5HapticsBt:
                 # 没有 HD 段（老固件 / 未接入）：等同于空闲，不发报。
                 left_v = right_v = None
                 speaker = ()
+            if hd is not None and not self._engaged:
+                # 开关打开与线程启动只说明通路就绪，收到 HD 子帧才开始驱动音圈。
+                self._engaged = True
+                carrier = "0x36 HD + 手柄喇叭" if self._speaker_encoder else "0x32 音圈"
+                self._note(f"蓝牙触觉流接到主机的 HD 子帧，开始驱动触觉音圈（{carrier}）："
+                           f"左 {self._describe(left_v)} / 右 {self._describe(right_v)}")
             now = clock()
             tone = speaker[0] if speaker else (0, 0)
             if tone[1]:
@@ -709,26 +813,43 @@ class Ds5HapticsBt:
             if self._coil_active(left_v, right_v):
                 self._last_coil_at = now
             # 0x36 只在喇叭真有内容（含收音尾）时上；触觉走 0x32（发声段
-            # 折进音圈兜底）；两条静默超尾长就整流停发——蓝牙无线电是公共
-            # 介质，常驻空包会和同频段设备互相干扰（实机：2.4GHz 无线鼠标
-            # 卡顿、触控板幻手势弹 OSK/开始菜单）。触觉块到手即播，没有
-            # 需要保活的会话，也不做采样按住期间的满速保温。
+            # 折进音圈兜底）；两条静默超尾长就整流停发——常驻空包会和同频段
+            # 设备互相干扰，触觉块到手即播、没有需要保活的会话。
             use_36 = (self._speaker_encoder is not None and
                       now - self._last_speaker_at < BT36_SPEAKER_TAIL_S)
             haptic_recent = (now - self._last_coil_at < BT_HAPTIC_TAIL_S or
                              now - self._last_speaker_at < BT_HAPTIC_TAIL_S)
             if use_36:
-                if left_v is None:
-                    coil = bytes(BT_PCM_BYTES)
+                if self._pair:
+                    # 成对形态（0x39）：一报 2 块触觉（128 字节 PCM）+ 2 帧
+                    # 喇叭，节拍 21.33ms——多带的那一块是链路抖动的水垫（单块
+                    # 形态下一拍迟到 10.67ms 就断音），报数减半也少一半开销。
+                    coil = (bytes(BT_PCM_BYTES * 2) if left_v is None else
+                            bt_render_pcm(left_v, right_v, (), self._state,
+                                          frames=BT_FRAMES * 2))
+                    # 编码器一次只吃一帧（480 样本），成对形态逐帧编码后拼成
+                    # 400 字节：两块喇叭内容各占 200 字节，与声明长度一致。
+                    pair_pcm = render_speaker_pair(tone, self._state_beat)
+                    frame_bytes = BT36_SPEAKER_FRAMES * 4
+                    speaker_block = (
+                        self._speaker_encoder.encode(pair_pcm[:frame_bytes]) +
+                        self._speaker_encoder.encode(pair_pcm[frame_bytes:]))
+                    report = bt39_build_report(coil, speaker_block,
+                                               report_seq=seq,
+                                               packet_seq=packet_seq)
                 else:
-                    coil = bt_render_pcm(left_v, right_v, (), self._state)
-                speaker_block = self._speaker_encoder.encode(
-                    render_speaker_48k(tone, self._state48))
-                report = bt36_build_report(coil, speaker_block,
-                                           report_seq=seq,
-                                           packet_seq=packet_seq)
+                    if left_v is None:
+                        coil = bytes(BT_PCM_BYTES)
+                    else:
+                        coil = bt_render_pcm(left_v, right_v, (), self._state)
+                    speaker_block = self._speaker_encoder.encode(
+                        render_speaker_beat(tone, self._state_beat))
+                    report = bt36_build_report(coil, speaker_block,
+                                               report_seq=seq,
+                                               packet_seq=packet_seq)
                 seq = (seq + 1) & 0xF
                 packet_seq = (packet_seq + 1) & 0xFF
+                beat_s = self._interval if self._pair else BT_INTERVAL_S
             elif haptic_recent:
                 if left_v is None:
                     pcm = bytes(BT_PCM_BYTES)
@@ -736,6 +857,7 @@ class Ds5HapticsBt:
                     pcm = bt_render_pcm(left_v, right_v, speaker, self._state)
                 report = bt_build_report(pcm, seq)
                 seq = (seq + 1) & 0xFF
+                beat_s = BT_INTERVAL_S
             else:
                 # 空闲：一报不发，等 set_params 的内容唤醒或 20ms 兜底轮询
                 # （新震动的第一拍不等下一个轮询拍才被看见）；醒来把节拍网格
@@ -746,26 +868,51 @@ class Ds5HapticsBt:
                 continue
             try:
                 t0 = clock()
-                self._device.write(report)
+                written = self._device.write(report)
                 done = clock()
                 write_ms = (done - t0) * 1000.0
                 s = self._stats
+                # Windows 的 hidapi 会把短于描述符声明长度的写回补齐到
+                # OutputReportByteLength（DS5 蓝牙集合声明 547）再交驱动，返回值
+                # 因此常比报告本身长——只有真的少交（< 报告长度）才是这一拍
+                # 没进队列。把补齐当短写会每拍重发一次，音圈 PCM 被双倍喂进队列。
+                if isinstance(written, int) and written < len(report):
+                    s["short"] += 1
+                    if s["short"] == 1:
+                        self._note(f"蓝牙触觉流首份短写：{written}/{len(report)} 字节"
+                                   "——输出队列没收下这一拍，手柄这段收不到")
+                    # 短写是「驱动没把这一份收进队列」：立刻原样重发一次，能把
+                    # 队列瞬时满丢掉的拍救回来（内容仍是这一段波形，相位不跳）。
+                    try:
+                        retry = self._device.write(report)
+                    except OSError:
+                        retry = -1
+                    if isinstance(retry, int) and retry >= len(report):
+                        s["short_recovered"] += 1
                 if s["writes"] == 0:
                     s["first_at"] = t0
                 s["writes"] += 1
                 s["last_at"] = done
                 s["write_ms_total"] += write_ms
                 s["write_ms_max"] = max(s["write_ms_max"], write_ms)
-                if write_ms > BT_INTERVAL_S * 1000.0:
+                s["beat_s"] = beat_s
+                if write_ms > beat_s * 1000.0:
                     s["late"] += 1
+                # 起震延迟：内容到达（set_params 置位）到首报写出之间的时间。
+                if self._pending_since is not None:
+                    onset_ms = max(0.0, (done - self._pending_since) * 1000.0)
+                    self._onset_ms_total += onset_ms
+                    self._onset_ms_max = max(self._onset_ms_max, onset_ms)
+                    self._onsets += 1
+                    self._pending_since = None
             except OSError as exc:
                 self._warn(f"DS5 蓝牙触觉流写回失败：{exc}")
                 if self._on_error is not None:
                     self._on_error(exc)
                 break
-            next_due += BT_INTERVAL_S
+            next_due += beat_s
             after = clock()
-            if after - next_due > BT_INTERVAL_S:
+            if after - next_due > beat_s:
                 # 落后超过一拍（系统挂起、写回卡住）：网格挪到当前时刻，
                 # 不做连发追赶。
                 next_due = after

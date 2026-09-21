@@ -1,9 +1,6 @@
 /**
- * DS4 / DS5 手柄行为（pad/ds_behavior.c）：屏幕「DS4、DS5 设置」页两项开关在
- * 触摸板按下时的落地。触摸板按下在私有格式里是 PAD_BTN_SHARE（分享类），
- * 减号位是 PAD_BTN_TOUCHPAD、加号位是 PAD_BTN_OPT。
- *
- * 跨采样语义（先触发的半区、按下期间锁存、位置取不到时退回）在这里逐条钉住。
+ * DS4 / DS5 手柄行为（pad/ds_behavior.c）主机端用例：触摸板按下的跨采样语义——
+ * 先触发的半区、按下期间锁位与位置取不到时的回落。
  */
 #include "host_test.h"
 

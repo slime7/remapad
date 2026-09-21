@@ -349,7 +349,7 @@ def feedback_params(payload: bytes) -> dict | None:
 
 #: HOST_RAW 载荷头：通道字节 + 标志/长度字节（bit7 = 截断，低 7 位 = 数据长度）。
 HOST_RAW_HEADER = 2
-#: 通道字节 → 名字（controller.md「GATT 属性表」的句柄低字节，与固件
+#: 通道字节 → 名字（GATT 属性表的句柄低字节，与固件
 #: dp_capture.h 同一张表）。未登记的通道按 ch-<hex> 显示。
 HOST_RAW_CHANNELS = {
     0x05: "base-config",

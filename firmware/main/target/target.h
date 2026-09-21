@@ -54,11 +54,9 @@ const char *target_name(void);
 void target_set_facts(const pad_target_facts_t *facts);
 
 /**
- * 用输入设备自报的电量覆盖事实表：声明 `PAD_CAP_BATTERY` 且本帧真的解出
- * 电量字段的手柄，主机看到的电量（档位 / 充电 / 外部供电）跟手柄走；
- * 设备没带电量数据（Xbox 系没有电量字节、报告过短、没插手柄）时不动，
- * 板载电池兜底。0x05 报文专用的端电压字段按电压—容量表反演成名义值——
- * 输入设备的电量以档位到达，没有真实的毫伏可带。
+ * 用输入设备自报的电量覆盖事实表：声明 PAD_CAP_BATTERY 且本帧真的解出电量字段的手柄，
+ * 主机看到的电量跟手柄走；没有电量数据时不动、由板载电池兜底。
+ * 0x05 专用端电压字段按电压—容量表反演成名义值（输入设备的电量以档位到达）。
  */
 void target_apply_pad_battery(pad_target_facts_t *facts, const pad_state_t *pad);
 

@@ -4,7 +4,8 @@
 
 Remapad 是一个面向 **微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）** 的嵌入式控制器与 UI 系统，板卡规格见 [hardware.md](hardware.md)。
 最终产品从 USB 接收输入，将其转换为 NS2 手柄报告，再通过 Bluetooth LE 对外提供手柄服务，同时在本机屏幕上显示连接、配对和设备状态。
-UI 使用 Vue Vapor + Tailwind，运行时使用 PocketJS 官方 ESP-IDF host 组件；控制器协议、广播、GATT 和配对范围记录在 [controller.md](controller.md)。
+UI 使用 Vue Vapor + Tailwind，运行时使用 PocketJS 官方 ESP-IDF host 组件；
+控制器协议、广播、GATT 和配对范围记录在 [controller-switch2.md](controller-switch2.md)。
 
 ## 要解决的核心痛点
 
@@ -33,7 +34,7 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
 3. **固件构建链路清晰可复现**：前端通过官方 PocketJS CLI 和 ESP32-S3 host profile 生成 `.pocket`，ESP-IDF 通过官方组件嵌入该包；
    16 MB Flash / 8 MB Octal PSRAM 内存配置和 240×280 视口由设备 profile 统一描述。
 4. **USB 到 NS2 BLE 的可靠转发**：稳定接收 USB HID/原始报告，规范化输入状态，生成 NS2 手柄报告，完成 BLE 广播、连接、通知、配对和重连；
-   协议细节以 [controller.md](controller.md) 为设计依据并以实机验证为准。
+   协议细节以 [controller-switch2.md](controller-switch2.md) 为设计依据并以实机验证为准。
 5. **极致轻量与高帧率**：在无硬件 2D 加速器（PPA）的 ESP32-S3 上，通过编译期静态光栅化实现高帧率流畅运行。
 
 ## 非目标与系统边界

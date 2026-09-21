@@ -84,6 +84,20 @@ class RenderTest(unittest.TestCase):
         self.assertGreater(max(abs(v) for v in out[30:]), 0)
         self.assertLess(max(abs(v) for v in out[30:]), max(abs(v) for v in out[:15]))
 
+    def test_single_declared_key_stays_continuous(self):
+        """声明 1 个子帧的持续震动连续：主机是 200Hz 的单子帧流（实抓 94% 的
+        包只声明 1 个子帧），声明之外的槽位不占时间——固定按 3 槽轮播会把持续
+        震动切成「5ms 有声 + 10ms 静默」的 66Hz 断续（音圈的细腻手感退化成
+        普通马达的粗糙震动，查找手柄页的合成强震段同理）。"""
+        side = {"count": 1, "keys": (((135, 255), (0, 0)),)}
+        phases = [0.0, 0.0]
+        cursor = [0, 0]
+        slice_samples = ds5_haptics._slice_samples(ds5_haptics.BT_RATE)
+        for _ in range(4):
+            out = ds5_haptics._render_keys(side, phases, cursor, 32, ds5_haptics.BT_RATE,
+                                           ds5_haptics.AMP_PEAK_BT, slice_samples)
+            self.assertGreater(max(abs(v) for v in out), 100)
+
     def test_phase_carries_across_blocks(self):
         """相位跨块推进：两块拼接处不重置（相邻样本的跳变有正弦斜率上界，
         相位重置会跳到满刻度）。三个子帧同频同幅：切片边界不应产生任何跳变。"""
@@ -102,7 +116,8 @@ class RenderTest(unittest.TestCase):
 class AudioCallbackTest(unittest.TestCase):
     def test_callback_block_layout(self):
         """WASAPI 回调的整块字节：4ch 交错 int16，扬声器两路放发声音色，
-        触觉两路各跟各的子帧、发声段同时折进音圈（与蓝牙通路一致）。"""
+        触觉两路各跟各的子帧、发声段同时折进音圈（与蓝牙通路一致）。右侧声明
+        1 个子帧：整块都在播它，声明之外不补静默切片。"""
         audio = ds5_haptics.Ds5HapticsAudio()
         audio.set_params(hd_params())
         frames = 480
@@ -114,10 +129,11 @@ class AudioCallbackTest(unittest.TestCase):
         ch4 = [block[i * 4 + 3] for i in range(frames)]
         self.assertGreater(max(abs(v) for v in ch1), 10000)  # 发声段铺频道 1/2
         self.assertGreater(max(abs(v) for v in ch3), 10000)  # 左音圈
-        # 右侧子帧 0 高频 484Hz：仅前 1/3 周期有声，其后音圈只剩折进来的
-        # 发声段——与频道 1 的扬声器音色同值。
+        # 右侧子帧 0 高频 484Hz：声明 1 个子帧就是整段都在播它（折进来的发声
+        # 段叠在上面），第二半块因此不是纯扬声器音色。
         self.assertGreater(max(abs(v) for v in ch4), 3000)
-        self.assertEqual(ch4[240:], ch1[240:])
+        self.assertGreater(max(abs(v) for v in ch4[240:]), 3000)
+        self.assertNotEqual(ch4[240:], ch1[240:])
 
     def test_speaker_segment_reaches_coil_channels(self):
         """发声段折进两侧音圈：子帧全静、只有扬声器音色时，触觉两路与

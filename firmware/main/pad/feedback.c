@@ -68,7 +68,7 @@ typedef struct {
     size_t step_count;
 } haptic_sound_t;
 
-/** 定位呼叫（0x02，「搜索手柄」长按，实机抓包建模）：真手柄（Joy-Con）上
+/** 定位呼叫（0x02，「搜索手柄」长按）：手柄（Joy-Con）上
  *  是「一下强震、停顿、两声上行短鸣、长停顿」，震动由 HD 马达放出、鸣声
  *  从它的喇叭出来；这里沿用同一形态，两声蜂鸣按上行双音给出音高（近似
  *  Joy-Con 提示音的音色，起音/收音的柔化在合成端做），整周期 1200ms 循环
@@ -84,7 +84,7 @@ static const haptic_env_step_t s_snd_locate[] = {
 };
 
 /** 低频蜂鸣（0x01，子命令 0x02 的采样清单：约 1 秒低频蜂鸣）：一段强震
- *  后静默、不循环；时长按协议文档登记，播放形态待实机回填。 */
+ *  后静默、不循环；时长按协议文档登记。 */
 static const haptic_env_step_t s_snd_lf_beep[] = {
     {1000, PAD_HAPTIC_PULSE, 0},
     {1100, 0, 0},
@@ -196,7 +196,7 @@ static uint32_t crc32_le(uint32_t crc, const uint8_t *data, size_t len)
 }
 
 /** PS 蓝牙输出报告的尾帧：先在种子字节上过一遍，再覆盖报告体（末 4 字节除
- *  外），结果小端写进末 4 字节。缺这段的主机不接受整份报告——实机表现是写
+ *  外），结果小端写进末 4 字节。缺这段的主机不接受整份报告——表现是写
  *  回成功、手柄没有任何反应。 */
 static void ps_bt_frame(uint8_t *out, size_t len)
 {
@@ -263,6 +263,21 @@ static uint16_t hd_freq(const pad_hd_haptic_t *hd, uint16_t raw, bool high_band)
     return raw;
 }
 
+/** HD 增益落地（布局行 hd 的 num/den，0 = 1/1 不缩放）：主机游戏内档位很小
+ *  ——实抓非零档位中位 21/1023 落到 8 位刻度只有 5/255（占音圈满幅约百分之
+ *  二），线性直迁到音圈接近摸不到；放大后夹回 8 位满幅。增益在写 FEEDBACK 帧
+ *  之前落地，板载合成与 PC 哑渲染因此吃同一份数值。 */
+static uint8_t hd_gain_apply(const pad_hd_haptic_t *hd, uint8_t gain)
+{
+    const uint16_t num = hd->gain_num != 0 ? hd->gain_num : 1u;
+    const uint16_t den = hd->gain_den != 0 ? hd->gain_den : 1u;
+    if (num == den) {
+        return gain;
+    }
+    const uint32_t scaled = ((uint32_t)gain * num + den / 2u) / den;
+    return scaled > 255u ? 255u : (uint8_t)scaled;
+}
+
 void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *feedback,
                             pad_hd_render_t *out)
 {
@@ -292,14 +307,20 @@ void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *fe
                 k < count ? &feedback->rumble_keys[side][k] : &feedback->rumble_keys[side][0];
             const bool active = k < count && (src->lf_amp != 0 || src->hf_amp != 0);
             out->key[side][k].lf_freq = active ? hd_freq(hd, src->lf_freq, false) : 0;
-            out->key[side][k].lf_gain = active ? (uint8_t)(src->lf_amp >> 2) : 0;
+            out->key[side][k].lf_gain =
+                active ? hd_gain_apply(hd, (uint8_t)(src->lf_amp >> 2)) : 0;
             out->key[side][k].hf_freq = active ? hd_freq(hd, src->hf_freq, true) : 0;
-            out->key[side][k].hf_gain = active ? (uint8_t)(src->hf_amp >> 2) : 0;
+            out->key[side][k].hf_gain =
+                active ? hd_gain_apply(hd, (uint8_t)(src->hf_amp >> 2)) : 0;
         }
         /* 采样「强震」段是音色里的震动成分：覆盖该侧各子帧的音圈（真手柄的
          * 定位音就是 HD 马达放出的「震动、停顿、发声、停顿」，震动段归
          * 音圈），保持子帧时间轴不变。 */
         if (feedback->haptic_env == PAD_HAPTIC_PULSE && hd->pulse_hz != 0) {
+            /* 合成段自己铺满 3 个子帧：声明数跟着改，消费侧按声明轮播——留着
+             *  主机载波包的声明数（实抓为 1）会让这一段被切成 5ms 有声 + 10ms
+             *  静默的断续（查找手柄的强震听着像普通马达）。 */
+            out->key_count[side] = PAD_HD_KEY_MAX;
             for (size_t k = 0; k < PAD_HD_KEY_MAX; k++) {
                 out->key[side][k].lf_freq = hd->pulse_hz;
                 out->key[side][k].lf_gain = 255u;
@@ -430,7 +451,7 @@ bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b)
     }
     /* 只比会改变写回内容的语义字段。主机的震动流是音频式连续包络，原始 LRA
      * 参数包逐包都在抖（低有效位、频率扫描），拿它当变化判据会把等价帧全部
-     * 判成变化、以接近输入上报的频率把串口灌爆（实机曾出现稳态强度每秒重发
+     * 判成变化、以接近输入上报的频率把串口灌爆（稳态强度每秒重发
      * 上百条帧，把 PC 会话循环拖到输入转发卡顿）。 */
     if (memcmp(a->rumble_on, b->rumble_on, sizeof(a->rumble_on)) != 0 ||
         memcmp(a->rumble_strength, b->rumble_strength, sizeof(a->rumble_strength)) != 0 ||
@@ -457,8 +478,21 @@ bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b)
     return a->haptic_env == b->haptic_env && a->haptic_tone_hz == b->haptic_tone_hz;
 }
 
-size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
-                           const pad_feedback_t *feedback, uint8_t *out, size_t out_len)
+bool pad_feedback_segment_changed(const pad_feedback_t *sent, uint8_t env, uint16_t tone_hz)
+{
+    if (sent == NULL) {
+        return true;
+    }
+    /* 段音高只在「发声」段铺扬声器，其他段一律按 0 比较（与 hd_render 同口径）。 */
+    const uint16_t tone = env == PAD_HAPTIC_BEEP ? tone_hz : 0u;
+    return sent->haptic_env != env || sent->haptic_tone_hz != tone;
+}
+
+/** 编码主体：quiet 时用布局行的 quiet_presets（马达字节照旧清零，预置字节换成
+ *  让位形态），布局行没声明就回落 presets。 */
+static size_t encode_report(pad_conn_t conn, uint16_t vid, uint16_t pid,
+                            const pad_feedback_t *feedback, uint8_t *out, size_t out_len,
+                            bool quiet)
 {
     s_last_layout = NULL;
     if (feedback == NULL || out == NULL || out_len == 0) {
@@ -490,13 +524,17 @@ size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
     }
     memset(out, 0, desc->len);
     out[0] = desc->report_id;
+    const uint8_t (*presets)[2] = desc->presets;
+    if (quiet && off_set(desc->quiet_presets[0][0])) {
+        presets = desc->quiet_presets;
+    }
     for (size_t i = 0; i < PAD_OUT_PRESET_MAX; i++) {
-        const uint8_t off = desc->presets[i][0];
+        const uint8_t off = presets[i][0];
         /* 未填的槽位是 {0, 0}：偏移 0 是报告 ID，一律跳过（同 off_set）。 */
         if (!off_set(off) || off >= desc->len) {
             continue;
         }
-        out[off] = desc->presets[i][1];
+        out[off] = presets[i][1];
     }
 
     /* 马达只跟 0x30 震动载波：触觉采样（0x0A 采样流）是主机点播的声音，
@@ -540,4 +578,17 @@ size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
         ps_bt_frame(out, desc->len);
     }
     return desc->len;
+}
+
+size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
+                           const pad_feedback_t *feedback, uint8_t *out, size_t out_len)
+{
+    return encode_report(conn, vid, pid, feedback, out, out_len, false);
+}
+
+size_t pad_feedback_encode_quiet(pad_conn_t conn, uint16_t vid, uint16_t pid,
+                                 const pad_feedback_t *feedback, uint8_t *out,
+                                 size_t out_len)
+{
+    return encode_report(conn, vid, pid, feedback, out, out_len, true);
 }

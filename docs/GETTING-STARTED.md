@@ -2,7 +2,8 @@
 
 本指南面向微雪 ESP32-S3-Touch-LCD-1.69 目标板，说明 UI 检查、PocketJS 包构建、ESP-IDF 编译和当前 bring-up 边界。
 Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，并通过屏幕 UI 管理连接和配对；
-协议资料见 [controller.md](controller.md)，板卡规格与引脚见 [hardware.md](hardware.md)。
+协议资料见 [controller-switch2.md](controller-switch2.md) 与 [controller-ps.md](controller-ps.md)，
+板卡规格与引脚见 [hardware.md](hardware.md)。
 
 ## 前置环境
 
@@ -369,7 +370,8 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 - [ui/src/App.tsx](../ui/src/App.tsx)：
   首屏前一次挂完七个页面的页面调度（切页由页面根节点自行切换 `hidden`，新增页面直接写在 JSX 里，见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
-- [docs/controller.md](controller.md)：NS2 手柄 USB/BLE、广播、GATT、HID 报告和配对规范。
+- [docs/controller-switch2.md](controller-switch2.md)：NS2 手柄广播、GATT、HID 报告、配对、指令集与 NFC 规范。
+- [docs/controller-ps.md](controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置。
 - [docs/hardware.md](hardware.md)：目标板卡的 SoC/存储、屏幕、触摸、外设、GPIO 分配和板级注意事项。
 
 ### USB 手柄直插（host 模式）
@@ -385,32 +387,12 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 - 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 Xbox 有线布局并打兜底标记。
 - 供电：host 模式要给插入的手柄供 VBUS 5V，V2.1 原理图确认板上无升压输出，需从 TP1 外部注入 5V（见 [hardware.md](hardware.md)）；手柄能否枚举仍需实机验证。
 
-## 最终产品数据面（当前规划）
-
-后续固件工作按以下顺序拆分（BLE 链路先行、USB 输入殿后）：
-
-1. 接入 ESP-IDF USB host，接收并解析输入设备报告。（代码完成：`firmware/main/usb/` 枚举 HID 手柄、按 VID/PID 走同一份家族表，实机核对待做；VBUS 供电确认已完成，见 [hardware.md](hardware.md)）
-2. 将输入转换为统一 controller state，并按目标型号编码 NS2 输入报告。
-   （已完成，按 `firmware/main/input/` → `pad/` → `target/` 三段划分，见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）
-3. PC 手柄经桥接程序与串口帧进入设备，映射与编码走同一套 `pad/` + `target/`。（设备侧与 PC 侧代码已完成，实机验收与家族表抓包核对待做）
-3. 接入 ESP32 BLE peripheral，完成广播、GATT、输入通知和主机输出命令。
-   （代码完成，`firmware/main/ble/` + `firmware/main/dp/`，合成源静置、按键由调试页注入，实机互操作已验证）
-4. 实现配对、回连、唤醒、凭证存储和震动输出；字段与流程参照 [controller.md](controller.md)，每一步都需要真实设备验证。（配对/回连/NVS 凭证代码完成，唤醒广播顺延；震动解析成结构化事件后转发给 USB 源手柄或桥接 PC）
-5. 将连接/配对/电池等低频状态接入产品 bridge，供 PocketJS UI 显示和控制。（配对/连接与电池电量已真实化；充电状态为电压趋势推断值）
-
-USB 高频报告不应通过 PocketJS UI turn 或 JSON bridge 转发；bridge 只作为控制面，数据面应使用 ESP-IDF 原生任务和队列。
-
 ## 常见问题
 
 ### `bun not found`
 
-项目脚本通过 Bun 执行 `ui/vendor/pocketjs/tools/pocket.ts`。
+项目脚本通过 Bun 执行 `@pocketjs/framework` 与 `@pocketjs/cli` 里的官方编译器。
 安装官方 Bun 并确保它位于当前 PowerShell 的 `PATH`，再重试 `pnpm run check` 或 `pnpm run build`；如果看到缺少依赖的报错，先执行一次 `pnpm install`。
-
-### `Cannot find module './styles.generated.ts'`
-
-快照里的 `ui/vendor/pocketjs/framework/src/styles.generated.ts` 缺失，或它没有进入 pnpm 的依赖副本。从 Git 恢复该文件后重新执行 `pnpm install`；
-如果用的是外部 checkout，先在其目录里执行官方 `bun tools/build.ts` 生成这个镜像。
 
 ### 屏幕上中文显示为方框（tofu）
 
@@ -507,8 +489,8 @@ Get-CimInstance Win32_Process |
 ### 屏幕上没有出现 BLE 手柄广播
 
 BLE 手柄外设已接入（`firmware/main/ble/`）：
-开机后设备以厂商数据广播出现（nRF Connect 可见 Company ID `0x0553`），主机互操作已在 Switch 2 实机对账——发现、连接、0x15 配对、断连回连与 HOME 唤醒均实测通过，协议依据与对账记录见 [controller.md](controller.md)。
-排查顺序：先看启动日志有无 `host synced` 与 GATT 句柄表，再确认广播载荷，最后对照 [controller.md](controller.md) 逐段核对。
+开机后设备以厂商数据广播出现（nRF Connect 可见 Company ID `0x0553`），主机互操作已在 Switch 2 实机对账——发现、连接、0x15 配对、断连回连与 HOME 唤醒均实测通过，协议依据与对账记录见 [controller-switch2.md](controller-switch2.md)。
+排查顺序：先看启动日志有无 `host synced` 与 GATT 句柄表，再确认广播载荷，最后对照 [controller-switch2.md](controller-switch2.md) 逐段核对。
 USB host 直插与 PC 桥接两条输入路径都已接入（`firmware/main/usb/`、`firmware/main/input/`），调试页的注入按钮仍可合成按键。
 
 ### `unsupported QuickJS source; review immutable-buffer patch before upgrading`

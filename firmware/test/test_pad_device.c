@@ -1,9 +1,6 @@
 /**
- * 私有格式解析（pad_device.c）：家族布局表的偏移错了会表现为「按 A 出了 B」
- * 或「摇杆漂移」，这类问题在真机上只能靠猜；这里用构造好的报告把每个家族
- * 的按键位置映射、量程归一、死区与兜底行为逐条钉住。
- *
- * 报告样本按家族表的偏移构造，与 pc/remapadctl.py --dump 的实测结果对账。
+ * 私有格式解析（pad_device.c）主机端用例：按家族表偏移构造报告，钉住各家族的按键位置映射、
+ * 量程归一、死区与兜底行为；样本与 pc/remapadctl.py --dump 的结果对账。
  */
 #include "host_test.h"
 
@@ -202,7 +199,7 @@ static void family_detection_and_steam_gap(void)
     CHECK_EQ(pad_family_from_ids(0x28DE, 0x1142), PAD_FAMILY_STEAM);
     CHECK_EQ(pad_family_from_ids(0x0F0D, 0x00C1), PAD_FAMILY_UNKNOWN);
 
-    /* Steam 原生布局尚未抓包：按兜底路径解析并在能力位里如实标记。 */
+    /* Steam 原生布局尚未登记：按兜底路径解析并在能力位里如实标记。 */
     pad_report_t report;
     memset(&report, 0, sizeof(report));
     report.family = PAD_FAMILY_UNKNOWN;
@@ -406,8 +403,8 @@ static void dualsense_usb_parses_by_pid(void)
 }
 
 /**
- * DualSense 蓝牙（Report ID 0x31）空闲帧：字节取自 pc/remapadctl.py --dump 的实测
- * 报告，第 9 字节读作 0x08，正是方向键帽子开关的松开值、面键位全为 0，
+ * DualSense 蓝牙（Report ID 0x31）空闲帧样本（取自 pc/remapadctl.py --dump）：
+ * 第 9 字节读作 0x08，正是方向键帽子开关的松开值、面键位全为 0，
  * 因此按键位图从第 9 字节起、四轴从第 2 字节起。
  */
 static const uint8_t kDualSenseBtIdle[64] = {
@@ -526,7 +523,7 @@ static void dualsense_edge_back_buttons_map_to_gl_gr(void)
     pad_report_t report = dualsense_bt_report();
     pad_state_t state;
 
-    /* 第 11 字节高两位是 DualSense Edge 的两颗背键（实测抓包：左 0x40、右 0x80）。 */
+    /* 第 11 字节高两位是 DualSense Edge 的两颗背键（左 0x40、右 0x80）。 */
     report.data[11] = 0x40;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_L4);
@@ -609,10 +606,9 @@ static void ps_share_and_touchpad_map_by_position(void)
 }
 
 /**
- * 耳机状态字段的偏移与位序都要靠实机插拔核对（headset_style 默认
+ * 耳机状态字段的偏移与位序都要靠插拔核对（headset_style 默认
  * PAD_HEADSET_NONE）：未登记的行即便整份报文字节全是 0xFF，也必须保持
- * 「未插入」——抓包里跟音频无关的字节不能被当成插入状态。核对方法见
- * pc/README.md 的「3.5mm 耳机状态」。
+ * 「未插入」——与音频无关的字节不能被当成插入状态。
  */
 static void unregistered_headset_row_reports_nothing(void)
 {
@@ -663,7 +659,7 @@ static void dualsense_bt_headset_state_parses(void)
 
 /**
  * DualSense 蓝牙行登记了电量字节（第 54 字节）：与 DS4 同一套读法，低四位是
- * 0-10 档、bit4 表示充电中。两份实机抓包交叉核对：一份空闲帧样本
+ * 0-10 档、bit4 表示充电中。两份样本交叉核对：一份空闲帧
  * 读作 0x09（90%），后来同一只 Edge 掉到 0x05（50%），两份样本里耳机
  * 字节（第 55 字节）都在原位，偏移没有漂移。
  */
@@ -712,7 +708,7 @@ static pad_report_t dualshock4_usb_report(void)
  * 触摸板：DS4 与 DualSense 的触点是 4 字节（触点字节 + 12 位 X + 12 位 Y），
  * 一帧两个触点按归一后的 X 分到左右半区，同一半区取先出现的那一路，未置
  * 触点位的路不填。四种形态各锁一次偏移——两家的偏移都取自 Linux
- * hid-playstation.c 的报告结构，实机抓包尚未核对。
+ * hid-playstation.c 的报告结构，尚未核对。
  */
 static void ps_touch_halves_split_by_position(void)
 {

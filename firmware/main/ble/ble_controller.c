@@ -21,7 +21,7 @@
 
 static const char *TAG = "remapad_blctl";
 
-/* ---- GATT UUID 表（真机布局，对齐已验证实现；NimBLE 以空中字节序
+/* ---- GATT UUID 表（对齐已验证实现；NimBLE 以空中字节序
  * （小端）定义 128 位 UUID）---- */
 
 #define CHR_BASE_STATUS 1
@@ -99,7 +99,7 @@ static const ble_uuid128_t uuid_ext32 =
     BLE_UUID128_INIT(0x80, 0xb3, 0xe8, 0x09, 0x98, 0x6f, 0xaf, 0x8e,
                      0xb5, 0x40, 0x55, 0x69, 0x7e, 0xbc, 0xac, 0x3d);
 /* 描述符两族：报告率族 679d5510（0x000c/0x0010/0x0028/0x0030）、
- * 通用族 b746df8c（0x001c/0x0020/0x0024）；真机均接受主机写入。 */
+ * 通用族 b746df8c（0x001c/0x0020/0x0024）；两族都接受主机写入。 */
 static const ble_uuid128_t uuid_report_rate =
     BLE_UUID128_INIT(0xcb, 0x6e, 0x48, 0x80, 0xdf, 0x95, 0x57, 0x95,
                      0xee, 0x4d, 0x24, 0x5a, 0x10, 0x55, 0x9d, 0x67);
@@ -128,7 +128,7 @@ typedef struct {
     uint16_t conn_handle;
     uint8_t identity; /* ns2_identity_t */
     bool input05_notify;
-    /** 专用输入通道（0x07 / 0x08 / 0x09）的订阅状态与句柄：真机在同一个
+    /** 专用输入通道（0x07 / 0x08 / 0x09）的订阅状态与句柄：主机在同一个
      *  0x000E 句柄上按型号换 UUID，本设备把三种都注册出来，主机订哪一个
      *  就往哪一个发通知。 */
     bool input_priv_notify;
@@ -155,7 +155,7 @@ static uint8_t s_adv_addr[ADV_INSTANCE_MAX][6];
 static bool s_adv_addr_valid[ADV_INSTANCE_MAX];
 static uint8_t s_own_public[6];
 
-/** 广播 PDU 形态（实机对账开关，默认按实例默认）：见 ble_ctl_adv_pdu_form_t。 */
+/** 广播 PDU 形态（对账开关，默认按实例默认）：见 ble_ctl_adv_pdu_form_t。 */
 static uint8_t s_adv_pdu_form;
 
 const char *ble_controller_adv_pdu_form_name(uint8_t form)
@@ -285,7 +285,7 @@ static int read_flat(struct ble_gatt_access_ctxt *ctxt, const void *data, size_t
     return os_mbuf_append(ctxt->om, data, len) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
-/** 未知特征值写入留痕：长度 + 前 8 字节，只作实机对账（协议未定，不参与业务）。 */
+/** 未知特征值写入留痕：长度 + 前 8 字节，只作对账（协议未定，不参与业务）。 */
 static void log_write_head(const char *what, uint16_t tag, const struct os_mbuf *om)
 {
     const size_t total = OS_MBUF_PKTLEN(om);
@@ -315,7 +315,7 @@ static bool is_input_chr(uintptr_t tag)
     return tag == CHR_INPUT05 || tag == CHR_INPUT09;
 }
 
-/** 写入特征值 → 采集通道字节（controller.md「GATT 属性表」的句柄低字节，
+/** 写入特征值 → 采集通道字节（GATT 属性表的句柄低字节，
  *  PC 侧按同一张表还原通道名）。 */
 static uint8_t capture_channel(uintptr_t tag)
 {
@@ -373,12 +373,12 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
         case CHR_INPUT09:
             return read_flat(ctxt, slot ? slot->last_input_priv : (uint8_t[63]){0}, 63);
         case CHR_BASE_STATUS: {
-            /* 真机读值（已验证实现基线）。 */
+            /* 基线读值（已验证实现）。 */
             static const uint8_t base_status[7] = {0x04, 0x00, 0x05, 0x00, 0x01, 0x01, 0x00};
             return read_flat(ctxt, base_status, sizeof(base_status));
         }
         case CHR_DEVICE_ID: {
-            /* 真机读值（8B，语义未知）。 */
+            /* 读值（8B，语义未知）。 */
             static const uint8_t device_id[8] = {
                 0x36, 0x80, 0x74, 0xee, 0xbb, 0x3d, 0x8e, 0x13,
             };
@@ -396,7 +396,7 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
         return read_flat(ctxt, rate_zero, sizeof(rate_zero));
     }
     if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_DSC) {
-        /* 主机初始化末尾会向 0x000C/0x0010 写报告率描述符（实测 `85 00`）。
+        /* 主机初始化末尾会向 0x000C/0x0010 写报告率描述符（`85 00`）。
          * 写到这里说明主机的初始化序列已走到订阅输入前一步，日志留痕便于
          * 判断握手停在哪一步。 */
         uint8_t data[8] = {0};
@@ -458,7 +458,7 @@ static int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     return 0;
 }
 
-/** 注册回调：捕获关键特征值句柄并打印整表，供与 controller.md「GATT 属性表与服务架构」句柄比对。 */
+/** 注册回调：捕获关键特征值句柄并打印整表，供与 GATT 属性表比对。 */
 static void gatt_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
 {
     if (ctxt->op == BLE_GATT_REGISTER_OP_CHR) {
@@ -616,7 +616,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "MTU -> %u", event->mtu.value);
         break;
     case BLE_GAP_EVENT_REPEAT_PAIRING:
-        /* NS2 禁用标准 SMP（controller.md「自定义安全配对与密钥协商协议」）：忽略重复配对请求。 */
+        /* 忽略重复的 SMP 配对请求：标准 SMP 只用于链路加密，配对密钥由 Command 0x15 承担。 */
         ESP_LOGW(TAG, "repeat pairing ignored");
         return BLE_GAP_REPEAT_PAIRING_IGNORE;
     default:
@@ -636,9 +636,9 @@ static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t p
         ble_gap_ext_adv_stop(instance);
     }
     struct ble_gap_ext_adv_params params = {0};
-    /* legacy PDU 才是主机看得见、也认得住的形式（controller.md「Bluetooth LE 广播帧规范」：真机
-     * ADV_IND 可连接可扫描、附空 SCAN_RSP，广播间隔 30 ms）；扩展 PDU 按
-     * 规范不可同时置可连接与可扫描，主机侧实测完全看不见。 */
+    /* legacy PDU 才是主机看得见、也认得住的形式（ADV_IND 可连接可扫描、
+     * 附空 SCAN_RSP，广播间隔 30 ms）；扩展 PDU 按规范不可同时置可连接与
+     * 可扫描，主机侧完全看不见。 */
     params.legacy_pdu = legacy_pdu;
     params.connectable = 1;
     params.scannable = legacy_pdu;
@@ -712,10 +712,9 @@ void ble_controller_adv_start(uint8_t instance, uint8_t identity,
      * 沿用公共伪装地址。 */
     s_adv_identity[instance] = identity;
     ESP_LOG_BUFFER_HEX(TAG, payload, 31);
-    /* 默认形态是 legacy PDU（controller.md「Bluetooth LE 广播帧规范」：真机发现广播是可连接 + 可
-     * 扫描的 ADV_IND）：实机对账里扩展 PDU 的实例在主机侧完全
-     * 看不见——同一份载荷、同一个 public 地址，切成 legacy PDU 后主机立刻
-     * 连接并跑完 0x15 配对。对账开关可强制扩展形态做反向验证。 */
+    /* 默认形态是 legacy PDU（发现广播是可连接 + 可扫描的 ADV_IND）：扩展 PDU
+     * 的实例在主机侧完全看不见——同一份载荷、同一个 public 地址，切成 legacy
+     * PDU 后主机立刻连接并跑完 0x15 配对。对账开关可强制扩展形态做反向验证。 */
     const int legacy_pdu = s_adv_pdu_form == BLE_CTL_ADV_PDU_EXTENDED ? 0 : 1;
     adv_start_instance(instance, legacy_pdu, payload, addr);
 }
@@ -996,7 +995,7 @@ esp_err_t ble_controller_start(void)
     memset(s_adv_addr_valid, 0, sizeof(s_adv_addr_valid));
 
     /* NimBLE 对每条 ATT 通知都打一行 INFO（连接期间约 200 行/秒）：会把串口
-     * 日志淹掉、真机排查时看不到自己的事件，也会给上报循环增加格式化开销。
+     * 日志淹掉、排查时看不到自己的事件，也会给上报循环增加格式化开销。
      * 只留 WARN 及以上。 */
     esp_log_level_set("NimBLE", ESP_LOG_WARN);
 

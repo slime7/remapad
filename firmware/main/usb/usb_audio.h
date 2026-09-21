@@ -11,11 +11,9 @@ extern "C" {
 #endif
 
 /**
- * DS5 音频触觉通道（USB host 直插）：DualSense 的 USB 音频接口是 UAC1 的
- * 48kHz / 4ch PCM，后两路直接驱动左右触觉音圈（PS5 也是这么用的）。这里
- * 只认布局行声明了音频触觉能力的设备：claim 音频流 OUT 接口的非 0 备用
- * 设置，持续向等时端点送合成 PCM（扬声器两路恒零），震动参数经
- * usb_audio_haptic 随到随换。HID 输出报告的震动字节由数据面让位（见 dp）。
+ * DS5 音频触觉通道（USB host 直插）：DualSense 的 USB 音频接口是 UAC1 的 48kHz / 4ch PCM，
+ * 后两路直接驱动左右触觉音圈。只认布局行声明了音频触觉能力的设备：claim 音频流 OUT 接口的
+ * 非 0 备用设置并持续送合成 PCM，震动参数经 usb_audio_haptic 随到随换；HID 震动字节由数据面让位。
  */
 bool usb_audio_attach(usb_host_client_handle_t client, usb_device_handle_t dev,
                       const usb_config_desc_t *cfg, uint16_t vid, uint16_t pid);

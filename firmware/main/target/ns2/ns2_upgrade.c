@@ -73,7 +73,7 @@ ns2_upgrade_event_t ns2_upgrade_feed(ns2_upgrade_t *up, const uint8_t *data, siz
         return NS2_UPGRADE_MALFORMED;
     }
     /* 上一帧已经交出去：这一条记录起算新的一帧，不管它的类型字段是什么
-     * （实测每帧都以帧首记录开头，但缺首记录时也不能把两帧拼在一起）。 */
+     * （每帧都以帧首记录开头，缺首记录时不能把两帧拼在一起）。 */
     if (up->frame_ready) {
         up->frame_ready = false;
         up->frame_len = 0;

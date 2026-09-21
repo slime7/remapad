@@ -4,7 +4,23 @@
 当串口命令行、抓实机截图、推固件 OTA。设备只有一根 Type-C，USB-Serial/JTAG 既跑
 桥接帧也跑固件日志与 CLI 文本，因此这些能力共用同一个串口句柄，彼此不再抢口。
 
-  与免复位的 Win32 串口打开，是 PC 侧唯一的串口实现（含串口枚举与打开失败的提示文案）。
+```mermaid
+flowchart LR
+    Pad["手柄 HID 报告（hidapi）"] --> Session["Session：桥接帧编解码 + 串口唯一写者"]
+    Session -->|"REPORT 帧"| Dev["设备"]
+    Dev -->|"OUT_REPORT / FEEDBACK / HOST_RAW / 图像帧"| Session
+    CLI["命令行与交互命令"] --> Session
+    Shot["实机截图（--shot）"] --> Session
+    OTA["固件 OTA（--upgrade）"] --> Session
+    GUI["remapadgui.py（CustomTkinter）"] --> Session
+    Session -->|"CLI 文本行"| Dev
+```
+
+整条会话只有一个串口写者：后台线程（音频触觉发送、抓包落盘）只置标志，帧与命令都由主循环写。
+
+核心模块：
+
+- `link.py`：桥接帧编解码、会话线程与免复位的 Win32 串口打开，是 PC 侧唯一的串口实现（含串口枚举与打开失败的提示文案）。
 - `remapadctl.py`：桥接转发（读手柄、发桥接帧、把主机的震动与玩家灯写回手柄）、
   串口命令行、实机截图、固件 OTA 与交互式工具命令。
 - `remapadgui.py`：上面这套会话的图形入口（CustomTkinter），与命令行共用同一份
@@ -152,7 +168,8 @@ USB 手柄，按顺序选柄可能把它当桥接目标抓走——输入转发�
 
 `--dump` 打印的每行是「时间戳 + 报告长度 + 原始字节」，用来与固件 `pad/layouts/` 里
 对应系列的偏移对账：按住某个键只看一位变化，就能确认该键的字节与位序；摇杆推到极限
-看量程与方向。对出来的偏移回填该系列的布局文件，比在真机上猜「为什么按 A 出了 B」快得多。
+看量程与方向。对出来的偏移回填该系列的布局文件，比对结果与核对状态见
+[../docs/controller-ps.md](../docs/controller-ps.md)。
 
 ## 会话与设备共用一根 Type-C
 
@@ -179,21 +196,11 @@ USB 手柄，按顺序选柄可能把它当桥接目标抓走——输入转发�
 ## 3.5mm 耳机状态
 
 固件把输入设备报告里的耳机状态经 NS2 报文报给主机（`0x09` 偏移 `0x0D` 与 `0x05` 的耳机
-插入位）。在 DualSense Edge（`0x0DF2`，蓝牙 `0x31`）上按插拔差分核对完毕：
-**第 55 字节** bit0 是插入、bit1 是带麦，插 → 拔 → 插得到 `0x03` → `0x00` → `0x01` →
-`0x03`（第 56 字节跟着 bit0 走）。该行已登记 `headset_off = 55` 与
-`PAD_HEADSET_PS`；DS4 与 DS5 有线行的耳机字节还没有抓包，保持不解析。
-
-主机侧同一晚做过取值 A/B（`headset <值>` 后 `wake` 重建会话，用 `link` 看 `notify=`）：
-
-| `0x0D` 取值 | 主机反应 |
-| :--- | :--- |
-| `0x00` 未插入 / `0x05` 插入 / `0x0D` 插入另一档 | 保持 `0x000E` 订阅，按上报节奏收帧（15 ms 下 66 帧/秒、`txf=0`） |
-| `0x07` / `0x0F` 带麦 | 订阅后约 150 ms 取消订阅，输入不再被采用 |
-
-所以 auto 派生值只报「插入」（`0x05`），带麦位不上行：主机认那一档的前提是 `0x002C`
-上的音频 / 麦克风通路，本轮不做。要复现这组对照：`headset 0x07`（或 `0x0F`）→ `wake`
-→ `link` 看 `notify=--`；`headset auto` 回到派生值。
+插入位）：输入设备侧的字节偏移与核对状态见 [../docs/controller-ps.md](../docs/controller-ps.md)
+的「耳机状态」，主机侧接受的档位与取值对照见
+[../docs/controller-switch2.md](../docs/controller-switch2.md) 的输入报告一节。
+`headset <值>` 覆盖派生值、`headset auto` 回到按输入设备派生；要复现主机侧的取舍：
+`headset 0x07`（或 `0x0F`）→ `wake` → `link` 看 `notify=--`。
 
 换手柄或换系列时按同样步骤复核：
 
@@ -227,7 +234,7 @@ amiibo 上传四帧（`--amiibo` 与交互模式 `:amiibo` 走这套）：
 `AMIIBO_DATA` 是偏移 u16 小端 + 最多 200 字节数据（偏移越过已收字节数报错，重复帧幂等）；
 `AMIIBO_END` 无载荷；设备对每帧回 `AMIIBO_ACK`：状态 + 错误码 + 已收字节 u32 小端 + 槽位号
 （仅 DONE 有意义，0xFF 表示无）。收齐后设备落 storage 分区槽位（572 字节记录，纯镜像签名补零）并回 DONE，
-串口 `amiibo select <n>` 选用（NFC 标签模拟见 [../docs/controller.md](../docs/controller.md) 的 NFC 章节）。
+串口 `amiibo select <n>` 选用（NFC 标签模拟见 [../docs/controller-switch2.md](../docs/controller-switch2.md) 的 NFC 章节）。
 
 设备在主机下发 NS2 反馈（震动 / 玩家灯 / 触觉采样）时回发两种帧：
 `FEEDBACK` 是归一化状态（打印与对账用，DS5 桥接时还驱动 PC 侧音频触觉合成；
@@ -243,10 +250,10 @@ PC 侧只把它交给 `hid.write()`，不参与任何映射（PS 系蓝牙形态
 映射规则只在固件布局里有一份，PC 只做哑渲染）。
 写回经 `WriteBackGate` 限速（30ms 一条、被挡的帧留最新一帧到期补写）：
 游戏内震动包络逐包都变、设备侧去重压不住写回量，蓝牙 HID 写回又慢——
-不加限速会把会话循环拖到输入转发卡顿（实机：蓝牙手柄游戏内约 100 条/秒）。
+不加限速会把会话循环拖到输入转发卡顿。
 
 `FEEDBACK` 帧的打印按秒合并（`FeedbackThrottle`）：震动效果的包络逐帧在变，
-逐条打印会把日志区刷爆（游戏内实测每秒上百条）；窗口内只打第一条，
+逐条打印会把日志区刷爆；窗口内只打第一条，
 下一条带「已合并 N 条」。写回手柄与帧计数不受限频影响。
 
 ## 主机原始输出采集（--capture / :capture）
@@ -271,7 +278,7 @@ uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad
 +1.250s cmd[0x14] seq=001   9B 09 91 01 07 00 01 00 00 01
 ```
 
-通道字节取 controller.md「GATT 属性表」的句柄低字节（`base-config` 0x05、
+通道字节取 controller-switch2.md「GATT 属性表」的句柄低字节（`base-config` 0x05、
 `rumble` 0x12、`cmd` 0x14、`composite` 0x16、`fwupg` 0x18、扩展通道 0x22-0x32，
 含音频下行 0x2C）；单条写入超过 253 字节（升级数据块）截断并带 `trunc` 标记；
 `seq` 是设备侧记录号，跳号说明设备队列满、丢过包（收尾总结里按处数汇总）。
@@ -281,52 +288,21 @@ uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad
 
 ## DS5 音频触觉（桥接路径，--no-audio-haptics 关闭）
 
-DualSense 连在 PC 上时音频接口由 PC 持有，板卡够不着——触觉波形改由 PC 侧送，
-按连接方式走两条通路（[ADR 0046](../docs/adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)）：
+DualSense 连在 PC 上时音频接口由 PC 持有，触觉与喇叭改由 PC 侧送，按连接方式走两条通路：
 
-- **USB 直插 PC**：对它的 4ch 扬声器端点开 WASAPI 共享流，通道 3/4（RL/RR，直连左右
-  触觉音圈）放固件重整出的触觉子帧、通道 1/2（手柄小喇叭）放采样提示音的发声段，
-  没有真正的声音时两路填充 0 静音。
-- **蓝牙连接 PC**：HID 之外没有音频接口，触觉流走私有报告，默认 0x32
-  （142 字节 SAxense 形态：报文 ID + 137 字节报文体 + 尾部 CRC32，packet 0x11
-  配置/序号 + packet 0x12 承载 64 字节 PCM），3000Hz / 2 声道 / 8-bit、每
-  10.67ms 一报由发送线程推送；发声段折进两侧音圈（蓝牙没有扬声器通道，音圈
-  是它唯一的载体——摸得到、听不到）。
-  PyAV/libopus 可用时发声段升级 0x36（398 字节 vds 形态）：节拍与一报里触觉
-  PCM 的时长一致（10.67ms，触觉块按 3kHz 对表，不折喇叭），由 200 字节 Opus
-  喇叭块（48kHz 立体声 CBR 160kbit）经手柄真喇叭出声，状态块把喇叭音量钉在 PS5
-  缺省档、输出路径钉在手柄喇叭。
-  两条私有流都按内容门控：触觉/发声静默超过尾长就整流停发——蓝牙无线电是
-  2.4GHz 公共介质，常驻空包会和同频段设备互相干扰（实机：无线鼠标卡顿、
-  触控板幻手势弹 OSK），触觉块到手即播、无会话可保活。默认关闭
-  （`--bt-haptics` 启用，写回被拒自动回落 HID 震动）。
+- **USB 直插 PC**：对 4ch 扬声器端点开 WASAPI 共享流，通道 3/4（音圈）放触觉子帧、
+  1/2（手柄小喇叭）放发声段，没有声音时两路静音。
+- **蓝牙连接 PC**（默认启用，`--no-bt-haptics` 关掉回落 0x31 两带震动）：有 PyAV/libopus 时用 0x36
+  （触觉 PCM + Opus 喇叭块，发声段由手柄真喇叭出声），没有 libopus 时回落 0x32（发声段折进两侧音圈）。
 
-两条通路对音圈的驱动完全一致：发声段铺到扬声器通道之外同时折进两侧音圈——蓝牙上
-没有扬声器通道，音圈是发声段唯一的载体，只发触觉不会把发声段静默丢掉；USB 的扬声器
-是额外加音。
-
-子帧参数来自 `FEEDBACK` 帧（57 字节 HD 版）：NS 的波形描述已由固件按布局行 `hd`
-规则按时间顺序重整（震动映射为震动、采样发声段映射为音频，频率落地值由固件算好），PC 只做
-哑渲染，刻度与固件 `haptic_synth.c` 一致；老固件的 16 字节帧回落两带正弦（扬声器
-恒零）。两条通路启用后 PC 都发固件 CLI `haptic audio on`，设备据此把桥接写回的
-HID 震动字段清零（同一对音圈不双驱动）；会话退出或手柄断开时发 `haptic audio off`
-复位，通路开不起来则静默回落 HID 震动。桥接断开时让位自动失效（设备侧按
-`input_source_attached` 门控），不会卡在无震动状态。
-
-实现细节（`pc/ds5_haptics.py`）：音频流用 `RawOutputStream`（int16 字节回调），
-不用 `OutputStream`——后者的回调强制 numpy 数组，而 numpy 的原生扩展在会话
-进程里首载入会卡死（faulthandler 抓栈定位）；开流在后台线程
-（WASAPI 要秒级），串口只允许主循环一个写者，后台线程只置通知标志。蓝牙的私有流
-发送线程独立于会话主循环（蓝牙 HID 写回慢，两条私有流都约 94 报/秒，节拍按一报里
-PCM 的时长走、渲染与写回耗时不计入周期），写的是会话已打开的同一 HID 句柄，按
-描述符声明的原始形态直写（Windows 接受按报告 ID 声明长度的短写，与 0x31 的 78
-字节写法同理）；写回被拒经 on_error 回落
-HID 震动。震动的起止在渲染端过音圈包络门（起音 1ms、收音 15ms，收音锁定最后
-发声的子帧淡出）：NS 震动的起止在承载上是块对齐硬切，只占一块的短震动会被截没、
-收震落点生硬——门控让短震动拉到可感知的长度、结尾平滑有界，子帧序列内部的静默
-切片不参与门控（主机排的时间轴不变）；整段静默后的新震动从子帧 0 重播，蓝牙
-空闲停发的发送线程由 `set_params` 的新内容即时唤醒（启动不等 20ms 兜底轮询）。
-包络门与板载合成（`haptic_synth`）同一条曲线，USB 直插板卡与蓝牙两条承载手感一致。
+子帧参数吃 `FEEDBACK` 帧的 57 字节 HD 版（固件已按布局行 `hd` 规则重整好，PC 只做哑渲染；
+老固件的 16 字节帧回落两带正弦、扬声器恒零）。两条通路都按内容门控（静默整流停发），
+启用后发固件命令 `haptic audio on` 让 HID 震动字节让位，会话退出或断开时 `haptic audio off` 复位，
+开流失败或写回被拒静默回落 HID。
+报文布局、承载选择、让位语义、增益与核对状态见 [../docs/controller-ps.md](../docs/controller-ps.md)
+的「音频触觉与 HD 触觉」，取舍见 [ADR 0042](../docs/adr/0042-ds5-audio-haptics-onboard-synthesis.md)、
+[ADR 0043](../docs/adr/0043-ds5-bridge-pc-side-audio-haptics.md) 与
+[ADR 0046](../docs/adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)。
 
 ## 固件 OTA（--upgrade）
 
@@ -365,20 +341,17 @@ uv run python -m unittest discover -s tests -t . -v
 
 ## 已知限制
 
-- 家族表里的偏移多数取自公开资料，尚未逐条实机核对（只有 DualSense 蓝牙的 0x31
-  行按 DualSense Edge 实测核对过）；核对前以 `--dump` 的结果为准，不符处回填
-  `pad/layouts/` 下对应系列的文件。PS 系按 PID 分行（DS3、DS4、DualSense 有线都报 0x01），
+- 家族表里的偏移多数取自公开资料，尚未逐条核对；哪些行已核对、哪些字段还是初值以
+  [../docs/controller-ps.md](../docs/controller-ps.md) 的「核对状态」为准，核对前先看 `--dump` 的结果，
+  不符处回填 `pad/layouts/` 下对应系列的文件。PS 系按 PID 分行（DS3、DS4、DualSense 有线都报 0x01），
   `--list` 的型号与连接方式可用于判断命中了哪一行。
-- DualSense 蓝牙行的耳机状态字节（第 55 字节 / `PAD_HEADSET_PS`）已在 DualSense Edge 上核对，
-  主机接受「插入」档（0x05 / 0x0D）而拒绝「带麦」档（0x07 / 0x0F，约 150 ms 后掉订阅），
-  因此派生值只报插入；DS4 与 DS5 有线行未核对，方法见上文「3.5mm 耳机状态」。主机经 `0x002C`
-  下发的耳机音频流当前只做日志留痕，尚未转发。
+- 耳机状态字节与主机侧接受的档位见 [../docs/controller-ps.md](../docs/controller-ps.md) 与
+  [../docs/controller-switch2.md](../docs/controller-switch2.md)，复核步骤见上文「3.5mm 耳机状态」。
+  主机经 `0x002C` 下发的耳机音频流当前只做日志留痕，尚未转发。
 - 转发的是原始报告，不做任何按键重排：重排规则（用户自定义映射）在固件侧，本轮未做。
 - 拔线或退出程序时发送 `DETACH` 帧，设备侧状态回到静置，不会留下卡住的按键。
-- 反馈写回依赖固件里的输出报告描述（DS4 / DualSense / Xbox / DS3 / NS1 各一行），这些描述多数取自公开资料：
-  DualSense 蓝牙（0x31）行已按 DualSense Edge 实机核对——帧头 `00 10` 加尾部 CRC32，缺 CRC 时手柄整份报告都不接受（写回却照样返回成功）；
-  蓝牙上主机自己的连接动画会一直盖着灯，灯条设置（`valid_flag2` + `lightbar_setup`）必须与颜色写在同一帧里才压得住，玩家灯按五颗灯的模式表点亮。
-  其余行同样未核对；写回没效果时先看该系列布局行的 `out` 描述。
+- 反馈写回依赖固件里的输出报告描述（DS4 / DualSense / Xbox / DS3 / NS1 各一行）：描述与核对状态见
+  [../docs/controller-ps.md](../docs/controller-ps.md)；写回没效果时先看该系列布局行的 `out` 描述。
 - 手柄同时按住 L1+R1+L3+R3（约 300 ms）会被设备捕获成屏幕操控模式：设备先补一帧全松开、其后续发中性帧（玩家的按键不再上行），之后方向键移动屏幕焦点、圆圈键等价于点按屏幕。
   再按一次同样的组合退出（[ADR 0028](../docs/adr/0028-pad-combo-captures-screen.md)）。桥接程序不感知这个状态，转发照旧；
   不想要这个行为就别按这个组合，串口 `ui on` / `ui off` 可以直接置位验证。

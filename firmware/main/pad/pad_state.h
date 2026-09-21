@@ -10,16 +10,11 @@ extern "C" {
 
 /**
  * 私有手柄格式（输入通路的中间模型，见 docs/ABSTRACTIONS.md「输入通路」）：
- * 各家手柄（Xbox / PS / Steam）的报告先由 pad_device 解析成这份模型，再由
- * target/ 下的目标编码器转成目标手柄报文。模型与任何目标家族解耦，因此
+ * 各家报告先由 pad_device 解析成这份模型，再由 target/ 下的编码器转成目标报文；
  * 新增手柄只改家族表，新增目标只加一份编码器。
  *
- * 坐标约定：四轴与双扳机统一为 0-4095 整数，摇杆中位 `PAD_AXIS_CENTER`；
- * 轴向按数学意义取正——X 向右为正、Y 向上为正，输入侧负责把各家相反的
- * Y 轴翻过来。面键沿用 PS 的键名按位置固定：Triangle 上、Circle 右、Cross 下、
- * Square 左——Xbox 与 Nintendo 的 A/B/X/Y 标签位置各不相同（Xbox 的 A 在下、
- * Nintendo 的 A 在右），用 PS 名可以避免「A 到底是哪个键」这类混淆，家族表
- * 负责把各家的物理键填到对应位置。
+ * 坐标：四轴与双扳机统一 0-4095、摇杆中位 PAD_AXIS_CENTER，X 向右为正、Y 向上为正；
+ * 面键沿用 PS 键名按位置固定（Triangle 上、Circle 右、Cross 下、Square 左），家族表负责把物理键填到对应位置。
  */
 
 #define PAD_AXIS_MIN 0

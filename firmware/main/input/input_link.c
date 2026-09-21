@@ -22,7 +22,7 @@ static const char *TAG = "remapad_input";
 #define INPUT_LINK_RX_BUF 4096
 #define INPUT_LINK_TX_BUF 1024
 /* CLI 桥接命令在这条任务里执行：amiibo 槽位读写走 SPIFFS/VFS 的 fopen
- * 调用链（栈深），4096 会溢出（实机 select 即溢出），定 8192。 */
+ * 调用链（栈深），4096 会溢出（select 就会），定 8192。 */
 #define INPUT_LINK_TASK_STACK 8192
 #define INPUT_LINK_TASK_PRIO 6
 /** 控制帧（PING/OTA 应答）等着写进发送环的上限：日志刷屏时环会满，但绝不无限等。 */

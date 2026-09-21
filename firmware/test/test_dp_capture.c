@@ -1,7 +1,5 @@
 /**
- * 主机输出原始采集（dp_capture.c）：入队丢帧或次序错乱会表现为 PC 抓到的
- * 数据缺包乱序，截断标志写错会静默丢掉升级长块的尾巴，开关残留会把上一次
- * 抓包的字节混进下一次——排队、上限、丢包计数与开关清理都在主机上钉住。
+ * 主机输出原始采集（dp_capture.c）主机端用例：排队次序、容量上限、截断标志、丢包计数与开关清理。
  */
 #include "host_test.h"
 
@@ -145,7 +143,7 @@ static void re_enabling_starts_from_a_clean_state(void)
     dp_capture_counts(&pushed, &dropped);
     CHECK_EQ(pushed, 0U);
     CHECK_EQ(dropped, 0U);
-    /* 记录号也从 0 重新起算：每次抓包的 seq 各自独立。 */
+    /* 记录号也从 0 重新起算：每次采集的 seq 各自独立。 */
     dp_capture_host_write(DP_CAPTURE_CH_CMD, (const uint8_t *)"\x07", 1);
     REQUIRE(pop(payload, sizeof(payload), &len, &slot));
     CHECK_EQ(slot, 0U);

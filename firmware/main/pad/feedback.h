@@ -88,10 +88,33 @@ void pad_feedback_apply(pad_feedback_t *held, uint8_t fields, const pad_feedback
 bool pad_feedback_equal(const pad_feedback_t *a, const pad_feedback_t *b);
 
 /**
+ * 采样音色的段状态（幅度段 + 段音高）是否与已投递的不同：段由固件按采样 ID
+ * 的时序合成（主机只给起停与 ID），而投递原先只在主机事件到达时发生——查找
+ * 手柄页的采样事件约 15Hz，段边界因此被量化到 64ms 的栅格上（震动/蜂鸣的
+ * 起止错位、短段整段丢失）。数据面每 tick 用本判据置待发位，投递精度回到
+ * tick（5ms）。tone_hz 只在「发声」段参与（其他段不铺扬声器）。
+ */
+bool pad_feedback_segment_changed(const pad_feedback_t *sent, uint8_t env, uint16_t tone_hz);
+
+/**
+ * 让位版本的输出报告：音频触觉接手音圈时用的编码形态——马达字节恒零、
+ * `valid_flag0` 换成布局行 `quiet_presets` 声明的那一组（DS5 两行是 0xA1：
+ * 音频控制与音量档照旧，震动位段是「带 COMPATIBLE_VIBRATION、不带
+ * HAPTICS_SELECT」的那次交还切换）。手柄的音圈模式是粘性的：HAPTICS_SELECT
+ * 置位后停在震动仿真模式、之后的触觉 PCM 被静音，因此让位期间不能照抄完整
+ * 预置的 0xA3，也不能把 `valid_flag0` 整个留零（留零等于不交还，音圈停在
+ * 震动仿真模式、马达字节又已清零，表现是「没有震动、只剩玩家灯」）。
+ * 布局行没声明 `quiet_presets` 时与 pad_feedback_encode 同形。
+ */
+size_t pad_feedback_encode_quiet(pad_conn_t conn, uint16_t vid, uint16_t pid,
+                                 const pad_feedback_t *feedback, uint8_t *out,
+                                 size_t out_len);
+
+/**
  * 主机震动振幅的感知重映射（0-255 → 0-255）：NS2 的振幅是 LRA 线性驱动档位，
  * 小档位在共振频点上也能摸到；ERM 偏心马达（DualSense / DualShock / Xbox）
  * 低占空比整段落在死区里，线性直迁会让游戏里中低强度的震动几乎无感
- * （实机：USB 直插游戏震动非常轻）。按 out = 40 + 215·√(amp/255)
+ * （USB 直插游戏震动非常轻）。按 out = 40 + 215·√(amp/255)
  * （amp > 0）抬低端、压顶端，0 仍映射 0。采样音色与 CLI 注入写的是设备刻度，
  * 不经过本表。
  */
@@ -105,7 +128,7 @@ void pad_feedback_bt_seq_reset(void);
  * 采样音色在 age_ms 的当前段：返回段内幅度（0 = 停顿），remain_ms（可空）
  * 给出距下一段段边界的毫秒数，tone_hz（可空）给出「发声」段的音高（Hz，
  * 0 = 该段不发声或用布局行的 beep_hz 缺省）。主机只发采样 ID、不带播放形态
- * （实机抓包确认它以十几 Hz 重发同一 ID），真手柄的节奏由其内部音色库给
+ * （同一 ID 以十几 Hz 重发），真手柄的节奏由其内部音色库给
  * 出——本设备对应的就是这里的采样音色表：按 ID 登记各自的响/停时间线
  * （段边界毫秒 → 段内幅度与音高），未登记的采样回落缺省音色（一次短脉冲
  * 后静默）。登记条目按各自周期循环播放，缺省音色不循环（主机要重复播放就

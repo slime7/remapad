@@ -12,12 +12,9 @@ static const uint32_t s_btn_map[24] = {
     0, 0, 0, 0,
 };
 
-/** DualShock 3（0x054C:0x0268）：有线与蓝牙都报 0x01、字段偏移一致（蓝牙多一层
- *  传输头，剥掉后与有线相同），因此一行覆盖两种连接。运动字段是 41-46 的大端加
- *  速度加 47-48 的陀螺，与解析器要求的 6×int16 小端不同；电量也不在输入报告里
- *  （要靠特性报告查询），两处都不登记。按键位是否为低电平有效（0 表示按下）与
- *  蓝牙是否多一字节前缀，都要等 `pc/remapadctl.py --dump` 实测确认，当前按高电平
- *  有效、49 字节形式登记。 */
+/** DualShock 3（0x054C:0x0268）：有线与蓝牙都报 0x01、字段偏移一致，因此一行覆盖两种连接。
+ *  运动字段的字节序与解析器约定不同、电量也不在输入报告里，两处都不登记；
+ *  按键极性与蓝牙前缀长度待核对，字段表与核对状态见 docs/controller-ps.md。 */
 static const pad_layout_t s_rows[] = {
     {
         .family = PAD_FAMILY_PS,
@@ -36,9 +33,8 @@ static const pad_layout_t s_rows[] = {
         .caps = PAD_CAP_TRIGGER_ANALOG | PAD_CAP_RUMBLE,
         .invert_y = true,
         .btn_map = s_btn_map,
-        /* 输出报告 0x01（48 字节）：b2/b3 是右小马达的时长与强度、b4/b5 是左大
-         * 马达的时长与强度，时长写 0xFF 表示保持到下一条命令。偏移取自公开实现，
-         * 未实机核对；LED 控制要另走 SET_REPORT 序列，本轮不映射。 */
+        /* 输出报告 0x01（48 字节）：b2/b3 是右小马达时长与强度、b4/b5 是左大马达，时长写 0xFF
+         * 表示保持到下一条命令；偏移取自公开实现。LED 要另走 SET_REPORT 序列，本轮不映射。 */
         .out = {
             .report_id = 0x01,
             .len = 48,

@@ -1,7 +1,6 @@
 """DS5 蓝牙私有触觉流（0x32 报告）的编码与发送：报文布局、CRC32、序号与
-渲染声道的黄金断言。参考 SAxense.c（首个与真机互通的公开实现）、SDL 的
-Switch 2 驱动与 Linux hid-playstation.c 的 CRC 规则；两条通路都没有真机可测，
-字节在这里钉死。
+渲染声道的黄金断言。参考 SAxense.c（公开的互通实现）、SDL 的
+Switch 2 驱动与 Linux hid-playstation.c 的 CRC 规则；字节在这里钉死。
 """
 
 import math
@@ -13,6 +12,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ds5_haptics  # noqa: E402  （先把 pc/ 放进来再导入）
+
+try:
+    import av  # noqa: F401  （只在这些用例里用，缺依赖就跳过）
+    HAS_AV = True
+except Exception:  # noqa: BLE001 - 缺 PyAV/libopus 都按不可用处理
+    HAS_AV = False
 
 SILENT_PCM = bytes(ds5_haptics.BT_PCM_BYTES)
 
@@ -35,7 +40,7 @@ def silent_side() -> dict:
 
 class BuildReportTest(unittest.TestCase):
     def test_report_layout_golden(self):
-        """报文逐字段（SAxense.c 的真机互通布局，共 142 字节）：0x32 头、
+        """报文逐字段（SAxense.c 的互通布局，共 142 字节）：0x32 头、
         packet 0x11 配置/序号、packet 0x12 承载 PCM、补零到 138 字节，
         尾部 4 字节 CRC。"""
         pcm = bytes(range(64))
@@ -208,6 +213,107 @@ class RenderPcmTest(unittest.TestCase):
 
 
 class SenderLoopTest(unittest.TestCase):
+    def test_engagement_is_visible_in_the_log(self):
+        """「私有流是否真的在驱动」只有日志能看出来：开关打开与线程启动只说明
+        通路就绪，收到主机的 HD 子帧才是真的开始驱动音圈——这一行只在
+        第一次接到内容时打一条。"""
+        class FakeDevice:
+            def __init__(self) -> None:
+                self.writes = []
+
+            def write(self, report):
+                self.writes.append(report)
+                raise OSError("done")
+
+        class Reporter:
+            def __init__(self) -> None:
+                self.lines = []
+                self.errors = []
+
+            def line(self, text):
+                self.lines.append(text)
+
+            def error(self, text):
+                self.errors.append(text)
+
+        reporter = Reporter()
+        device = FakeDevice()
+        sender = ds5_haptics.Ds5HapticsBt(device, reporter)
+        sender.set_params({"hd": {"l": {"count": 3, "keys": (((55, 128), (0, 0)),) * 3},
+                                  "r": silent_side(),
+                                  "speaker": (0, 0)}})
+        sender._run()
+        self.assertEqual(len(reporter.lines), 1)
+        self.assertIn("HD 子帧", reporter.lines[0])
+        self.assertIn("0x32", reporter.lines[0])
+        # 同一行带首帧的子帧档位：靠它区分「固件没放大」（增益 5 上下）与
+        # 「标定值」（增益 20 上下）。
+        self.assertIn("55Hz/128", reporter.lines[0])
+        self.assertIn("静默", reporter.lines[0])
+
+        # 没有 HD 段（老固件/未接入）不冒充「已驱动」。
+        reporter.lines.clear()
+        sender = ds5_haptics.Ds5HapticsBt(device, reporter)
+        sender.set_params({"hd": None})
+        sender._stop.set()
+        sender._run()
+        self.assertEqual(reporter.lines, [])
+
+    def test_short_write_is_counted_and_reported(self):
+        """短写（hidapi 返回值 < 报告长度）要计数并提示：只捕异常会把「驱动没收
+        下这一拍」当成成功——蓝牙会频繁漏震而统计一切正常。"""
+        class ShortDevice:
+            def __init__(self) -> None:
+                self.writes = 0
+
+            def write(self, report):
+                self.writes += 1
+                if self.writes >= 2:
+                    raise OSError("done")
+                return len(report) - 1  # 少一个字节 = 这一拍没出去
+
+        class Reporter:
+            def __init__(self) -> None:
+                self.lines = []
+
+            def line(self, text):
+                self.lines.append(text)
+
+            def error(self, text):
+                self.lines.append(text)
+
+        reporter = Reporter()
+        sender = ds5_haptics.Ds5HapticsBt(ShortDevice(), reporter)
+        sender.set_params({"hd": {"l": {"count": 1, "keys": (((135, 200), (0, 0)),)},
+                                  "r": silent_side(),
+                                  "speaker": (0, 0)}})
+        sender._run()
+        self.assertTrue(any("短写" in line for line in reporter.lines))
+        self.assertIn("短写 1 份", sender.stats())
+
+    def test_padded_write_is_not_a_short_write(self):
+        """补齐后的写回不算短写：Windows 的 hidapi 把短于描述符声明长度的写回
+        补齐到 OutputReportByteLength（DS5 蓝牙集合声明 547）再交驱动，返回值比
+        报告长是常态——按「不等于报告长度」判定会每拍重发一次，音圈 PCM 被双倍
+        喂进控制器的队列（触觉整段失真、断续）。"""
+        class PaddedDevice:
+            def __init__(self) -> None:
+                self.writes = 0
+
+            def write(self, report):
+                self.writes += 1
+                if self.writes >= 2:
+                    raise OSError("done")
+                return 547  # 补齐到描述符声明的输出报告长度
+
+        sender = ds5_haptics.Ds5HapticsBt(PaddedDevice(), None)
+        sender.set_params({"hd": {"l": {"count": 1, "keys": (((135, 200), (0, 0)),)},
+                                  "r": silent_side(),
+                                  "speaker": (0, 0)}})
+        sender._run()
+        self.assertNotIn("短写", sender.stats())
+        self.assertIn("写回统计：1 份", sender.stats())
+
     def test_sender_pushes_well_formed_reports(self):
         """发送线程按节拍推报：序号逐报递增、每份 CRC 都对得上、错误即收尾。"""
         import threading
@@ -237,8 +343,7 @@ class SenderLoopTest(unittest.TestCase):
             self.assertNotEqual(report[13:77], SILENT_PCM)  # 左侧子帧在震
 
         # 空闲整流停发：蓝牙无线电是公共介质，常驻空包会和同频段设备互相
-        # 干扰（实机：2.4GHz 无线鼠标卡顿、触控板幻手势弹 OSK），静默期
-        # 一报不发。
+        # 干扰，静默期一报不发。
         sender = ds5_haptics.Ds5HapticsBt(device)
         sender.set_params({})
         device.writes.clear()
@@ -286,7 +391,7 @@ class SenderLoopTest(unittest.TestCase):
 
     def test_reports_go_out_raw_saxense_length(self):
         """0x32 报文按 SAxense 的 142 字节原始形态直写、绝不填充：蓝牙报告
-        描述符（nondebug/dualsense 实测）声明 0x32 为 141 字节数据（报告 ID +
+        描述符（nondebug/dualsense）声明 0x32 为 141 字节数据（报告 ID +
         137 报文体 + 4 CRC = 142），547 是同族 0x39 的长度——零填充到 547 送出
         的是变长报文，手柄对它无反应；Windows 接受按报告 ID 声明长度的短写
         （0x31 的 78 字节写法同理）。"""
@@ -443,6 +548,45 @@ class SenderTimingTest(unittest.TestCase):
                 self.assertAlmostEqual(frames / span, ds5_haptics.BT_RATE,
                                        delta=ds5_haptics.BT_RATE * 0.002)
 
+    def test_pair_form_lands_two_blocks_per_report(self):
+        """成对形态（0x39）：一报 2 块触觉 + 2 帧喇叭、节拍 21.33ms——多带的
+        那一块是链路抖动的水垫（单块形态下一拍迟到 10.67ms 就断音），报数减半
+        也少一半链路开销；触觉块仍按 64 字节声明长度、两块连着放。"""
+        class FakeEncoder:
+            def encode(self, pcm: bytes) -> bytes:
+                return bytes(ds5_haptics.BT36_SPEAKER_BYTES)
+
+        class CountingDevice:
+            def __init__(self, clock) -> None:
+                self._clock = clock
+                self.reports = []
+                self.stamps = []
+
+            def write(self, report):
+                self.reports.append(bytes(report))
+                self.stamps.append(self._clock.now)
+                if self._clock.now > 0.5:
+                    raise OSError("done")
+
+        clock = _FakeClock()
+        device = CountingDevice(clock)
+        sender = _GridSender(device, clock, speaker_encoder=FakeEncoder(), pair=True)
+        sender.set_params(self._speaker_params())
+        sender._run()
+        self.assertGreater(len(device.reports), 5)
+        first = device.reports[0]
+        self.assertEqual(len(first), ds5_haptics.BT39_REPORT_LEN)
+        self.assertEqual(first[0], ds5_haptics.BT39_REPORT_ID)
+        self.assertEqual(first[3], 6)  # 配置包长度
+        self.assertEqual(first[10], 0x12 | 0x80)
+        self.assertEqual(first[11], ds5_haptics.BT_PCM_BYTES)
+        self.assertEqual(first[140], 0x13 | 0x80)
+        self.assertEqual(first[141], ds5_haptics.BT36_SPEAKER_BYTES)
+        gaps = [b - a for a, b in zip(device.stamps, device.stamps[1:])]
+        for gap in gaps:
+            self.assertAlmostEqual(gap, ds5_haptics.BT39_INTERVAL_S, places=9)
+        self.assertIn("目标 21.33ms", sender.stats())
+
     def test_idle_wake_does_not_backfill_the_grid(self):
         """空闲唤醒后第一拍立刻发出、第二拍起仍按节拍，不连发补报：空闲前的
         网格早就过期，唤醒后一口气连发几份会把控制器的 PCM 队列一次塞满
@@ -500,7 +644,7 @@ class BuildBt36ReportTest(unittest.TestCase):
         self.assertEqual(report[1], 0x50)  # 报告序号在高半字节
         self.assertEqual(report[2], 0x91)  # 配置包 0x11 + sized
         self.assertEqual(report[3], 7)
-        self.assertEqual(report[4], 0xFF)  # 音频段全开（vds 实发值）
+        self.assertEqual(report[4], 0xFE)  # 音频段全开但不开麦克风采集（0xFF 会开双工）
         self.assertEqual(report[5:10], bytes([64] * 5))  # 音频缓冲长度
         self.assertEqual(report[10], 0xBC)  # 配置包滚动序号
         self.assertEqual(report[11], 0x90)  # 状态块 0x10 + sized
@@ -528,7 +672,7 @@ class BuildBt36ReportTest(unittest.TestCase):
         """状态块沿用 vds 运行态（喇叭音量 100、输出路径钉手柄喇叭、触觉走
         音频块），但灯条与玩家灯字节全零：手柄的灯归固件的 0x31 写回管，
         0x36 不掺和。输出路径不路由到手柄喇叭的话，喇叭块会播进没插的
-        耳机口（实机：0x36 触觉可达而喇叭无声）。"""
+        耳机口（0x36 触觉可达而喇叭无声）。"""
         state = ds5_haptics.BT36_STATE
         self.assertEqual(len(state), 63)
         self.assertEqual(state[0], 0xFD)  # 音频各段使能 + 喇叭音量更新
@@ -596,23 +740,37 @@ class BuildBt36ReportTest(unittest.TestCase):
         self.assertEqual(device.writes[0][0], ds5_haptics.BT_REPORT_ID)
         self.assertNotEqual(device.writes[0][13:77], SILENT_PCM)  # 发声段折进音圈
 
-    def test_speaker_pcm_renders_48k_blocks(self):
-        """48kHz 喇叭块的哑渲染：10ms = 480 帧，发声段音色爬起音包络，
-        静默段归零；相位与 3kHz 音圈通路的状态分开（互不拖拽）。"""
+    def test_speaker_block_carries_one_full_beat(self):
+        """喇叭块要装下一整拍的内容：手柄按「一块对一拍」消耗 PCM（480 样本
+        铺满 10.667ms 节拍 ≈ 45kHz），公开实现是把主机 512 样本的块重采样成
+        480 再编一帧；只送 10ms 的内容会每秒欠喂 6.25%（表现为周期性顿挫）。
+        用 880Hz 音的过零间距直接量合成时钟：45kHz 下周期 51.1 样本，按 48kHz
+        合成会是 54.5 样本。静默段归零、相位与 3kHz 音圈通路分开。"""
         state = ds5_haptics._VoiceState()
-        silence = ds5_haptics.render_speaker_48k((0, 0), state)
+        silence = ds5_haptics.render_speaker_beat((0, 0), state)
         self.assertEqual(len(silence), ds5_haptics.BT36_SPEAKER_FRAMES * 4)
         self.assertEqual(bytes(silence), bytes(len(silence)))
+        self.assertEqual(ds5_haptics.BT36_SPEAKER_BEAT_RATE, 45000)
 
-        tone = ds5_haptics.render_speaker_48k((880, 255), state)
-        values = [int.from_bytes(tone[i:i + 2], "little", signed=True)
-                  for i in range(0, len(tone), 2)]
-        self.assertTrue(any(abs(v) > 10000 for v in values))
+        tone = ds5_haptics.render_speaker_beat((880, 255), state)
+        mono = [int.from_bytes(tone[i:i + 2], "little", signed=True)
+                for i in range(0, len(tone), 4)]
+        self.assertTrue(any(abs(v) > 10000 for v in mono))
+        crossings = []
+        for i in range(len(mono) - 1):
+            if mono[i] < 0 <= mono[i + 1]:
+                span = mono[i + 1] - mono[i]
+                crossings.append(i - mono[i] / span if span else float(i))
+        self.assertGreater(len(crossings), 6)
+        periods = [b - a for a, b in zip(crossings, crossings[1:])]
+        mean = sum(periods) / len(periods)
+        self.assertAlmostEqual(mean, ds5_haptics.BT36_SPEAKER_BEAT_RATE / 880.0,
+                               delta=1.0)
 
     def test_bt36_only_while_speaker_has_content(self):
         """0x36 只在喇叭有内容（含收音尾）时上：满速 0x36 ≈ 40KB/s，Windows
-        蓝牙 HID 链路长时间扛不住（实机：接入即断链、重连后报文才落地、触发
-        触控板幻手势）。平时与只有触觉时都走 0x32（发声段折进音圈兜底），
+        蓝牙 HID 链路长时间扛不住（接入即断链、重连后报文才落地）。平时与只有
+        触觉时都走 0x32（发声段折进音圈兜底），
         喇叭有音量才切 0x36，退回后 0x32 的折进把发声段接回来。"""
         import threading
 
@@ -661,8 +819,8 @@ class BuildBt36ReportTest(unittest.TestCase):
             self.assertEqual(report[142], 0x93)  # 手柄喇叭 + sized
 
         # 鸣叫停顿期间（喇叭静默、采样还按着）：过收音尾就整流停发，把空口
-        # 还给同频段设备——采样按住期间的满速保温会让无线鼠标全程被骚扰
-        # （实机复测）；下一声鸣叫重新进入 0x36。
+        # 还给同频段设备——采样按住期间的满速保温会让同频段设备全程被骚扰；
+        # 下一声鸣叫重新进入 0x36。
         import time as time_mod
 
         device = FakeDevice(limit=1)
@@ -709,6 +867,79 @@ class CaptureReplayTest(unittest.TestCase):
         self.assertEqual(total, 223)
         self.assertEqual(locate, 207)
         self.assertEqual(stop, 16)
+
+
+def _decode_stereo_s16(packet: bytes) -> list[int]:
+    """一帧 Opus → 左声道样本（测试用，避开 numpy）。"""
+    import av
+
+    ctx = av.CodecContext.create("libopus", "r")
+    ctx.sample_rate = 48000
+    ctx.format = "s16"
+    ctx.layout = "stereo"
+    ctx.open()
+    frames = ctx.decode(av.Packet(packet))
+    assert frames, "解码器没有输出帧"
+    # planes[0] 是整块分配缓冲，按帧内实际样本数截断（480 帧 × 2ch × 2B）。
+    raw = bytes(frames[0].planes[0])[:frames[0].samples * 4]
+    return [int.from_bytes(raw[i:i + 2], "little", signed=True)
+            for i in range(0, len(raw), 4)]
+
+
+def _decode_stream(packets: list[bytes]) -> list[int]:
+    """一帧帧喂给同一个解码器再拼左声道：Opus 首帧含建立延迟（预跳），按真实
+    用法连续解多帧、估频时丢前段才稳。"""
+    out: list[int] = []
+    for packet in packets:
+        out.extend(_decode_stereo_s16(packet))
+    return out
+
+
+def _dft_peak_hz(mono: list[int], rate: int, lo: float, hi: float, skip: int) -> float:
+    """滑动频率点的幅度谱峰值（纯 Python，避开 numpy）：比过零计数抗噪，能分辨
+    6.25% 的音高差。"""
+    window = mono[skip:]
+    best_hz, best_pow = 0.0, -1.0
+    hz = lo
+    while hz <= hi:
+        w = 2 * math.pi * hz / rate
+        re = sum(v * math.cos(w * k) for k, v in enumerate(window))
+        im = sum(v * math.sin(w * k) for k, v in enumerate(window))
+        power = re * re + im * im
+        if power > best_pow:
+            best_pow, best_hz = power, hz
+        hz += 1.0
+    return best_hz
+
+
+@unittest.skipUnless(HAS_AV, "PyAV/libopus 不可用（发声段编不了码）")
+class SpeakerPitchRoundTripTest(unittest.TestCase):
+    """发声段一帧经真实 Opus 编解码后音高必须对：合成按节拍时钟（45kHz）写
+    480 样本、交给声明 48kHz 的编码器，解码回来是 音高×48/45——手柄按「一块对
+    一拍」播回（≈45kHz）后正好是原音高。这条同时钉住「一帧装下整拍」与
+    「Opus 参数没把音高与时长改掉」。"""
+
+    def test_chirp_keeps_its_pitch_through_opus(self):
+        try:
+            encoder = ds5_haptics.Bt36OpusEncoder()
+        except Exception as exc:  # noqa: BLE001
+            self.skipTest(f"Opus 编码器不可用：{exc}")
+        for played_hz in (880.0, 1175.0):
+            state = ds5_haptics._VoiceState()
+            packets = [encoder.encode(ds5_haptics.render_speaker_beat((played_hz, 255), state))
+                       for _ in range(8)]
+            self.assertEqual({len(p) for p in packets}, {ds5_haptics.BT36_SPEAKER_BYTES})
+            mono = _decode_stream(packets)
+            self.assertEqual(len(mono), ds5_haptics.BT36_SPEAKER_FRAMES * len(packets))
+            beat_hz = played_hz * 48000 / ds5_haptics.BT36_SPEAKER_BEAT_RATE
+            # 搜索范围同时罩住「按 48kHz 直采」（原音高）与「按整拍合成」两个
+            # 候选位置，谁的能量高谁就是实际内容。
+            got = _dft_peak_hz(mono, 48000, lo=played_hz * 0.9, hi=played_hz * 1.2,
+                               skip=1600)
+            # 音高落在「按整拍合成」的位置（48kHz 声明下比原音高高 6.25%），
+            # 而不是按 48kHz 时钟直采的位置——手柄按一块对一拍播回后正好原音高。
+            self.assertAlmostEqual(got, beat_hz, delta=beat_hz * 0.02)
+            self.assertGreater(abs(got - played_hz), abs(got - beat_hz))
 
 
 if __name__ == "__main__":

@@ -370,5 +370,5 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
   }
 }
 
-/* 上电不主动发信号（真机不按键不广播）：mock 里主机从未配过，开机静默等
+/* 上电不主动发信号（设备不按键不广播）：mock 里主机从未配过，开机静默等
  * 用户按连接键。 */

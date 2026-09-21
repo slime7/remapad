@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Create a numbered ADR with deterministic structure and no placeholders."""
+"""Create a numbered ADR with deterministic structure and no placeholders.
+
+Historical ADRs are immutable: never rewrite an existing file. New findings go
+into the feature docs (docs/controller-switch2.md, docs/controller-ps.md,
+docs/ARCHITECTURE.md, docs/ABSTRACTIONS.md) and new decisions become a new ADR.
+Pass body text one sentence per line with lines shorter than 120 characters, and
+leave measurements, captures and implementation steps out of the ADR.
+"""
 
 from __future__ import annotations
 
@@ -81,7 +88,12 @@ def resolve_project_path(project_root: Path, relative_path: Path) -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Create the next numbered ADR in a project-relative directory."
+        description="Create the next numbered ADR in a project-relative directory.",
+        epilog=(
+            "Historical ADRs are immutable; new facts belong in the feature docs and new "
+            "decisions in a new ADR. Pass body text one sentence per line (shorter than 120 "
+            "characters) and keep measurements, captures and implementation steps out."
+        ),
     )
     parser.add_argument("project_root", type=Path, help="Path to the project root")
     parser.add_argument(

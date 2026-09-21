@@ -41,20 +41,14 @@ static const char *TAG = "remapad_dp";
 /** 单拍最多发几条采集帧：突发时余下的留在环里，别把一拍时间全交给串口。 */
 #define DP_CAPTURE_DRAIN_MAX 8
 
-/** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告（ADR 0023 的取值）。
- *
- *  主机在初始化末尾用报告率描述符（0x0010 写 `85 00`）点的就是这一量级，
- *  实机对照确认只有它能被稳定吃下：15 ms 下 66.7 帧/秒、
- *  发送失败计数为 0；改成 5 ms 后发送失败与已发计数一起涨（四成以上通知因
- *  mbuf 耗尽被丢），有效投递反掉到 20 次/秒上下，主机侧表现为操作延迟与
- *  震动丢失。节奏因此写死，不再提供运行时档位。 */
+/** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告，写死不提供运行时档位（取值与理由见 ADR 0034）。 */
 #define DP_REPORT_INTERVAL_MS 15u
 
 /** 上报分频：每 DP_TICK_MS 一次采样，够这个数就发一份报告。 */
 #define DP_SEND_DIV (DP_REPORT_INTERVAL_MS / DP_TICK_MS)
 
 /** 按键变化日志的最小间隔：调试注入与桥接输入都在这一条里可见，
- *  限频后连点也不会刷屏（真机排查时按时间对得上串口日志）。 */
+ *  限频后连点也不会刷屏。 */
 #define DP_BUTTON_LOG_MIN_INTERVAL_US (200 * 1000LL)
 
 /** 合成输入源：只提供静置状态（摇杆居中、无按键）。板卡与主机会话侧的事实
@@ -133,12 +127,8 @@ static volatile bool s_feedback_pending;
 static volatile bool s_bridge_audio_haptics;
 
 /**
- * 主机反馈监听：事件叠加进持续帧（pad_feedback_apply：事件带哪些字段就覆盖
- * 哪些字段，其余沿用上一帧），编码与投递由数据面任务做，绝不在 BLE 回调里碰
- * USB/串口传输——震动写入跑在 NimBLE 主机任务里，游戏内主机的震动流接近输入
- * 上报的频率，任何阻塞 IO 都会拖住输入通知（主机侧操作变卡）。持续帧是必需
- * 的——每个事件都从默认值重建，会把刚点亮的玩家灯被随后的震动帧写灭，马达
- * 强度也在主机不更新时来回跳。
+ * 主机反馈监听：事件叠加进持续帧（事件带哪些字段就覆盖哪些字段，其余沿用上一帧），
+ * 编码与投递由数据面任务做，绝不在 BLE 回调里碰 USB/串口传输——阻塞 IO 会拖住输入通知。
  */
 static void feedback_commit(uint8_t fields, const pad_feedback_t *event)
 {
@@ -274,7 +264,8 @@ bool dp_plane_bridge_audio_active(void)
  * 字节）。返回编码长度，设备没有反馈通道时返回 0。编码与发送分开：调用方
  * 要先拿编码字节做变化判定，再决定发不发。
  */
-static size_t encode_feedback_report(const pad_feedback_t *feedback, uint8_t *out, size_t cap)
+static size_t encode_feedback_report_ex(const pad_feedback_t *feedback, uint8_t *out,
+                                        size_t cap, bool quiet)
 {
     uint16_t vid = 0;
     uint16_t pid = 0;
@@ -283,25 +274,33 @@ static size_t encode_feedback_report(const pad_feedback_t *feedback, uint8_t *ou
         !input_source_device_ids(&vid, &pid, &conn)) {
         return 0;
     }
+    if (quiet) {
+        return pad_feedback_encode_quiet(conn, vid, pid, feedback, out, cap);
+    }
     return pad_feedback_encode(conn, vid, pid, feedback, out, cap);
 }
 
+static size_t encode_feedback_report(const pad_feedback_t *feedback, uint8_t *out, size_t cap)
+{
+    return encode_feedback_report_ex(feedback, out, cap, false);
+}
+
 /** 「震动让位」版本的输出报告：马达字节全零、玩家灯照常——音频触觉接手的
- *  那条通路拿它写回，同一对音圈不再被 HID 与音频双驱动。 */
+ *  那条通路拿它写回，同一对音圈不再被 HID 与音频双驱动。编码用布局行的
+ *  quiet_presets：震动位段换成「COMPATIBLE_VIBRATION 不带 HAPTICS_SELECT」，
+ *  这是把手柄的音圈交还给音频触觉的那次切换——照抄完整预置的 HAPTICS_SELECT
+ *  会让音圈停在震动仿真模式、触觉 PCM 被静音（让位后只剩玩家灯）。 */
 static size_t encode_quiet_feedback(const pad_feedback_t *feedback, uint8_t *out, size_t cap)
 {
     pad_feedback_t quiet;
     pad_feedback_defaults(&quiet);
     quiet.player_led = feedback->player_led;
-    return encode_feedback_report(&quiet, out, cap);
+    return encode_feedback_report_ex(&quiet, out, cap, true);
 }
 
 /**
- * 一帧「全部松开」的中性报文：捕获组合键的那一刻补发一份（主机的按键状态是
- * 最后一份报文的内容，正按着的键不会自己弹起来），捕获期间再按上报节奏持续
- * 续发——主机靠稳定不跳号的上报流判断链路健康，整段停发会让它把手柄判成
- * 离线。同代透传载荷一并清掉：原样转发的报文体里带着被捕获的那几个键，
- * 中性帧就成了白发。
+ * 一帧「全部松开」的中性报文：捕获组合键那一刻补发一份（否则正按着的键停在主机侧），
+ * 捕获期间按上报节奏续发，避免主机把停发判成离线；同代透传载荷一并清掉。
  */
 static void send_neutral_report(const pad_state_t *pad)
 {
@@ -450,6 +449,17 @@ static void dp_task(void *param)
                 }
                 buzzer_beep_tone(haptic_tone_hz, haptic_remain_ms);
             }
+        }
+        /* 采样音色的段边界按 tick 投递：段是固件合成的（主机只给采样 ID 与
+         *  起停），而 FEEDBACK 帧只在主机事件到达时才发——查找手柄页的采样
+         *  事件约 15Hz，段边界会被量化到 64ms 的栅格（震动/蜂鸣的起止错位、
+         *  短段整段丢失；板载蜂鸣器按 tick 走，两条通路因此还不同步）。
+         *  段状态（幅度段 + 段音高）一变就置待发位，投递精度回到 tick。 */
+        if (feedback_sent_valid &&
+            pad_feedback_segment_changed(&feedback_sent, haptic_env, haptic_tone_hz)) {
+            portENTER_CRITICAL(&s_feedback_mux);
+            s_feedback_pending = true;
+            portEXIT_CRITICAL(&s_feedback_mux);
         }
         if (s_feedback_pending) {
             pad_feedback_t feedback;

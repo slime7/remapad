@@ -73,7 +73,7 @@ export function startPreviewServer({ port = 8130, pageDir, distDir, runtimeDir, 
     if (path === '/' || path === '/index.html') {
       filePath = indexFile;
     } else if (path === '/host-profile.json') {
-      // 预览页是注入式宿主，没有真机那套 tickHz 契约断言，帧节奏只能靠这份
+      // 预览页是注入式宿主，没有设备那套 tickHz 契约断言，帧节奏只能靠这份
       // profile 与编译器对齐；文件每次现读，改完 profile 刷新页面即可生效。
       filePath = hostProfile;
     } else if (route) {

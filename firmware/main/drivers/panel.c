@@ -12,15 +12,9 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
-/* 面板与引脚事实来自 docs/hardware.md；方向、GRAM 偏移与反转配置逐条对照微雪
- * 官方示例（02_ESP_IDF_ST7789_LVGL）：
- * https://github.com/waveshareteam/ESP32-S3-Touch-LCD-1.69/tree/main/examples/esp-idf/02_ESP_IDF_ST7789_LVGL
- * 电源、VCOM 与 gamma 寄存器不在 IDF 内置驱动的初始化序列里，另按厂商调优表补发，
- * 见下方的 s_panel_vendor_tuning。
- *
- * 像素时钟取 SPI2 的上限 80 MHz：条带管线里传输本就基本被渲染盖住，取上限
- * 是为了压缩整帧重绘时的串行等待与 DMA 占线时间（整帧 240x280 约 13.5 ms，
- * 40 MHz 时约 27 ms）。取值依据见 docs/adr/0018。 */
+/* 面板与引脚事实来自 docs/hardware.md；方向、GRAM 偏移与反转配置逐条对照微雪官方示例，
+ * 电源/VCOM/gamma 寄存器不在 IDF 内置驱动的初始化序列里，另按厂商调优表补发（见 s_panel_vendor_tuning）。
+ * 像素时钟取 SPI2 上限 80 MHz 以压缩整帧重绘的串行等待，依据见 ADR 0018。 */
 #define REMAPAD_LCD_H_RES 240
 #define REMAPAD_LCD_V_RES 280
 #define REMAPAD_LCD_SPI_HOST SPI2_HOST
@@ -55,7 +49,7 @@ static uint32_t s_color_completed = 0;
 typedef uint32_t __attribute__((may_alias)) panel_pair_t;
 
 /** 32 位整字里的两个 RGB565 像素各自换字节序，像素顺序保持不变。
- * 注意不能用 __builtin_bswap32：那会连同两个像素的前后顺序一起颠倒，实机表现
+ * 注意不能用 __builtin_bswap32：那会连同两个像素的前后顺序一起颠倒，表现
  * 为相邻像素成对交换（平坦色块看不出来，文字与圆弧会发糊、边缘上下波动）。 */
 static inline uint32_t panel_byteswap_pair(uint32_t value)
 {
@@ -122,17 +116,9 @@ static bool IRAM_ATTR panel_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
     return higher_priority_woken == pdTRUE;
 }
 
-/* 面板电源、VCOM 与两组 gamma 抽头，取自微雪为同一块板自带的 Arduino 库
- * （examples/arduino/libraries/GFX_Library_for_Arduino/src/display/Arduino_ST7789.h
- * 的 st7789_init_operations），仓库 waveshareteam/ESP32-S3-Touch-LCD-1.69。
- *
- * IDF 内置的 esp_lcd_new_panel_st7789 初始化只发 SLPOUT/MADCTL/COLMOD/RAMCTRL
- * 四条命令，微雪的两份 ESP-IDF 示例（01/02）同样没写这几组寄存器，于是 VCOM、
- * 源极电压与 gamma 全部停在上电默认值，实机观感是黑位抬高、画面发灰。
- *
- * 与上电默认值不同的条目只有 VCOM 0xBB=0x19（默认 0x20）、源极电压 0xC3=0x12
- * （默认 0x0B）与 0xE0/0xE1 两组 gamma 抽头；其余条目与默认值一致，保留是为了让
- * 面板状态与厂商序列逐条对齐。只想单独试 gamma 就删到只剩最后两条。 */
+/* 面板电源、VCOM 与两组 gamma 抽头，取自微雪为同一块板自带的 Arduino 库：
+ * IDF 内置驱动只发四条命令，不补这几组寄存器时面板黑位抬高、画面发灰；
+ * 其余条目与上电默认值一致，保留是为了让面板状态与厂商序列逐条对齐。 */
 typedef struct {
     uint8_t command;
     uint8_t length;

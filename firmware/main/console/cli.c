@@ -188,7 +188,7 @@ static void cli_key(const char *arg)
     cli_print("ok key injected");
 }
 
-/** 手柄操控 UI 模式：面板组合键之外的直接开关，实机上用它验证捕获与恢复。 */
+/** 手柄操控 UI 模式：面板组合键之外的直接开关，用来验证捕获与恢复。 */
 static void cli_ui(const char *arg)
 {
     if (arg[0] == '\0') {
@@ -506,7 +506,7 @@ static void cli_wake(void)
 }
 
 /** 广播窗口内形态的 A/B：auto 按窗口来源决策（默认，连接键回连、HOME 唤醒），
- *  wake/reconnect 钉住窗口内的已配对形态做实机对账。 */
+ *  wake/reconnect 钉住窗口内的已配对形态做对账。 */
 static void cli_adv(const char *arg)
 {
     if (strcmp(arg, "auto") == 0) {
@@ -535,7 +535,7 @@ static void cli_adv(const char *arg)
     }
 }
 
-/** 广播地址形态 A/B：auto 与 public 都是公共伪装地址（真机手柄的形态），
+/** 广播地址形态 A/B：auto 与 public 都是公共伪装地址，
  *  random 强制用派生静态随机地址做对照——主机只接受 public 地址的广播，
  *  这条开关用来复现「随机地址在主机侧完全看不见」。不落盘，未连接时改完
  *  立即按新形态重发。 */
@@ -631,7 +631,7 @@ static void cli_report(void)
     }
 }
 
-/** 0x09 运动块内容切换：0 全零 / 1 抓包占位 / 2 不带 / 3 输入设备的真实样本。 */
+/** 0x09 运动块内容切换：0 全零 / 1 样本占位 / 2 不带 / 3 输入设备的真实样本。 */
 static void cli_motion(const char *arg)
 {
     if (arg[0] == '\0') {
@@ -664,7 +664,7 @@ static void cli_shot(void)
 
 /**
  * 3.5mm 耳机状态字节（0x09 的 0x0D 与 0x05 的插入位）：auto 用输入设备
- * 派生的值，0xNN 钉住一个取值做主机侧 A/B（例如 controller.md 里的 0x0D）。
+ * 派生的值，0xNN 钉住一个取值做主机侧 A/B（例如耳机状态字节的 0x0D）。
  * 不带参数回显覆盖开关、覆盖值与 auto 派生值。
  */
 static void cli_headset(const char *arg)
@@ -750,11 +750,8 @@ static void cli_feedback_state(void)
 }
 
 /**
- * 手动反馈注入：把事件叠加进持续帧后由数据面按接入设备的布局编码投递，
- * 与主机下发的反馈走完全同一条路径（USB 直插走 OUT 端点，桥接路径回传 PC
- * 写手柄）。没有主机在场时，串口脚本用它验证震动 / 玩家灯 / 触觉采样整条
- * 反馈链路。震动手动注入按归一强度（0-255）走；同代 NS2 手柄吃主机的原始
- * LRA 参数包，这条命令对它只能写停（全零包）。
+ * 手动反馈注入：事件叠加进持续帧后由数据面按接入设备的布局编码投递，与主机下发的反馈同一条路径；
+ * 震动手动注入按归一强度（0-255）走，同代 NS2 手柄只认主机的原始参数包、这条命令对它只能写停。
  */
 static void cli_rumble(const char *arg)
 {
@@ -962,7 +959,7 @@ static bool parse_version(const char *text, uint8_t out[3])
 }
 
 /** 上报给主机的手柄固件版本（0x10 查询与两个出厂块共用；假升级会话完成时
- *  自行递增）。实机对账用：把版本抬到主机认为无需更新的值，或复位到出厂
+ *  自行递增）。对账用：把版本抬到主机认为无需更新的值，或复位到出厂
  *  版本再走一次主机的更新流程。 */
 static void cli_fwver(const char *arg)
 {
@@ -1042,9 +1039,9 @@ static void cli_fwack(const char *arg)
     cli_print(line);
 }
 
-/** 假升级收尾动作：主机推完更新后会等控制器重启回来。实测重启会被主机当成
+/** 假升级收尾动作：主机推完更新后会等控制器重启回来。重启会被主机当成
  *  更新没生效而重推整包（推包→重启→再推包），所以默认不重启；这里只做
- *  一次性武装，留给实机对账那一次。 */
+ *  一次性武装，留给对账那一次。 */
 static void cli_fwapply(const char *arg)
 {
     char line[64];

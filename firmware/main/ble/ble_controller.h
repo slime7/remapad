@@ -12,13 +12,9 @@ extern "C" {
 #endif
 
 /**
- * NimBLE 手柄外设传输层（ADR 0010）：NimBLE 生命周期、GATT 表、原始广播与通知发送。
- * 协议语义（广播内容、指令应答、会话状态）由 ble_session 决策，本模块只负责收发。
- * GATT 表按 controller.md「GATT 属性表与服务架构」的句柄布局注册（含占位描述符对齐，见源内注释）。
- *
- * 设备对外只有一台 Pro Controller 2：单身份、单条链路。广播实例 0/1 可分别
- * 携带独立地址（advaddr 对账开关的派生形态），默认 legacy PDU
- * （见 ble_controller_adv_start）。
+ * NimBLE 手柄外设传输层：NimBLE 生命周期、GATT 表、原始广播与通知发送；
+ * 协议语义由 ble_session 决策，本模块只负责收发。GATT 表按 docs/controller-switch2.md 的句柄布局注册。
+ * 设备对外只有一台 Pro Controller 2（单身份、单条链路），广播默认用 legacy PDU。
  */
 
 /** 初始化 NimBLE 并启动 host 任务；成功后栈在同步回调里触发发现广播。 */
@@ -44,7 +40,7 @@ bool ble_controller_peer_mac(uint16_t conn_handle, uint8_t out_mac[6]);
 /** 指定连接上输入报告通道（0x05 通用，或 0x09 专用）的 CCCD 是否已由主机开启。 */
 bool ble_controller_input_notify_ready(uint16_t conn_handle, uint8_t report_format);
 
-/** 主机在指定连接上订阅的专用输入通道句柄（0 = 未订阅）。真机在 0x000E
+/** 主机在指定连接上订阅的专用输入通道句柄（0 = 未订阅）。主机在 0x000E
  *  句柄上按型号换 UUID，本设备按 Pro 的规格注册；串口 link 用它确认主机
  *  订的是哪一条通道。 */
 bool ble_controller_input_priv_handle(uint16_t conn_handle, uint16_t *out_handle);
@@ -82,18 +78,13 @@ void ble_controller_adv_stop(void);
 /** 停止指定身份在发的广播实例（Pro 两实例同址，一并停止）。 */
 void ble_controller_adv_stop_identity(uint8_t identity);
 
-/**
- * 以 31 字节原始载荷启动一个广播实例。addr 为 NULL 时用公共伪装地址，
- * 非 NULL 时以该静态随机地址广播（`advaddr` 对账开关的派生形态）。默认
- * legacy PDU（可连接 + 可扫描，与真机发现广播一致），见 advpdu 开关。
- * instance 取 0/1；identity 由会话层显式给出（ns2_identity_t），传输层不再
- * 从地址反推——左右两只的地址最低位来自芯片，反推会认错身份。
- */
+/** 以 31 字节原始载荷启动一个广播实例：addr 为 NULL 用公共伪装地址，否则用该静态随机地址；
+ *  instance 取 0/1，identity 由会话层显式给出（传输层不从地址反推身份）。 */
 void ble_controller_adv_start(uint8_t instance, uint8_t identity,
                               const uint8_t payload[31], const uint8_t addr[6]);
 
-/** 广播 PDU 形态（实机对账开关，不落盘）：auto 与 legacy 都是 legacy PDU
- *  （可连接 + 可扫描，主机只认这种，实机对账）；extended 换成
+/** 广播 PDU 形态（对账开关，不落盘）：auto 与 legacy 都是 legacy PDU
+ *  （可连接 + 可扫描，主机只认这种）；extended 换成
  *  扩展 PDU 做反向验证——扩展实例在主机侧完全看不见。 */
 typedef enum {
     BLE_CTL_ADV_PDU_AUTO = 0,

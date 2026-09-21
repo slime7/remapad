@@ -405,8 +405,8 @@ class ConsoleWindow(ctk.CTk):
     def _sync_scroll(self, frame: ctk.CTkScrollableFrame) -> None:
         """补上滚动区域（scrollregion）：不补的话滚动条拖不动、滚轮也不滚。
 
-        CustomTkinter 只在内容框架的 Configure 里刷它，实测页签里的滚动框架拿不到
-        那个事件，滚动区域一直是空的。内容框架挂在内部画布上，画布就是它的 master；
+        CustomTkinter 只在内容框架的 Configure 里刷它，页签里的滚动框架拿不到那个
+        事件，滚动区域一直是空的。内容框架挂在内部画布上，画布就是它的 master；
         拿不到画布（上游改了组成）就直接跳过，页面照旧显示，只是没了滚动。
 
         滚动条常驻：CustomTkinter 没有「装得下就收起」的开关，而映射状态要等下一轮

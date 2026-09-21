@@ -1,7 +1,7 @@
 /**
  * NFC 命令通路（Command 0x01）的主机端用例：主机在游戏里读一张 amiibo 时
  * 走「开轮询 → 取卡信息 → 分块取镜像 → （可选）写存档 → 关轮询」，这些用例
- * 把每一步的应答字节钉住（布局来自 ndeadly/switch2_controller_research 抓包）。
+ * 把每一步的应答字节钉住（布局来自 ndeadly/switch2_controller_research 的样本）。
  */
 #include "host_test.h"
 
@@ -10,7 +10,7 @@
 #include "ns2_frames.h"
 #include "ns2_nfc.h"
 
-/** 一份带已知 UID 的 NTAG215 镜像：UID 04 8A 6D 2A B7 5D 80（抓包示例卡），
+/** 一份带已知 UID 的 NTAG215 镜像：UID 04 8A 6D 2A B7 5D 80（样本卡），
  *  BCC0/BCC1 按 NTAG 规则自洽，其余字节按页号填花样。 */
 static uint8_t s_image[NS2_NFC_TAG_SIZE];
 
@@ -45,7 +45,7 @@ static size_t run_cmd(uint8_t subcmd, const uint8_t *body, size_t body_len, uint
     return ns2_nfc_on_command(req, NS2_FRAME_HEADER_LEN + body_len, subcmd, resp, cap);
 }
 
-/** 0x05 的 63 字节应答体：抓包前缀（状态 + 卡类型 + UID 长度）+ 镜像 UID + 补零。 */
+/** 0x05 的 63 字节应答体：前缀（状态 + 卡类型 + UID 长度）+ 镜像 UID + 补零。 */
 static void build_tag_info_body(uint8_t *out)
 {
     memset(out, 0, NS2_NFC_TAG_INFO_BODY_LEN);
@@ -78,7 +78,7 @@ static void test_nfc_state_follows_polling(void)
     CHECK_EQ(ns2_nfc_report_state(), 0x01);
 }
 
-/** 主机取卡信息（0x01/0x05）拿到与抓包同构的状态体，UID 取自镜像页 0-2。 */
+/** 主机取卡信息（0x01/0x05）拿到与样本同构的状态体，UID 取自镜像页 0-2。 */
 static void test_tag_info_carries_uid(void)
 {
     ns2_nfc_reset();
@@ -239,7 +239,7 @@ static bool sink_capture(const uint8_t *data, size_t len, void *user)
     return true;
 }
 
-/** 主机写卡（0x14）首块带 `d0 07` 操作描述符（抓包 0x14 示例）：描述符
+/** 主机写卡（0x14）首块带 `d0 07` 操作描述符（样本 0x14）：描述符
  *  17 字节剥掉、标签数据从页 4（镜像偏移 16）接续落位，后续块按序续写，
  *  提交后 UID/CC 只读页（页 0-3）保持原值。 */
 static void test_write_descriptor_stream(void)
@@ -342,7 +342,7 @@ static void test_write_sink_failure_is_not_fatal(void)
     CHECK_EQ(after[0], 0x5A);
 }
 
-/** 0x0C 查询 NFC 控制器状态返回抓包原值（主机初始化/reconnect 期会问这条）。 */
+/** 0x0C 查询 NFC 控制器状态返回固定原值（主机初始化/reconnect 期会问这条）。 */
 static void test_nfc_status_body(void)
 {
     ns2_nfc_reset();
@@ -364,7 +364,7 @@ static void test_read_status_progression_14_to_15(void)
 
     uint8_t resp[NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN];
     CHECK_EQ(run_cmd(0x05, NULL, 0, resp, sizeof(resp)), sizeof(resp));
-    CHECK_EQ(resp[NS2_FRAME_HEADER_LEN], 0x09); /* 卡片在场（抓包原值） */
+    CHECK_EQ(resp[NS2_FRAME_HEADER_LEN], 0x09); /* 卡片在场 */
 
     CHECK_EQ(run_cmd(0x06, NULL, 0, resp, sizeof(resp)), NS2_FRAME_HEADER_LEN);
     CHECK_EQ(ns2_nfc_report_state(), 0x14);
@@ -440,7 +440,7 @@ static void test_report_stage_manual_override(void)
     CHECK_EQ(resp[NS2_FRAME_HEADER_LEN], 0x09);
 }
 
-/** 应答帧头的 Status/ACK 字节按子命令取抓包值：0x0C/0x15 是 10/78（蓝牙抓包
+/** 应答帧头的 Status/ACK 字节按子命令取固定值：0x0C/0x15 是 10/78（蓝牙
  *  亦同），其余已见子命令是 00/F8；未知子命令沿用通用帧头。 */
 static void test_response_ack_pairs_follow_captures(void)
 {
@@ -526,19 +526,19 @@ static void test_polling_commands_ack_and_idle(void)
 HOST_TEST_SUITE(suite_ns2_nfc, "ns2_nfc",
                 {"主机开轮询且预置镜像后 NFC 状态字节才亮起，关轮询即归零",
                  test_nfc_state_follows_polling},
-                {"主机取卡信息拿到抓包同构的状态体，UID 取自镜像页 0-2",
+                {"主机取卡信息拿到与样本同构的状态体，UID 取自镜像页 0-2",
                  test_tag_info_carries_uid},
                 {"没有预置镜像时取卡信息是全零体", test_tag_info_empty_without_image},
                 {"镜像按 70 字节分块读完，最后一块只剩 50 字节", test_read_buffer_chunks},
-                {"头区按抓包结构填充：前缀/UID/签名/尾串，标签从偏移 60 接续",
+                {"头区按读卡结构填充：前缀/UID/签名/尾串，标签从偏移 60 接续",
                  test_read_buffer_header_template},
                 {"读取偏移越过镜像末端时不回数据", test_read_buffer_beyond_end},
                 {"主机写入的存档要在写卡指令后才出现在镜像里", test_write_commits_on_write_command},
                 {"带 d0 07 描述符的写卡首块剥掉描述符、数据从页 4 流式落位",
                  test_write_descriptor_stream},
                 {"写卡落盘失败不拦住主机流程", test_write_sink_failure_is_not_fatal},
-                {"0x0C 状态查询返回抓包原值", test_nfc_status_body},
-                {"应答帧头的 Status/ACK 字节按子命令取抓包值",
+                {"0x0C 状态查询返回固定原值", test_nfc_status_body},
+                {"应答帧头的 Status/ACK 字节按子命令取值",
                  test_response_ack_pairs_follow_captures},
                 {"0x06 触发后状态走 0x14→0x15，0x05 体首字节与报告字节同源",
                  test_read_status_progression_14_to_15},

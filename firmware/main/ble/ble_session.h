@@ -12,13 +12,9 @@ extern "C" {
 #endif
 
 /**
- * BLE 手柄会话：广播策略、连接初始化时序与指令分发（controller.md「控制指令系统」/「通信交互与报告上报时序」）。
- * 传输细节（NimBLE、GATT 表、notify）由 ble_controller 承载，本模块只面对协议。
- * 设备对外只有一台 Pro Controller 2：单身份、单报告格式（0x09）、单条会话。
- *
- * 广播与真机一样只由用户动作打开：上电静默、主机睡下（断连）后静默，连接键
- * （屏幕「连接」、PWR 长按）开连接窗口，HOME 键在未连接时开唤醒窗口；窗口
- * 到期或主机连上即关闭。配对流程与未配对身份的发现广播见 ns2_session_connect。
+ * BLE 手柄会话：广播策略、连接初始化时序与指令分发（协议见 docs/controller-switch2.md）。
+ * 传输细节由 ble_controller 承载；设备对外只有一台 Pro Controller 2（单身份、单报告格式、单条会话）。
+ * 广播只由用户动作打开：上电与断连静默，连接键开连接窗口、HOME 开唤醒窗口，窗口到期或主机连上即关闭。
  */
 
 /** host 同步完成（栈就绪）：记录自身 MAC，不启动广播（等用户按连接键）。 */
@@ -69,7 +65,7 @@ size_t ns2_session_fw_ack_body(uint8_t *out, size_t cap);
 void ns2_session_set_fw_post_version(const uint8_t ver[3]);
 void ns2_session_fw_post_version(uint8_t out[3]);
 
-/** 主机更新收尾（0x0d/0x07）时是否重启伪装「已升级」：默认关闭——实测重启
+/** 主机更新收尾（0x0d/0x07）时是否重启伪装「已升级」：默认关闭——重启
  *  会被主机当成更新没生效而重推整包，形成推包与重启的循环。武装是一次性的：
  *  触发后自动撤防，串口 fwapply on|off 控制。 */
 void ns2_session_set_fw_restart_armed(bool armed);
@@ -105,25 +101,25 @@ bool ns2_session_advertising(void);
  *  忽略。 */
 void ns2_session_wake_request(void);
 
-/** 广播窗口内形态的来源（实机对账开关）。 */
+/** 广播窗口内形态的来源（对账开关）。 */
 typedef enum {
     NS2_WINDOW_FORM_AUTO = 0,      /**< 按窗口来源：连接键回连形态、HOME 唤醒形态。 */
     NS2_WINDOW_FORM_WAKE = 1,      /**< 钉住唤醒形态 0x81。 */
     NS2_WINDOW_FORM_RECONNECT = 2, /**< 钉住回连形态 0x00。 */
 } ns2_window_form_t;
 
-/** 窗口内形态的实机对账开关：只有串口 `adv` 诊断命令改它。 */
+/** 窗口内形态的对账开关：只有串口 `adv` 诊断命令改它。 */
 void ns2_session_set_window_form(ns2_window_form_t form);
 ns2_window_form_t ns2_session_window_form(void);
 
-/** 广播地址形态的实机对账开关（ns2_adv_addr_form_t，串口 `advaddr`）：
- *  auto 与 public 都是公共伪装地址（真机手柄的形态，主机也只接受这种），
+/** 广播地址形态的对账开关（ns2_adv_addr_form_t，串口 `advaddr`）：
+ *  auto 与 public 都是公共伪装地址（主机也只接受这种），
  *  random 换成派生静态随机地址做对照。不落盘；没连接又在广播时改完立即
  *  按新形态重发，已连接的链路要断开重连才换地址。 */
 bool ns2_session_set_adv_addr_form(uint8_t form);
 uint8_t ns2_session_adv_addr_form(void);
 
-/** 广播 PDU 形态的实机对账开关（ble_ctl_adv_pdu_form_t，串口 `advpdu`）：
+/** 广播 PDU 形态的对账开关（ble_ctl_adv_pdu_form_t，串口 `advpdu`）：
  *  分辨主机按 legacy 还是扩展 PDU 过滤；同样在未连接时立即重发广播。 */
 void ns2_session_set_adv_pdu_form(uint8_t form);
 

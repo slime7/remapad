@@ -55,13 +55,9 @@ void app_main(void)
         ESP_LOGE("remapad_app", "power latch not held, battery power will drop");
     }
 
-    /* 广播地址伪装必须在蓝牙控制器初始化前完成：public 广播的空中地址
-     * 由 controller 的 BD_ADDR 决定，host 侧改不动。实测主机不校验地址
-     * OUI（99:E2:55 与 00:11:22 都能被搜索、配对，见 controller.md「广播过滤与配对记录」）。
-     * 这里换成一个主机没见过的 OUI：主机按地址存配对记录，旧地址上那份
-     * 记录（以及随之作废的 LTK）会让回连停在加密失败上，换地址等于让它把
-     * 本设备当新设备重配一次。蓝牙地址（base+2）随之派生，后缀沿用 eFuse，
-     * 上电稳定。 */
+    /* 广播地址伪装必须在蓝牙控制器初始化前完成：public 广播的空中地址由 controller 的 BD_ADDR 决定。
+     * 换成一个主机没见过的 OUI 等于让主机把本设备当新设备重配一次（主机按地址存配对记录，
+     * 旧记录与其作废的 LTK 会让回连停在加密失败上）；蓝牙地址随之派生，后缀沿用 eFuse，上电稳定。 */
     uint8_t base[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     esp_read_mac(base, ESP_MAC_WIFI_STA);
     base[0] = 0x9C;
@@ -78,7 +74,7 @@ void app_main(void)
 
     nvs_init();
     ESP_ERROR_CHECK(app_config_init());
-    /* amiibo 存储初始化临时禁用：NFC 读卡收尾未通（controller.md
+    /* amiibo 存储初始化临时禁用：NFC 读卡收尾未通（见 docs/controller-switch2.md
      * 「Amiibo 读写完整交互时序」外部调研），SPIFFS 挂载与槽位扫描的开销先省下，
      * 期间槽位操作按「未挂载」拒绝。恢复时解开下面三行即可。 */
     // if (xTaskCreate(amiibo_store_init_task, "amiibo-init", 8192, NULL, 3, NULL) != pdPASS) {

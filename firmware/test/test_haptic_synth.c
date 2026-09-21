@@ -1,10 +1,6 @@
 /**
- * 触觉 PCM 合成（usb/haptic_synth.c）：NS2 的时序子帧经布局行 hd 规则重整
- * 后，在这里变成 DS5 音频通道上的 PCM——扬声器两路放采样提示音的发声段
- * （静音时恒零），触觉两路按各自子帧序列逐帧合成、按 slice_frames 帧数切
- * 子帧。钉住五件语义：无声音时扬声器两路恒零、左右触觉通道各跟各的子帧、
- * 子帧按时间顺序轮播且时间轴跨块连续、满幅钉在 amp_peak 刻度上、振荡器
- * 相位跨块连续（拼接处跳变会在音圈上听成咔哒声）。
+ * 触觉 PCM 合成（usb/haptic_synth.c）主机端用例：扬声器静音恒零、左右通道各跟各的子帧、
+ * 子帧按时间顺序轮播且时间轴跨块连续、满幅钉在 amp_peak 刻度、振荡器相位跨块连续。
  */
 #include "host_test.h"
 
@@ -176,6 +172,26 @@ static void speaker_tone_fades_in_and_out(void)
     CHECK(channel_is_silent(pcm + 672 * HAPTIC_SYNTH_CHANNELS, 48, 0));
 }
 
+/** 发声段的满幅钉在 amp_peak 上、不靠削顶：包络是 Q16（65535 = 1.0），乘包络
+ *  要 >> 16——按 >> 15 乘等于把增益翻倍，gain 255 的提示音整段顶到 32767
+ *  （小喇叭上就是破音/毛刺，与 PC 侧哑渲染的峰值也对不上：那边是
+ *  amp_peak × 波形形状）。 */
+static void speaker_tone_caps_at_scale(void)
+{
+    haptic_synth_state_t state;
+    haptic_synth_reset(&state);
+    haptic_synth_params_t params = params_default();
+    params.slice_frames = 1200;
+    params.tones.speaker.freq = 880;
+    params.tones.speaker.gain = 255;
+
+    int16_t pcm[480 * HAPTIC_SYNTH_CHANNELS];
+    haptic_synth_fill(&state, &params, pcm, 480);
+    const int peak = peak_of(pcm, 480, 0);
+    CHECK(peak <= (int)params.amp_peak);          /* 不越过承载刻度 */
+    CHECK(peak > (int)params.amp_peak * 9 / 10);  /* 满幅确实到位 */
+}
+
 static void sides_follow_their_own_keys(void)
 {
     haptic_synth_state_t state;
@@ -211,6 +227,31 @@ static void keys_play_in_order_over_the_timeline(void)
     CHECK(peak_of(pcm + 200 * HAPTIC_SYNTH_CHANNELS, 100, 2) > 2000);    /* 子帧 2：弱 */
     CHECK(peak_of(pcm + 200 * HAPTIC_SYNTH_CHANNELS, 100, 2) < 8000);
     CHECK(peak_of(pcm + 300 * HAPTIC_SYNTH_CHANNELS, 100, 2) > 10000);   /* 回绕到子帧 0 */
+}
+
+/** 声明 1 个子帧的持续震动是连续的：主机是 200Hz 的单子帧流（实抓 94% 的
+ *  包只声明 1 个子帧），声明之外的槽位不占时间——固定按 3 槽轮播会把这一段
+ *  切成「5ms 有声 + 10ms 静默」的 66Hz 断续，音圈手感退化成普通马达的粗糙
+ *  震动（查找手柄页由音色表合成的强震段同理）。 */
+static void single_declared_key_stays_continuous(void)
+{
+    haptic_synth_state_t state;
+    haptic_synth_reset(&state);
+    haptic_synth_params_t params = params_default();
+    params.slice_frames = 10;
+    for (size_t side = 0; side < 2; side++) {
+        params.tones.key_count[side] = 1;
+        params.tones.key[side][0].lf_freq = 135;
+        params.tones.key[side][0].lf_gain = 255;
+    }
+
+    int16_t pcm[600 * HAPTIC_SYNTH_CHANNELS];
+    haptic_synth_fill(&state, &params, pcm, 600);
+    for (size_t i = 0; i < 3; i++) {
+        const int16_t *window = pcm + i * 200 * HAPTIC_SYNTH_CHANNELS;
+        CHECK(peak_of(window, 200, 2) > 10000);
+        CHECK(peak_of(window, 200, 3) > 10000);
+    }
 }
 
 static void full_amplitude_caps_at_scale(void)
@@ -325,10 +366,13 @@ HOST_TEST_SUITE(suite_haptic_synth, "haptic_synth",
                  speaker_channels_stay_silent_without_sound},
                 {"发声段的小喇叭音色铺在频道 1/2", speaker_tone_rides_channels_1_2},
                 {"发声段包络起音渐入收音渐出（段边界硬切听成咔哒）",
-                 speaker_tone_fades_in_and_out},
+                speaker_tone_fades_in_and_out},
+                {"发声段满幅钉在承载刻度上（不靠削顶）", speaker_tone_caps_at_scale},
                 {"左右触觉通道各跟各的子帧", sides_follow_their_own_keys},
                 {"子帧按时间顺序轮播，静默子帧保住节奏",
                  keys_play_in_order_over_the_timeline},
+                {"声明 1 个子帧的持续震动连续（不补静默切片）",
+                 single_declared_key_stays_continuous},
                 {"满幅强度钉在刻度上界（24000 附近）", full_amplitude_caps_at_scale},
                 {"amp_peak 缩放承载刻度（蓝牙 8-bit 形态）", amp_peak_scales_the_render},
                 {"同一子帧内两带叠加且饱和封顶", bands_sum_within_saturation},

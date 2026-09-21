@@ -266,7 +266,7 @@ static void parse_touch(const pad_report_t *report, const pad_layout_t *layout,
         }
         const uint16_t raw_x = (uint16_t)(point[1] | ((uint16_t)(point[2] & 0x0Fu) << 8));
         const uint16_t raw_y = (uint16_t)((point[2] >> 4) | ((uint16_t)point[3] << 4));
-        /* 12 位原始值可以越过面板量程（噪声与越界抓包）：归一后夹进 0-4095。 */
+        /* 12 位原始值可以越过面板量程（噪声与越界值）：归一后夹进 0-4095。 */
         uint32_t x = ((uint32_t)raw_x * PAD_AXIS_MAX) / layout->touch_max_x;
         uint32_t y = ((uint32_t)raw_y * PAD_AXIS_MAX) / layout->touch_max_y;
         if (x > PAD_AXIS_MAX) {
@@ -311,8 +311,8 @@ static void parse_battery(const pad_report_t *report, const pad_layout_t *layout
 
 /**
  * 3.5mm 耳机状态：PS 系的音频状态字节 bit0 是插入、bit1 是带麦。偏移与位序
- * 都要靠实机插拔核对，因此只有显式登记了 headset_style 的行才解析（默认
- * PAD_HEADSET_NONE 时主机看到的就是「未插入」）；核对方法见 pc/README.md。
+ * 都要靠插拔核对，因此只有显式登记了 headset_style 的行才解析（默认
+ * PAD_HEADSET_NONE 时主机看到的就是「未插入」）。
  */
 static void parse_headset(const pad_report_t *report, const pad_layout_t *layout,
                           pad_state_t *state)

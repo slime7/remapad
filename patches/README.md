@@ -28,7 +28,7 @@ Registry 的 `espressif__quickjs-ng-v0.14.0.zip` 内 `quickjs.c` 的实际哈希
 ## 0003-ui-qjs-touch-hit-facts-capture-table
 
 上游 `pocketjs_ui_qjs` 的 `pocketjs_ui_turn` 用 native `pocketjs_ui_core_touch_hits`
-解析触摸命中事实，且只在 `touch_count != 0` 时调用。真机上观察到两个层面的故障：
+解析触摸命中事实，且只在 `touch_count != 0` 时调用。设备上表现为两个层面的故障：
 
 1. 跳过空帧使核心内的命中捕获表（归档符号 `pocketjs_core::touch::HitTable`）永不清理
    已抬起的触点 id——CST816T 单点触点 id 恒为 0，开机后第一次按压解析出的节点被永久
@@ -42,7 +42,7 @@ Registry 的 `espressif__quickjs-ng-v0.14.0.zip` 内 `quickjs.c` 的实际哈希
 实现（`ui/vendor/pocketjs/framework/src/touch.ts` 的 `createTouchHitFacts`，注释标注
 "Rust twin: pocketjs_core::Ui::touch_hits"）：新触点 id 经
 `pocketjs_ui_core_hit_test_bounds`（规范 op 42，对当前布局树的通用几何查询）解析一次，
-触点存续期间携带，抬起后由空帧清除。该行为已在真机通过固件注入合成点击端到端验证
+触点存续期间携带，抬起后由空帧清除。该行为已用固件注入合成点击端到端验证
 （按钮坐标 → 命中按钮节点 → `onPress` 触发 → 串口输出；空白坐标正确不触发）。
 
 `0003-ui-qjs-touch-hit-facts-capture-table.patch` 是这份差异的记录，用于升级组件时
@@ -52,7 +52,7 @@ Registry 的 `espressif__quickjs-ng-v0.14.0.zip` 内 `quickjs.c` 的实际哈希
 ## 0004-guest-interrupt-handler-periodic-yield
 
 上游 `pocketjs_guest` 的 `guest_interrupt` 只负责消费 `interrupt_epoch` 终止请求，
-正常执行路径对调度零让出。真机观察到：初始化 bundle 的首次 `JS_Eval` 是一段
+正常执行路径对调度零让出。设备上的表现：初始化 bundle 的首次 `JS_Eval` 是一段
 约 11 秒的连续解释器执行，期间 `remapad-pjs`（优先级 5）一直占据 CPU 0，IDLE0
 饿死，触发默认订阅空闲任务的 task watchdog（超时 5s）在 6.7s 与 11.7s 各打印
 一次；稳态帧循环因帧间等待走信号量阻塞不受影响。
@@ -85,8 +85,8 @@ turn 不会延迟，`pocketjs_guest_interrupt` 的终止语义原样保留。CMa
    python -c $code $zip
    ```
 
-4. 确认不可变 ArrayBuffer 补丁仍然适用：把源码哈希临时替换为实测值后运行 `prepare_quickjs.py` 的
-   `prepare()`，能正常产出即为适用；随后把实测值写入仓库副本，并更新本文件与补丁记录。
+4. 确认不可变 ArrayBuffer 补丁仍然适用：把源码哈希临时替换为实际值后运行 `prepare_quickjs.py` 的
+   `prepare()`，能正常产出即为适用；随后把实际值写入仓库副本，并更新本文件与补丁记录。
 5. 用固定版本的 Xtensa Rust 重新生成原生归档（`pnpm run native`），并确认
    `firmware/components/*/lib/esp32s3/build-receipt.json` 中的编译器信息与上游 `toolchains.json` 一致。
 

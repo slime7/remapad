@@ -12,13 +12,9 @@ extern "C" {
 #endif
 
 /**
- * OTA 升级会话（ESP 侧）：接住 input_link 分派来的 OTA 帧，把镜像写进非运行
- * 应用分区，`esp_ota_end` 校验通过后把启动分区切过去并重启。协议与聚合逻辑
- * 在 ota_proto，这里只做队列、flash 写入、回滚健康门槛与重启。
- *
- * 通道复用 USB-Serial/JTAG 上的桥接帧，不切 USB mux、不经过 BLE；PC 端工具
- * 见 pc/remapadctl.py --upgrade。flash 写入必须在内部 RAM 栈上执行（本模块任务由 xTaskCreate
- * 创建，栈来自内部 RAM），聚合缓冲与帧队列同样固定在内部 RAM。
+ * OTA 升级会话（ESP 侧）：接住 input_link 分派来的 OTA 帧，把镜像写进非运行应用分区，
+ * 校验通过后切启动分区并重启；协议与聚合逻辑在 ota_proto，这里只做队列、flash 写入与回滚健康门槛。
+ * flash 写入必须在内部 RAM 栈上执行：本模块任务、聚合缓冲与帧队列都固定在内部 RAM。
  */
 
 /** 该帧类型是否属于 OTA 接收通道（BEGIN / DATA / END）。 */

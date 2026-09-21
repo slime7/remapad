@@ -41,12 +41,7 @@ typedef enum {
     PAD_LED_LIGHTBAR,    /**< 灯条：掩码换算成一组颜色写进 RGB 三字节。 */
 } pad_led_style_t;
 
-/**
- * 马达跟哪条频带：主机的震动流是连续包络（NS2 参数包低频给冲击、高频给
- * 纹理），每颗马达按 rumble_band 选自己跟的带，振幅再按 rumble_max 缩放。
- * 惯例是重击马达（DS5 大马达、NS1 低频马达、Xbox 左马达）跟低频、纹理
- * 马达（DS5 小马达、NS1 高频马达）跟高频；0 值 = 低频（旧行不填也是这个）。
- */
+/** 马达跟哪条频带：重击马达（大马达 / 低频马达）跟低频、纹理马达跟高频；0 值 = 低频。 */
 typedef enum {
     PAD_RUMBLE_LF = 0, /**< 低频带（rumble_strength）。 */
     PAD_RUMBLE_HF,     /**< 高频带（rumble_hf_strength）。 */
@@ -55,18 +50,14 @@ typedef enum {
 /** 输出报告的收尾方式：字段写完之后的补字节动作。 */
 typedef enum {
     PAD_OUT_FRAME_NONE = 0, /**< 写完即可发送（有线形态）。 */
-    /** PS 蓝牙形态：末 4 字节是 CRC32（种子字节 0xA2 参与计算，小端），
-     *  缺它时主机应声不认——手柄收下报告但一个动作都不做。 */
+    /** PS 蓝牙形态：末 4 字节是 CRC32（种子字节 0xA2，小端），缺它时手柄不执行报告。 */
     PAD_OUT_FRAME_PS_BT,
 } pad_out_frame_t;
 
 /**
- * HD 触觉波形映射规则（布局行声明，映射在布局内完成）：NS 的震动参数是
- * 「波形描述」（每侧最多 3 个时序子帧，子帧按时间顺序各播 1/3 周期，每帧
- * 一条低频音与一条高频音的频率与振幅档位），不是马达信号；声明了 HD 通路
- * 的设备按这份规则把主机的波形重整为自己的 PCM——震动映到触觉音圈、采样
- * 提示音的发声段映到扬声器（PC 侧再折进音圈）。频率码已按 9 位 log2 刻度
- * 解成 Hz，落地时夹进各带的 [min, max]（0 回落缺省）。
+ * HD 触觉波形映射规则（布局行声明，映射在布局内完成）：NS 的震动是波形描述
+ * （每侧最多 3 个时序子帧），按这份规则重整为目标设备的 PCM；频率已解成 Hz，
+ * 落地时夹进各带的 [min, max]，0 回落缺省。完整规则与承载通路见 docs/controller-ps.md。
  */
 typedef struct {
     uint8_t ops; /**< 参与合成的时序子帧数上限（NS2 波形规则为 3）；0 = 无 HD 通路。 */
@@ -81,12 +72,14 @@ typedef struct {
     uint16_t hf_default_hz;
     uint16_t pulse_hz; /**< 采样「强震」段铺在音圈上的频率。 */
     uint16_t beep_hz;  /**< 采样「发声」段铺在扬声器上的频率。 */
+    /** 振幅增益（num/den，0 表示 1/1）：主机档位偏小，增益在写 FEEDBACK 帧之前落地，
+     *  板载合成与 PC 哑渲染因此吃同一份数值。 */
+    uint8_t gain_num;
+    uint8_t gain_den;
 } pad_hd_haptic_t;
 
-/** HD 渲染结果：每侧一条按时间顺序播放的子帧序列（低频/高频各一个振荡器，
- *  增益 0-255）加一路扬声器音色。由布局行的 hd 规则从主机波形渲染出来，
- *  合成引擎与桥接 FEEDBACK 帧都吃这一份——落地规则只在固件里有一份，PC
- *  只做哑渲染。 */
+/** HD 渲染结果：每侧一条按时间顺序播放的子帧序列（低频/高频各一个振荡器，增益 0-255）
+ *  加一路扬声器音色；合成引擎与桥接 FEEDBACK 帧吃同一份。 */
 #define PAD_HD_KEY_MAX 3 /**< 每侧子帧上限（NS2 波形规则为 3）。 */
 
 typedef struct {
@@ -104,11 +97,9 @@ typedef struct {
 } pad_hd_render_t;
 
 /**
- * 运动字段描述：一次性给出取样位置、样本数与轴映射。轴映射把来源轴归一到
- * 私有约定（X 右为正、Y 上为正、Z 朝屏幕外为正）：gyro_src / accel_src 的
- * 第 i 项是私有三轴第 i 路取来源的第几路（PAD_OFF_NONE 表示该路缺失），
- * 三项全零表示恒等映射。invert_mask 的 bit0-2 表示陀螺 X/Y/Z 取反、
- * bit3-5 表示加速 X/Y/Z 取反。
+ * 运动字段描述：给出取样位置、样本数与轴映射。gyro_src / accel_src 的第 i 项是
+ * 私有三轴第 i 路取来源的第几路（PAD_OFF_NONE 表示缺失，三项全零 = 恒等映射）；
+ * invert_mask 的 bit0-2 取反陀螺 XYZ、bit3-5 取反加速 XYZ。
  */
 typedef struct {
     uint8_t samples; /**< 一次报告里的样本数；0 按 1 处理。 */
@@ -119,12 +110,10 @@ typedef struct {
 } pad_motion_layout_t;
 
 /**
- * 输出（反馈）报告描述：把主机下发的震动 / 玩家灯编码成该设备能吃的输出
- * 报告（触觉采样不进输出报告，由板载蜂鸣器或丢弃处置）。presets 是发送前
- * 写入的常量字节（偏移 + 值，偏移 PAD_OFF_NONE 表示结束），用来点亮 DS4 的
- * flags 或 DualSense 的两个 valid_flag。震动的两路强度按 rumble_max 缩放后
- * 写进 rumble_off；玩家灯按 led_style 写掩码或 RGB。report_id 为 0 表示该
- * 设备没有可写的反馈通道。
+ * 输出（反馈）报告描述：把主机下发的震动 / 玩家灯编码成该设备的输出报告
+ * （触觉采样不进输出报告）。presets 是发送前写入的常量字节（偏移 + 值，
+ * 偏移 PAD_OFF_NONE 表示结束）；震动强度按 rumble_max 缩放后写进 rumble_off，
+ * 玩家灯按 led_style 写掩码或 RGB；report_id 为 0 表示没有可写的反馈通道。
  */
 #define PAD_OUT_PRESET_MAX 8
 
@@ -132,6 +121,9 @@ typedef struct {
     uint8_t report_id;
     uint8_t len; /**< 输出报告总长度（含 Report ID 字节）。 */
     uint8_t presets[PAD_OUT_PRESET_MAX][2];
+    /** 音频触觉让位期间的预置字节（与 presets 同格式；首槽偏移为 0 表示未声明，回落 presets）。
+     *  音频接手时写回的报告只该带玩家灯，位段语义见 docs/controller-ps.md。 */
+    uint8_t quiet_presets[PAD_OUT_PRESET_MAX][2];
     uint8_t rumble_off[PAD_TRIGGER_COUNT];
     uint8_t rumble_max[PAD_TRIGGER_COUNT];
     /** 每颗马达跟的频带（pad_rumble_band_t）；未填按低频。 */
@@ -139,37 +131,24 @@ typedef struct {
     uint8_t led_mask_off;
     uint8_t led_rgb_off;
     uint8_t led_style; /**< pad_led_style_t。 */
-    /** 音频触觉：设备带可驱动的 UAC 音频触觉通道（DualSense 的 4ch PCM，
-     *  后两路直连左右触觉音圈）。USB 直插时震动改走板上合成，HID 震动字节
-     *  让位；桥接路径（PC 持有音频接口）不受影响。蓝牙接入时它声明的是
-     *  蓝牙私有触觉流（DualSense 的 0x32 报告），让位语义相同。触觉采样
-     *  不进任何渲染通路（板载蜂鸣器发声 / 蓝牙桥接丢弃），与音频触觉标记
-     *  无关。 */
+    /** 音频触觉：设备带可驱动的音频触觉通道（DualSense 的 4ch PCM 或蓝牙私有流）。
+     *  USB 直插时震动改走板上合成、HID 震动字节让位；桥接路径（PC 持有音频接口）不受影响。 */
     uint8_t audio_haptic;
     /** HD 触觉波形映射规则（ops 为 0 表示该设备没有 HD 通路）。 */
     pad_hd_haptic_t hd;
     uint8_t frame;     /**< pad_out_frame_t。 */
-    /** PS 蓝牙形态的序号字节偏移（高半字节逐报递增、低半字节 tag 保持 0，
-     *  内核 DS_OUTPUT_SEQ_NO 的语义）；0 表示没有序号字节——DualShock 4 的
-     *  蓝牙报告头是静态的（b1 hw_control、b2 音频控制），DualSense 才有它。 */
+    /** PS 蓝牙形态的序号字节偏移（高半字节逐报递增、低半字节 tag 保持 0）；0 表示没有序号字节。 */
     uint8_t seq_off;
-    /** 玩家灯落地值：四项依次对应主机掩码 bit0-3（1P-4P），0 表示原样写主机
-     *  掩码。DualSense 的五颗灯是一组固定模式（1P 中灯、2P 中加外），不能直写
-     *  主机掩码，需要这张表。 */
+    /** 玩家灯落地值：四项依次对应主机掩码 bit0-3（1P-4P），0 表示原样写主机掩码。 */
     uint8_t led_mask_map[4];
 } pad_output_layout_t;
 
 /**
- * 家族布局表的一行：按（家族, Report ID, 连接方式, PID）定位字段偏移。偏移
- * 一律从收到的报告首字节起算（含 Report ID）。
- *
- * 同一组合下有多个型号时报 PID 分行（PS 系三种型号都报 0x01，但字段偏移各不
- * 相同）；布局相同的多个 PID 写在同一行的 pids 里；pids 为空表示该组合下所有
- * 型号共用这行。报告未带 PID（离线构造或旧帧）时不做型号过滤，取最先匹配的行。
- *
- * 各系列的行放在 pad/layouts/ 下，一族一个文件；加一个系列＝加一个文件并在
- * layout.c 的模块表里登记一行。偏移初值多取自公开资料，实机接线时用
- * `pc/remapadctl.py --dump` 抓包核对，偏差只影响布局文件，不影响上下游。
+ * 家族布局表的一行：按（家族, Report ID, 连接方式, PID）定位字段偏移，偏移一律从报告
+ * 首字节起算（含 Report ID）。同一组合下多个型号报同一 Report ID 时按 PID 分行，
+ * 布局相同的多个 PID 写在同一行，pids 为空表示该组合共用这行；报告未带 PID 时取最先匹配的行。
+ * 各系列的行放在 pad/layouts/ 下，一族一个文件，加一个系列再加一行登记。
+ * 字段偏移的来源与核对状态见 docs/controller-ps.md。
  */
 typedef struct {
     pad_family_t family;
@@ -184,13 +163,9 @@ typedef struct {
     uint8_t hat_off;
     uint8_t trigger_off[PAD_TRIGGER_COUNT];
     uint8_t stick_off[PAD_AXIS_COUNT];
-    /** 第一个触点的起始偏移（PAD_OFF_NONE 表示该行没有触摸数据）：每个触点
-     *  4 字节，首字节 bit7 为 0 表示这一路有触点（低 7 位是触点 ID），其余
-     *  三字节是 12 位 X（低 8 位 + 高 4 位）与 12 位 Y（高 4 位 + 低 8 位），
-     *  DS4 与 DualSense 同一套约定。DS4 的一帧带多份触摸历史（每份 1 字节
-     *  时间戳 + 2 个触点，USB 三份、蓝牙四份），偏移取第一份；DualSense 只有
-     *  一份。登记了它的行必须同时给 touch_max_x / touch_max_y：归一到 0-4095
-     *  与左右半区判定都用这一对量程。 */
+    /** 第一个触点的起始偏移（PAD_OFF_NONE 表示该行没有触摸数据）：每点 4 字节，
+     *  首字节 bit7 为 0 表示有触点（低 7 位是触点 ID），其余三字节是 12 位 X 与 12 位 Y；
+     *  DS4 一帧带多份触摸历史、取第一份。登记了它的行必须同时给 touch_max_x / touch_max_y。 */
     uint8_t touch_off;
     uint8_t motion_off;
     uint8_t battery_off;
@@ -228,9 +203,8 @@ typedef struct {
  *  布局也用它，因此定义在 layout.c 与 layouts/xbox.c 共用。 */
 extern const uint32_t pad_xbox_btn_map[16];
 
-/** PS 家族（DS4 与 DualSense）共用的按键位序：方向键帽子开关在低四位、面键在
- *  高四位，肩键、Create/Options、摇杆按下、PS / 触摸板 / 静音与 Edge 背键依次
- *  排在第二、三字节。DS3 的方向键在按键位图里，自带一份。 */
+/** PS 家族（DS4 与 DualSense）共用的按键位序：方向键帽子开关在低四位、面键在高四位，
+ *  肩键、Create/Options、摇杆按下、PS / 触摸板 / 静音与 Edge 背键依次排在第二、三字节。 */
 extern const uint32_t pad_ps_btn_map[24];
 
 /**

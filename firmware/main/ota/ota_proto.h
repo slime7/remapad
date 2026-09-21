@@ -9,16 +9,9 @@ extern "C" {
 #endif
 
 /**
- * OTA 会话的纯逻辑（不依赖 ESP-IDF，可主机端测试）：把桥接帧里的 OTA 载荷
- * 拼成镜像字节流，负责序号判定、窗口应答、4 KB 聚合成块与空闲超时；真正
- * 写 flash 与写启动分区由 `ota_flush_fn` 回调与上层（ota_session）承担。
- *
- * 载荷布局（PC 端 pc/link.py 与 remapadctl.py 按同名常量镜像一份）：
- *   BEGIN: "ROM1" + image_size(u32 LE)
- *   DATA:  seq(u16 LE) + 数据（最多 200 字节）
- *   END:   无载荷
- *   ACK:   state(1) + code(1) + next_seq(u16 LE) + received(u32 LE)，
- *          对 BEGIN 的应答末尾再跟 16 字节运行版本（ASCII，不足补 0）。
+ * OTA 会话的纯逻辑（不依赖 ESP-IDF，可主机端测试）：把桥接帧里的 OTA 载荷拼成镜像字节流，
+ * 负责序号判定、窗口应答、4 KB 聚合成块与空闲超时；写 flash 与写启动分区由上层回调承担。
+ * 载荷布局见 ABSTRACTIONS 的桥接帧表。
  */
 
 #define OTA_BEGIN_MAGIC "ROM1"

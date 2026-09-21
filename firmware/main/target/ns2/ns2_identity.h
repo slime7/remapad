@@ -12,14 +12,14 @@ extern "C" {
 
 /**
  * 手柄身份的对外地址与命名（纯逻辑，无 IDF 依赖，可主机端测试）。
- * 设备对外只有一台 Pro Controller 2，广播一律用公共伪装地址——主机只接受
- * public 地址的广播（实机对账，见 docs/controller.md「广播过滤与配对记录」）。
+ * 协议事实见 docs/controller-switch2.md。
+ * 设备对外只有一台 Pro Controller 2，广播一律用公共伪装地址——主机只接受 public 地址的广播。
  */
 
 /** 身份短名（日志与诊断用）：pro；未知身份返回 "?"。 */
 const char *ns2_identity_name(uint8_t identity);
 
-/** 广播地址形态（实机对账开关，见 ns2_session_set_adv_addr_form）：
+/** 广播地址形态（对账开关，见 ns2_session_set_adv_addr_form）：
  *  auto 与 public 都是公共伪装地址，random 换成派生静态随机地址做对照。 */
 typedef enum {
     NS2_ADV_ADDR_AUTO = 0,

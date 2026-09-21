@@ -2,10 +2,10 @@
 
 #include <string.h>
 
-/** 真机抓包（ndeadly/switch2_controller_research 的 btle_procon2_motion_0x000E）
- *  里的一块运动数据：40 字节运动块 + 紧随其后的 8 字节尾段。板卡没有 IMU，
- *  用抓包原值占位比全零更接近真机；块内两处 3 字节小端微秒时间戳（运动块
- *  偏移 0x05 与 0x23）在发送时按上报节奏推进，其余字节保持原值。 */
+/** 一块运动数据样本（来自 ndeadly/switch2_controller_research 的
+ *  btle_procon2_motion_0x000E）：40 字节运动块 + 紧随其后的 8 字节尾段。
+ *  板卡没有 IMU，用样本原值占位比全零更接近真实形态；块内两处 3 字节小端微秒
+ *  时间戳（运动块偏移 0x05 与 0x23）在发送时按上报节奏推进，其余字节保持原值。 */
 static const uint8_t s_motion_capture[40 + 8] = {
     0x06, 0x70, 0x95, 0x5B, 0x34, 0xB6, 0x94, 0x78, 0x00, 0x0D,
     0x43, 0xB7, 0xFB, 0x37, 0x42, 0x01, 0x2C, 0x83, 0xFF, 0x41,
@@ -14,7 +14,7 @@ static const uint8_t s_motion_capture[40 + 8] = {
     0x6C, 0xBE, 0x81, 0x4B, 0x20, 0x54, 0xDF, 0x58,
 };
 
-/** 抓包块内两个时间戳字段的偏移（相对运动块起点）：第二个比第一个晚 2.5ms。 */
+/** 块内两个时间戳字段的偏移（相对运动块起点）：第二个比第一个晚 2.5ms。 */
 #define NS2_MOTION_STAMP_OFFS_A 0x05
 #define NS2_MOTION_STAMP_OFFS_B 0x23
 #define NS2_REPORT_INTERVAL_US 5000u
@@ -58,7 +58,7 @@ void ns2_unpack_stick(const uint8_t in[3], uint16_t *x, uint16_t *y)
     *y = (uint16_t)((in[1] >> 4) | (in[2] << 4));
 }
 
-/** Report 0x09 三字节按键位图（controller.md「专用输入报告」Pro Controller 2 表）。 */
+/** Report 0x09 三字节按键位图（位序见 docs/controller-switch2.md）。 */
 static void buttons_09(const ns2_controller_state_t *state, uint8_t out[3])
 {
     const uint32_t b = state->buttons;
@@ -85,7 +85,7 @@ static void buttons_09(const ns2_controller_state_t *state, uint8_t out[3])
                        btn_bit(b, NS2_BTN_HOME, 0));
 }
 
-/** Report 0x05 四字节按键位图（controller.md「Input Report 0x05」按键表）。 */
+/** Report 0x05 四字节按键位图。 */
 static void buttons_05(const ns2_controller_state_t *state, uint8_t out[4])
 {
     const uint32_t b = state->buttons;
@@ -113,7 +113,7 @@ static void buttons_05(const ns2_controller_state_t *state, uint8_t out[4])
 }
 
 /** 运动块填充（0x09 报文体；0x05 的 IMU 字段另在 ns2_encode_input_05 里写）。
- *  len_out 是长度字节、data_out 是块首，cap 为块首之后可用字节数（抓包占位块
+ *  len_out 是长度字节、data_out 是块首，cap 为块首之后可用字节数（样本块
  *  带 8 字节尾段，空间不够时只填块本体，取用方传 48）。主机开启 IMU 特性位后
  *  长度 0 的报文会被当作不完整输入，因此除 NS2_MOTION_NONE 外用的一档一律填满长度。 */
 static void motion_block(uint8_t *len_out, uint8_t *data_out, size_t cap,
@@ -140,7 +140,7 @@ static void motion_block(uint8_t *len_out, uint8_t *data_out, size_t cap,
         return;
     }
     /* 实验模式：把输入设备的真实样本按 NS1 的 12 字节样本风格填进块首，
-     * 余下字节保持 0。块结构未公开，这一档只为实机 A/B（见 ns2_state.h）。 */
+     * 余下字节保持 0。块结构未公开，这一档只为对照（见 ns2_state.h）。 */
     if (state->motion_mode == NS2_MOTION_SENSOR && state->motion_valid) {
         for (uint8_t s = 0; s < NS2_09_MOTION_SAMPLES; s++) {
             uint8_t *sample = &data_out[s * NS2_09_MOTION_SAMPLE_LEN];
@@ -165,8 +165,8 @@ void ns2_encode_input_09(uint8_t out[NS2_INPUT_09_LEN],
     buttons_09(state, &out[0x02]);
     ns2_pack_stick(state->stick_lx, state->stick_ly, &out[0x05]);
     ns2_pack_stick(state->stick_rx, state->stick_ry, &out[0x08]);
-    /* 状态标志：特性位 5（触觉）开启时 0x38，否则 0x30（真机抓包：开启触觉
-     * 的 0x09 报文该字节恒为 0x38）。0x0C NFC 状态由 amiibo 预置数据驱动
+    /* 状态标志：特性位 5（触觉）开启时 0x38，否则 0x30（开启触觉的 0x09 报文
+     * 该字节恒为 0x38）。0x0C NFC 状态由 amiibo 预置数据驱动
      * （空闲 0x00）；0x0D 耳机状态按输入设备的 3.5mm 状态（或串口 headset
      * 覆盖值）填，未插入为 0x00。 */
     out[0x0B] = state->rumble_enabled ? 0x38 : 0x30;

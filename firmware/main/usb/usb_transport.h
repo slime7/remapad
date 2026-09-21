@@ -11,14 +11,9 @@ extern "C" {
 #endif
 
 /**
- * USB host 传输层（usb_transport.c）：装栈、枚举、挑 HID 手柄接口、收 IN
- * 报告、写 OUT 报告。切换 PHY 会断开板卡上的 COM 口（USB-Serial/JTAG），
- * 因此进入 host 之前必须先把串口链路与控制台出口迁走，见 usb_role.c。
- *
- * 文件名避开 usb_host.h：那一份是 Registry 组件 espressif/usb 的头文件，
- * 同名头会被本目录遮住。
- *
- * 依赖 Registry 组件 espressif/usb（IDF 6.x 已把 USB Host 库移出核心）。
+ * USB host 传输层：装栈、枚举、挑 HID 手柄接口、收 IN 报告、写 OUT 报告。
+ * 切换 PHY 会断开板卡上的 COM 口，进入 host 之前必须先把串口链路与控制台出口迁走（见 usb_role.c）。
+ * 文件名避开 usb_host.h，以免遮住 Registry 组件 espressif/usb 的同名头。
  */
 
 /** 装 host 栈并起任务；重复调用返回 ESP_OK。 */

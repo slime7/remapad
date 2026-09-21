@@ -10,22 +10,9 @@ extern "C" {
 #endif
 
 /**
- * 串口控制台 CLI（USB-Serial/JTAG 复用烧录/日志口）：以行命令驱动设备，
- * 免去验收时手点屏幕。命令走产品控制面同一路径（js_bridge 外部队列或
- * 直接调用安全接口），不引入第二条控制逻辑。
- *
- * 可用命令（回车结尾，回复为单行文本）：
- *   help / ping / status
- *   key <name> [ms]      调试注入按键（a b x y home capture c l r zl zr …）
- *   backlight 0-100      背光并持久化
- *   screen on|off        息屏 / 亮屏
- *   mode device|host     连接模式（桥接 otg 由 bridge 拒绝）
- *   pairing start|stop   配对模式开关
- *   version              运行镜像版本 / 分区 / OTA 会话状态
- *   rollback             回滚到上一个可用镜像（仅待验证状态有效）
- *   reboot               软重启（回 COM 模式）
- *
- * 注意：与 idf.py monitor 共用端口时，监视器会抢读输入，二者勿同时使用。
+ * 串口控制台 CLI（与烧录/日志共用 USB-Serial/JTAG）：以行命令驱动设备，走产品控制面同一路径，
+ * 不引入第二条控制逻辑。命令清单见 docs/GETTING-STARTED.md 与运行中的 `help`；
+ * 与 idf.py monitor 共用端口时监视器会抢读输入，二者勿同时使用。
  */
 
 esp_err_t remapad_cli_start(void);

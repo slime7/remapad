@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 /** 找到的音频流（AS）输出接口：Type I PCM 16 位、带等时 OUT 端点的最低
- *  非 0 备用设置。DualSense 的音频布局固定为 48kHz / 4ch（实机
- *  描述符抓包：接口 1 alt 1、端点 0x01、MPS 392 = 49 样本 × 4ch × 2B）。 */
+ *  非 0 备用设置。DualSense 的音频布局固定为 48kHz / 4ch
+ *  （接口 1 alt 1、端点 0x01、MPS 392 = 49 样本 × 4ch × 2B）。 */
 typedef struct {
     uint8_t iface;
     uint8_t alt;

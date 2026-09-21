@@ -11,16 +11,15 @@
 
 static const char *TAG = "remapad_ns2nfc";
 
-/** 0x14（读取中）→ 0x15（数据就绪）的模拟耗时：实机对账取
- *  30ms 时主机能一气拉完全部 8 块（15ms 时反而 3 块就停）；块间的 0x05 轮询
- *  第一拍读到「读取中」、第二拍读到「就绪」，正是真机的节奏。 */
+/** 0x14（读取中）→ 0x15（数据就绪）的模拟耗时：30ms 时主机能一气拉完全部 8 块
+ *  （15ms 时反而 3 块就停）；块间的 0x05 轮询第一拍读到「读取中」、第二拍读到「就绪」。 */
 #define NS2_NFC_STAGE_READY_DELAY_US (30 * 1000LL)
 
-/** 0x05 卡信息体的抓包前缀：`09 00 00 00`（状态区）+ `01 01 02 00`
+/** 0x05 卡信息体的前缀：`09 00 00 00`（状态区）+ `01 01 02 00`
  *  （感应标志 / 协议 / 卡类型 02 = Type 2 标签）+ `07`（UID 长度）。 */
 static const uint8_t s_tag_info_prefix[9] = {0x09, 0x00, 0x00, 0x00, 0x01, 0x01, 0x02, 0x00, 0x07};
 
-/** 0x0C 的 NFC 控制器状态体（抓包原值）。 */
+/** 0x0C 的 NFC 控制器状态体（固定原值）。 */
 static const uint8_t s_nfc_status[4] = NS2_NFC_STATUS_BODY;
 
 static struct {
@@ -31,10 +30,9 @@ static struct {
     uint8_t sig[NS2_NFC_SIG_SIZE];
     /** 主机已开射频场轮询（0x01/0x03）；串口 CLI 也能手动开关做验证。 */
     bool polling;
-    /** 读卡流程状态：0 = 未在读书（卡片在场 0x09）；0x14 = 读取中（0x06 触发
-     *  后）；0x15 = 数据就绪（读卡耗时过后）——实机对账：主机 0x06
-     *  后检查 0x05 体首字节并等报告状态字节到 0x15 才来拉数据，此前恒报 0x09
-     *  时主机在 3 秒超时后整轮重来。 */
+    /** 读卡流程状态：0 = 未在读书（卡片在场 0x09）；0x14 = 读取中（0x06 触发后）；
+     *  0x15 = 数据就绪（读卡耗时过后）——主机在 0x06 后检查 0x05 体首字节，
+     *  并等报告状态字节到 0x15 才来拉数据。 */
     uint8_t read_stage;
     /** 主机抽完块（EOF 探测）后的「读取结束」：状态报 s_drained_state（串口
      *  可调，默认 0x00 Idle），下一次 0x03/0x04/0x06 复位。 */
@@ -51,9 +49,8 @@ static struct {
     void *sink_user;
 } s_nfc;
 
-/** 0x14 首块的操作描述符长度：`d0 07` + UID(7) + 操作参数(8)，与 0x06 读
- *  触发载荷同构（抓包 0x14 示例：d0 07 04 8a 6d 2a b7 5d 80 01 00 01 04
- *  ff ff ff ff，其后直接接标签页 4）。 */
+/** 0x14 首块的操作描述符长度：`d0 07` + UID(7) + 操作参数(8)，与 0x06 读触发载荷
+ *  同构（其后直接接标签页 4）。 */
 #define NS2_NFC_WRITE_DESC_LEN 17u
 
 /** 读取结束后的报告状态值（串口 `amiibo done <n>` 可调，扫「读取结束」的
@@ -174,9 +171,9 @@ static uint8_t effective_stage(void)
 
 uint8_t ns2_nfc_report_state(void)
 {
-    /* 状态机（报告字节与 0x05 体首字节同源）：场开无卡 0x01；卡片在场 0x09
-     * （抓包原值）；0x06 读卡触发后 0x14（读取中）→ 0x15（数据就绪）；主机
-     * 抽完块（EOF 探测）报「读取结束」值（串口可调，默认 0x00 Idle）。 */
+    /* 状态机（报告字节与 0x05 体首字节同源）：场开无卡 0x01；卡片在场 0x09；
+     * 0x06 读卡触发后 0x14（读取中）→ 0x15（数据就绪）；主机抽完块（EOF 探测）
+     * 报「读取结束」值（串口可调，默认 0x00 Idle）。 */
     if (!s_nfc.polling) {
         return 0x00u;
     }
@@ -285,10 +282,9 @@ void ns2_nfc_set_write_sink(ns2_nfc_write_sink_fn fn, void *user)
     s_nfc.sink_user = user;
 }
 
-/** 0x05 取卡信息：63 字节体（抓包前缀 + UID + 补零），感应区无卡时全零。
- *  体首字节 = 报告状态字节的同一状态源（在场 0x09 抓包原值，读卡流程中
- *  0x14/0x15，读取结束 0x00）——两个通道的值必须一致，主机在读卡流程里
- *  交替观察它们。 */
+/** 0x05 取卡信息：63 字节体（前缀 + UID + 补零），感应区无卡时全零。
+ *  体首字节 = 报告状态字节的同一状态源（在场 0x09，读卡流程中 0x14/0x15，
+ *  读取结束 0x00）——两个通道的值必须一致，主机在读卡流程里交替观察它们。 */
 static size_t build_tag_info(uint8_t *resp, size_t cap)
 {
     if (cap < NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN) {
@@ -307,10 +303,8 @@ static size_t build_tag_info(uint8_t *resp, size_t cap)
     return NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN;
 }
 
-/** 读缓冲 60 字节头区：结构来自 Switch 1 MCU 时代的读卡响应（Poohl/
- *  joycontrol mcu.md read1 的标签数据前缀），尾部 3B 3C 77 78 86 00 00 与
- *  NS2 抓包的 0x06 读触发载荷尾部同串；厂商签名取 572 字节 dump 尾部。
- *  布局见 ns2_nfc.h 的 ns2_nfc_set_header_mode 注释。 */
+/** 读缓冲 60 字节头区：结构来自 Switch 1 MCU 时代的读卡响应（Poohl/joycontrol
+ *  mcu.md read1 的标签数据前缀）；厂商签名取 572 字节 dump 尾部。 */
 static void build_read_header(uint8_t *out)
 {
     memset(out, 0, NS2_NFC_BUFFER_HEADER);
@@ -337,9 +331,7 @@ static void build_read_header(uint8_t *out)
 }
 
 /** 0x15 取读缓冲：`00`（状态）+ 数据长度（u16 LE）+ 最多 70 字节缓冲数据。
- *  缓冲区 = [60 字节读卡结果头][540 字节标签镜像]，布局见 ns2_nfc.h
- *  （NS2_NFC_BUFFER_HEADER/TOTAL）。抓包里 `00 46 00` 的 `46 00` 是数据长度
- *  （曾误读成偏移回显）。 */
+ *  缓冲区 = [60 字节读卡结果头][540 字节标签镜像]（NS2_NFC_BUFFER_HEADER/TOTAL）。 */
 static size_t build_buffer_read(const uint8_t *req, size_t len, uint8_t *resp, size_t cap)
 {
     if (len < NS2_FRAME_HEADER_LEN + 2 ||
@@ -373,11 +365,10 @@ static size_t build_buffer_read(const uint8_t *req, size_t len, uint8_t *resp, s
     return NS2_FRAME_HEADER_LEN + 3 + n;
 }
 
-/** 0x14 装载写缓冲：`offset(u16 LE) + len(u16 LE) + 数据`；首次装载把镜像
- *  整份垫进缓冲（0xFF 补齐），保证部分写入提交后其余字节不变。
- *  首块若以 `d0 07` 操作描述符开头（抓包 0x14 示例：描述符 17 字节后直接
- *  接标签页 4，UID/CC 只读页不写），进入流式模式：描述符剥掉、数据从页 4
- *  起按序落位；不带描述符的装载保持按偏移直写。 */
+/** 0x14 装载写缓冲：`offset(u16 LE) + len(u16 LE) + 数据`；首次装载把镜像整份垫进
+ *  缓冲（0xFF 补齐），保证部分写入提交后其余字节不变。首块若以 `d0 07` 操作描述符
+ *  开头（描述符 17 字节后直接接标签页 4，UID/CC 只读页不写），进入流式模式：
+ *  描述符剥掉、数据从页 4 起按序落位；不带描述符的装载保持按偏移直写。 */
 static void load_write_buffer(const uint8_t *req, size_t len)
 {
     if (len < NS2_FRAME_HEADER_LEN + 4) {
@@ -499,9 +490,8 @@ size_t ns2_nfc_on_command(const uint8_t *req, size_t len, uint8_t subcmd, uint8_
         return built;
     }
     case 0x06:
-        /* 触发读卡：镜像常驻内存，读卡即刻成立。状态按 0x14（读取中）→
-         * 0x15（数据就绪）跃迁——实机对账：主机在 0x06 后检查
-         * 一次 0x05 体首字节、随后等报告状态字节到 0x15 才按 0x15 分块拉取。 */
+        /* 触发读卡：镜像常驻内存，读卡即刻成立。状态按 0x14（读取中）→ 0x15（数据就绪）
+         * 跃迁——主机在 0x06 后检查一次 0x05 体首字节、随后等报告状态字节到 0x15 才拉取。 */
         s_nfc.read_stage = 0x14u;
         s_nfc.drained = false;
         s_nfc.read_started_us = esp_timer_get_time();
@@ -521,9 +511,8 @@ size_t ns2_nfc_on_command(const uint8_t *req, size_t len, uint8_t subcmd, uint8_
         load_write_buffer(req, len);
         return NS2_FRAME_HEADER_LEN;
     case 0x15: {
-        /* 主机抽块期间状态保持在 0x15（数据就绪）不变：每拉一块就翻回
-         * 0x14 会让主机看到「就绪状态消失」而中途放弃抽块（实机
-         * 对账：状态翻转时抽块深度随机 1-8 块，保持 0x15 才能连续抽完）。
+        /* 主机抽块期间状态保持在 0x15（数据就绪）不变：每拉一块就翻回 0x14
+         * 会让主机看到「就绪状态消失」而中途放弃抽块，保持 0x15 才能连续抽完。
          * 主机拉到缓冲区末端（应答长度 0）即整份读完毕，状态报「读取结束」
          * 值（串口可调）交给上层。 */
         const uint16_t offset = (uint16_t)(req[8] | ((uint16_t)req[9] << 8));

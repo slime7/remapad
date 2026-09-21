@@ -22,4 +22,4 @@
 
 - 正面：模式页的「手柄」卡片与 PWR 长按都能即时切角色，烧录链路不受影响（复位即回 COM）。
 - 约束：host 模式下日志与 CLI 只在 UART0（GPIO43/44 扩展焊盘，需 USB-UART 适配器），PC 桥接与 OTA 在 host 模式不可用。
-- 门禁：VBUS 5V 供电路径仍未确认，是 host 模式能否给插入手柄供电的前提，实机结论回填 hardware.md。
+- 门禁：host 模式要给插入的手柄供 VBUS 5V，板卡没有升压输出，需外部注入，见 [hardware.md](../hardware.md)。

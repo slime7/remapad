@@ -1,6 +1,6 @@
 #include "layout.h"
 
-/** Xbox 系列：有线的字段偏移按公开资料填、蓝牙待抓包核对。 */
+/** Xbox 系列：字段偏移按公开资料登记。 */
 static const pad_layout_t s_rows[] = {
     {
         .family = PAD_FAMILY_XBOX,
@@ -20,9 +20,8 @@ static const pad_layout_t s_rows[] = {
         .invert_y = false,
         .btn_map = pad_xbox_btn_map,
         /* 输出报告 0x03：b1 是四个马达的使能掩码，b2 左大马达、b3 右小马达、
-         * b4/b5 左右扳机。偏移取自公开实现（Chromium xbox_hid_controller.cc），
-         * 未实机核对；注意 USB 直连的 Xbox One/Series 多数走厂商 GIP/XUSB 而
-         * 不是 HID 输出报告，host 路径能否认到这个接口要实机确认。 */
+         * b4/b5 左右扳机。偏移取自公开实现（Chromium xbox_hid_controller.cc）；
+         * 注意 USB 直连的 Xbox One/Series 多数走厂商 GIP/XUSB 而不是 HID 输出报告。 */
         .out = {
             .report_id = 0x03,
             .len = 8,
@@ -34,7 +33,7 @@ static const pad_layout_t s_rows[] = {
         },
     },
     {
-        /* Xbox 蓝牙：字段顺序与有线一致，偏移待抓包核对。 */
+        /* Xbox 蓝牙：字段顺序与有线一致。 */
         .family = PAD_FAMILY_XBOX,
         .conn = PAD_CONN_BT,
         .report_id = 0x01,

@@ -1,10 +1,6 @@
 /**
- * NS2 序列号命名规则（ns2_serial.c，controller.md「出厂数据区定义」）：14 位 = 3 字母
- * 前缀 + 10 位数字 + 校验位，校验位 = (10 − S mod 10) mod 10，
- * S = 偶位和 + 3 × 奇位和（0 基）。
- *
- * 校验位错一位主机就可能不认这台手柄，而它在日志里完全看不出来，只能靠
- * 用例守住；下面同时拿文档里的两个真实示例当黄金样本。
+ * NS2 序列号命名规则（ns2_serial.c）主机端用例：前缀、地区码与校验位逐条钉住，
+ * 并拿文档里的真实示例当黄金样本；校验位错一位主机可能不认这台手柄，日志里完全看不出来。
  */
 #include "host_test.h"
 
@@ -86,4 +82,3 @@ HOST_TEST_SUITE(suite_ns2_serial, "ns2_serial",
                 {"界面展示的占位序列号同一规则", builds_serials_shown_in_ui},
                 {"14 位形状与前缀原样拷贝", shape_and_prefix},
                 {"校验位覆盖边界和值", check_digit_covers_edge_sums});
-

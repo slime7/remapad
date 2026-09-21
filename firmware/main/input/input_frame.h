@@ -9,16 +9,10 @@ extern "C" {
 #endif
 
 /**
- * 桥接帧协议（PC → 设备）：与 USB-Serial/JTAG 上的 CLI 文本共用一条字节流，
- * 靠同步字区分。
- *
- * 帧布局（长度不含自身）：
- *   A5 5A | ver | type | slot | seq | len | payload[len] | crc16(LE)
- * CRC-16/CCITT-FALSE 覆盖整帧除末尾两字节外的全部字节（含同步字）。
- * 载荷上限按用途分档：报文帧 72 字节（8 字节设备标识 + 单帧最多 64 字节
- * 原始报告），输出报告帧 78 字节（设备 → PC，蓝牙 PS 两行的输出报告长度），
- * OTA 数据帧最多 202 字节；线格式的 len 是单字节，因此解码器按
- * INPUT_FRAME_WIRE_MAX_PAYLOAD 收帧，各类型再按自己的上限校验。
+ * 桥接帧协议（PC → 设备）：与 USB-Serial/JTAG 上的 CLI 文本共用一条字节流，靠同步字区分。
+ * 帧布局：A5 5A | ver | type | slot | seq | len | payload[len] | crc16(LE)，CRC-16/CCITT-FALSE
+ * 覆盖除末尾两字节外的全部字节。线格式 len 是单字节，解码器按 INPUT_FRAME_WIRE_MAX_PAYLOAD 收帧，
+ * 各类型再按自己的上限校验；帧类型表见 ABSTRACTIONS。
  */
 #define INPUT_FRAME_SYNC0 0xA5u
 #define INPUT_FRAME_SYNC1 0x5Au

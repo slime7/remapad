@@ -99,11 +99,8 @@ static void ns2_from_pad(const pad_state_t *pad, ns2_controller_state_t *out)
 
 /** 私有 3.5mm 状态 → NS2 耳机状态字节：未插入 0x00、插入 0x05。
  *
- *  带麦那一档（0x07 / 0x0F）经实机对照会被主机拒绝：换上这两个值后约
- *  150 ms 主机就取消 0x000E 的订阅，输入不再被采用；0x00 / 0x05 / 0x0D 则
- *  全程保持订阅。主机认这一档的前提是 0x002C 上的音频 / 麦克风通路，本轮
- *  不做，因此派生值只报「插入」，带麦位不上行；要 A/B 时用串口 headset
- *  钉一个值（见 pc/README.md 与 ADR 0035）。 */
+ *  带麦那一档（0x07 / 0x0F）会被主机拒绝、输入不再被采用，因此不上行；
+ *  要 A/B 时用串口 headset 钉一个值（见 ADR 0035）。 */
 static uint8_t ns2_headset_state_from_pad(const pad_state_t *pad)
 {
     if ((pad->caps & PAD_CAP_MIC) == 0u || !pad->headset_present) {

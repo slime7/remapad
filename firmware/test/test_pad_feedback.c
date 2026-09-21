@@ -1,9 +1,6 @@
 /**
- * 反馈编码（pad/feedback.c）：主机下发的震动 / 玩家灯 / 触觉采样按布局行
- * 编码成对应手柄的输出报告。偏移取自公开实现（本轮没有实机核对），这里把
- * 每个家族的字节布局钉住——实机对比时只要报告字节一致就说明表没填错。
- *
- * 同代透传单独一例：NS2 手柄直接吃主机的 LRA 参数包，不做任何字段映射。
+ * 反馈编码（pad/feedback.c）主机端用例：按布局行钉住各家族输出报告的字节布局，
+ * 同代透传单独成例（NS2 手柄直接吃主机的 LRA 参数包）；偏移取自公开实现，核对前以用例为准。
  */
 #include "host_test.h"
 
@@ -22,10 +19,11 @@ static pad_feedback_t feedback_default(void)
 /** 蓝牙输出报告尾部 CRC32 的黄金值（算法与来源见 dualsense 蓝牙用例）：
  *  依次对应「左 255 / 右 128 / 1P」「停止震动 / 1P」「无震动 2P」「DS4 左 64 / 2P」。
  *  DS5 的三组是灯条退出反馈通道后的取值（valid_flag1 只置玩家灯、灯条设置与
- *  RGB 字节全零）。 */
-static const uint8_t s_crc_ds5_rumble[4] = {0x2a, 0x6b, 0x1a, 0x26};
-static const uint8_t s_crc_ds5_stop[4] = {0xd2, 0x8e, 0x7f, 0xfa};
-static const uint8_t s_crc_ds5_2p[4] = {0x74, 0x68, 0x6c, 0xf2};
+ *  RGB 字节全零），并带上喇叭路由的两个使能位与 b10/b40（见
+ *  dualsense_rows_route_the_pad_speaker）。 */
+static const uint8_t s_crc_ds5_rumble[4] = {0x0b, 0xf2, 0x56, 0xbd};
+static const uint8_t s_crc_ds5_stop[4] = {0xf3, 0x17, 0x33, 0x61};
+static const uint8_t s_crc_ds5_2p[4] = {0x55, 0xf1, 0x20, 0x69};
 static const uint8_t s_crc_ds4_bt[4] = {0xbc, 0xb2, 0x30, 0x41};
 
 static void dualsense_usb_encodes_rumble_and_led(void)
@@ -44,8 +42,8 @@ static void dualsense_usb_encodes_rumble_and_led(void)
                                            sizeof(out));
     CHECK_EQ(len, 48);
     CHECK_EQ(out[0], 0x02); /* 报告 ID */
-    CHECK_EQ(out[1], 0x23); /* valid_flag0：兼容震动 + 关音频触觉 + 更新喇叭音量 */
-    CHECK_EQ(out[2], 0x10); /* valid_flag1：只置玩家指示灯，灯条不声明有效 */
+    CHECK_EQ(out[1], 0xA3); /* valid_flag0：兼容震动 + 关音频触觉 + 更新喇叭音量 + 音频控制 */
+    CHECK_EQ(out[2], 0x90); /* valid_flag1：玩家指示灯 + 前级增益更新，灯条不声明有效 */
     CHECK_EQ(out[3], 128);  /* 右小马达 */
     CHECK_EQ(out[4], 255);  /* 左大马达 */
     CHECK_EQ(out[6], 100);  /* 喇叭音量钉在 PS5 缺省档（采样提示音不轻到听不见） */
@@ -87,7 +85,7 @@ static void ds4_usb_encodes_rumble_and_lightbar(void)
 
 /** 蓝牙形态：b1 是序号/标签字节、b2 是固定魔数 0x10、公共段从 b3 起，末 4 字节
  *  是 CRC32。黄金字节按 Linux hid-playstation.c 的算法算得（种子字节 0xA2 先过
- *  一遍、结果小端写末 4 字节）——实机验证过：缺了这段 CRC，主机整份报告都不认，
+ *  一遍、结果小端写末 4 字节）——缺了这段 CRC，主机整份报告都不认，
  *  写回成功而手柄毫无反应。 */
 static void dualsense_bt_encodes_framed_report(void)
 {
@@ -109,8 +107,8 @@ static void dualsense_bt_encodes_framed_report(void)
     CHECK_EQ(out[0], 0x31); /* 蓝牙报告 ID */
     CHECK_EQ(out[1], 0x00); /* 序号与标签半字节 */
     CHECK_EQ(out[2], 0x10); /* 固定魔数 */
-    CHECK_EQ(out[3], 0x23); /* 震动 + 关音频触觉 + 更新喇叭音量 */
-    CHECK_EQ(out[4], 0x10); /* 只置玩家指示灯 */
+    CHECK_EQ(out[3], 0xA3); /* 震动 + 关音频触觉 + 更新喇叭音量 + 音频控制 */
+    CHECK_EQ(out[4], 0x90); /* 玩家指示灯 + 前级增益更新 */
     CHECK_EQ(out[5], 128); /* 右小马达 */
     CHECK_EQ(out[6], 255); /* 左大马达 */
     CHECK_EQ(out[8], 100); /* 喇叭音量钉在 PS5 缺省档 */
@@ -158,7 +156,7 @@ static void dualsense_motors_follow_rumble_bands(void)
 
 /** 监听者按两带解出强度后要经持续帧合并（pad_feedback_apply）才到编码——
  *  合并漏拷高频带会把高频纹理编码成全零马达字节，写回层按「字节没变」一帧
- *  都不发（实机曾表现：反馈帧 L=on 而两带强度印成 0/0 自相矛盾）。 */
+ *  都不发（反馈帧 L=on 而两带强度印成 0/0 自相矛盾）。 */
 static void hf_band_strength_survives_into_held_frame(void)
 {
     pad_feedback_t held = feedback_default();
@@ -203,7 +201,7 @@ static void rumble_frequencies_survive_into_held_frame(void)
     CHECK_EQ(held.rumble_hf_freq[PAD_TRIGGER_R2], 200);
 }
 
-/** 主机只发采样 ID、不带播放形态（实机抓包：重发同一 ID 约
+/** 主机只发采样 ID、不带播放形态（重发同一 ID 约
  *  18Hz），节奏由采样音色表给出——0x02（定位呼叫）是首个登记条目：强震、
  *  停顿、两声蜂鸣、停顿，整周期循环；把恒定强度写马达会整段钉成「一直震」。
  *  音色表是常规数据：新增采样只登记新条目，不改编码路径。 */
@@ -234,7 +232,7 @@ static void unregistered_samples_fall_back_to_one_pulse(void)
 }
 
 /** 协议清单里的 0x01（低频蜂鸣，约 1 秒）按文档时长登记为音色数据：
- *  一段强震后静默、不循环；实机回填前先钉住数据契约。 */
+ *  一段强震后静默、不循环；回填前先钉住数据契约。 */
 static void lf_beep_sample_plays_documented_duration(void)
 {
     CHECK_EQ(pad_haptic_pulse_envelope(0x01, 0), 0xC0);
@@ -354,7 +352,7 @@ static void haptic_sample_never_drives_motors(void)
 
 /** 「查找手柄」页的蜂鸣由 0x0A 采样流承载，同期的 LRA 参数包只是载波
  *  （高频 1-2/255，不判成在震）。载波包以接近输入上报的频率到达，持续帧
- *  合并若被非采样事件顺手清掉采样，蜂鸣节奏会被切成 15ms 碎片——实机表现：
+ *  合并若被非采样事件顺手清掉采样，蜂鸣节奏会被切成 15ms 碎片——表现：
  *  查找手柄页的提示音时有时无。采样只在带它的事件里更新，
  *  0x00 是「停止播放」；马达不吃采样，一直保持中性。 */
 static void haptic_pulse_survives_rumble_carriers(void)
@@ -425,7 +423,7 @@ static void dualsense_player_led_follows_pattern(void)
     CHECK_EQ(out[46], 0x00);
 }
 
-/** 震动写回不能改灯条颜色（实机：玩家灯 0x01 时每次震动写回都把
+/** 震动写回不能改灯条颜色（玩家灯 0x01 时每次震动写回都把
  *  灯条钉成玩家蓝并带「淡出」设置，平时淡回默认白、一震就变深蓝）。DualSense
  *  的玩家号只落四颗白灯，灯条留给 PC 侧管理：valid_flag1 不置灯条位，灯条
  *  设置与 RGB 字节全零。 */
@@ -439,7 +437,7 @@ static void dualsense_rumble_leaves_lightbar_alone(void)
     uint8_t out[PAD_OUTPUT_MAX];
     CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x0CE6, &feedback, out, sizeof(out)),
              48);
-    CHECK_EQ(out[2], 0x10);  /* valid_flag1：只置玩家指示灯 */
+    CHECK_EQ(out[2], 0x90);  /* valid_flag1：玩家指示灯 + 前级增益更新 */
     CHECK_EQ(out[39], 0x00); /* 不写灯条设置控制 */
     CHECK_EQ(out[42], 0x00); /* 不写灯条设置值 */
     CHECK_EQ(out[44], 0x04); /* 1P 灯位仍点亮 */
@@ -450,13 +448,64 @@ static void dualsense_rumble_leaves_lightbar_alone(void)
     pad_feedback_bt_seq_reset();
     CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)),
              78);
-    CHECK_EQ(out[4], 0x10);
+    CHECK_EQ(out[4], 0x90);
     CHECK_EQ(out[41], 0x00);
     CHECK_EQ(out[44], 0x00);
     CHECK_EQ(out[46], 0x04);
     CHECK_EQ(out[47], 0x00);
     CHECK_EQ(out[48], 0x00);
     CHECK_EQ(out[49], 0x00);
+}
+
+/** 音频触觉让位期间的写回把音圈交还给音频触觉：手柄的音圈模式是粘性的，
+ *  HAPTICS_SELECT（0x02）置位后停在震动仿真模式、之后送进去的触觉 PCM 被
+ *  静音。让位版本因此不能照抄完整预置的 0xA3，也不能把 valid_flag0 整个留零
+ *  （留零等于不交还：马达字节已清零、音圈还停在震动仿真模式，表现是
+ *  「没有震动、只剩玩家灯」）——布局行的 quiet_presets 取 0xA1：带
+ *  COMPATIBLE_VIBRATION（0x01）而不带 HAPTICS_SELECT。 */
+static void quiet_writeback_hands_the_coils_back_to_audio_haptics(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.player_led = 0x01;
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    pad_feedback_bt_seq_reset();
+    CHECK_EQ(pad_feedback_encode_quiet(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback,
+                                       out, sizeof(out)),
+             78);
+    CHECK_EQ(out[0], 0x31);
+    CHECK_EQ(out[2], 0x10); /* tag 字节照常 */
+    CHECK_EQ(out[3], 0xA1); /* valid_flag0：交还音圈，不留 HAPTICS_SELECT */
+    CHECK_EQ(out[4], 0x90); /* valid_flag1：玩家指示灯 + 音频控制 2 照旧 */
+    CHECK_EQ(out[5], 0x00); /* 马达字节恒零 */
+    CHECK_EQ(out[6], 0x00);
+    CHECK_EQ(out[8], 100); /* 喇叭音量档照旧 */
+    CHECK_EQ(out[10], 0x30); /* 音频控制（输出路径 = 手柄喇叭）照旧 */
+    CHECK_EQ(out[40], 0x02); /* 前级增益照旧 */
+    CHECK_EQ(out[46], 0x04); /* 1P 灯位照常点亮 */
+
+    /* 有线行同一份口径：板载合成接手音圈时 0x02 写回也把音圈交还。 */
+    CHECK_EQ(pad_feedback_encode_quiet(PAD_CONN_USB, 0x054C, 0x0DF2, &feedback,
+                                       out, sizeof(out)),
+             48);
+    CHECK_EQ(out[0], 0x02);
+    CHECK_EQ(out[1], 0xA1);
+    CHECK_EQ(out[2], 0x90);
+    CHECK_EQ(out[3], 0x00);
+    CHECK_EQ(out[4], 0x00);
+    CHECK_EQ(out[6], 100);
+    CHECK_EQ(out[8], 0x30);
+    CHECK_EQ(out[38], 0x02);
+    CHECK_EQ(out[44], 0x04);
+
+    /* 完整形态仍带路由与音量档（会话开始那一份，喇叭靠它出声）。 */
+    pad_feedback_bt_seq_reset();
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out)),
+             78);
+    CHECK_EQ(out[3], 0xA3);
+    CHECK_EQ(out[8], 100);
+    CHECK_EQ(out[10], 0x30);
+    CHECK_EQ(out[40], 0x02);
 }
 
 /** DS4 蓝牙同样带 hw_control 头与尾部 CRC32：公共段从 b3 起，灯条在 b8-b10。 */
@@ -580,7 +629,7 @@ static void ds4_bt_keeps_static_header(void)
 
 /** 主机下发的振幅是 NS2 LRA 的线性档位（共振上小档位也摸得到），ERM 马达
  *  （DS5/DS4/Xbox）低占空比整段落在死区——线性直迁让游戏里中低强度的震动
- *  几乎无感（实机：USB 直插游戏震动非常轻）。感知重映射把非零档
+ *  几乎无感（USB 直插游戏震动非常轻）。感知重映射把非零档
  *  抬出死区（下限约 40）、压平顶端、保持单调。 */
 static void host_rumble_amp_is_remapped_perceptually(void)
 {
@@ -631,19 +680,19 @@ static void hd_render_maps_host_waveform_per_layout(void)
     CHECK_EQ(render.key_count[0], 3);
     CHECK_EQ(render.key_count[1], 3);
     CHECK_EQ(render.key[0][0].lf_freq, 55);
-    CHECK_EQ(render.key[0][0].lf_gain, 100);
+    CHECK_EQ(render.key[0][0].lf_gain, 255); /* 100 × 4 过满幅：夹回 */
     CHECK_EQ(render.key[0][0].hf_freq, 190);
-    CHECK_EQ(render.key[0][0].hf_gain, 64);
+    CHECK_EQ(render.key[0][0].hf_gain, 255); /* 64 × 4 过满幅：夹回 */
     CHECK_EQ(render.key[0][1].lf_freq, 90);
-    CHECK_EQ(render.key[0][1].lf_gain, 2);
+    CHECK_EQ(render.key[0][1].lf_gain, 8); /* 2 × 4：布局行 hd 的增益 */
     CHECK_EQ(render.key[0][2].lf_freq, 500); /* 越界夹取 */
-    CHECK_EQ(render.key[0][2].lf_gain, 10);
+    CHECK_EQ(render.key[0][2].lf_gain, 40); /* 10 × 4 */
     CHECK_EQ(render.key[1][0].hf_freq, 135); /* 频率 0 回落缺省 */
-    CHECK_EQ(render.key[1][0].hf_gain, 128);
+    CHECK_EQ(render.key[1][0].hf_gain, 255); /* 128 × 4 过满幅：夹回 */
     CHECK_EQ(render.speaker.freq, 0); /* 没有真正的声音时扬声器静音 */
     CHECK_EQ(render.speaker.gain, 0);
 
-    /* 只声明 1 个有效子帧（实机载波包的操作数计数）：其余子帧按静默播。 */
+    /* 只声明 1 个有效子帧（载波包的操作数计数）：其余子帧按静默播。 */
     feedback.rumble_key_count[PAD_TRIGGER_L2] = 1;
     pad_feedback_hd_render(ds5, &feedback, &render);
     CHECK_EQ(render.key_count[0], 1);
@@ -672,6 +721,19 @@ static void hd_render_spreads_sample_segments(void)
     }
     CHECK_EQ(render.key_count[1], 3);
     CHECK_EQ(render.speaker.gain, 0);
+
+    /* 主机载波包声明过 1 个子帧（实抓 94% 的包如此）时，合成的强震段仍要
+     *  声明满 3 个：声明数决定消费侧的轮播长度，留着 1 会把这一段切成
+     *  「5ms 有声 + 10ms 静默」的断续（查找手柄页听着像普通马达）。 */
+    feedback.rumble_key_count[PAD_TRIGGER_L2] = 1;
+    feedback.rumble_key_count[PAD_TRIGGER_R2] = 1;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key_count[0], 3);
+    CHECK_EQ(render.key_count[1], 3);
+    CHECK_EQ(render.key[0][2].lf_freq, 135);
+    CHECK_EQ(render.key[0][2].lf_gain, 255);
+    feedback.rumble_key_count[PAD_TRIGGER_L2] = 0;
+    feedback.rumble_key_count[PAD_TRIGGER_R2] = 0;
 
     feedback.haptic_env = PAD_HAPTIC_BEEP;
     pad_feedback_hd_render(ds5, &feedback, &render);
@@ -845,7 +907,7 @@ static void ns2_pad_relays_lra_payload_verbatim(void)
     CHECK_EQ(out[41], 0x00);
 }
 
-/** 采样 ID 0x00 是「静音 / 停止播放」（controller.md「控制指令系统」），不是一次播放：
+/** 采样 ID 0x00 是「静音 / 停止播放」，不是一次播放：
  *  主机用它收掉「寻找手柄」的提示音时，蜂鸣器与马达都必须停。 */
 static void haptic_stop_sample_silences_motors(void)
 {
@@ -891,7 +953,7 @@ static void unknown_device_has_no_feedback_channel(void)
 
 /** 游戏里主机以接近输入上报的频率刷震动流，内容常常只差原始参数包的低有效位
  *  （音频式包络逐包都在抖），写回的字节却一模一样：桥接反馈按「写回语义变了
- *  才发」判定——实机稳态 `强度 9/9` 每秒重发上百条帧、写回风暴把
+ *  才发」判定——稳态 `强度 9/9` 每秒重发上百条帧、写回风暴把
  *  PC 会话循环拖到转发卡顿，就是拿原始字节当变化判据的结果。等价判定跟两带
  *  强度、使能、玩家灯与「非零」触觉采样走，原始 LRA 参数包不参与。 */
 static void equal_frames_follow_writeback_semantics(void)
@@ -941,7 +1003,118 @@ static void equal_frames_follow_writeback_semantics(void)
     CHECK(pad_feedback_equal(NULL, NULL));
 }
 
+/** 手柄喇叭的输出路径要显式路由：音频控制字节的输出路径位段（bit4-5）不置成
+ *  手柄喇叭时，手柄的内置喇叭是「未路由」状态，往它送的声音全被丢掉——
+ *  表现是蓝牙私有流里触觉可达而喇叭无声（USB 直插的 4ch 发声段同一回事）。
+ *  更新使能位（valid_flag0 bit7、valid_flag1 bit7）不置的话这两个字节不生效，
+ *  前级增益同理（+6dB，手柄喇叭的出厂档）。 */
+static void dualsense_rows_route_the_pad_speaker(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    uint8_t out[PAD_OUTPUT_MAX];
+
+    /* 有线 0x02：公共段从 b1 起——b1/b2 是有效位，b6 喇叭音量、b8 音频控制、
+     * b38 前级增益。 */
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x0CE6, &feedback, out, sizeof(out)),
+             48);
+    CHECK_EQ(out[1] & 0x80, 0x80); /* 音频控制更新使能 */
+    CHECK_EQ(out[2] & 0x80, 0x80); /* 前级增益更新使能 */
+    CHECK_EQ(out[6], 100);         /* 喇叭音量档 */
+    CHECK_EQ(out[8], 0x30);        /* 输出路径 = 手柄喇叭（bit4-5 = 0b11） */
+    CHECK_EQ(out[38], 0x02);       /* 喇叭前级增益 */
+
+    /* 蓝牙 0x31：比有线多两字节前缀，公共段从 b3 起——b8 喇叭音量、b10 音频
+     * 控制、b40 前级增益。 */
+    pad_feedback_bt_seq_reset();
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out,
+                                 sizeof(out)),
+             78);
+    CHECK_EQ(out[3] & 0x80, 0x80);
+    CHECK_EQ(out[4] & 0x80, 0x80);
+    CHECK_EQ(out[8], 100);
+    CHECK_EQ(out[10], 0x30);
+    CHECK_EQ(out[40], 0x02);
+}
+
+/** HD 通路的振幅增益（布局行 hd 的 num/den）：主机游戏内档位很小（实抓非零
+ *  档位中位 21/1023 → 8 位刻度 5/255，占音圈满幅约百分之二），线性直迁到音圈
+ *  接近摸不到；DS5 两行取 4 倍。增益在写 FEEDBACK 帧之前落地，
+ *  板载合成与 PC 哑渲染因此吃同一份数值；采样强震段本来是满幅，过增益后仍
+ *  夹在 255。 */
+static void hd_gain_lifts_quiet_amplitudes(void)
+{
+    pad_family_t family;
+    const pad_layout_t *ds5 = pad_layout_find_by_ids(0x054C, 0x0CE6, PAD_CONN_USB, &family);
+    REQUIRE(ds5 != NULL);
+    REQUIRE(ds5->out.hd.ops == 3);
+    CHECK_EQ(ds5->out.hd.gain_num, 4);
+    CHECK_EQ(ds5->out.hd.gain_den, 1);
+
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_key_count[PAD_TRIGGER_L2] = 1;
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].lf_amp = 21;  /* 实抓中位：8 位刻度 5 */
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].hf_amp = 20;
+    /* 频率留 0：按布局规则回落缺省 80/135，增益不参与频率。 */
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].lf_freq = 0;
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].hf_freq = 0;
+    feedback.rumble_key_count[PAD_TRIGGER_R2] = 1;
+    feedback.rumble_keys[PAD_TRIGGER_R2][0].lf_amp = 1023; /* 满档：过增益夹回 255 */
+
+    pad_hd_render_t render;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key[0][0].lf_gain, 20);  /* 5 × 4 */
+    CHECK_EQ(render.key[0][0].hf_gain, 20);  /* 5 × 4 */
+    CHECK_EQ(render.key[1][0].lf_gain, 255); /* 255 × 4 夹回满幅 */
+    CHECK_EQ(render.key[0][0].lf_freq, 80);
+    CHECK_EQ(render.key[0][0].hf_freq, 135);
+    /* 桥接 FEEDBACK 帧带的就是抬过的值：PC 只做哑渲染，自己再乘会双倍。 */
+    uint8_t wire[PAD_FEEDBACK_WIRE_HD];
+    CHECK_EQ(pad_feedback_wire(&feedback, &render, wire, sizeof(wire)),
+             PAD_FEEDBACK_WIRE_HD);
+    CHECK_EQ(wire[16], 1);  /* 左侧有效子帧数 */
+    CHECK_EQ(wire[19], 20); /* 子帧 0 低频增益（已过增益） */
+    CHECK_EQ(wire[22], 20); /* 子帧 0 高频增益 */
+
+    /* 采样强震段是满幅铺色，增益不改变它。 */
+    feedback.haptic_env = PAD_HAPTIC_PULSE;
+    pad_feedback_hd_render(ds5, &feedback, &render);
+    CHECK_EQ(render.key[0][0].lf_gain, 255);
+    CHECK_EQ(render.key[1][2].lf_gain, 255);
+}
+
+/** 采样音色的段边界按 tick 投递：段是固件合成的（主机只给采样 ID 与起停），
+ *  投递原先只在主机事件到达时发生——查找手柄页的采样事件约 15Hz，段边界被
+ *  量化到 64ms 的栅格（震动/蜂鸣起止错位、短段整段丢失）。判据只看已投递的
+ *  段状态与当前的差异，段音高只在「发声」段参与。 */
+static void sample_segment_delivery_tracks_the_tick(void)
+{
+    pad_feedback_t sent = feedback_default();
+    sent.haptic_env = PAD_HAPTIC_PULSE;
+    sent.haptic_tone_hz = 0;
+    CHECK(!pad_feedback_segment_changed(&sent, PAD_HAPTIC_PULSE, 0));
+    CHECK(pad_feedback_segment_changed(&sent, 0, 0));            /* 强震 → 停顿 */
+    sent.haptic_env = 0;
+    CHECK(pad_feedback_segment_changed(&sent, PAD_HAPTIC_BEEP, 880));
+    sent.haptic_env = PAD_HAPTIC_BEEP;
+    sent.haptic_tone_hz = 880;
+    CHECK(pad_feedback_segment_changed(&sent, PAD_HAPTIC_BEEP, 1175)); /* 第二声换音高 */
+    CHECK(!pad_feedback_segment_changed(&sent, PAD_HAPTIC_BEEP, 880));
+    sent.haptic_env = PAD_HAPTIC_PULSE;
+    sent.haptic_tone_hz = 0;
+    CHECK(!pad_feedback_segment_changed(&sent, PAD_HAPTIC_PULSE, 1175)); /* 非发声段不看音高 */
+    CHECK(pad_feedback_segment_changed(NULL, PAD_HAPTIC_PULSE, 0));
+}
+
 HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
+                {"采样音色的段边界按 tick 投递（段与段音高变化才算）",
+                 sample_segment_delivery_tracks_the_tick},
+                {"HD 通路的振幅增益把安静档位抬进可感知区",
+                 hd_gain_lifts_quiet_amplitudes},
+                {"手柄喇叭的输出路径显式路由到手柄喇叭",
+                 dualsense_rows_route_the_pad_speaker},
+                {"音频触觉让位期间的写回把音圈交还给音频触觉",
+                 quiet_writeback_hands_the_coils_back_to_audio_haptics},
                 {"DualSense 有线的震动、玩家灯与灯条编码", dualsense_usb_encodes_rumble_and_led},
                 {"DS4 有线的震动与灯条颜色编码", ds4_usb_encodes_rumble_and_lightbar},
                 {"DualSense 蓝牙的震动写回带上帧头与 CRC32", dualsense_bt_encodes_framed_report},

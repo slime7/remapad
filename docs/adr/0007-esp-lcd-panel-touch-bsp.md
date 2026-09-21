@@ -20,4 +20,6 @@
 
 ## 影响
 
-- 正向：驱动代码收敛到 panel/touch/backlight 三个薄模块；psram_dma_direct 在 S3 AHB GDMA v1 下无对齐约束，PSRAM strip 可被 EDMA 直读。代价：main 组件新增两个 Registry 组件依赖（版本锁定进 dependencies.lock）；每帧传输前的一次全 strip 字节交换计入帧预算；触摸驱动私有持有 I2C master bus，后续接入 IMU/RTC 时必须重构出共享总线持有者。
+- 驱动代码收敛到 panel / touch / backlight 三个薄模块，PSRAM strip 可被 EDMA 直读。
+- 代价：main 组件新增两个 Registry 组件依赖；每帧传输前的一次全 strip 字节交换计入帧预算；
+  触摸驱动私有持有 I2C master bus，后续接入 IMU/RTC 时必须重构出共享总线持有者。

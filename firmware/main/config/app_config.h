@@ -11,7 +11,7 @@ extern "C" {
 
 /**
  * 上报给主机的手柄固件版本（主.次.修订）的出厂值。主机（Switch 2）拿它判断
- * 要不要推手柄固件更新：实测版本偏低时会弹更新提示、并在「更新手柄」菜单里
+ * 要不要推手柄固件更新：版本偏低时会弹更新提示、并在「更新手柄」菜单里
  * 推整包。想固定上报版本就改这三个常量并连固件一起刷；串口 fwver 写的值存在
  * NVS 里、优先于这里的出厂值（清除 NVS 后回到出厂值）。
  */
@@ -20,14 +20,9 @@ extern "C" {
 #define CONFIG_DEFAULT_FW_VERSION_REVISION 9u
 
 /**
- * 用户设置持久化（NVS 命名空间 "remapad"，键 "cfg"）：背光亮度、手柄机身
- * 配色、DS 手柄行为与上报固件版本。USB 连接模式只在内存中生效、
- * 不落盘，开机恒为串口。内存表在 app_config_init 时读入，setter 只改内存
- * 表并置脏标记；落盘由内部 RAM 栈的提交任务每 1 分钟检查一次，确有改动才
- * 写一次 NVS（每次写入都要擦 flash 页，切选项这类高频改动不能改一次写一
- * 次，代价是断电会丢最近一个周期内的改动）。提交任务与 ble_creds 同一模式：
- * owner task 栈在 PSRAM，flash 写入的禁缓存窗口内访问 PSRAM 栈会触发 cache
- * 异常重启，任何任务上下文都不得直接写 flash）。
+ * 用户设置持久化（NVS 命名空间 "remapad"，键 "cfg"）：背光亮度、手柄配色、DS 行为与上报固件版本。
+ * setter 只改内存表并置脏标记，落盘由内部 RAM 栈的提交任务每 1 分钟检查一次、确有改动才写一次；
+ * flash 写入的禁缓存窗口内不能访问 PSRAM 栈，任何任务都不得直接写 flash。USB 连接模式只在内存中生效。
  */
 
 /** USB 连接模式。桥接（otg）双端禁切；该值不持久化，重启回到 device。 */
@@ -44,7 +39,7 @@ typedef struct {
     /** USB 角色（app_config_usb_role_t）：仅本次运行有效。 */
     uint8_t usb_role;
     /** 机身 / 按键 / 高光 / 握把配色 0xRRGGBB，0 表示未设置（沿用出厂占位）。
-     *  四段与出厂块 0x13019 起的布局一一对应（见 controller.md「出厂数据区定义」）。 */
+     *  四段与出厂块 0x13019 起的布局一一对应。 */
     uint32_t body_color;
     uint32_t button_color;
     uint32_t accent_color;
@@ -52,7 +47,7 @@ typedef struct {
     /**
      * 上报给主机的手柄固件版本（主.次.修订），0x10 版本查询、0x7E40 与
      * 0x13000 出厂块的版本字段共用。出厂值见 CONFIG_DEFAULT_FW_VERSION_*；
-     * 主机的固件更新推送由假升级会话接收并逐帧应答（见 controller.md「Command 0x0D - 手柄固件更新推送」），
+     * 主机的固件更新推送由假升级会话接收并逐帧应答（取舍见 ADR 0032），
      * 是否重启伪装成「已升级」由串口 fwapply 一次性武装。
      */
     uint8_t fw_version[3];

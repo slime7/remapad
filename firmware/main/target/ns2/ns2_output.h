@@ -14,18 +14,9 @@ extern "C" {
 #endif
 
 /**
- * NS2 输出封装：数据面（以及将来的 USB/桥接路径）调用本模块把规范化手柄
- * 状态发往 NS2 主机，不需要关心报告格式、计数器与传输通道。
- *
- * - 输入侧：ns2_output_send() 接收一个规范化状态（可只填需要输出的按键，
- *   其余字段走默认），内部按会话当前的报告格式（0x05 / 0x09）编码并经
- *   注册的输出通道发送；默认通道为 BLE 通知，USB 通道接入后注册替换。
- * - 反馈侧：主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析成
- *   结构化事件后经 ns2_output_emit_* 分发给监听者（由监听者转发给插入的
- *   USB 手柄或桥接 PC），返回信息结构化、便于解析。
- * - 电池 / NFC：ns2_output_set_battery 更新随报告上发的电源字段；NFC 状态
- *   字节取自 ns2_nfc 的标签模拟状态机（amiibo 镜像与 Command 0x01 通路都在
- *   那边，见 ns2_nfc.h）。
+ * NS2 输出封装：数据面把规范化手柄状态发往主机，不需要关心报告格式、计数器与传输通道。
+ * 输入侧按会话当前报告格式编码并经注册的输出通道发送；反馈侧把主机事件分发给监听者；
+ * 电池与 NFC 状态字节由本模块汇总进报告。协议见 docs/controller-switch2.md。
  */
 
 /** 输出通道：把编码后的报告体发往 NS2 主机链路（BLE 现役，USB 预留）。
@@ -59,26 +50,16 @@ typedef struct {
 } ns2_rumble_event_t;
 
 /**
- * LRA 参数包里一个时序子帧的解码结果（NS2 的波形规则：每侧最多 3 个子帧，
- * 每个子帧一条低频音与一条高频音，按时间顺序各播 1/3 周期，主机以接近输入
- * 上报的频率刷新它们来合成连续包络）。位布局取 BlueRetro 的 sw2.h（真机
- * 验证过的参照，静止包常量与我们实机抓包一致）：
- * 5 字节小端位串 = 低频频率 bit0-8、低频使能音 bit9、低频振幅 bit10-19、
- * 高频频率 bit20-28、高频使能音 bit29、保留 bit30、使能 bit31、高频振幅
- * bit32-39（独立 8 位）。SDL 的 Switch 2 驱动（EncodeHDRumble）把同一位串
- * 读成 10/10/10/10 对称字段，是没有上过真机的逆向猜测。频率已在解码时按
- * 9 位 log2 刻度（f = 10×2^(码/128) Hz）落地，振幅是 LRA 的原始档位
- * （低频 10 位 / 高频抬到 10 位刻度），夹取与回落由消费侧的布局映射决定。
- * 结构复用 pad 层的 pad_rumble_key_t（私有反馈模型的家族无关形状）。
+ * LRA 参数包里一个时序子帧的解码结果：每个子帧一条低频音与一条高频音，
+ * 频率已按 9 位 log2 刻度解成 Hz、振幅是 LRA 原始档位，夹取与回落由消费侧的布局映射决定。
+ * 位布局见 docs/controller-switch2.md 的输出报告一节。
  */
 typedef pad_rumble_key_t ns2_rumble_key_t;
 
 typedef void (*ns2_feedback_fn)(ns2_feedback_type_t type, const void *payload, void *user);
 
-/** 解析主机经 0x0012 下发的 Output Report 0x02（BLE 形态）为结构化震动事件：
- *  左/右 LRA 各 16 字节参数包，状态字 bit6 为启用标志。实机写入的载荷是
- *  32 字节（两个参数包，BLE 模式不带 Report ID），部分主机路径会多带 1 字节
- *  Report ID/占位前缀（33 字节）。命中返回 true，过短返回 false。 */
+/** 解析主机经 0x0012 下发的 Output Report 0x02 为结构化震动事件：左右 LRA 各 16 字节参数包，
+ *  状态字 bit6 是启用标志；载荷按长度自适应（≥33 字节剥离前缀）。命中返回 true，过短返回 false。 */
 bool ns2_rumble_parse(const uint8_t *data, size_t len, ns2_rumble_event_t *out);
 
 /**
@@ -120,12 +101,8 @@ void ns2_output_set_feedback_listener(ns2_feedback_fn fn, void *user);
  *  编码进当前会话格式。内部维护两种格式的循环计数器。 */
 void ns2_output_send(const ns2_controller_state_t *state);
 
-/**
- * 同代透传（NS2 手柄插在板卡上）：把设备原始报文体原样发给身份与报告格式
- * 都对得上的会话，只重写由本机会话决定的状态字节（0x0B 特性标志、0x0C
- * NFC、0x0D 耳机），按键、摇杆、电量与运动块保持设备原值——真陀螺仪与真
- * 电量因此直达主机。没有匹配会话时返回 false，调用方按解析重编码的路径发。
- */
+/** 同代透传（NS2 手柄接在板卡上）：把设备原始报文体原样发给身份与报告格式都对得上的会话，
+ *  只重写由本机会话决定的状态字节；没有匹配会话时返回 false，调用方走解析重编码。 */
 bool ns2_output_send_raw(const pad_state_t *pad);
 
 /** 会话侧事实：主机是否开启了触觉特性（0x09 状态标志字节与透传重写都用它）。 */
@@ -134,8 +111,8 @@ void ns2_output_set_rumble_enabled(bool enabled);
 /** 更新随报告上发的电池信息（电平 0-9、电压毫伏、充电与外部供电）。 */
 void ns2_output_set_battery(uint8_t level, uint16_t voltage_mv, bool charging, bool external);
 
-/** 0x09 运动块占位方式（ns2_motion_mode_t）：板卡无 IMU，实机排查「主机不
- *  采用输入」时用 CLI `motion` 切换，无需重新烧录。 */
+/** 0x09 运动块占位方式（ns2_motion_mode_t）：板卡无 IMU，用 CLI `motion`
+ *  在几种占位间切换，无需重新烧录。 */
 void ns2_output_set_motion_mode(uint8_t mode);
 
 /** 当前运动块占位方式（CLI 回显用）。 */
@@ -153,7 +130,7 @@ uint8_t ns2_output_headset_derived(void);
 void ns2_output_set_headset_derived(uint8_t value);
 
 /** 覆盖开关与取值（串口 headset 命令）：enabled 为 true 时钉住一个值做
- *  实机 A/B，false 回到 auto；out_value 非 NULL 时回读当前覆盖值。 */
+ *  对照，false 回到 auto；out_value 非 NULL 时回读当前覆盖值。 */
 bool ns2_output_headset_override(uint8_t *out_value);
 void ns2_output_set_headset_override(bool enabled, uint8_t value);
 
@@ -170,7 +147,7 @@ void ns2_output_emit_haptic_sample(uint8_t sample_id);
 /**
  * 从命令帧解出触觉采样 ID（Command 0x0A）：命中返回 true 并把采样 ID 写进
  * sample（0x00 = 停止播放）。纯函数，供 ble_session 的命令分发与主机端
- * 抓包回放共用。
+ * 样本回放共用。
  */
 bool ns2_haptic_sample_parse(const uint8_t *frame, size_t len, uint8_t *sample);
 

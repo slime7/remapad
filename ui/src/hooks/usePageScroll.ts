@@ -127,7 +127,7 @@ export function usePageScroll(
   /**
    * 松手：落点越界的抛掷改写成到边界的补间。官方的 snap 钩子是同一位置的入口，
    * 但它对每次松手都生效；这里只接管越界的那部分，界内仍走原生 fling。框架的
-   * fling 撞到边缘会转交边缘弹簧，实测会冲过边界约 70 px 再弹回。
+   * fling 撞到边缘会转交边缘弹簧，冲过边界一段再弹回。
    */
   const release = (velocity: number) => {
     scroller.endDrag(velocity);

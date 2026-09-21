@@ -62,13 +62,8 @@ static uint32_t phase_step(uint16_t freq_hz)
  *  提示音的音色；谐波频率越过奈奎斯特界限就省去（混叠出不成调的杂音）。 */
 #define SYNTH_SPEAKER_HARMONIC2 3604u /* 0.22 × 32768 */
 
-/** 音圈包络门的起音/收音时长（48kHz 帧数）：NS 震动的起止落在承载块边界
- *  上是硬切，只占一块的短震动会被截得几乎不剩、收震落点生硬——起音 1ms
- *  爬满（启动及时），收音 ~15ms 锁定最后发声的子帧淡出（短震动拉到可感知
- *  的长度，长震动的结尾多 15ms 感知不到）。与 PC 侧 ds5_haptics.py 的
- *  COIL_ATTACK_S / COIL_RELEASE_S 同一条曲线，两条承载手感一致。门控只在
- *  「有增益的参数 ↔ 全零参数」的边沿发生，子帧序列内部的静默切片原样保留
- *  （主机排的时间轴不变）。 */
+/** 音圈包络门的起音/收音时长（48kHz 帧数）：起音 1ms 爬满、收音约 15ms 锁定最后发声的
+ *  子帧淡出，避免块对齐硬切把短震动截没；与 PC 侧 ds5_haptics.py 同一条曲线。 */
 #define SYNTH_COIL_ATTACK_FRAMES 48u  /* 1ms @ 48kHz */
 #define SYNTH_COIL_RELEASE_FRAMES 728u
 /* 包络的 Q15 步进（每帧，满幅 32768）：32768/48 与 32768/728。 */
@@ -123,8 +118,11 @@ static synth_osc_t osc_prepare(uint16_t freq_hz, uint8_t gain, uint16_t amp_peak
  *  1.09 倍，压回峰值刻度。 */
 #define SYNTH_SPEAKER_SHAPE 30048u /* 0.917 × 32768 */
 
-/** 一个子帧槽位的振荡器组：门的开放侧跟序列当前子帧（超出有效子帧数的
- *  切片静默），收音尾侧跟锁定的子帧。 */
+/** 一个子帧槽位的振荡器组：门的开放侧跟序列当前子帧，收音尾侧跟锁定的
+ *  子帧。开放侧按各侧自己声明的子帧数循环——主机是 200Hz 的单子帧流
+ *  （实抓 94% 的包只声明 1 个子帧），声明之外的槽位不占时间；固定 3 槽
+ *  轮播会把持续震动切成「5ms 有声 + 10ms 静默」的 66Hz 断续（音圈的细腻
+ *  手感退化成普通马达的粗糙震动），合成的强震段同理。 */
 static void osc_prepare_side(synth_osc_t *lf, synth_osc_t *hf, bool open,
                              const haptic_synth_state_t *state,
                              const haptic_synth_params_t *params, size_t side,
@@ -134,14 +132,14 @@ static void osc_prepare_side(synth_osc_t *lf, synth_osc_t *hf, bool open,
     uint8_t lf_gain = 0;
     uint16_t hf_freq = 0;
     uint8_t hf_gain = 0;
-    if (open) {
-        if (key < params->tones.key_count[side]) {
-            lf_freq = params->tones.key[side][key].lf_freq;
-            lf_gain = params->tones.key[side][key].lf_gain;
-            hf_freq = params->tones.key[side][key].hf_freq;
-            hf_gain = params->tones.key[side][key].hf_gain;
-        }
-    } else {
+    const uint8_t keys = params->tones.key_count[side];
+    if (open && keys != 0) {
+        const size_t slot = key % keys;
+        lf_freq = params->tones.key[side][slot].lf_freq;
+        lf_gain = params->tones.key[side][slot].lf_gain;
+        hf_freq = params->tones.key[side][slot].hf_freq;
+        hf_gain = params->tones.key[side][slot].hf_gain;
+    } else if (!open) {
         lf_freq = state->coil_latch[side].lf_freq;
         lf_gain = state->coil_latch[side].lf_gain;
         hf_freq = state->coil_latch[side].hf_freq;
@@ -161,7 +159,8 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
      * 已归零但包络还在落），相位步进跟频率走。 */
     const uint16_t speaker_freq = params->tones.speaker.freq;
     const uint32_t speaker_step = speaker_freq != 0 ? phase_step(speaker_freq) : 0;
-    /* 包络满幅 = 增益刻度（Q15，钳在 65535：gain 255 的目标恰好差一位溢出）。 */
+    /* 包络满幅 = 增益刻度（Q16：65535 = 1.0，乘包络因此是 >> 16；gain 255 的
+     * 目标 65536 差一位溢出，钳到 65535 只差万分之零点二）。 */
     const uint32_t speaker_target32 = params->tones.speaker.gain * 65536u / 255u;
     const uint16_t speaker_target =
         (uint16_t)(speaker_target32 > 65535u ? 65535u : speaker_target32);
@@ -172,9 +171,18 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
     const uint16_t slice = params->slice_frames != 0 ? params->slice_frames : 1;
     /* 子帧游标从上一块的断点继续：循环内逐帧倒数、到 0 切下一子帧并按新
      * 子帧重算振荡器步进（切帧不重置相位，时间轴上是连续波形）。 */
+    /* 轮播长度取两侧声明子帧数的较大者（1..3）：声明 1 子帧的持续震动因此
+     *  是连续的；两侧声明数不同时多的一侧照常轮播，少的一侧循环自己的序列。 */
+    uint8_t cycle = params->tones.key_count[0];
+    if (params->tones.key_count[1] > cycle) {
+        cycle = params->tones.key_count[1];
+    }
+    if (cycle == 0 || cycle > PAD_HD_KEY_MAX) {
+        cycle = PAD_HD_KEY_MAX;
+    }
     uint8_t key = state->key_index;
     uint16_t left = state->slice_left;
-    if (left == 0 || key >= PAD_HD_KEY_MAX) {
+    if (left == 0 || key >= cycle) {
         key = 0;
         left = slice;
     }
@@ -216,7 +224,7 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
     }
     for (size_t i = 0; i < frames; i++) {
         if (left == 0) {
-            key = (uint8_t)((key + 1u) % PAD_HD_KEY_MAX);
+            key = (uint8_t)((key + 1u) % cycle);
             left = slice;
             for (size_t side = 0; side < 2; side++) {
                 osc_prepare_side(&lf[side], &hf[side], coil_open[side], state,
@@ -245,7 +253,7 @@ void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t 
                     wave = (wave * (int32_t)SYNTH_SPEAKER_SHAPE) >> 15;
                 }
                 speaker_sample = ((wave * params->amp_peak) >> 15) *
-                                 (int32_t)state->speaker_env >> 15;
+                                 (int32_t)state->speaker_env >> 16;
                 state->speaker_phase += speaker_step;
             }
         }

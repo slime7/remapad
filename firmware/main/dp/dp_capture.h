@@ -9,17 +9,10 @@ extern "C" {
 #endif
 
 /**
- * 主机输出原始采集（诊断通道）：把主机经 BLE 写进输出特征值的原始字节
- * （震动参数包、指令帧、复合输出、固件更新记录流与扩展通道——布局解析
- * 与结构化事件之前的最原始数据）排队交给数据面任务，经桥接帧
- * INPUT_FRAME_TYPE_HOST_RAW 回传 PC。采集默认关闭，串口 `capture on|off`
- * 控制；写入侧跑在 NimBLE 主机任务里，这里只做入环拷贝，任何串口传输
- * 都留在数据面任务（与反馈持续帧同一约束）。
- *
- * 通道字节取 controller.md「GATT 属性表」的句柄低字节，PC 侧按同一张
- * 表还原通道名：
- *   0x05 基础配置  0x12 震动输出  0x14 指令通道  0x16 复合输出
- *   0x18 固件更新  0x22/0x26/0x2A/0x2C/0x2E/0x32 扩展通道（含音频下行 0x2C）。
+ * 主机输出原始采集（诊断通道）：把主机写进输出特征值的原始字节（布局解析与结构化事件之前）
+ * 排队交给数据面任务，经桥接帧 HOST_RAW 回传 PC。采集默认关闭、串口 `capture on|off` 控制；
+ * 写入侧跑在 NimBLE 主机任务里，本模块只做入环拷贝，串口传输留在数据面任务。
+ * 通道字节与名称见 docs/controller-switch2.md 的 GATT 属性表。
  */
 #define DP_CAPTURE_CH_BASE_CONFIG 0x05u
 #define DP_CAPTURE_CH_RUMBLE 0x12u
@@ -49,7 +42,7 @@ typedef struct {
 
 /**
  * 开/关采集。开关同时清空队列与计数：每次采集都从干净的现场开始，
- * 关闭前残留的记录不属于下一次抓包。
+ * 关闭前残留的记录不属于下一次采集。
  */
 void dp_capture_set_enabled(bool on);
 

@@ -1,14 +1,8 @@
 /**
- * NS2 广播载荷与广播策略（ns2_adv.c）：厂商数据里的状态位是主机唯一的唤醒
- * 判据。三种形态的字节在这里钉死——状态位或主机地址写错一位，主机就认不出
- * 这台手柄；策略部分——没有被请求连接就静默（上电与主机睡下都不发信号）、
- * 配对流程发发现广播、窗口形态按组装参数分时（信号搜索先 3 秒唤醒突发随后
- * 回连、断连回连全程回连形态不带突发、HOME 唤醒窗口全程唤醒）、调试页 HOME
- * 按键按主机是否在线分流、主机注册证据的判定——同样在这里定死。
- *
- * 期望值取自真机 Pro Controller 2 抓包（ndeadly/switch2_controller_research
- * 的 reconnect / wake 录制）：回连状态位 0x00，唤醒状态位 0x81，两者都
- * 携带主机地址，尾部标志 0x0F 固定在厂商数据偏移 0x12。
+ * NS2 广播载荷与广播策略（ns2_adv.c）主机端用例：钉住三种形态的字节（回连状态位 0x00、
+ * 唤醒 0x81、两者都带主机地址）与窗口策略（未被请求即静默、配对流程发发现广播、
+ * 窗口内分时发唤醒与回连形态、HOME 按主机是否在线分流、注册证据判定）；
+ * 期望值取自 Pro Controller 2 的广播样本。
  */
 #include "host_test.h"
 
@@ -16,7 +10,7 @@
 
 #include "ns2_adv.h"
 
-/** 真机抓包中的主机地址（存储序，显示序为 48:F1:EB:3A:EB:81）。 */
+/** 样本里的主机地址（存储序，显示序为 48:F1:EB:3A:EB:81）。 */
 static const uint8_t s_host_mac[6] = {0x81, 0xeb, 0x3a, 0xeb, 0xf1, 0x48};
 
 /** 发现广播：不带主机地址、状态位 0x00。 */
@@ -26,14 +20,14 @@ static const uint8_t s_discovery[NS2_ADV_PAYLOAD_LEN] = {
     0x00, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-/** 回连广播：带主机地址、状态位 0x00（与真机回连抓包逐字节一致）。 */
+/** 回连广播：带主机地址、状态位 0x00。 */
 static const uint8_t s_reconnect[NS2_ADV_PAYLOAD_LEN] = {
     0x02, 0x01, 0x06, 0x1B, 0xFF, 0x53, 0x05, 0x01, 0x00, 0x03, 0x7E,
     0x05, 0x69, 0x20, 0x00, 0x01, 0x00, 0x81, 0xEB, 0x3A, 0xEB, 0xF1,
     0x48, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-/** 唤醒广播：带主机地址、状态位 0x81（与真机唤醒抓包逐字节一致）。 */
+/** 唤醒广播：带主机地址、状态位 0x81。 */
 static const uint8_t s_wake[NS2_ADV_PAYLOAD_LEN] = {
     0x02, 0x01, 0x06, 0x1B, 0xFF, 0x53, 0x05, 0x01, 0x00, 0x03, 0x7E,
     0x05, 0x69, 0x20, 0x00, 0x01, 0x81, 0x81, 0xEB, 0x3A, 0xEB, 0xF1,
@@ -93,7 +87,7 @@ static void pid_follows_identity(void)
     CHECK_EQ(out[13], 0x20);
 }
 
-/** 广播形态决策：设备与真机一样只在被请求后广播——没有窗口就是静默，
+/** 广播形态决策：设备与手柄一样只在被请求后广播——没有窗口就是静默，
  *  上电与主机睡下都回到这一态。 */
 static void mode_choice_follows_window(void)
 {
@@ -174,7 +168,7 @@ static void manufacturer_data_offsets(void)
 }
 
 /** 休眠链路判据：已订阅但主机始终没发 0x0c/0x04 启用特性——输入被采用的
- *  门槛是特性启用而不是连接间隔（实测 itvl=4 但未启用的链路按键无效）。 */
+ *  门槛是特性启用而不是连接间隔（itvl=4 但未启用的链路按键无效）。 */
 static void dormant_link_follows_feature_enable(void)
 {
     CHECK(ns2_adv_dormant_link(true, false));
@@ -185,7 +179,7 @@ static void dormant_link_follows_feature_enable(void)
 }
 
 /** 主机注册证据：地址命中凭证、私有配对握手走完、主机在链路上启用特性
- *  （0x0c/0x04）三条任一条成立即算注册。第三条覆盖两个实机现场——主机换了
+ *  （0x0c/0x04）三条任一条成立即算注册。第三条覆盖两个现场——主机换了
  *  随机地址、主机已存有本机凭证而不再重跑 0x15：只看地址会把在用的链路一直
  *  留在等待态，屏幕停在「配对中…」，配新主机的流程也退不出来。
  *  「已订阅但没启用特性」（握把页快捷回连）不算注册：主机此刻还没认这只手柄。 */
@@ -198,8 +192,8 @@ static void host_registration_follows_evidence(void)
 }
 
 /** 回连广播要带回的地址是主机真正在用的那一条：配对交换给的是两条只差一位的
- *  主机地址（本设备实测末字节 0x8c / 0x8d），凭证里存的那条未必是主机连接时
- *  在用的那条——塞错一条主机就既不回连也不醒。 */
+ *  主机地址（末字节 0x8c / 0x8d），凭证里存的那条未必是主机连接时在用的那条
+ *  ——塞错一条主机就既不回连也不醒。 */
 static void host_mac_prefers_last_connected_address(void)
 {
     const uint8_t recorded[6] = {0x8d, 0x63, 0x27, 0x70, 0x68, 0xb8};
@@ -285,7 +279,7 @@ static void home_key_fires_on_press_edge(void)
 }
 
 HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
-                {"发现广播与真机抓包一致", discovery_matches_capture},
+                {"发现广播与样本一致", discovery_matches_capture},
                 {"回连广播不带唤醒标志", reconnect_keeps_normal_status},
                 {"唤醒广播带 0x81 状态位", wake_sets_wake_status},
                 {"缺少主机地址时退化为发现形态", missing_host_mac_degrades_to_discovery},
