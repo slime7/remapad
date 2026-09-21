@@ -53,10 +53,6 @@ static const char *TAG = "remapad_pocketjs";
  *  是鉴别「JS 堆滞留 vs 原生 ui_core 增长」的唯一仪表（ui_core 分配不走
  *  QuickJS 上限，PSRAM 涨满时它 abort 重启）。 */
 #define REMAPAD_MEM_REPORT_WINDOWS 12
-/** 显式 GC 的触发步长（256 KiB）：帧循环里 PSRAM 余量比上次回收点再跌过一个步长就 JS_RunGC 一次，
- *  并把基线钉回回收后的余量。引擎内部阈值式 GC 在常驻大堆上不再触发，环垃圾会把物理 PSRAM 顶满；
- *  GC 与 eval 同在 owner task 执行，无并发问题（见 ADR 0036）。 */
-#define REMAPAD_GC_BUMP_STEP (256U * 1024U)
 /** strip 缓冲数量：渲染下一条时，前几条仍在被 DMA 读取。 */
 #define REMAPAD_STRIP_BUFFER_COUNT 3
 /** 单条 strip 的逻辑高度：整屏 damage 会被切成这个高度的条带。一条
@@ -146,9 +142,6 @@ typedef struct {
     uint64_t window_render_us;
     uint32_t window_frames;
     uint64_t window_damage_px;
-    /** 压力触发 GC 的基线：上次 GC 判定点（或回收后）的 PSRAM 余量。 */
-    size_t gc_baseline_free;
-    bool gc_baseline_valid;
     uint16_t *strip_buffers[REMAPAD_STRIP_BUFFER_COUNT];
     size_t strip_capacity_pixels;
     uint32_t strip_slot;
@@ -966,29 +959,7 @@ static void pocketjs_owner_task(void *opaque)
             mem_report_print(runtime);
         }
 
-        /* 压力触发的显式 GC（PSP host 同款，每帧判定）：PSRAM 余量比基线跌过
-         * REMAPAD_GC_BUMP_STEP 就回收并把基线钉回回收后的余量，余量回升则基线
-         * 跟随上抬。判定只是读一次堆账，每帧做；真正的 JS_RunGC 只在涨出
-         * 一个步长时发生，毫秒级，不占稳态帧预算。 */
-        const size_t psram_free_now = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-        if (!runtime->gc_baseline_valid) {
-            runtime->gc_baseline_free = psram_free_now;
-            runtime->gc_baseline_valid = true;
-        } else if (psram_free_now > runtime->gc_baseline_free) {
-            runtime->gc_baseline_free = psram_free_now;
-        } else if (runtime->gc_baseline_free - psram_free_now >= REMAPAD_GC_BUMP_STEP) {
-            if (runtime->guest != NULL) {
-                const size_t before_gc = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-                JS_RunGC(JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest)));
-                const size_t after_gc = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-                /* 触发是低频事件（每跌过一个步长至多一次），留一行对账日志：
-                 * 回收量大说明环垃圾在积累，持续为 0 说明跌幅来自活对象。 */
-                ESP_LOGI(TAG, "gc: psram fell %u kB below baseline, JS_RunGC recovered %u kB",
-                         (unsigned)((runtime->gc_baseline_free - psram_free_now) / 1024U),
-                         (unsigned)((after_gc - before_gc) / 1024U));
-            }
-            runtime->gc_baseline_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-        }
+        /* 本分支实验：无宿主侧回收，只观察引擎阈值式 GC 能否自行兜住 PSRAM。 */
 
         if (esp_timer_get_time() >= report_due) {
             const uint32_t frames_in_window =
@@ -1011,27 +982,17 @@ static void pocketjs_owner_task(void *opaque)
             if (report_windows % REMAPAD_MEM_REPORT_WINDOWS == 0U) {
                 pocketjs_guest_stats_t mem_stats = {.struct_size = sizeof(mem_stats)};
                 const bool have_heap = pocketjs_guest_stats(runtime->guest, &mem_stats) == ESP_OK;
-                /* 分桶 + 前后 GC 对照：obj/prop 涨而 func/str 平是「成环待回收」
-                 * 的特征。GC 后总账回落即为环垃圾（引擎阈值式 GC 之间会越积
-                 * 越多）；仍线性涨才是真被根引用的滞留。JS_RunGC 毫秒级。 */
-                uint32_t before_kb = 0;
-                if (have_heap && runtime->guest != NULL) {
-                    JSRuntime *qjs_rt =
-                        JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest));
-                    before_kb = (uint32_t)(mem_stats.heap_used / 1024U);
-                    JS_RunGC(qjs_rt);
-                }
+                /* 分桶观察：obj/prop 涨而 func/str 平是「成环待回收」的特征。 */
                 JSMemoryUsage usage = {0};
                 if (have_heap && runtime->guest != NULL) {
                     JS_ComputeMemoryUsage(
                         JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest)), &usage);
                 }
                 ESP_LOGI(TAG,
-                         "mem: js_heap=%" PRIu32 "kB(pre %" PRIu32 "kB)/%" PRIu32 "kB "
+                         "mem: js_heap=%" PRIu32 "kB/%" PRIu32 "kB "
                          "psram_free=%u internal_free=%u "
                          "allocs=%u obj_n=%u prop_n=%u arr_n=%u",
                          (uint32_t)(usage.malloc_size / 1024U),
-                         before_kb,
                          have_heap ? (uint32_t)(mem_stats.heap_limit / 1024U) : 0U,
                          (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
                          (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
