@@ -32,7 +32,7 @@ static void fwupd_schedule_apply(void);
 #define ANSWER_PREFIX_LEN 14
 #define FACTORY_SIZE 2048u
 
-/** 会话状态：休眠/唤醒广播顺延到后续里程碑（见 docs/ROADMAP.md M3）。 */
+/** 会话状态：休眠/唤醒广播顺延到后续里程碑。 */
 typedef enum {
     SESSION_ADV_DISCOVERY = 0,
     SESSION_ADV_RECONNECT,
@@ -1282,8 +1282,8 @@ void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
 void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle)
 {
     /* Output Report 0x02：2x16B LRA 参数包（controller.md「输出报告格式」）。板卡无震动马达：
-     * 解析为结构化震动事件经 ns2_output 分发给监听者（当前记录日志，
-     * M5 起转发给 USB 源手柄 / 桥接 PC）。 */
+     * 解析为结构化震动事件经 ns2_output 分发给监听者，
+     * 由监听者转发给 USB 源手柄 / 桥接 PC。 */
     (void)conn_handle;
     ns2_rumble_event_t event;
     if (!ns2_rumble_parse(data, len, &event)) {

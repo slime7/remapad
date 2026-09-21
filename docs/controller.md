@@ -5,7 +5,7 @@
 GATT 属性表、HID 报告格式、指令集架构及存储布局，作为基于 ESP32-S3 的 Remapad 控制器数据面实现参考。
 
 Remapad 的最终目标是接收 USB 输入，转换为 NS2 手柄报告，并通过 BLE 向主机提供手柄服务；广播、GATT、输入/输出报告、配对、回连和唤醒均属于固件产品数据面，不属于 PocketJS UI runtime。
-当前固件的 USB 接收、NS2 编码、BLE 服务和配对状态机按 [ROADMAP.md](ROADMAP.md) 里程碑逐步接入（BLE 链路先行，USB 输入殿后），进度以该文件为准；
+当前固件的 USB 接收、NS2 编码、BLE 服务和配对状态机按「BLE 链路先行，USB 输入殿后」的顺序逐步接入；
 实现这些功能时必须结合真实设备抓包与互操作测试验证本文的逆向结论。系统架构见 [ARCHITECTURE.md](ARCHITECTURE.md)，PocketJS UI bridge 只承载低频状态和控制消息。
 
 ---

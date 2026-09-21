@@ -131,7 +131,7 @@ flowchart TB
 `ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；
 数据面按 `input/`、`pad/`、`target/` 三段划分（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）。
 USB host 直插由 `usb/` 提供接收传输与运行时角色切换，取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
-实机门禁见 [usb-input-plan.md](usb-input-plan.md)。反馈方向由 `pad/feedback.c` 按布局行编码成设备输出报告，经 OUT 端点或桥接帧投递。
+反馈方向由 `pad/feedback.c` 按布局行编码成设备输出报告，经 OUT 端点或桥接帧投递。
 
 UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 50 ms（240×280，成本在 Vue Vapor 的逐节点挂载，不在宿主 op 或样式解析）。
 `ui/src/App.tsx` 因此在首次渲染里一次挂完七个页面，首屏只在全部建树完成后提交，等待期由固件启动画面覆盖；把建树摊到首帧之后会让首帧后仍有数秒的阻塞帧（切页与滚动都在这段时间里卡住）。

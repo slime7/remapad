@@ -21,8 +21,8 @@ extern "C" {
  *   其余字段走默认），内部按会话当前的报告格式（0x05 / 0x09）编码并经
  *   注册的输出通道发送；默认通道为 BLE 通知，USB 通道接入后注册替换。
  * - 反馈侧：主机下发的震动 / 玩家 LED / 触觉采样被 ble_session 解析成
- *   结构化事件后经 ns2_output_emit_* 分发给监听者（当前由 dp 记录日志，
- *   M5 起转发给插入的 USB 手柄或桥接 PC），返回信息结构化、便于解析。
+ *   结构化事件后经 ns2_output_emit_* 分发给监听者（由监听者转发给插入的
+ *   USB 手柄或桥接 PC），返回信息结构化、便于解析。
  * - 电池 / NFC：ns2_output_set_battery 更新随报告上发的电源字段；NFC 状态
  *   字节取自 ns2_nfc 的标签模拟状态机（amiibo 镜像与 Command 0x01 通路都在
  *   那边，见 ns2_nfc.h）。
@@ -113,7 +113,7 @@ uint8_t ns2_rumble_strength(const uint8_t raw[16]);
  *  覆盖旧通道。 */
 void ns2_output_set_sink(const ns2_output_sink_t *sink);
 
-/** 订阅主机反馈事件（单监听者；M5 的 USB 转发注册于此）。 */
+/** 订阅主机反馈事件（单监听者；USB 转发在此注册）。 */
 void ns2_output_set_feedback_listener(ns2_feedback_fn fn, void *user);
 
 /** 以规范化状态发送一个输入报告周期：按键 / 摇杆 / 电池 / NFC 状态一并

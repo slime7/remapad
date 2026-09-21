@@ -4,7 +4,7 @@
  * 样本运动数据取最新一份，以及同代透传所需的载荷（raw）与语言标记。
  *
  * 偏移按公开资料登记、本轮没有实机核对，样本按同一份资料构造；实机用
- * pc/remapadctl.py --dump 抓包对账（ROADMAP M5 的实机待办）。
+ * pc/remapadctl.py --dump 抓包对账。
  */
 #include "host_test.h"
 

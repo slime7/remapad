@@ -384,8 +384,8 @@ static void handle_set_usb_role(int id, const char *cmd)
         return;
     }
     /* 桥接（otg）开发期临时禁用防误操作：USB PHY 切换会断开 COM（无人
-     * 值守时无法烧录），数据面也未接入。UI 已移除该选项，这里静默跳过：
-     * 不应用、不报错，回复当前角色，待 M5 数据面接入后恢复。 */
+     * 值守时无法烧录）。UI 已移除该选项，这里静默跳过：
+     * 不应用、不报错，回复当前角色。 */
     if (want_otg) {
         char event[REMAPAD_EVENT_MAX];
         snprintf(event, sizeof(event),

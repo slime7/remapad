@@ -91,7 +91,6 @@ flowchart TB
 
 两条输入路径都已落地（PC 桥接走 USB-Serial/JTAG 的桥接帧，USB host 直插走 OTG host 的 HID 中断传输）。
 在 `input/` 汇合之后共用 `pad/` 与 `target/` 两段，解析与映射只有一份；反馈方向同样收敛在 `pad/feedback.c` 一处（按设备布局行编码输出报告，USB 写 OUT 端点，桥接把原始报告交给 PC）。
-推进结论与实机待办（USB mux 实验、VBUS 供电确认）见 [usb-input-plan.md](usb-input-plan.md) 与 [ROADMAP.md](ROADMAP.md) M5；
 同代透传的判定见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。
 角色切换见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
 
@@ -150,7 +149,7 @@ flowchart TB
   切到 host 时先把日志与 CLI 出口换到 UART0（GPIO43/44），再放掉 USB-Serial/JTAG、装 USB host 栈（复用开关随之切到 OTG host），PC 上的 COM 口消失直到复位；
   切回串口按相反顺序还原。角色只在本次运行有效（不写 NVS），复位后复用开关回默认的 USB-Serial/JTAG（COM 设备模式），"重启回 COM 模式"因此天然成立。
   恢复路径与取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
-- 配对与连接状态接的是真实 BLE 会话（NimBLE 手柄外设，进度见 [ROADMAP.md](ROADMAP.md)）：
+- 配对与连接状态接的是真实 BLE 会话（NimBLE 手柄外设）：
   配对页主按钮是连接键——`connect` 在已配对身份上开连接窗口（回连形态），未配对身份上进配对流程；广播中它发 `disconnect`（收窗口与流程、断开链路、静默）；
   副按钮配新主机走 `startPairing`：先断开当前主机再进发现广播等新主机搜索，凭证拿齐且会话注册完成才由 tick 退出流程——只看凭证会让已配对设备一按配对键就被判成完成。
   开机不自动进入配对流程，解除配对走显式 `unpair`（清 NVS 凭证并静默），UI 不暴露入口。
@@ -222,10 +221,9 @@ flowchart TB
   572 字节记录 = 镜像 + 厂商签名，200 槽，选中持久化、重启恢复），
   主机的 NFC 命令（Command 0x01）由 `target/ns2/ns2_nfc.c` 按抓包布局应答，读缓冲头区按 MCU 时代结构
   填充（UID + 厂商签名 + 尾串，`amiibo hdr 0|1` 可切全零对账），布局细节见 [controller.md](controller.md) 的 NFC 章节。
-  USB host 直插的推进方案见 [usb-input-plan.md](usb-input-plan.md)。
 - USB host 直插的数据面：`usb/usb_transport.c` 装 host 栈、枚举、按报告描述符挑手柄用途的 HID 接口（跳过厂商与音频接口）。
   `usb/usb_input.c` 把 IN 报告组成 `pad_report_t` 交给同一份家族表并把反馈写回 OUT 端点。
-  `usb/usb_role.c` 负责运行时切换角色（先迁日志到 UART0，再让出 USB-Serial/JTAG）。实机步骤与 VBUS 门禁见 [usb-input-plan.md](usb-input-plan.md)。
+  `usb/usb_role.c` 负责运行时切换角色（先迁日志到 UART0，再让出 USB-Serial/JTAG）。
   布局行声明音频触觉能力的设备（DualSense）另由 `usb/usb_audio.c` 认领 UAC1 音频流 OUT 接口：持续向等时端点送板上合成的 4ch PCM，
   触觉走后两路（频道 3/4）、发声段的小喇叭音色走前两路（频道 1/2，无声时恒零）；
   纯逻辑的描述符解析与 PCM 合成在 `usb_audio_parse.c` / `haptic_synth.c`（主机端可测）。
@@ -455,7 +453,7 @@ PS 系的 DS3、DS4 与 DualSense 有线都报 0x01，DS3 有线与蓝牙字段�
 各行的偏移初值取自公开资料，落地时用 `pc/remapadctl.py --dump` 抓原始报告核对后再固化（DualSense 蓝牙的 0x31 行按 Edge 实测核对过，含第 54 字节的电量）；
 DS3 的按键极性、蓝牙前缀长度与 DualSense 有线行的各字段仍未核对；PS 系的触摸点偏移（每点 4 字节，
 DS4 在 35/37、DS5 在 33/34）按 Linux 驱动的报告结构登记为初值，抓包时要一并复核左右半区。
-见 [ROADMAP.md](ROADMAP.md) 的家族表回填。Steam 原生布局未抓包，整族走 Xbox 兜底并在能力位里标记。
+Steam 原生布局未抓包，整族走 Xbox 兜底并在能力位里标记。
 
 手柄组合键 L1+R1+L3+R3 按住 300 ms 会捕获输入、转为屏幕操控（[ADR 0028](adr/0028-pad-combo-captures-screen.md)）：
 判定在私有格式层完成（`firmware/main/dp/dp_ui.c`），家族表只需要把 L1/R1/L3/R3 映射到 `PAD_BTN_L1/R1/L3/R3`，既有与将来的布局都自动可用。

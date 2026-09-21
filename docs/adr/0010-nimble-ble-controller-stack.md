@@ -6,7 +6,7 @@
 
 ## 背景
 
-Phase 2 路线图（docs/ROADMAP.md）M2-M4 进入 BLE 手柄外设实现。ESP32-S3 只支持 Bluetooth LE 5.x、无经典蓝牙控制器；docs/controller.md 的参考实现（第 10.3 节）基于 NimBLE，社区 Switch 2 模拟实践亦然。NS2 使用私有配对协议，发起或响应标准 SMP 会被主机直接断连，安全由应用层 Command 0x15 配对承担；连接间隔需接受主机（central）主导的 5-10ms 区间；固件还需与 PocketJS guest（4MB JS 堆）共存，内部 RAM 空闲约 360KB，栈与堆预算紧张。
+Phase 2 进入 BLE 手柄外设实现。ESP32-S3 只支持 Bluetooth LE 5.x、无经典蓝牙控制器；docs/controller.md 的参考实现（第 10.3 节）基于 NimBLE，社区 Switch 2 模拟实践亦然。NS2 使用私有配对协议，发起或响应标准 SMP 会被主机直接断连，安全由应用层 Command 0x15 配对承担；连接间隔需接受主机（central）主导的 5-10ms 区间；固件还需与 PocketJS guest（4MB JS 堆）共存，内部 RAM 空闲约 360KB，栈与堆预算紧张。
 
 ## 决策
 

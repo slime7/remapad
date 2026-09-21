@@ -22,7 +22,7 @@ static const pad_layout_t s_rows[] = {
         /* 输出报告 0x03：b1 是四个马达的使能掩码，b2 左大马达、b3 右小马达、
          * b4/b5 左右扳机。偏移取自公开实现（Chromium xbox_hid_controller.cc），
          * 未实机核对；注意 USB 直连的 Xbox One/Series 多数走厂商 GIP/XUSB 而
-         * 不是 HID 输出报告，host 路径能否认到这个接口要实机确认（ROADMAP M5）。 */
+         * 不是 HID 输出报告，host 路径能否认到这个接口要实机确认。 */
         .out = {
             .report_id = 0x03,
             .len = 8,

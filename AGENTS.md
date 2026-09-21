@@ -57,7 +57,6 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
   - `usb/`：USB host 直插：枚举与 HID 收发、输入源、运行时角色切换；DualSense 的音频触觉通道也挂在这一层
     （`usb_audio.c` 自写最小 UAC1 等时客户端、`haptic_synth.c` 板上合成 PCM），
     取舍见 [ADR 0042](docs/adr/0042-ds5-audio-haptics-onboard-synthesis.md)。
-    方案与实机核对清单见 [docs/usb-input-plan.md](docs/usb-input-plan.md)，
     运行时角色切换见 [ADR 0027](docs/adr/0027-runtime-usb-role-switch.md)。
   - `ota/`：升级会话：非运行分区回写、窗口流控与回滚健康门槛（[ADR 0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md)）。
   - `pad/`：处理段：私有格式 `pad_state_t`、解析与归一、按布局行编码的反馈；
@@ -153,7 +152,7 @@ NS2/BLE 协议资料见 [docs/controller.md](docs/controller.md)，板卡规格�
 | 产品定位、服务受众、非目标边界变动 | [docs/VISION.md](docs/VISION.md) |
 | 跨层数据协议、核心图元、宏常量与状态模型变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | USB 输入、NS2 报告、BLE 广播/GATT、配对或绑定状态变动 | [docs/controller.md](docs/controller.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
-| 输入通路（桥接帧协议、私有格式、家族表、目标编码）变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [docs/usb-input-plan.md](docs/usb-input-plan.md), [pc/README.md](pc/README.md) |
+| 输入通路（桥接帧协议、私有格式、家族表、目标编码）变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [pc/README.md](pc/README.md) |
 | 显示通路的条带划分/整幅刷新取值、滚动帧预算或面板时钟变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md), [docs/adr/0018](docs/adr/0018-panel-spi2-clock-80mhz.md) |
 | OTA 升级通路、桥接帧类型或载荷布局变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), [pc/README.md](pc/README.md), [docs/adr/0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md) |
 | 环境依赖、操作指令、目录结构变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |

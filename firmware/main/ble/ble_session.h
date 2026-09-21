@@ -48,7 +48,7 @@ void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity);
 void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
                             uint16_t conn_handle);
 
-/** 震动通道（0x0012）写入：Output Report 0x02。本阶段解析记录，M5 转发 USB。 */
+/** 震动通道（0x0012）写入：Output Report 0x02。解析成结构化事件交给反馈监听者。 */
 void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle);
 
 /** 复合输出通道（0x0016）写入：震动参数 + 指令帧。 */

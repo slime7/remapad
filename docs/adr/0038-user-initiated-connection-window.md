@@ -46,7 +46,7 @@ ADR 0031 的常态回连广播虽然不叫醒休眠主机，但它仍在设备�
 - 连接入口只有连接键与手柄 HOME：用户不按就「连不上」，主机自己从待机醒来后也不会主动来连（设备静默，主机连不到）；
   屏幕状态（已配对 / 连接中…）与 PWR 长按的 3 秒提示音是唯一提示。
 - PWR 长按不再是 USB 角色切换入口：角色切换保留在模式页与串口 mode，
-  GETTING-STARTED、ROADMAP 与 usb-input-plan 的入口清单同步改写。
+  GETTING-STARTED 的入口清单同步改写。
 - 配对页按钮改为 连接/停止/断开 与 新主机配对（配对流程中换成 L+R 兜底）；
   桥接命令去掉 stopPairing、新增 connect 与 disconnect，UI 六态加 advertising。
 - 串口 adv auto|wake|reconnect 语义改为「广播窗口内的已配对形态」，新增串口 connect；
