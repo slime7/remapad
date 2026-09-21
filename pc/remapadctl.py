@@ -893,6 +893,121 @@ def desc_field(data: bytes, offset: int) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def _reply_fields(line: str) -> dict[str, str]:
+    """把一行回读按空白切开，收下所有 `键=值` 片段；值里带空格时只留第一段。"""
+    fields: dict[str, str] = {}
+    for token in line.split():
+        key, sep, value = token.partition("=")
+        if sep and key and key not in fields:
+            fields[key] = value
+    return fields
+
+
+def _int_field(text: str | None) -> int | None:
+    if not text:
+        return None
+    try:
+        return int(text, 10)
+    except ValueError:
+        return None
+
+
+def _hex_field(text: str | None) -> int | None:
+    """`0xRRGGBB` → 整数；不是合法的一段配色返回 None（界面对应项保持原值）。"""
+    if not text:
+        return None
+    try:
+        value = int(text, 16)
+    except ValueError:
+        return None
+    return value if 0 <= value <= 0xFFFFFF else None
+
+
+def _battery_field(text: str | None) -> tuple[int, int] | None:
+    """`3971mV/85%` → （毫伏, 百分比）。"""
+    if not text or "/" not in text:
+        return None
+    millivolts, _, percent = text.partition("/")
+    if millivolts.endswith("mV"):
+        millivolts = millivolts[:-2]
+    if percent.endswith("%"):
+        percent = percent[:-1]
+    mv, pct = _int_field(millivolts), _int_field(percent)
+    return (mv, pct) if mv is not None and pct is not None else None
+
+
+def parse_device_reply(line: str) -> tuple[str, dict] | None:
+    """识别固件设置回读行 → （通道, 字段）；认不出的行返回 None。
+
+    图形界面用它把设备回读同步进设置控件：固件是唯一事实源，界面不自算状态。
+    通道与字段：
+
+    - `backlight`：`backlight 60` → `light`；
+    - `screen`：`screen on|off` → `screen_on`；
+    - `ctrl`：`ok ctrl body=0x… button=0x… accent=0x… grip=0x…` → 四段 `0xRRGGBB`；
+    - `ds`：`ds touchpad=on|off capture=on|off` → `touchpad_plus_minus` / `capture_key`；
+    - `device`：`status` 与 `version` 的一行回读 → 版本、分区、电池、堆与配对等事实，
+      固件字段名收敛成 `firmware` / `partition` / `image` / `ota_state` /
+      `pairing` / `role` / `pad` / `light` / `screen_on` / `battery_mv` /
+      `battery_percent` / `charging` / `heap` / `uptime_s`。
+
+    带状态词的应答先剥前缀：`err` 行大多答不进这里的字段表，自然返回 None。
+    """
+    text = line.strip()
+    for status in ("ok ", "err "):
+        if text.startswith(status):
+            text = text[len(status):].strip()
+            break
+    if not text:
+        return None
+    words = text.split()
+    if words[0] == "backlight" and len(words) > 1:
+        light = _int_field(words[1])
+        if light is not None and 0 <= light <= 100:
+            return "backlight", {"light": light}
+        return None
+    if words[0] == "screen" and len(words) > 1:
+        if words[1] in ("on", "off"):
+            return "screen", {"screen_on": words[1] == "on"}
+        return None
+    fields = _reply_fields(text)
+    if words[0] == "ctrl" and all(key in fields for key in ("body", "button", "accent", "grip")):
+        colors = {key: _hex_field(fields[key]) for key in ("body", "button", "accent", "grip")}
+        if all(value is not None for value in colors.values()):
+            return "ctrl", colors
+        return None
+    if words[0] == "ds":
+        touchpad = fields.get("touchpad")
+        capture = fields.get("capture")
+        if touchpad in ("on", "off") and capture in ("on", "off"):
+            return "ds", {"touchpad_plus_minus": touchpad == "on",
+                          "capture_key": capture == "on"}
+        return None
+    if words[0] == "state" or text.startswith("fw="):
+        facts: dict[str, object] = {}
+        for key, name in (("fw", "firmware"), ("part", "partition"), ("image", "image"),
+                          ("ota", "ota_state"), ("pairing", "pairing"), ("role", "role"),
+                          ("pad", "pad")):
+            if key in fields:
+                facts[name] = fields[key]
+        for key, name in (("backlight", "light"), ("heap", "heap")):
+            value = _int_field(fields.get(key))
+            if value is not None:
+                facts[name] = value
+        if fields.get("screen") in ("0", "1"):
+            facts["screen_on"] = fields["screen"] == "1"
+        if fields.get("chg") in ("0", "1"):
+            facts["charging"] = fields["chg"] == "1"
+        uptime = _int_field((fields.get("uptime") or "").removesuffix("s"))
+        if uptime is not None:
+            facts["uptime_s"] = uptime
+        battery = _battery_field(fields.get("batt"))
+        if battery is not None:
+            facts["battery_mv"], facts["battery_percent"] = battery
+        return ("device", facts) if facts else None
+    return None
+
+
 def wait_for_version(port: str, baud: int, reporter: Reporter | None = None) -> int:
     """等设备重启回来，问一次 version 命令并打印。"""
     out = reporter or ConsoleReporter()

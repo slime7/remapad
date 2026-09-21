@@ -110,6 +110,8 @@ PC 侧合并成单进程 `pc/remapadctl.py`（转发 + 命令行 + 截图 + OTA�
 - [ ] 图形连接控制台（`pc/remapadgui.py`，[ADR 0040](adr/0040-pc-gui-customtkinter-console.md)）的实机验收：
   手动连上后日志逐行滚动、转发开关生效且主机收到手柄输入、截图按钮落盘并交给系统看图器打开；
   升级页完成一次真实 OTA、勾选等待时能自动重连；关窗后设备状态回静置不卡键。
+  「设置」页的实机验收（[ADR 0048](adr/0048-pc-gui-settings-tab-mirrors-device-ui.md)）：
+  改亮度 / 息屏 / 配色 / DS 行为 / 电源后设备侧生效，四条回读行同步进控件，与屏幕上的同一设置互不打架。
 
 
 UI 的每帧成本集中在整幅软件 RGB565 光栅化与每帧 draw list 重建上（见 [adr/0017](adr/0017-display-path-and-scroll-frame-budget.md)）。

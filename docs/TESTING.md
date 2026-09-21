@@ -134,7 +134,7 @@ pnpm run test:firmware
 
 ## PC 侧主机端用例
 
-`pc/` 下的工具也有与设备无关的纯逻辑（串口枚举、镜像校验、帧编解码、输出分流、工具命令解析），
+`pc/` 下的工具也有与设备无关的纯逻辑（串口枚举、镜像校验、帧编解码、输出分流、工具命令解析、设置回读行解析），
 这部分跑标准库 `unittest`，不需要板子：
 
 | 文件 | 为什么值得测 |
@@ -144,6 +144,7 @@ pnpm run test:firmware
 | `pc/tests/test_frame_codec.py` | 桥接帧的成帧、CRC 拒绝与失步重同步错一位会表现为「手柄偶尔失灵」或命令行冒出乱码 |
 | `pc/tests/test_pick_device.py` | 候选接口的用途过滤与 VID/PID/接口路径选择错了会表现为「转发到别的手柄」 |
 | `pc/tests/test_session_output.py` | 输出分流（命令行写标准流、界面写队列）与工具命令解析错了会表现为日志缺失或报错位置错乱 |
+| `pc/tests/test_settings_reply.py` | 设置回读行的解析错了会表现为界面显示的亮度、配色或开关与设备不一致（固件是唯一事实源，界面只跟回读走），接上设备之前看不出来 |
 
 ```powershell
 pnpm run test:pc                                            # 仓库根
@@ -151,5 +152,5 @@ cd pc ; uv run python -m unittest discover -s tests -t . -v  # 单独跑
 ```
 
 用例跑的是 `pc/` 下的真源码（`import remapadctl` / `import link`），不复制被测逻辑，也不创建窗口：
-界面本身靠实机与隐藏窗口的手工走查，只有它的队列接收器（`remapadgui.QueueReporter`）进用例。
+界面本身靠实机与隐藏窗口的手工走查，只有它的队列接收器（`remapadgui.QueueReporter`）与输入框取值、时长格式这类纯函数进用例。
 新增用例直接放进 `pc/tests/`，文件名以 `test_` 开头。

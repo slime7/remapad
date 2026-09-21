@@ -234,7 +234,8 @@ PC 侧工具里与设备无关的逻辑（串口枚举、镜像校验、帧编�
 
 固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。
 项目自带 [pc/remapadctl.py](../pc/remapadctl.py)（桥接转发、命令行、实机截图与 OTA 都在同一个进程里），串口与帧编解码实现在 [pc/link.py](../pc/link.py)。
-同一套会话还有图形入口 [pc/remapadgui.py](../pc/remapadgui.py)（`uv run python remapadgui.py`：选口连接、转发开关、日志、命令行、截图与升级），界面与命令行不要同时连同一个口。
+同一套会话还有图形入口 [pc/remapadgui.py](../pc/remapadgui.py)（`uv run python remapadgui.py`：选口连接、转发开关、日志、命令行、屏幕设置、截图与升级），
+界面与命令行不要同时连同一个口；调试动作（连接键、屏幕操控、状态回读）在「命令」页，界面上不放它们的按钮。
 依赖由 uv 管理（在 `pc/` 目录下执行，见 [pc/README.md](../pc/README.md)）：
 
 ```powershell
@@ -358,7 +359,8 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
   涵盖按键构建报告、结构化反馈、电池与 amiibo 预置。
 - [pc/remapadctl.py](../pc/remapadctl.py) 与 [pc/link.py](../pc/link.py)：
   PC 侧单工具（hidapi 读手柄 → 桥接帧、串口命令行、实机截图与 OTA 在同一个进程里；`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
-- [pc/remapadgui.py](../pc/remapadgui.py)：同一套会话的图形界面（CustomTkinter；输出走可注入的 Reporter、命令由按钮与输入框投递，见 [ADR 0040](adr/0040-pc-gui-customtkinter-console.md)）。
+- [pc/remapadgui.py](../pc/remapadgui.py)：同一套会话的图形界面（CustomTkinter；输出走可注入的 Reporter、命令由按钮与输入框投递，见 [ADR 0040](adr/0040-pc-gui-customtkinter-console.md)）；
+  「设置」页把设备屏幕上的可改项搬到 PC（读写都走固件 CLI，控件值来自回读行，见 [ADR 0048](adr/0048-pc-gui-settings-tab-mirrors-device-ui.md)）。
 - [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端入口是 `remapadctl.py --upgrade`。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。
