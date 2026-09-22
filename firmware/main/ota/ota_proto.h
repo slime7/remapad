@@ -108,6 +108,13 @@ ota_proto_result_t ota_proto_begin(ota_proto_t *proto, uint32_t image_size,
                                    uint32_t max_image_size, int64_t now_us);
 
 /**
+ * 刷新空闲计时起点：BEGIN 之后的目标分区预擦在应答之前完成，
+ * 那段时间不该算进接收窗口，否则大镜像会在 PC 收到应答前就判超时。
+ * 会话不在接收态时是空操作。
+ */
+void ota_proto_note_rx(ota_proto_t *proto, int64_t now_us);
+
+/**
  * 收一块镜像数据：序号不符回 SEQ_ERROR（next_seq 是 PC 的重发起点）。window_end
  * 为真（帧 slot 标记）或已收满一个固定窗口时回 ACK。
  */

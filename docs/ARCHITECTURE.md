@@ -299,6 +299,7 @@ flowchart LR
 - **应答可靠性**：发送环与日志共用，NimBLE 的 INFO 日志会把它填满，因此 ACK 与 PING 应答走「分片重试写 + 等发送完成」的路径（上限 200 ms，超时放弃）；数据面反馈仍是非阻塞写、可丢。
 - **写入**：
   `esp_ota_get_next_update_partition()` 选非运行分区，`esp_ota_begin(镜像大小)` 预擦，4 KB 对齐的 `esp_ota_write` 写数据。
+  BEGIN 的应答在预擦之后才发（3.6 MB 的预擦可达数秒），设备侧的 5 秒空闲超时从应答时刻起算，不把预擦算进接收窗口。
   随后 `esp_ota_end()` 整体校验应用描述符、芯片标识与尾部 SHA-256。
   通过后 `esp_ota_set_boot_partition()` 切启动分区，回 ACK 后延时 500 ms 重启。
   任一步失败即 `esp_ota_abort()`，`otadata` 在成功前不动，所以断电与拔线只会让设备继续从旧镜像启动。

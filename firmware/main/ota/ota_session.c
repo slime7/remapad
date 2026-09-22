@@ -246,6 +246,8 @@ static void handle_begin(const uint8_t *payload, size_t len)
     s_ota.target = target;
     s_ota.phase = OTA_PHASE_RECEIVING;
     s_ota.reported_pct = 0;
+    /* 空闲超时从应答时刻起算：预擦已经过去，接收窗口要完整留给 PC。 */
+    ota_proto_note_rx(&s_ota.proto, esp_timer_get_time());
     notify_ui(OTA_PHASE_RECEIVING, 0, image_size);
     reply(&result, true);
     ESP_LOGI(TAG, "ota begin: %u bytes -> %s (running %s %s)", (unsigned)image_size,

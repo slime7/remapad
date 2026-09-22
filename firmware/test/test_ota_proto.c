@@ -354,6 +354,24 @@ static void idle_session_times_out(void)
     CHECK(!ota_proto_tick(&proto, 10 * OTA_SESSION_TIMEOUT_US).reply);
 }
 
+static void begin_restamps_the_idle_timer(void)
+{
+    ota_proto_t proto;
+    ota_proto_init(&proto);
+    /* 空闲会话上刷新计时是空操作。 */
+    ota_proto_note_rx(&proto, 5 * 1000 * 1000LL);
+    CHECK(!ota_proto_tick(&proto, 10 * OTA_SESSION_TIMEOUT_US).reply);
+
+    REQUIRE(ota_proto_begin(&proto, 800, 1048576, 1000).state == OTA_STATE_RECEIVING);
+    /* BEGIN 应答前的目标分区预擦（这里用 30 秒代表）不计入空闲超时：
+     * 计时从应答时刻重新起算，PC 拿到应答后仍有完整的接收窗口。 */
+    const int64_t answered_us = 1000 + 30 * 1000 * 1000LL;
+    ota_proto_note_rx(&proto, answered_us);
+    CHECK(!ota_proto_tick(&proto, answered_us + OTA_SESSION_TIMEOUT_US).reply);
+    CHECK_EQ(ota_proto_tick(&proto, answered_us + OTA_SESSION_TIMEOUT_US + 1).code,
+             OTA_CODE_TIMEOUT);
+}
+
 static void ack_payload_is_a_golden_byte_sequence(void)
 {
     const ota_proto_result_t result = {
@@ -422,5 +440,6 @@ HOST_TEST_SUITE(suite_ota_proto, "ota_proto",
                 {"结束帧字节数与声明不符即失败", end_rejects_size_mismatch},
                 {"写 flash 失败按原错误码作废会话", flush_failure_aborts_with_its_code},
                 {"空闲超时作废会话，收完则不再计时", idle_session_times_out},
+                {"BEGIN 应答前的分区预擦不计入空闲超时", begin_restamps_the_idle_timer},
                 {"ACK 载荷黄金字节与版本尾巴", ack_payload_is_a_golden_byte_sequence},
                 {"完成与失败结论各回一次", done_reports_success_once});

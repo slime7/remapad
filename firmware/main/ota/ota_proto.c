@@ -75,6 +75,13 @@ ota_proto_result_t ota_proto_begin(ota_proto_t *proto, uint32_t image_size,
     return result_from(proto, true);
 }
 
+void ota_proto_note_rx(ota_proto_t *proto, int64_t now_us)
+{
+    if (proto != NULL && proto->state == OTA_STATE_RECEIVING) {
+        proto->last_rx_us = now_us;
+    }
+}
+
 ota_proto_result_t ota_proto_data(ota_proto_t *proto, const uint8_t *payload, size_t len,
                                   bool window_end, int64_t now_us, ota_flush_fn flush,
                                   void *user)
