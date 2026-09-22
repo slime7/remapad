@@ -45,6 +45,9 @@ static const char *TAG = "remapad_pocketjs";
 #define REMAPAD_POCKETJS_TASK_STACK_BYTES (288U * 1024U)
 #define REMAPAD_POCKETJS_TASK_NAME "remapad-pjs"
 #define REMAPAD_POCKETJS_TASK_PRIORITY 5
+/** owner task 固定 CPU1：BLE 控制器、NimBLE 主机栈与 BLE 中断都在 CPU0，
+ *  UI turn 与渲染独占另一颗核，面板 SPI 中断随之落在 CPU1。 */
+#define REMAPAD_POCKETJS_TASK_CORE 1
 #define REMAPAD_POCKETJS_MAX_LAG_US 500000
 /** 持久化亮度缺失时的兜底值（app_config 加载后通常有用户设定值）。 */
 #define REMAPAD_BACKLIGHT_PCT_DEFAULT 40
@@ -616,29 +619,27 @@ static esp_err_t allocate_strip_buffer(
     }
 
     const size_t bytes = runtime->strip_capacity_pixels * sizeof(uint16_t);
-    const char *where = "internal";
     for (size_t index = 0; index < REMAPAD_STRIP_BUFFER_COUNT; ++index) {
-        /* strip 既是 renderer 的写入目标也是 EDMA 的读取源。滚动的整屏帧要写
-         * 134 kB，PSRAM 的写带宽会把渲染卡在内存上，因此优先要内部 RAM，
-         * 要不到时退回 PSRAM（功能不变，只是渲染变慢）。 */
+        /* draw buffer 既是 renderer 的写入目标也是 EDMA 的读取源，只放内部 RAM：
+         * PSRAM 的写带宽会把渲染卡在内存上，取数还要过 cache。要不到就报错，
+         * 不退回 PSRAM —— 整屏要写 134 kB，退回等于把渲染速度交给外存。 */
         uint16_t *buffer = heap_caps_aligned_alloc(
             REMAPAD_STRIP_ALIGN, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
         if (buffer == NULL) {
-            buffer = heap_caps_aligned_alloc(
-                REMAPAD_STRIP_ALIGN, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            where = "psram";
-        }
-        if (buffer == NULL) {
+            ESP_LOGE(TAG,
+                     "draw buffer unavailable: %u bytes internal DMA (largest=%u), "
+                     "internal RAM is the only allowed home",
+                     (unsigned)bytes,
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
             runtime->strip_capacity_pixels = 0;
             return ESP_ERR_NO_MEM;
         }
         memset(buffer, 0, bytes);
         runtime->strip_buffers[index] = buffer;
     }
-    ESP_LOGI(TAG, "strip buffers: %u x %u bytes in %s, internal free=%u psram free=%u",
-             (unsigned)REMAPAD_STRIP_BUFFER_COUNT, (unsigned)bytes, where,
-             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    ESP_LOGI(TAG, "draw buffers: %u x %u bytes in internal RAM, internal free=%u",
+             (unsigned)REMAPAD_STRIP_BUFFER_COUNT, (unsigned)bytes,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     return ESP_OK;
 }
 
@@ -903,8 +904,9 @@ static void pocketjs_owner_task(void *opaque)
         goto exit;
     }
 
-    ESP_LOGI(TAG, "PocketJS owner task running at %" PRIu32 " Hz (stack %u bytes)",
-             runtime->tick_hz, (unsigned)REMAPAD_POCKETJS_TASK_STACK_BYTES);
+    ESP_LOGI(TAG, "PocketJS owner task running at %" PRIu32 " Hz on CPU%d (stack %u bytes)",
+             runtime->tick_hz, (int)xPortGetCoreID(),
+             (unsigned)REMAPAD_POCKETJS_TASK_STACK_BYTES);
 
     const int64_t started = esp_timer_get_time();
     uint64_t tick = 0;
@@ -1083,7 +1085,7 @@ esp_err_t remapad_pocketjs_start(void)
         &s_runtime,
         REMAPAD_POCKETJS_TASK_PRIORITY,
         &s_runtime.task,
-        tskNO_AFFINITY,
+        REMAPAD_POCKETJS_TASK_CORE,
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (created != pdPASS) {
         vSemaphoreDelete(s_runtime.wake);

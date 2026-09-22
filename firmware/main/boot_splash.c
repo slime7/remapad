@@ -343,10 +343,25 @@ static void splash_flush(bool dots_changed)
     }
 }
 
-static uint16_t *splash_alloc(size_t pixels)
+/**
+ * 画布同样是「CPU 写、DMA 读」的绘制缓冲，优先落在内部 RAM；整屏那张 134 kB
+ * 拿不到内部 RAM 时退回 PSRAM（只画一次、随即释放），并留一行警告。
+ */
+static uint16_t *splash_alloc(size_t pixels, const char *what)
 {
-    return heap_caps_aligned_alloc(64, pixels * sizeof(uint16_t),
-                                   MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    const size_t bytes = pixels * sizeof(uint16_t);
+    uint16_t *buffer =
+        heap_caps_aligned_alloc(64, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
+    if (buffer != NULL) {
+        ESP_LOGI(TAG, "splash %s: %u bytes in internal RAM", what, (unsigned)bytes);
+        return buffer;
+    }
+    buffer = heap_caps_aligned_alloc(64, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (buffer != NULL) {
+        ESP_LOGW(TAG, "splash %s: %u bytes fell back to PSRAM (internal DMA unavailable)",
+                 what, (unsigned)bytes);
+    }
+    return buffer;
 }
 
 /** 重画两个动态区域：内容没变化就不传输，避免启动期无谓的 SPI 流量。 */
@@ -424,7 +439,7 @@ esp_err_t boot_splash_begin(uint8_t brightness_pct, const uint32_t *stage_ms, si
     }
 
     const size_t frame_pixels = (size_t)SPLASH_WIDTH * SPLASH_HEIGHT;
-    uint16_t *frame = splash_alloc(frame_pixels);
+    uint16_t *frame = splash_alloc(frame_pixels, "frame");
     if (frame == NULL) {
         ESP_LOGE(TAG, "splash frame buffer unavailable (%u bytes)",
                  (unsigned)(frame_pixels * sizeof(uint16_t)));
@@ -448,8 +463,8 @@ esp_err_t boot_splash_begin(uint8_t brightness_pct, const uint32_t *stage_ms, si
         return transfer;
     }
 
-    s_splash.dots = splash_alloc((size_t)SPLASH_DOTS_W * SPLASH_DOTS_H);
-    s_splash.bar = splash_alloc((size_t)SPLASH_TRACK_W * SPLASH_TRACK_H);
+    s_splash.dots = splash_alloc((size_t)SPLASH_DOTS_W * SPLASH_DOTS_H, "dots");
+    s_splash.bar = splash_alloc((size_t)SPLASH_TRACK_W * SPLASH_TRACK_H, "bar");
     if (s_splash.dots == NULL || s_splash.bar == NULL) {
         heap_caps_free(s_splash.dots);
         heap_caps_free(s_splash.bar);
@@ -468,7 +483,7 @@ esp_err_t boot_splash_begin(uint8_t brightness_pct, const uint32_t *stage_ms, si
     s_splash.stage = 0;
     s_splash.stage_base_ms = 0;
     s_splash.stage_started_us = esp_timer_get_time();
-    /* -1 让首帧动画无条件重画两个区域（缓冲是未初始化的 PSRAM）。 */
+    /* -1 让首帧动画无条件重画两个区域（画布缓冲是未初始化的）。 */
     s_splash.filled = -1;
     s_splash.highlight = -1;
     s_splash.fill_color = SPLASH_COLOR_PRIMARY;
