@@ -445,6 +445,8 @@ UI 侧把各页与底栏的 `focusable` 绑在「自己是当前页、且没有�
 - `<Text>` 使用构建期收集的字符集和 baked font atlas；字号应使用 PocketJS 支持的 Tailwind 插槽。
   Inter 未映射的码点（中文等）经应用目录 `fonts.json` 声明的回退字体面（当前为 Noto Sans SC）烘焙进同一图集。
 - `<Image>` 通过资源名称引用 PAK 中的图像；图片在构建期处理，不在 ESP32 上解析 SVG。
+  应用目录 `images.json` 可按资源名声明 `psm`（`0` 是 PSM_5650，缺省 `3` 是 8888）：
+  不透明的底图声明成 565 才能在设备上走本机直拷回调，带透明通道的位图只能逐像素混合（见 [ADR 0051](adr/0051-opaque-565-card-artwork.md)）。
 - `createSpriteAnimation` 只描述资源帧选择，实际资源仍由官方编译器和 PAK 管理。
 - 长文案放不进可视区时用 `ui/src/components/MarqueeText.tsx`（自定义横向滚动文本）：
   框架的单行 `Text` 不自动换行，组件按「静止 2 秒 → 匀速左移到底 → 到底停留 1 秒 → 跳回起点」循环，放得下则全程静止；

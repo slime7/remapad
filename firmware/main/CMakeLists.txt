@@ -26,6 +26,7 @@ idf_component_register(
         "boot_splash.c"
         "pocketjs_host.c"
         "render_accel.c"
+        "render_damage.c"
         "amiibo/amiibo_proto.c"
         "amiibo/amiibo_session.c"
         "amiibo/amiibo_store.c"

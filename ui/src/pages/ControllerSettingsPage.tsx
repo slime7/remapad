@@ -80,6 +80,25 @@ export function ControllerSettingsPage(props: {
     return luminance(cw.body) > 0.4 ? '#000000' : '#ffffff';
   };
 
+  /** 单个配色按钮：42 圆形色块 + 选中指示环。
+   *  环的底色与色块同色——引擎只把「有底色的圆角边框」画成两枚圆角填充
+   *  （各 4 个圆角四边形 + 3 条矩形），纯边框元素退化成一整串逐行覆盖条，
+   *  36 尺寸的环就是两百来条矩形指令（见 docs/adr/0050）。 */
+  const swatch = (cw: Colorway) => (
+    <View
+      key={cw.id}
+      focusable={props.interactive()}
+      onPress={() => selectColorway(cw)}
+      class={STYLE.colorSwatch42}
+      style={{ bgColor: cssColor(cw.body) }}
+    >
+      <View
+        class={STYLE.colorSwatchRing42}
+        style={{ borderColor: ringBorder(cw), bgColor: cssColor(cw.body) }}
+      />
+    </View>
+  );
+
   return (
     <View class={props.active() ? 'w-full h-full flex-col items-center justify-center p-1 gap-[6]' : 'hidden'}>
       {/* 上层：手柄身份标识（去掉了标题手柄名，留出高度给 42 尺寸大圆钮） */}
@@ -94,38 +113,8 @@ export function ControllerSettingsPage(props: {
 
       {/* 下层：4 款配色选择，2×2 饱满排布，达到 42 触发尺寸 */}
       <View class="flex-col items-center gap-[6] shrink-0 mt-[2]">
-        <View class="flex-row items-center gap-4">
-          {COLORWAYS.slice(0, 2).map((cw) => (
-            <View
-              key={cw.id}
-              focusable={props.interactive()}
-              onPress={() => selectColorway(cw)}
-              class={STYLE.colorSwatch42}
-              style={{ bgColor: cssColor(cw.body) }}
-            >
-              <View
-                class={STYLE.colorSwatchRing42}
-                style={{ borderColor: ringBorder(cw) }}
-              />
-            </View>
-          ))}
-        </View>
-        <View class="flex-row items-center gap-4">
-          {COLORWAYS.slice(2, 4).map((cw) => (
-            <View
-              key={cw.id}
-              focusable={props.interactive()}
-              onPress={() => selectColorway(cw)}
-              class={STYLE.colorSwatch42}
-              style={{ bgColor: cssColor(cw.body) }}
-            >
-              <View
-                class={STYLE.colorSwatchRing42}
-                style={{ borderColor: ringBorder(cw) }}
-              />
-            </View>
-          ))}
-        </View>
+        <View class="flex-row items-center gap-4">{COLORWAYS.slice(0, 2).map(swatch)}</View>
+        <View class="flex-row items-center gap-4">{COLORWAYS.slice(2, 4).map(swatch)}</View>
       </View>
     </View>
   );

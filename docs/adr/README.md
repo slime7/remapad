@@ -70,7 +70,7 @@
 | [0034](0034-ns2-report-interval-fixed-15ms.md) | active | NS2 上报节奏固定 15 ms、不提供运行时档位（5 ms 试验被否：四成以上通知因 mbuf 耗尽被丢）；确认 0023 的上报节奏一项 |
 | [0035](0035-ns2-headset-state-passthrough.md) | active | NS2 耳机状态按输入设备的 3.5 mm 状态透传（0x09 的 0x0D 与 0x05 的插入位同源，串口 headset 可覆盖） |
 | [0036](0036-host-pressure-triggered-js-gc.md) | active | JS 堆的显式 GC 由宿主按 PSRAM 压力触发（每帧读余量、跌过 256 KiB 步长才 JS_RunGC 并重钉基线），与上游 PSP host 的 arena-pressure GC 同构 |
-| [0037](0037-ui-tick-rate-30hz.md) | active | UI 帧节奏定为 30 Hz：tickHz 写进 host profile，UI 侧以 ui/src/tick.ts 为唯一换算来源（TICK_HZ 取框架烘焙值），与帧绑定的时长写成毫秒再换算、序列图动画按累计帧推进以保持感官时间；部分取代 0017 的 60 Hz 帧预算取值 |
+| [0037](0037-ui-tick-rate-30hz.md) | active | UI 帧节奏定为 30 Hz：tickHz 写进 host profile，UI 侧以 ui/src/tick.ts 为唯一换算来源（TICK_HZ 取框架烘焙值），与帧绑定的时长写成毫秒再换算、序列图动画按累计帧推进以保持感官时间；部分取代 0017 的 60 Hz 帧预算取值，其中 30 Hz 这一取值由 0052 部分取代，换算与 host profile 约定仍生效 |
 | [0038](0038-user-initiated-connection-window.md) | active | 连接由用户发起：上电与断连（主机睡下）静默，连接键（配对页「连接」、PWR 长按 3 秒）开 30 秒连接窗口广播、HOME 在未连接时开 10 秒唤醒窗口，窗口到期或主机连上即收窗；部分取代 0031 的常态回连广播与 0027 的 PWR 长按入口 |
 | [0039](0039-pro-controller-only.md) | active | 设备对外只模拟一台 Pro Controller 2：身份、专用输入通道、报文体与会话回到单身份单连接，JoyCon 形态（左/右身份、0x07 / 0x08 报文体、导轨键确认与 side / rails 开关）整体移除；部分取代 0026 的透传身份约束 |
 | [0040](0040-pc-gui-customtkinter-console.md) | active | PC 侧新增图形界面入口 remapadgui.py（CustomTkinter）：与命令行共用 Session 与串口，输出改走可注入的 Reporter，界面只做队列排空、命令投递与事件映射 |
@@ -82,6 +82,10 @@
 | [0046](0046-ns-waveform-to-ds5-pcm-hd-haptics.md) | active | NS2 波形（每侧 3 个时序子帧）经布局行 `hd` 规则重整为 DS5 的 PCM HD 触觉：USB 4ch 承载频道 3/4 音圈 + 1/2 发声、蓝牙走 0x32/0x36 私有报告（3kHz 2ch s8 + CRC32；0x36 另带「一帧装整拍」的 Opus 喇叭块，需先显式路由手柄喇叭），映射与落地只在固件布局内、PC 哑渲染；振幅按 `hd` 的增益定标（DS5 两行 4 倍），私有流默认启用；延伸 0042/0043 的合成刻度与让位语义，FEEDBACK 扩到 57 字节 |
 | [0047](0047-ds-behavior-settings.md) | active | DS4/DS5 手柄行为两项设置（触摸板映射加减键默认关、截图键默认开）持久化在 NVS，数据面每拍按先触发半区改写触摸板按下的键位；触摸点改为 4 字节解析、按左右半区建模，四个 PS 布局行登记触摸偏移与量程 |
 | [0048](0048-pc-gui-settings-tab-mirrors-device-ui.md) | active | PC 图形界面新增「设置」页镜像设备 UI 的可改项（亮度与息屏、手柄配色、DS4/DS5 行为、电源，只读设备信息），读写走固件 CLI、控件值全取回读行（remapadctl.parse_device_reply）；调试动作不再放按钮，只在「命令」页填进输入框 |
+| [0049](0049-firmware-draw-list-damage-diff.md) | active | 结构变化帧的 damage 由固件侧 draw list 差分算出：框架报整屏重画时换成本机差分出的真实变化区域，失败一律退回框架计划 |
+| [0050](0050-repaint-friendly-screen-rules.md) | active | 屏幕动效按重绘友好选：圆角加边框的元素必须带底色，切页瞬时完成、方向提示交给翻页箭头弹一下，只有拖动预览保留跟手平移 |
+| [0051](0051-opaque-565-card-artwork.md) | active | 卡片底图烘成不透明 PSM_5650（SVG 垫根容器色底 + 位图清单声明 565），走渲染器直拷路径 |
+| [0052](0052-ui-tick-rate-back-to-60hz.md) | active | UI 帧节奏恢复 60 Hz（tickHz 以 host profile 为准），CST816T 触摸改连续点模式；部分取代 0037 的 30 Hz 取值 |
 
 ## 创建 ADR 脚本用法
 

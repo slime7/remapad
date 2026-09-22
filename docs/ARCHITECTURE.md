@@ -325,16 +325,42 @@ flowchart LR
 - 渲染输出走 32 行高的条带：三条 240 × 32 的 strip 缓冲（共 45 kB）优先分配内部 RAM，`render_strip` 每次接收 full-width × 条高的容量与一条行带矩形；
   行带比视口窄时按行压缩成紧凑布局（x = 0 的窗口同样要压缩，否则整体错行），字节序交换由面板传输统一负责。
   提交走 `panel_transfer_async`（只入队并交回完成序号），调用方在轮到某个 strip 槽时用 `panel_wait_seq` 等该槽上一笔传输结束，渲染因此可与 DMA 重叠。
-- 显示通路按 30 Hz tick 做预算（节奏取值见 [ADR 0037](adr/0037-ui-tick-rate-30hz.md)），实测瓶颈在 CPU 侧的软件 RGB565 光栅化而不是面板传输：
-  整屏 6.72 万像素的位移帧在一次扫描里要花 0.5–0.65 µs/像素（掩码构建、字形图集与纹理采样为主，本机加速回调只占其中很小一部分）。
-  因此 damage 按 32 行行带切分，行带在同一帧内按绝对行序自上而下渲染并提交，不切字段。
-  静止帧的 turn 实测约 5.7 ms（33.3 ms 预算里约 17%），整幅 240 × 280 帧的渲染实测约 50 ms，重绘帧因此由渲染成本定拍。
+- 显示通路按 60 Hz tick 做预算（tickHz 写进 host profile，节奏演变见 [ADR 0037](adr/0037-ui-tick-rate-30hz.md) 与 [ADR 0052](adr/0052-ui-tick-rate-back-to-60hz.md)），
+  实测瓶颈在 CPU 侧的软件 RGB565 光栅化而不是面板传输：整屏 6.72 万像素重绘一次约 1.7 µs/像素，
+  内容与卡片底图重叠处约 2–3 µs/像素，底部状态栏一带最便宜（约 0.7 µs/像素）。
+  因此 damage 按 32 行行带切分，行带在同一帧内按绝对行序自上而下渲染并提交，不切字段；
+  一条行带渲染的 x 范围取落在它上面的全部 region 的并集，纵向按整条行带渲染，越出 region 的像素照画。
+  静止帧实测 turn 约 11.9 ms（16.7 ms 预算里约 71%），其中 render_frame 约 2.2 ms、damage 为 0；
+  重绘帧的价格因此完全由重画范围与绘制指令数决定。
   完整测量与隔行方案被否决的理由见 [ADR 0017](adr/0017-display-path-and-scroll-frame-budget.md)。
   面板 SPI2 时钟取上限 80 MHz 的理由见 [ADR 0018](adr/0018-panel-spi2-clock-80mhz.md)。
 - 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，SPI2 取上限 80 MHz；
   选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
 - ESP32-S3 没有本项目所需的 P4 PPA；`firmware/main/render_accel.c` 用本机整数实现接管渲染器的填充、A8 掩码混合与 PSM5650 直拷回调（与官方 P4 适配层同一套 ABI）。
-  其余仍走 `pocketjs_render_rgb565` 的软件路径。
+  其余仍走 `pocketjs_render_rgb565` 的软件路径；卡片底图按不透明 PSM5650 烘制，因此走直拷回调（见 [ADR 0051](adr/0051-opaque-565-card-artwork.md)）。
+
+### 重画范围：框架计划与本机差分
+
+```mermaid
+flowchart LR
+    Turn["每帧 pocketjs_ui_turn"] --> Prepare["prepare：框架逐 op 对齐给出 damage plan"]
+    Prepare --> Full{"整屏重画？"}
+    Full -->|否| Bands["region 折成行带，逐条渲染提交"]
+    Full -->|是| Comparable{"上一帧副本可比、且不是截图帧？"}
+    Comparable -->|否| Bands
+    Comparable -->|是| Diff["render_damage：本机 draw list 差分"]
+    Diff --> Smaller{"算出更小的变化区域？"}
+    Smaller -->|是| Bands
+    Smaller -->|否| Bands
+```
+
+- 框架的 damage 是 op 级、逐 op 对齐的比较：op 数量或顺序一变（切页、焦点环移动、弹窗开关、列表项增删），它不再比对、直接给整屏计划。
+- 固件在框架给整屏计划时，用 `firmware/main/render_damage.c` 对上一帧与本帧的 draw list 做本机差分，换出真实变化区域；
+  接管条件、失败回退与上一帧副本的容量约定见 [ADR 0049](adr/0049-firmware-draw-list-damage-diff.md) 与 `firmware/main/render_damage.h` 写下的契约。
+- 实机读数（240 × 280 @1x、60 Hz，取串口 `trace` 命令）：一次切页从基线固件的 4 帧整屏重画（每帧约 110–120 ms，合计约 0.48 s）
+  降到一帧内容框重画（约 3.4 万行带像素、约 72 ms）加两帧箭头提示（各约 8 ms）；
+  手柄设置页的 draw list 从 3621 字、其中 817 条逐行覆盖矩形，降到 645 字、78 条 op。
+- 重绘价格同样取决于界面写法，规则见 [ADR 0050](adr/0050-repaint-friendly-screen-rules.md)：圆角加边框的元素必须带底色，切页瞬时完成、方向提示交给行进侧的翻页箭头。
 
 ## Flash 分区
 

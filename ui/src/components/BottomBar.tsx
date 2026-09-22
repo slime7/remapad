@@ -145,7 +145,7 @@ export function BottomBar() {
         <View
           focusable
           onPress={onHostClick}
-          class="grow basis-0 h-full flex-col items-center justify-center gap-1 rounded-[8] active:bg-[#1a8552] transition-colors duration-150"
+          class="grow basis-0 h-full flex-col items-center justify-center gap-1 rounded-[8] active:bg-[#1a8552]"
         >
           <View
             class="h-[24] flex-row items-center justify-center"

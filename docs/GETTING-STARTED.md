@@ -251,6 +251,7 @@ uv run python remapadctl.py -p COM3 stick reset     # 两侧摇杆回中
 uv run python remapadctl.py -p COM3 link            # 两只手柄的地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
 uv run python remapadctl.py -p COM3 headset auto    # 耳机状态字节：auto 按输入设备派生，也可钉住 0xNN 做主机侧 A/B
 uv run python remapadctl.py -p COM3 shot            # 请求一次实机截图（PC 侧拼齐后存 PNG）
+uv run python remapadctl.py -p COM3 trace 40        # 逐帧打印 damage 计划、逐条行带耗时与绘制指令直方图（不带参数 30 帧）
 uv run python remapadctl.py -p COM3 fwver 2.0.0     # 改写上报给主机的手柄固件版本（0x10 查询与出厂块共用；不带参数看当前值）
 uv run python remapadctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
 uv run python remapadctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
@@ -292,6 +293,7 @@ uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad   
 
 不带设备命令时进入桥接 + 交互模式：不是 `:` 开头的行按固件 CLI 命令发送（回复是 `ok`/`err` 单行，串口上同时会滚动固件日志），`:` 开头的是工具命令（`:help` 看清单，另有 `:shot` / `:log` / `:ota` / `:quit`）。
 命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑；同一个进程持有串口，因此桥接转发、命令行、截图与升级可以同时进行（`idf.py monitor` 仍与之互斥）。
+`drawlist` 的输出是几十 KB 的十六进制字，只发一行 `ok` 应答、正文按日志流出，因此要在交互模式（`--logs`）里看，或者把日志重定向到文件后再离线解码。
 `--log` 只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：
 USB-Serial/JTAG 的片内状态机把 CDC 的 DTR/RTS 当复位控制线解释——RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态；
 `remapadctl.py` 用 Win32 API 打开端口并把两条线固定为低电平，因此打开、读取、关闭都不会复位设备（连续调用 `status`，uptime 会持续增长）。

@@ -4,7 +4,7 @@
  * 2. 第 4 页：电源管理（重启与关机确认弹窗）；
  * 3. 第 6 页：系统信息（固件版本与内存）。
  */
-import { test, expect } from './fixtures';
+import { CLOVER_FACE, test, expect } from './fixtures';
 import { goHome, openPower, openSystemInfo } from './pages';
 
 test('第 1 页亮度调节步进（1-5 档），最低不会降到 0 档', async ({ app }) => {
@@ -36,10 +36,10 @@ test('亮度页加减钮是与背景瓣弧同心的 64 圆钮：右上加、右�
   // 钮内（半径 32），距圆心 38 已出钮、但仍在瓣外弧（半径 49.6）内，是四叶草浅蓝。
   expect(await app.colorAt(150, 58)).toBe('#152a1f');
   expect(await app.colorAt(166, 30)).toBe('#152a1f');
-  expect(await app.colorAt(166, 20)).toBe('#a6c8ff');
+  expect(await app.colorAt(166, 20)).toBe(CLOVER_FACE);
   // 右下瓣心（屏坐标 166,150）同样成立。
   expect(await app.colorAt(150, 150)).toBe('#152a1f');
-  expect(await app.colorAt(166, 188)).toBe('#a6c8ff');
+  expect(await app.colorAt(166, 188)).toBe(CLOVER_FACE);
 });
 
 test('第 4 页电源管理：重启与关机斜角放在左上/右下瓣心', async ({ app }) => {
@@ -50,8 +50,8 @@ test('第 4 页电源管理：重启与关机斜角放在左上/右下瓣心', a
   expect(await app.colorAt(74, 44)).toBe('#152a1f');
   expect(await app.colorAt(166, 136)).toBe('#8a1a1e');
   // 右上与左下两颗瓣心没有按钮，仍是四叶草浅蓝
-  expect(await app.colorAt(166, 44)).toBe('#a6c8ff');
-  expect(await app.colorAt(74, 164)).toBe('#a6c8ff');
+  expect(await app.colorAt(166, 44)).toBe(CLOVER_FACE);
+  expect(await app.colorAt(74, 164)).toBe(CLOVER_FACE);
 
   // 斜角布局下按钮行为不变：点击重启唤起确认弹窗，取消可关闭
   await app.tapText('重启');

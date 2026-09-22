@@ -95,7 +95,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 PocketJS 屏幕 UI。
 | **固件 OTA 升级** | `cd pc ; uv run python remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（含内嵌 `.pocket`）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
 | **PC 手柄桥接** | `cd pc ; uv run python remapadctl.py -p COMx` | 读 PC 手柄原始报告按桥接帧转发给设备，同进程提供串口命令行、实机截图与 OTA；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移；转发默认只在交互模式开，`--pad` / `--no-pad` 控制 |
 | **PC 连接控制台** | `cd pc ; uv run python remapadgui.py` | 同一套会话的图形界面：选串口、连接/断开、手柄转发开关、实时日志、命令输入、屏幕设置（亮度、手柄配色、DS4/DS5、电源）、实机截图与 OTA；调试动作只在「命令」页；与命令行不要同时连同一个口 |
-| **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`capture on\|off`、`ds touchpad\|capture on\|off`、`amiibo list\|select\|del\|poll`、`version`、`rollback` |
+| **串口 CLI** | `cd pc ; uv run python remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`capture on\|off`、`ds touchpad\|capture on\|off`、`amiibo list\|select\|del\|poll`、`version`、`rollback`；屏幕重绘诊断用 `trace [frames]`（每帧一行 damage 计划与逐条行带耗时）与 `drawlist`（把本帧绘制指令按十六进制字转储，供 PC 侧离线解码） |
 | **主机输出原始采集** | `cd pc ; uv run python remapadctl.py -p COMx --capture host-raw.log` | 抓主机写进输出特征值的原始字节（震动/玩家灯/指令，解析与布局转换之前）落盘成文本；桥接帧 `0x12`（HOST_RAW）承载，串口 `capture on\|off` 开关，交互模式 `:capture <路径>\|off` 同能力，`--pad` 可与手柄转发同时进行，见 [ADR 0045](docs/adr/0045-host-output-raw-capture.md) |
 | **amiibo 镜像上传** | `cd pc ; uv run python remapadctl.py -p COMx --amiibo Alm.bin` | 经桥接帧（`0x40-0x43`）把 NTAG215 dump（540 纯镜像或 572 带厂商签名）传进设备 storage 分区 SPIFFS 槽位（200 槽，槽位名取文件名主干）；交互模式 `:amiibo <bin>` 同通道，选中持久化、重启恢复，标签模拟见 [ADR 0044](docs/adr/0044-amiibo-bridge-upload-nfc-tag-emulation.md) |
 | **实机截图** | `cd pc ; uv run python remapadctl.py -p COMx --shot` | 固件把当前画面整屏重渲染并按图像帧回传，PC 拼成 PNG（默认 `pc/shots/`，`--out` 指定路径；期间 UI 冻结约 0.2-1 秒，见 [ADR 0033](docs/adr/0033-pc-single-process-tool-and-device-screenshot.md)） |
@@ -140,6 +140,11 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 PocketJS 屏幕 UI。
   新增可点控件要带 `focus:` 环（写在 `ui/src/theme.ts` 的 className 字面量里，构建期按字面量登记样式）；
   `focusable` 必须绑 App 传下来的 `interactive()`，静态 `focusable` 会把隐藏页控件留在名单里；
   可滚动页新增可聚焦行时把行位置加进 [ui/src/hooks/usePageScroll.ts](ui/src/hooks/usePageScroll.ts) 的 `focusRows`。
+- **重绘成本按像素算**：每帧的重绘价格等于这帧碰了多少像素，动效与控件写法按 [ADR 0050](docs/adr/0050-repaint-friendly-screen-rules.md) 选。
+  圆角 + 边框的元素必须同时给底色（取所在面的颜色）：只描边框会退化成逐行覆盖条，一个 36 尺寸的圆环就撒出两百来条矩形指令。
+  切页瞬时完成，方向提示交给行进侧的翻页箭头弹一下；只有拖动预览保留跟手平移，搬动整页内容的动画每帧都要重画整个内容框。
+  卡片底图按不透明 PSM_5650 烘制（[ADR 0051](docs/adr/0051-opaque-565-card-artwork.md)），改底图底色要同步 `theme.ts` 的 `STYLE.appRoot`。
+  量重画范围与代价用串口 `trace`（逐帧 damage 计划、逐条行带耗时与绘制指令直方图）与 `drawlist`（本帧绘制指令转储，PC 侧离线解码）。
 - **字体烘焙规则**：
   - 文本字号用 Tailwind 标准插槽（`text-xs` 等）；构建期扫描源码字面量字符集，按插槽烘焙点阵图集。
   - 中文等 Inter 未映射码点由 `ui/src/fonts.json` 声明的 NotoSansSC 回退面解析（中文粗体实际烘焙为常规字重）。
@@ -168,7 +173,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 PocketJS 屏幕 UI。
 | 主机协议（广播/GATT/HID 报告/指令集/出厂块/NFC）变动 | [docs/controller-switch2.md](docs/controller-switch2.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | 输入设备的字段偏移、输出报告、触觉通路或手柄行为设置变动 | [docs/controller-ps.md](docs/controller-ps.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | 输入通路（桥接帧协议、私有格式、家族表、目标编码）变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [pc/README.md](pc/README.md) |
-| 显示通路的条带划分/整幅刷新取值、滚动帧预算或面板时钟变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md), [docs/adr/0018](docs/adr/0018-panel-spi2-clock-80mhz.md) |
+| 显示通路的条带划分/整幅刷新取值、重画范围与动效代价、滚动帧预算或面板时钟变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md), [docs/adr/0018](docs/adr/0018-panel-spi2-clock-80mhz.md), [docs/adr/0049](docs/adr/0049-firmware-draw-list-damage-diff.md), [docs/adr/0050](docs/adr/0050-repaint-friendly-screen-rules.md), [docs/adr/0051](docs/adr/0051-opaque-565-card-artwork.md), [docs/adr/0052](docs/adr/0052-ui-tick-rate-back-to-60hz.md) |
 | OTA 升级通路、桥接帧类型或载荷布局变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), [pc/README.md](pc/README.md), [docs/adr/0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md) |
 | 环境依赖、操作指令、目录结构变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
 | 测试入口、用例范围、回归规则或断言分层变动 | [docs/TESTING.md](docs/TESTING.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |

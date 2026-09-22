@@ -1,6 +1,7 @@
 #include "pocketjs_host.h"
 
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdatomic.h>
@@ -25,6 +26,7 @@
 #include "ota_session.h"
 #include "panel.h"
 #include "render_accel.h"
+#include "render_damage.h"
 #include "touch.h"
 
 #include "pocketjs/guest.h"
@@ -75,6 +77,10 @@ static const char *TAG = "remapad_pocketjs";
 /** strip 缓冲的 DMA 对齐（面板驱动的约定值）。 */
 #define REMAPAD_STRIP_ALIGN 64
 
+/** 上一帧 draw list 副本的容量（字）：一份界面的 draw list 在千字量级，留数倍
+ *  余量；超出容量或差分失败时该帧回退框架给的整屏计划（见 render_damage.h）。 */
+#define REMAPAD_DAMAGE_WORDS_CAPACITY 8192U
+
 /** 截图单块回传的等待上限：PC 侧没在读时让这次截图尽快失败，不留半张图。 */
 #define REMAPAD_SHOT_TX_TIMEOUT_MS 200u
 
@@ -83,6 +89,12 @@ static atomic_bool s_shot_requested;
 
 /** 内存全景请求标志：同截图请求，跨任务只传一个比特。 */
 static atomic_bool s_mem_requested;
+
+/** 逐帧 damage 追踪的剩余帧数：串口 trace 命令置位、owner task 每帧递减。 */
+static atomic_int s_trace_frames;
+
+/** draw list 转储请求：串口 drawlist 命令置位、owner task 打印一次后清位。 */
+static atomic_bool s_draw_list_requested;
 
 /** 一次截图已回传的进度：字节偏移与分块数，供日志与失败诊断。 */
 typedef struct {
@@ -161,6 +173,15 @@ typedef struct {
     bool band_pending[REMAPAD_BAND_MAX];
     int32_t band_x0[REMAPAD_BAND_MAX];
     int32_t band_x1[REMAPAD_BAND_MAX];
+    /** 上一帧 draw list 副本：框架报整屏重画时用它做本机差分。副本只在整帧
+     *  提交成功后重建，失败（传输出错、容量不足）即作废，下一次差分回退整屏。 */
+    uint32_t *damage_words;
+    size_t damage_words_count;
+    bool damage_words_valid;
+    uint32_t damage_viewport_width;
+    uint32_t damage_viewport_height;
+    uint32_t damage_scale;
+    uint64_t damage_raster_revision;
     bool first_frame_logged;
     bool panel_ready;
 } remapad_pocketjs_runtime_t;
@@ -169,6 +190,11 @@ static remapad_pocketjs_runtime_t s_runtime;
 
 static void release_resources(remapad_pocketjs_runtime_t *runtime)
 {
+    if (runtime->damage_words != NULL) {
+        heap_caps_free(runtime->damage_words);
+        runtime->damage_words = NULL;
+    }
+    runtime->damage_words_valid = false;
     for (size_t index = 0; index < REMAPAD_STRIP_BUFFER_COUNT; ++index) {
         if (runtime->strip_buffers[index] != NULL) {
             heap_caps_free(runtime->strip_buffers[index]);
@@ -314,6 +340,144 @@ void remapad_ui_request_mem(void)
 }
 
 /**
+ * 请求逐帧 damage 追踪：只写剩余帧数，owner task 每帧读一次并打一行。
+ */
+void remapad_ui_request_trace(unsigned frames)
+{
+    if (frames == 0U) {
+        frames = REMAPAD_UI_TRACE_FRAMES_DEFAULT;
+    }
+    atomic_store_explicit(&s_trace_frames, (int)frames, memory_order_relaxed);
+}
+
+/** 本帧是否在追踪范围内；命中一次就消耗一帧，追踪窗口因此跨帧连续。 */
+static bool trace_take(void)
+{
+    if (atomic_load_explicit(&s_trace_frames, memory_order_relaxed) <= 0) {
+        return false;
+    }
+    (void)atomic_fetch_sub_explicit(&s_trace_frames, 1, memory_order_relaxed);
+    return true;
+}
+
+/**
+ * 请求下一帧把 draw list 原样打到控制台：供 PC 侧离线解码 op 构成与复算差分。
+ * 逐帧差分只能给出「变了多少」，定位「哪些绘制 op 吃掉了帧时间」要靠原始流。
+ */
+void remapad_ui_request_draw_list(void)
+{
+    atomic_store_explicit(&s_draw_list_requested, true, memory_order_relaxed);
+}
+
+/** 把格式化结果追加到追踪行末尾；返回新的写入长度（不越过容量）。 */
+static size_t trace_appendf(char *buffer, size_t capacity, size_t used,
+                            const char *format, ...)
+{
+    if (used >= capacity) {
+        return used;
+    }
+    va_list args;
+    va_start(args, format);
+    const int written = vsnprintf(buffer + used, capacity - used, format, args);
+    va_end(args);
+    if (written <= 0) {
+        return used;
+    }
+    const size_t appended = (size_t)written;
+    return used + appended < capacity ? used + appended : capacity - 1U;
+}
+
+/** 按 op 码统计 draw list 构成：结构变化换掉的是哪些 op、有多少，一眼可见。 */
+static size_t trace_op_histogram(char *line, size_t capacity, size_t used,
+                                 const uint32_t *words, size_t count)
+{
+    static const char *const names[11] = {"-",     "rect",  "grad",  "glyph", "tex", "scissor",
+                                          "pop",   "tri",   "texTri", "text", "surface"};
+    uint32_t counts[11] = {0};
+    size_t at = 0U;
+    while (at < count) {
+        const size_t length = render_damage_op_length(words, count, at);
+        if (length == 0U) {
+            return trace_appendf(line, capacity, used, " op=bad@%u", (unsigned)at);
+        }
+        const uint32_t code = words[at];
+        if (code < 11U) {
+            counts[code] += 1U;
+        }
+        at += length;
+    }
+    for (uint32_t code = 1U; code < 11U; ++code) {
+        if (counts[code] != 0U) {
+            used = trace_appendf(line, capacity, used, " %s=%u", names[code],
+                                 (unsigned)counts[code]);
+        }
+    }
+    return used;
+}
+
+/** 一帧的 damage 计划：来源、draw list 字数与构成、region 矩形与折成的行带数。 */
+static void trace_plan(const pocketjs_rgb565_damage_plan_t *plan, uint32_t band_count,
+                       const pocketjs_ui_frame_view_t *frame, bool local_damage)
+{
+    char line[320];
+    size_t used = trace_appendf(line, sizeof(line), 0U,
+                                "trace plan: local=%u words=%u bands=%u regions=%u full=%u",
+                                local_damage ? 1U : 0U, (unsigned)frame->draw_word_count,
+                                (unsigned)band_count, (unsigned)plan->region_count,
+                                plan->full_redraw ? 1U : 0U);
+    for (uint32_t index = 0; index < plan->region_count; ++index) {
+        const pocketjs_rgb565_rect_t region = plan->regions[index];
+        used = trace_appendf(line, sizeof(line), used, " r%u=%u,%u,%u,%u",
+                             (unsigned)index, (unsigned)region.x, (unsigned)region.y,
+                             (unsigned)region.width, (unsigned)region.height);
+    }
+    ESP_LOGI(TAG, "%s", line);
+    char histogram[256];
+    const size_t hist_used = trace_appendf(histogram, sizeof(histogram), 0U, "trace ops:");
+    (void)trace_op_histogram(histogram, sizeof(histogram), hist_used, frame->draw_words,
+                             frame->draw_word_count);
+    ESP_LOGI(TAG, "%s", histogram);
+}
+
+/** 把一帧的 draw list 按每行 8 个字打印；行首是起始字下标，便于对齐解码。 */
+static void dump_draw_list(const pocketjs_ui_frame_view_t *frame)
+{
+    ESP_LOGI(TAG, "drawlist head: words=%u viewport=%ux%u scale=%u revision=%llu",
+             (unsigned)frame->draw_word_count, (unsigned)frame->logical_width,
+             (unsigned)frame->logical_height, (unsigned)frame->raster_density,
+             (unsigned long long)frame->raster_revision);
+    const uint32_t *words = frame->draw_words;
+    const size_t count = frame->draw_word_count;
+    for (size_t at = 0U; at < count; at += 8U) {
+        char line[160];
+        size_t used = trace_appendf(line, sizeof(line), 0U, "drawlist %u:", (unsigned)at);
+        for (size_t index = at; index < count && index < at + 8U; ++index) {
+            used = trace_appendf(line, sizeof(line), used, " %08x", (unsigned)words[index]);
+        }
+        ESP_LOGI(TAG, "%s", line);
+    }
+    ESP_LOGI(TAG, "drawlist end: words=%u", (unsigned)count);
+}
+
+/** 字形图集查询：差分算字形运行范围时按 slot 取字格尺寸（见 render_damage.h）。 */
+static bool damage_font_lookup(void *user_data, uint32_t slot, uint32_t *cell_width,
+                               uint32_t *cell_height, uint32_t *glyph_count)
+{
+    remapad_pocketjs_runtime_t *runtime = user_data;
+    if (runtime->core == NULL) {
+        return false;
+    }
+    pocketjs_ui_font_view_t view = {.struct_size = sizeof(view)};
+    if (pocketjs_ui_core_font(runtime->core, slot, &view) != ESP_OK) {
+        return false;
+    }
+    *cell_width = view.cell_width;
+    *cell_height = view.cell_height;
+    *glyph_count = view.glyph_count;
+    return view.cell_width > 0U && view.cell_height > 0U && view.glyph_count > 0U;
+}
+
+/**
  * 把一条已渲染行带的像素按 200 字节分块回传（截图通路）：strip 的行距是
  * 视口全宽，窗口窄于视口时逐行取窗口内的列。返回非 ESP_OK 表示这次截图
  * 放弃——PC 侧按偏移是否覆盖满判定，半张图不会被写成文件。
@@ -347,6 +511,26 @@ static esp_err_t shot_stream_band(const uint16_t *strip, size_t physical_width, 
 static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_data)
 {
     remapad_pocketjs_runtime_t *runtime = user_data;
+    /* 追踪窗口内的帧把 damage 计划与逐条行带的耗时写进控制台；窗口外这些
+     * 计数器与计时调用都不参与热路径。 */
+    const bool tracing = trace_take();
+    const int64_t trace_started_us = esp_timer_get_time();
+    /* 上一帧副本与本帧是否可比：视口、倍率与光栅资源版本都要一致；本帧任何
+     * 失败（含传输失败）都在此作废副本，只有整帧提交成功后才会重建。 */
+    const bool damage_comparable =
+        runtime->damage_words_valid &&
+        runtime->damage_viewport_width == frame->logical_width &&
+        runtime->damage_viewport_height == frame->logical_height &&
+        runtime->damage_scale == frame->raster_density &&
+        runtime->damage_raster_revision == frame->raster_revision;
+    runtime->damage_words_valid = false;
+    bool local_damage = false;
+    uint32_t trace_bands = 0U;
+    uint32_t trace_band_px = 0U;
+    uint32_t trace_wait_us = 0U;
+    uint32_t trace_ppa[3] = {0U, 0U, 0U};
+    uint32_t trace_software_ops = 0U;
+    uint32_t trace_software_words = 0U;
     pocketjs_rgb565_damage_plan_t plan = {
         .struct_size = sizeof(plan),
     };
@@ -406,6 +590,29 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
             .height = frame->logical_height,
         };
     }
+    /* 结构变化（切页、焦点环出现或移动、弹窗开关）会让框架放弃逐 op 比对、
+     * 直接报整屏重画，而这类帧真正变化的部分常常只占一小块。与上一帧的
+     * draw list 做本机差分，拿到更小的区域就按它渲染；差不出结果（首帧、
+     * 解码失败、窗口内没有落点）就照框架给的整屏计划走。 */
+    if (plan.full_redraw && damage_comparable && !shot) {
+        render_damage_plan_t local;
+        if (render_damage_diff(runtime->damage_words, runtime->damage_words_count,
+                               frame->draw_words, frame->draw_word_count,
+                               frame->logical_width, frame->logical_height,
+                               damage_font_lookup, runtime, &local)) {
+            plan.full_redraw = false;
+            plan.region_count = local.count;
+            for (uint32_t index = 0U; index < local.count; ++index) {
+                plan.regions[index] = (pocketjs_rgb565_rect_t){
+                    .x = local.rects[index].x,
+                    .y = local.rects[index].y,
+                    .width = local.rects[index].width,
+                    .height = local.rects[index].height,
+                };
+            }
+            local_damage = true;
+        }
+    }
     for (uint32_t index = 0; index < plan.region_count; ++index) {
         const pocketjs_rgb565_rect_t region = plan.regions[index];
         if (region.width == 0U || region.height == 0U) {
@@ -457,6 +664,13 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
     }
     /* 行带按绝对行序自上而下渲染并提交：整幅内容在一帧内写完，面板扫描与本帧
      * 写入之间只剩一个撕裂边界，不再有隔行留下的相邻行带错位。 */
+    if (tracing) {
+        trace_plan(&plan, band_count, frame, local_damage);
+    }
+    /* 转储请求在渲染前消费：打印本身要阻塞秒级，放在渲染前不影响本帧像素。 */
+    if (atomic_exchange_explicit(&s_draw_list_requested, false, memory_order_relaxed)) {
+        dump_draw_list(frame);
+    }
     for (uint32_t band_index = 0; band_index < band_count; ++band_index) {
         if (!runtime->band_pending[band_index]) {
             continue;
@@ -499,6 +713,7 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
         const size_t slot = runtime->strip_slot;
         uint16_t *strip = runtime->strip_buffers[slot];
         runtime->strip_slot = (slot + 1U) % REMAPAD_STRIP_BUFFER_COUNT;
+        const int64_t wait_started_us = tracing ? esp_timer_get_time() : 0;
         result = panel_wait_seq(runtime->strip_tokens[slot],
                                 REMAPAD_PANEL_TRANSFER_TIMEOUT_MS);
         if (result != ESP_OK) {
@@ -508,12 +723,35 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
         pocketjs_rgb565_render_stats_t stats = {
             .struct_size = sizeof(stats),
         };
+        const int64_t band_started_us = tracing ? esp_timer_get_time() : 0;
         result = pocketjs_rgb565_render_strip(
             runtime->renderer,
             frame, strip, band_pixels, band, accelerator, &stats);
         if (result != ESP_OK) {
             pocketjs_rgb565_abort(runtime->renderer, runtime->target);
             return result;
+        }
+        if (tracing) {
+            const int64_t band_done_us = esp_timer_get_time();
+            trace_bands++;
+            trace_band_px += (uint32_t)(band_width * band_height);
+            trace_wait_us += (uint32_t)(band_started_us - wait_started_us);
+            trace_ppa[0] += stats.ppa_fills;
+            trace_ppa[1] += stats.ppa_blends;
+            trace_ppa[2] += stats.ppa_srm;
+            trace_software_ops += stats.software_ops;
+            trace_software_words += stats.software_words;
+            ESP_LOGI(TAG,
+                     "trace band[%u]: x=%d y=%u w=%u h=%u px=%u render_us=%u wait_us=%u"
+                     " acc=%u/%u/%u sw_ops=%u sw_words=%u",
+                     (unsigned)band_index, band_x, (unsigned)band.y,
+                     (unsigned)band_width, (unsigned)band_height,
+                     (unsigned)(band_width * band_height),
+                     (unsigned)(band_done_us - band_started_us),
+                     (unsigned)(band_started_us - wait_started_us),
+                     (unsigned)stats.ppa_fills, (unsigned)stats.ppa_blends,
+                     (unsigned)stats.ppa_srm, (unsigned)stats.software_ops,
+                     (unsigned)stats.software_words);
         }
         /* 截图回传必须在面板传输之前：panel_transfer_async 会把缓冲原地改成
          * SPI 线序（大端），之后再读就不是 RGB565 小端了。 */
@@ -566,6 +804,18 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
         pocketjs_rgb565_abort(runtime->renderer, runtime->target);
         return result;
     }
+    /* 提交成功后重建副本：面板此刻显示的就是这份 draw list，下一次差分以它为基准。 */
+    if (runtime->damage_words != NULL && frame->draw_word_count > 0U &&
+        frame->draw_word_count <= REMAPAD_DAMAGE_WORDS_CAPACITY) {
+        memcpy(runtime->damage_words, frame->draw_words,
+               frame->draw_word_count * sizeof(uint32_t));
+        runtime->damage_words_count = frame->draw_word_count;
+        runtime->damage_viewport_width = frame->logical_width;
+        runtime->damage_viewport_height = frame->logical_height;
+        runtime->damage_scale = frame->raster_density;
+        runtime->damage_raster_revision = frame->raster_revision;
+        runtime->damage_words_valid = true;
+    }
     if (shot && !shot_failed) {
         const esp_err_t end_err = input_link_send_image_end(shot_total, REMAPAD_SHOT_TX_TIMEOUT_MS);
         if (end_err != ESP_OK) {
@@ -594,6 +844,15 @@ static esp_err_t render_frame(const pocketjs_ui_frame_view_t *frame, void *user_
         if (backlight_result != ESP_OK) {
             ESP_LOGW(TAG, "backlight on failed: %s", esp_err_to_name(backlight_result));
         }
+    }
+    if (tracing) {
+        ESP_LOGI(TAG, "trace frame: bands=%u band_px=%u render_us=%u wait_us=%u",
+                 (unsigned)trace_bands, (unsigned)trace_band_px,
+                 (unsigned)(esp_timer_get_time() - trace_started_us),
+                 (unsigned)trace_wait_us);
+        ESP_LOGI(TAG, "trace acc: fill=%u blend=%u srm=%u sw_ops=%u sw_words=%u",
+                 (unsigned)trace_ppa[0], (unsigned)trace_ppa[1], (unsigned)trace_ppa[2],
+                 (unsigned)trace_software_ops, (unsigned)trace_software_words);
     }
     return result;
 }
@@ -640,6 +899,14 @@ static esp_err_t allocate_strip_buffer(
     ESP_LOGI(TAG, "draw buffers: %u x %u bytes in internal RAM, internal free=%u",
              (unsigned)REMAPAD_STRIP_BUFFER_COUNT, (unsigned)bytes,
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+
+    /* draw list 副本只做逐帧比对，放 PSRAM：每帧一次拷贝是内存带宽友好型
+     * 顺序读写，不值得占用内部 RAM。分配失败不阻断启动，只是差分不可用。 */
+    runtime->damage_words = heap_caps_malloc(
+        REMAPAD_DAMAGE_WORDS_CAPACITY * sizeof(uint32_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (runtime->damage_words == NULL) {
+        ESP_LOGW(TAG, "damage word cache unavailable, structural changes fall back to full redraw");
+    }
     return ESP_OK;
 }
 
@@ -1078,6 +1345,8 @@ esp_err_t remapad_pocketjs_start(void)
 
     atomic_init(&s_runtime.stopping, false);
     atomic_init(&s_shot_requested, false);
+    atomic_init(&s_trace_frames, 0);
+    atomic_init(&s_draw_list_requested, false);
     const BaseType_t created = xTaskCreatePinnedToCoreWithCaps(
         pocketjs_owner_task,
         REMAPAD_POCKETJS_TASK_NAME,

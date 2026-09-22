@@ -30,6 +30,13 @@ export const PLAYER_LED = {
   off: '#002613',
 } as const;
 
+/**
+ * 四叶草底图的浅蓝面。底图烘成不透明 PSM_5650 位图（见 docs/adr/0051），
+ * 预览按 565 采样，因此比设计色 #a6c8ff 低一档——与实机读回的值同源。
+ * 界面里画的浅蓝（例如玩家指示灯 on）仍是 #a6c8ff，两者不要混用。
+ */
+export const CLOVER_FACE = '#a5cbff';
+
 export interface FlatNode {
   i: number;
   t: string;

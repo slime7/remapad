@@ -71,6 +71,8 @@ export const COLOR = {
 /**
  * 表面样式常量：每条都是完整 class 字面量（构建期整体注册），供页面按语义复用。
  * 可点表面一律带 focus: 白环：手柄操控模式下方向键移动焦点由原生核心直接呈现。
+ * 控件不要带 transition-*：过渡期间该区域每帧都要重画，一次焦点移动就会多出上百毫秒的重绘
+ * （见 docs/adr/0050），按下与焦点的换色直接跳变。
  */
 export const STYLE = {
   /** 应用根容器与覆盖层。 */
@@ -80,10 +82,13 @@ export const STYLE = {
 
   /** 模态对话框（240×280 本应用自绘）。 */
   modalBox: 'w-[204] rounded-[16] bg-[#112035] p-3 flex-col items-center',
-  modalCancelBtn: 'w-[84] h-[40] rounded-[12] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  modalDangerBtn: 'w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  modalCancelBtn: 'w-[84] h-[40] rounded-[12] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] focus:border-2 focus:border-[#ffffff]',
+  modalDangerBtn: 'w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] focus:border-2 focus:border-[#ffffff]',
 
-  /** 手柄配色圆钮：42 尺寸圆形色块与选中指示环。 */
+  /** 手柄配色圆钮：42 尺寸圆形色块与选中指示环。
+   *  环的底色必须跟着色块一起给：引擎只对「有底色的圆角边框」走两枚圆角填充
+   *  （各 4 个圆角四边形 + 3 条矩形）的快路径，纯边框元素退化成逐行覆盖条，
+   *  36 尺寸的环会撒出两百来条矩形指令（见 docs/adr/0050）。 */
   colorSwatch42: 'w-[42] h-[42] shrink-0 rounded-full flex-row items-center justify-center focus:border-2 focus:border-[#ffffff]',
   colorSwatchRing42: 'w-[36] h-[36] shrink-0 rounded-full border-2',
 
@@ -93,8 +98,8 @@ export const STYLE = {
    *  的范围，按下时整块命中区亮成轨道原来的按下色。滑块位置靠轨道的
    *  justify-start / justify-end 翻转，不需要定位容器；选中态只换整条 class
    *  字面量，不做透明度混合。 */
-  switchHitOff: 'w-[40] h-[40] shrink-0 rounded-full flex-row items-center justify-center active:bg-[#7d8ca6] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  switchHitOn: 'w-[40] h-[40] shrink-0 rounded-full flex-row items-center justify-center active:bg-[#264a79] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  switchHitOff: 'w-[40] h-[40] shrink-0 rounded-full flex-row items-center justify-center active:bg-[#7d8ca6] focus:border-2 focus:border-[#ffffff]',
+  switchHitOn: 'w-[40] h-[40] shrink-0 rounded-full flex-row items-center justify-center active:bg-[#264a79] focus:border-2 focus:border-[#ffffff]',
   switchTrackOff: 'w-[36] h-[20] shrink-0 rounded-full bg-[#667692] flex-row items-center justify-start px-[3]',
   switchTrackOn: 'w-[36] h-[20] shrink-0 rounded-full bg-[#1b416f] flex-row items-center justify-end px-[3]',
   switchThumbOff: 'w-[14] h-[14] shrink-0 rounded-full bg-[#d9e6ff]',
@@ -105,17 +110,17 @@ export const STYLE = {
    *  常规底色 secondaryContainer、内容 onSecondaryContainer；Error 变体给
    *  「断开/停止」与「设备关机」两处破坏性动作（errorContainer 语义）。
    *  定位进同一条字面量（构建期整条注册，焦点环也直接呈现在 focusable 节点上）。 */
-  cornerBtnTL: 'absolute left-[50] top-[50] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  cornerBtnTR: 'absolute left-[142] top-[50] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  cornerBtnBL: 'absolute left-[50] top-[142] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  cornerBtnBR: 'absolute left-[142] top-[142] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  cornerBtnBRError: 'absolute left-[142] top-[142] w-[64] h-[64] rounded-full bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  cornerBtnTL: 'absolute left-[50] top-[50] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] focus:border-2 focus:border-[#ffffff]',
+  cornerBtnTR: 'absolute left-[142] top-[50] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] focus:border-2 focus:border-[#ffffff]',
+  cornerBtnBL: 'absolute left-[50] top-[142] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] focus:border-2 focus:border-[#ffffff]',
+  cornerBtnBR: 'absolute left-[142] top-[142] w-[64] h-[64] rounded-full bg-[#152a1f] flex-row items-center justify-center active:bg-[#1d3a2b] focus:border-2 focus:border-[#ffffff]',
+  cornerBtnBRError: 'absolute left-[142] top-[142] w-[64] h-[64] rounded-full bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] focus:border-2 focus:border-[#ffffff]',
 
   /** 调试页操作按钮。 */
-  dbgBtn: 'w-[52] h-[32] rounded-[10] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  dbgBtnOn: 'w-[52] h-[32] rounded-[10] bg-[#a6c8ff] flex-row items-center justify-center active:bg-[#7e9fd4] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  dbgFullBtn: 'w-[110] h-[32] rounded-[10] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  dbgFullBtnOn: 'w-[110] h-[32] rounded-[10] bg-[#a6c8ff] flex-row items-center justify-center active:bg-[#7e9fd4] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  dbgBtn: 'w-[52] h-[32] rounded-[10] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] focus:border-2 focus:border-[#ffffff]',
+  dbgBtnOn: 'w-[52] h-[32] rounded-[10] bg-[#a6c8ff] flex-row items-center justify-center active:bg-[#7e9fd4] focus:border-2 focus:border-[#ffffff]',
+  dbgFullBtn: 'w-[110] h-[32] rounded-[10] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] focus:border-2 focus:border-[#ffffff]',
+  dbgFullBtnOn: 'w-[110] h-[32] rounded-[10] bg-[#a6c8ff] flex-row items-center justify-center active:bg-[#7e9fd4] focus:border-2 focus:border-[#ffffff]',
 
   /** 底部中区玩家指示灯：8px 微型方块（底栏为 tertiary #4eb079，点亮用 primaryContainer #a6c8ff，熄灭用 onTertiary #002613）。 */
   miniPlayerLedOn: 'w-[8] h-[8] rounded-[2] shrink-0 bg-[#a6c8ff]',

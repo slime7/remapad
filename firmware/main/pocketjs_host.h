@@ -25,6 +25,24 @@ void remapad_ui_request_shot(void);
  */
 void remapad_ui_request_mem(void);
 
+/** trace 命令不带帧数时的追踪长度：1 秒（30 Hz tick 一帧一行）。 */
+#define REMAPAD_UI_TRACE_FRAMES_DEFAULT 30U
+
+/**
+ * 请求逐帧 damage 追踪（串口 trace 命令）：owner task 在接下来的 frames 帧里
+ * 每帧打一行 damage 计划（region 矩形、折带数、是否整屏重画）与逐条行带的
+ * 矩形和耗时，用来量切页、动画这类局部更新的真实代价；frames 传 0 取默认长度。
+ */
+void remapad_ui_request_trace(unsigned frames);
+
+/**
+ * 请求把下一帧的 draw list 原样打到控制台（串口 drawlist 命令）：每行一个
+ * 字偏移加八个十六进制字，供 PC 侧离线复算差分与统计 op 构成。输出量在
+ * 数十 KB 量级、串口按 115200 收，期间 UI 任务会阻塞在写日志上，因此只做
+ * 一次性诊断；owner task 消费标志位后自动清位。
+ */
+void remapad_ui_request_draw_list(void);
+
 #ifdef __cplusplus
 }
 #endif

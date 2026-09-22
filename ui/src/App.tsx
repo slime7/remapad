@@ -1,8 +1,9 @@
 /**
  * Remapad 屏幕应用主界面：
  * - 上半部分：四叶草菜单区域 (x:0, y:0, w:240, h:200)，单卡片居中展示，取消边缘露出提示以消除横向撕裂；
- *   切页过渡不做透明度混合（S3 软渲染的逐像素混合开销大）：旧卡立即让位，
- *   新卡从 75% 尺寸单独放大至 100%，拖动预览同比例缩小当前卡；
+ *   切页瞬时完成：任何搬动整页内容的动画每帧都要重画内容框，在 S3 上比一次
+ *   瞬时切换贵好几倍，方向提示改由行进侧的翻页箭头弹一下承担（见 docs/adr/0050）；
+ *   拖动预览仍让当前卡内容跟手平移（手指驱动，跟手反馈不可省）；
  *   方向键/肩键左右翻页、上下选择；拖动越过阈值或快甩释放速度达标即翻页，
  *   左右凹陷处的翻页箭头点按切页（触摸专用，不进手柄焦点环）；
  * - 下半部分：底部圆角状态卡片 (w:224, h:64)，集成物理手柄状态、主机连接（玩家指示灯/HOME触控）、
@@ -34,17 +35,20 @@ import { ticksForMs } from './tick';
 void CHARSET_ANCHOR;
 
 const SWIPE_THRESHOLD = 40;
-const SWIPE_SPAN = 100;
 // 甩动提交：释放速度（逻辑 px/虚拟秒，框架按 60Hz 采样）达到阈值、且总位移
 // 越过抖动下限（高于 tapSlop）即切页——快划时手指早抬、总位移很小也能翻页。
 const FLING_VELOCITY = 500;
 const FLING_MIN_TRAVEL = 12;
-// 过渡缩放下限：新卡从 75% 放大进场，拖动预览把当前卡按进度缩到 75%。
-// 过渡全程不做透明度混合——S3 软件渲染器的逐像素混合是过渡期最大的单帧开销。
-const TRANSITION_SCALE = 0.75;
-// 新卡 75%→100% 的进场时长；旧卡的「淡出」是拖动跟手缩放，无固定时长，回弹复原见 REBOUND_DUR_MS。
-const ANIM_DUR_MS = 80;
-const REBOUND_DUR_MS = 100;
+// 拖动预览：当前卡内容按手指位移的一半跟手平移，位移封顶 DRAG_SLIDE_PX。
+const DRAG_SLIDE_PX = 24;
+const DRAG_FOLLOW = 0.5;
+// 切页提示：页面瞬时切换，只有方向侧的翻页箭头往外弹 ARROW_NUDGE_PX 再收回。
+// 整页平移每帧都要重画内容框（S3 上一帧四十到八十毫秒，三帧动画比瞬时切换贵三倍），
+// 箭头只有 32 × 32，弹一下的代价在毫秒级（见 docs/adr/0050）。
+const ARROW_NUDGE_PX = 6;
+const ARROW_NUDGE_MS = 90;
+// 拖动未越过阈值时的回弹复原时长。
+const REBOUND_DUR_MS = 60;
 const BTN_CROSS = 0x4000;
 
 export default function App() {
@@ -71,85 +75,53 @@ export default function App() {
   };
 
   const dialogOpen = () => rebootAsk.value || powerOffAsk.value;
-  // 过渡可见性：提交动画期间只显示目标卡（旧卡立即让位，新卡放大进场），
-  // 拖动预览与静止态只显示当前页卡。两个引用都无条件读取——条件短路会让
-  // 其中一个漏出类绑定的依赖清单，写入就不再触发可见性翻转。
-  const isCardVisible = (index: number) => {
-    const page = pageIndex.value;
-    const target = transitionTarget.value;
-    if (isAnimating.value && target >= 0) {
-      return target === index;
-    }
-    return page === index;
-  };
+  // 卡片可见性只看当前页码：切页是瞬时的，拖动预览期间显示的也还是当前页。
+  const isCardVisible = (index: number) => pageIndex.value === index;
   const isPageActive = (index: number) => isCardVisible(index);
   const interactive = (index: number) => () =>
     pageIndex.value === index && !dialogOpen() && !isAnimating.value;
 
-  // 卡片节点与过渡控制器。isAnimating 必须是响应式引用：提交路径（onPanEnd）
-  // 里 transitionTarget 不变、只有它翻转，普通变量对类绑定不可见，新卡会在
-  // 整个放大动画期间保持隐藏，动画跑完才随 pageIndex 瞬间换页。
-  const cardNodes: (NodeMirror | null)[] = [null, null, null, null, null, null, null];
+  // 页面内容节点与拖动控制器：切页瞬时完成，只有拖动回弹与方向提示有动画，
+  // 内容节点只在拖动预览里被平移（translateX）。isAnimating 必须是响应式引用，
+  // 类绑定才看得见它的翻转（回弹期间焦点环要收起来）。
+  const contentNodes: (NodeMirror | null)[] = [null, null, null, null, null, null, null];
   let fromIndex = -1;
   const isAnimating = ref(false);
   let isDragging = false;
-  let animIds: number[] = [];
-  let pendingAnimFrames = 0;
+  let reboundIds: number[] = [];
+  let cueIds: number[] = [];
   let pendingReboundFrames = 0;
 
-  const setCardRef = (index: number) => (node: NodeMirror | null) => {
-    cardNodes[index] = node;
+  const setContentRef = (index: number) => (node: NodeMirror | null) => {
+    contentNodes[index] = node;
   };
 
-  const clearTransition = () => {
-    for (const id of animIds) {
-      if (id >= 0) {
-        cancelAnim(id);
-      }
-    }
-    animIds = [];
-    pendingAnimFrames = 0;
-    pendingReboundFrames = 0;
-    isAnimating.value = false;
+  /** 拖动状态归零：拖动预览与回弹都由它收尾。 */
+  const clearDrag = () => {
     isDragging = false;
     transitionTarget.value = -1;
     fromIndex = -1;
   };
 
-  // 动画终点结算：原子切换活跃页码并复位卡片变换状态
-  const finishTransition = () => {
-    const target = transitionTarget.value;
-    const from = fromIndex;
-    clearTransition();
-    if (target >= 0) {
-      pageIndex.value = target;
-    }
-    const oldNode = from >= 0 ? cardNodes[from] : null;
-    const newNode = target >= 0 ? cardNodes[target] : null;
-    if (oldNode) {
-      jump(oldNode, 'scale', 1.0);
-    }
-    if (newNode) {
-      jump(newNode, 'scale', 1.0);
-    }
-  };
-
+  /** 回弹收尾：内容位移归零、清掉动画句柄与拖动状态。 */
   const finishRebound = () => {
-    const from = fromIndex;
-    clearTransition();
-    const oldNode = from >= 0 ? cardNodes[from] : null;
-    if (oldNode) {
-      jump(oldNode, 'scale', 1.0);
+    const node = fromIndex >= 0 ? contentNodes[fromIndex] : null;
+    for (const id of reboundIds) {
+      if (id >= 0) {
+        cancelAnim(id);
+      }
+    }
+    reboundIds = [];
+    pendingReboundFrames = 0;
+    isAnimating.value = false;
+    clearDrag();
+    if (node) {
+      jump(node, 'translateX', 0);
     }
   };
 
   onFrame(() => {
-    if (pendingAnimFrames > 0) {
-      pendingAnimFrames -= 1;
-      if (pendingAnimFrames <= 0) {
-        finishTransition();
-      }
-    } else if (pendingReboundFrames > 0) {
+    if (pendingReboundFrames > 0) {
       pendingReboundFrames -= 1;
       if (pendingReboundFrames <= 0) {
         finishRebound();
@@ -157,45 +129,72 @@ export default function App() {
     }
   });
 
-  const startTransition = (to: number) => {
-    if (dialogOpen() || isAnimating.value) {
+  // 四叶草左右凹陷处的翻页箭头：兼作方向提示与触摸切页区。绑节点区域（透明
+  // 触摸区命中走 op 42 边界判定），不设 focusable、也不在 pageRoot 子树内，
+  // 方向键与圆圈键的焦点环因此永远落不到箭头上。
+  let leftArrowNode: NodeMirror | null = null;
+  const leftArrowRef = (node: NodeMirror | null) => {
+    leftArrowNode = node;
+  };
+  let rightArrowNode: NodeMirror | null = null;
+  const rightArrowRef = (node: NodeMirror | null) => {
+    rightArrowNode = node;
+  };
+
+  /** 方向提示：页面已经切过去了，只让行进侧的翻页箭头往外弹一下再收回。
+   *  direction = +1 向下一页（右箭头动），-1 向上一页（左箭头动）。 */
+  const nudgeArrow = (direction: number) => {
+    for (const id of cueIds) {
+      if (id >= 0) {
+        cancelAnim(id);
+      }
+    }
+    cueIds = [];
+    const node = direction > 0 ? rightArrowNode : leftArrowNode;
+    if (!node) {
       return;
     }
-    const from = pageIndex.value;
-    if (from === to) {
+    jump(node, 'translateX', direction * ARROW_NUDGE_PX);
+    cueIds.push(animate(node, 'translateX', 0, { dur: ARROW_NUDGE_MS, easing: 'out' }));
+  };
+
+  /** 立即切页：复位被拖动过的旧页内容、翻到目标页，再给一次方向提示。
+   *  页面本身不做进场动画——整页平移每帧都要重画内容框，比瞬时切换贵好几倍。 */
+  const switchPage = (to: number, direction: number) => {
+    const oldNode = fromIndex >= 0 ? contentNodes[fromIndex] : null;
+    for (const id of reboundIds) {
+      if (id >= 0) {
+        cancelAnim(id);
+      }
+    }
+    reboundIds = [];
+    pendingReboundFrames = 0;
+    isAnimating.value = false;
+    clearDrag();
+    if (oldNode) {
+      jump(oldNode, 'translateX', 0);
+    }
+    pageIndex.value = to;
+    nudgeArrow(direction);
+  };
+
+  /** direction = +1 表示向下一页，-1 表示向上一页。 */
+  const startTransition = (to: number, direction: number) => {
+    if (dialogOpen() || isDragging || isAnimating.value || to === pageIndex.value) {
       return;
     }
-
-    const oldNode = cardNodes[from];
-    const newNode = cardNodes[to];
-    if (!oldNode || !newNode) {
-      pageIndex.value = to;
-      transitionTarget.value = -1;
-      return;
-    }
-
-    clearTransition();
-    isAnimating.value = true;
-    fromIndex = from;
-    transitionTarget.value = to;
-
-    // 提交过渡：旧卡经可见性立即让位，新卡从 75% 单独放大进场（无透明度混合）
-    jump(newNode, 'scale', TRANSITION_SCALE);
-    animIds = [
-      animate(newNode, 'scale', 1.0, { dur: ANIM_DUR_MS, easing: 'out' }),
-    ];
-    pendingAnimFrames = Math.max(1, Math.round(ticksForMs(ANIM_DUR_MS)));
+    switchPage(to, direction);
   };
 
   const nextPage = () => {
-    startTransition(nextPageIndex());
+    startTransition(nextPageIndex(), 1);
   };
 
   const prevPage = () => {
-    startTransition(prevPageIndex());
+    startTransition(prevPageIndex(), -1);
   };
 
-  // 手势接管上半区域 (240 × 200)，支持拖动实时微缩淡出跟手与平滑回弹/顺应切页
+  // 手势接管上半区域 (240 × 200)，支持拖动实时跟手平移与平滑回弹/顺应切页
   attachGesture({
     axis: 'x',
     region: { rect: () => (dialogOpen() ? null : { x: 0, y: 0, w: 240, h: 200 }) },
@@ -203,12 +202,12 @@ export default function App() {
       if (dialogOpen() || isAnimating.value) {
         return;
       }
-      clearTransition();
       fromIndex = pageIndex.value;
       isDragging = true;
-      const oldNode = cardNodes[fromIndex];
+      transitionTarget.value = -1;
+      const oldNode = contentNodes[fromIndex];
       if (oldNode) {
-        jump(oldNode, 'scale', 1.0);
+        jump(oldNode, 'translateX', 0);
       }
     },
     onPanMove: (contact) => {
@@ -219,12 +218,15 @@ export default function App() {
       if (transitionTarget.value !== target) {
         transitionTarget.value = target;
       }
-      // 拖动预览只缩放当前卡（新卡保持隐藏，透明度不参与）：
-      // 进度 0→1 对应 100%→75%
-      const oldNode = cardNodes[pageIndex.value];
-      const progress = Math.min(1.0, Math.abs(contact.dx) / SWIPE_SPAN);
+      // 拖动预览只平移当前卡内容（新卡保持隐藏，透明度不参与）：
+      // 位移按 DRAG_FOLLOW 跟手，并对位移封顶，免得整段内容滑出框外
+      const oldNode = contentNodes[pageIndex.value];
       if (oldNode) {
-        jump(oldNode, 'scale', 1.0 - (1.0 - TRANSITION_SCALE) * progress);
+        const offset = Math.max(
+          -DRAG_SLIDE_PX,
+          Math.min(DRAG_SLIDE_PX, contact.dx * DRAG_FOLLOW),
+        );
+        jump(oldNode, 'translateX', offset);
       }
     },
     onPanEnd: (contact) => {
@@ -233,43 +235,24 @@ export default function App() {
       }
       isDragging = false;
       const target = transitionTarget.value;
-      const oldNode = cardNodes[pageIndex.value];
-      const newNode = target >= 0 ? cardNodes[target] : null;
+      const from = fromIndex;
+      const oldNode = from >= 0 ? contentNodes[from] : null;
 
       const flick = Math.abs(contact.vx) >= FLING_VELOCITY && Math.abs(contact.dx) >= FLING_MIN_TRAVEL;
-      if ((Math.abs(contact.dx) >= SWIPE_THRESHOLD || flick) && target >= 0 && oldNode && newNode) {
-        // 顺应提交：旧卡让位，新卡从 75% 放大进场（不做透明度混合）
-        isAnimating.value = true;
-        jump(newNode, 'scale', TRANSITION_SCALE);
-        animIds = [
-          animate(newNode, 'scale', 1.0, { dur: ANIM_DUR_MS, easing: 'out' }),
-        ];
-        pendingAnimFrames = Math.max(1, Math.round(ticksForMs(ANIM_DUR_MS)));
-      } else if (target >= 0 && oldNode && newNode) {
-        // 未超阈值：当前卡缩放回弹复原（新卡未上过屏，先收起过渡目标）
+      if ((Math.abs(contact.dx) >= SWIPE_THRESHOLD || flick) && target >= 0) {
+        // 顺应提交：内容复位后立即切页，方向提示由 switchPage 给出
+        switchPage(target, contact.dx < 0 ? 1 : -1);
+      } else if (target >= 0 && oldNode) {
+        // 未超阈值：当前卡内容平移回弹复原（内容位移是拖动留下的，只在这里清）
         isAnimating.value = true;
         transitionTarget.value = -1;
-        animIds = [
-          animate(oldNode, 'scale', 1.0, { dur: REBOUND_DUR_MS, easing: 'out' }),
-        ];
+        reboundIds = [animate(oldNode, 'translateX', 0, { dur: REBOUND_DUR_MS, easing: 'out' })];
         pendingReboundFrames = Math.max(1, Math.round(ticksForMs(REBOUND_DUR_MS)));
       } else {
-        clearTransition();
+        clearDrag();
       }
     },
   });
-
-  // 四叶草左右凹陷处的翻页箭头：触摸点按切页。绑节点区域（透明触摸区命中
-  // 走 op 42 边界判定），不设 focusable、也不在 pageRoot 子树内，方向键与
-  // 圆圈键的焦点环因此永远落不到箭头上。
-  let leftArrowNode: NodeMirror | null = null;
-  const leftArrowRef = (node: NodeMirror | null) => {
-    leftArrowNode = node;
-  };
-  let rightArrowNode: NodeMirror | null = null;
-  const rightArrowRef = (node: NodeMirror | null) => {
-    rightArrowNode = node;
-  };
 
   attachGesture({
     region: { node: () => leftArrowNode },
@@ -321,44 +304,43 @@ export default function App() {
         {/* 第 1 页：亮度调节 (几何中心 x: 120, y: 104)。角钮页铺满整张卡片：
             角钮要与背景瓣外弧同心，圆心落在中央内容框 (50,54,156,148) 之外。 */}
         <View
-          nodeRef={setCardRef(0)}
           class={isCardVisible(0) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-0 top-0 w-[256] h-[256]">
+          <View nodeRef={setContentRef(0)} class="absolute left-0 top-0 w-[256] h-[256]">
             <BrightnessPage active={() => isPageActive(0)} interactive={interactive(0)} />
           </View>
         </View>
 
         {/* 第 2 页：手柄设置 (几何中心 x: 120, y: 104) */}
         <View
-          nodeRef={setCardRef(1)}
           class={isCardVisible(1) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+          <View
+            nodeRef={setContentRef(1)}
+            class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
+          >
             <ControllerSettingsPage active={() => isPageActive(1)} interactive={interactive(1)} />
           </View>
         </View>
 
         {/* 第 3 页：手柄配对 (几何中心 x: 120, y: 104)。角钮页，容器同第 1 页。 */}
         <View
-          nodeRef={setCardRef(2)}
           class={isCardVisible(2) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-0 top-0 w-[256] h-[256]">
+          <View nodeRef={setContentRef(2)} class="absolute left-0 top-0 w-[256] h-[256]">
             <PairingPage active={() => isPageActive(2)} interactive={interactive(2)} />
           </View>
         </View>
 
         {/* 第 4 页：电源管理 (几何中心 x: 120, y: 104)。角钮页，容器同第 1 页。 */}
         <View
-          nodeRef={setCardRef(3)}
           class={isCardVisible(3) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-0 top-0 w-[256] h-[256]">
+          <View nodeRef={setContentRef(3)} class="absolute left-0 top-0 w-[256] h-[256]">
             <PowerPage
               active={() => isPageActive(3)}
               interactive={interactive(3)}
@@ -370,22 +352,26 @@ export default function App() {
 
         {/* 第 5 页：DS4、DS5 设置 (几何中心 x: 120, y: 104) */}
         <View
-          nodeRef={setCardRef(4)}
           class={isCardVisible(4) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+          <View
+            nodeRef={setContentRef(4)}
+            class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
+          >
             <DsSettingsPage active={() => isPageActive(4)} interactive={interactive(4)} />
           </View>
         </View>
 
         {/* 第 6 页：系统信息 (几何中心 x: 120, y: 104) */}
         <View
-          nodeRef={setCardRef(5)}
           class={isCardVisible(5) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
         >
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+          <View
+            nodeRef={setContentRef(5)}
+            class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
+          >
             <SystemInfoPage active={() => isPageActive(5)} interactive={interactive(5)} />
           </View>
         </View>
@@ -393,11 +379,13 @@ export default function App() {
         {/* 第 7 页：调试指令 (开发模式) */}
         {IS_DEV ? (
           <View
-            nodeRef={setCardRef(6)}
             class={isCardVisible(6) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
           >
             <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-            <View class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden">
+            <View
+              nodeRef={setContentRef(6)}
+              class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
+            >
               <DebugPage active={() => isPageActive(6)} interactive={interactive(6)} />
             </View>
           </View>

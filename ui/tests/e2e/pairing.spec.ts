@@ -1,7 +1,7 @@
 /**
  * 配对页：连接键（开广播）与配对副按钮。
  */
-import { test, expect } from './fixtures';
+import { CLOVER_FACE, test, expect } from './fixtures';
 import { openPairing, swipePrev } from './pages';
 
 test('开机静默：未配对也不广播，主按钮是「连接」', async ({ app }) => {
@@ -24,8 +24,8 @@ test('配对页提示在上方，两枚圆钮落在下方两角的瓣心', async
   // 上方两颗瓣心没有按钮，仍是四叶草浅蓝。
   expect(await app.colorAt(166, 136)).toBe('#152a1f');
   expect(await app.colorAt(74, 136)).toBe('#152a1f');
-  expect(await app.colorAt(74, 44)).toBe('#a6c8ff');
-  expect(await app.colorAt(166, 44)).toBe('#a6c8ff');
+  expect(await app.colorAt(74, 44)).toBe(CLOVER_FACE);
+  expect(await app.colorAt(166, 44)).toBe(CLOVER_FACE);
 
   // 提示文字块在页面上部（屏坐标 y < 80），主按钮文字在下半区（y > 100）。
   // 静止画面下官方 inspect 拿不到静态文本的矩形，用边界命中扫描定位。
