@@ -1,7 +1,8 @@
 # 上游对账记录
 
 本目录记录本仓库固定的 PocketJS 组件与上游实现之间的差异，以及重新对账的方法。
-当前固件组件对账至 PocketJS v0.12.0（commit `d3f0be0c7739ea704ca25d8b5158581bb176abc6`）。
+当前固件组件对账至上游 `main`（commit `ea25791da4ef75d95467cf83c230241114d76c70`，
+v0.12.0 之后 34 个提交，含 `pocket-stack/pocketjs#460`；下一版发布前的取值）。
 这些差异都已经写进 `firmware/components/` 内的仓库副本，构建时不需要再对任何目录打补丁。
 
 ## 0001-quickjs-ng-0.14.0-source-pin
@@ -67,15 +68,20 @@ turn 不会延迟，`pocketjs_guest_interrupt` 的终止语义原样保留。CMa
 组件时重新对账，不需要执行 `git apply`。升级组件时应确认上游是否已在长 eval
 场景处理空闲任务喂狗，处理后可回退本补丁。
 
-## 0005-guest-heap-limit-kconfig
+## 0005-guest-heap-limit-kconfig（已并入上游，无差异）
 
 上游 PR `pocket-stack/pocketjs#460`（对应 issue #429）把 guest 的 QuickJS 堆上限做成组件 Kconfig：
 新增 `CONFIG_POCKETJS_GUEST_HEAP_LIMIT`（默认 4194304 字节），`pocketjs_guest_config_defaults()` 改为读取它，
 显式赋值 `config.heap_limit` 仍可覆盖。它只改预算来源与默认值，不改变 GC 调度。
+该 PR 已进 `main`，仓库副本现在与上游逐字节一致，本条目只剩一条本仓库约定：
+产品固件的预算写在 `firmware/sdkconfig.defaults`，不在 C 代码里写死上限。
 
-本仓库副本已按该 PR 落地：`firmware/components/pocketjs_guest/Kconfig` 与 `src/guest.c` 的默认值取值方式
-一致；产品固件不再在 `pocketjs_host.c` 里写死上限，取值回到 `firmware/sdkconfig.defaults`。
-升级组件到含该 PR 的版本后，本条目只剩「预算取值写在 sdkconfig.defaults」这一条本仓库约定。
+## 对账后的预期差异
+
+仓库副本与同一提交的上游 `hosts/esp-idf/components/` 比对时，应当只剩下面四处文件不同：
+`pocketjs_guest/CMakeLists.txt`、`pocketjs_guest/src/guest.c`（0004）、
+`pocketjs_guest/tools/prepare_quickjs.py`（0001）、`pocketjs_ui_qjs/src/ui_qjs.c`（0003）；
+`pocketjs_ui_core` 另少一个上游的 `.gitignore`（0002）。其余组件应逐字节一致。
 
 ## 重新对账的方法
 

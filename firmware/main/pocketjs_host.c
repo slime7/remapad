@@ -871,15 +871,19 @@ static void mem_report_print(const remapad_pocketjs_runtime_t *runtime)
     pocketjs_guest_stats_t stats = {.struct_size = sizeof(stats)};
     const bool have_heap = pocketjs_guest_stats(runtime->guest, &stats) == ESP_OK;
     JSMemoryUsage usage = {0};
+    size_t gc_threshold = 0U;
     if (have_heap) {
-        JS_ComputeMemoryUsage(
-            JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest)), &usage);
+        JSRuntime *qjs_runtime =
+            JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest));
+        JS_ComputeMemoryUsage(qjs_runtime, &usage);
+        gc_threshold = JS_GetGCThreshold(qjs_runtime);
     }
     snprintf(&report[used], sizeof(report) - used,
-             "mem js_heap=%u/%u kB allocs=%u obj=%u prop=%u arr=%u turns=%u errors=%u "
-             "max_turn_us=%u max_render_us=%u\r\n",
+             "mem js_heap=%u/%u kB gc_thresh=%u kB allocs=%u obj=%u prop=%u arr=%u "
+             "turns=%u errors=%u max_turn_us=%u max_render_us=%u\r\n",
              (unsigned)(usage.malloc_size / 1024U),
              (unsigned)(stats.heap_limit / 1024U),
+             (unsigned)(gc_threshold / 1024U),
              (unsigned)usage.malloc_count, (unsigned)usage.obj_count,
              (unsigned)usage.prop_count, (unsigned)usage.array_count,
              (unsigned)stats.frames, (unsigned)stats.frame_errors,
@@ -957,8 +961,6 @@ static void pocketjs_owner_task(void *opaque)
             mem_report_print(runtime);
         }
 
-        /* 本分支实验：无宿主侧回收，只观察引擎阈值式 GC 能否自行兜住 PSRAM。 */
-
         if (esp_timer_get_time() >= report_due) {
             const uint32_t frames_in_window =
                 runtime->window_frames == 0U ? 1U : runtime->window_frames;
@@ -982,16 +984,20 @@ static void pocketjs_owner_task(void *opaque)
                 const bool have_heap = pocketjs_guest_stats(runtime->guest, &mem_stats) == ESP_OK;
                 /* 分桶观察：obj/prop 涨而 func/str 平是「成环待回收」的特征。 */
                 JSMemoryUsage usage = {0};
+                size_t gc_threshold = 0U;
                 if (have_heap && runtime->guest != NULL) {
-                    JS_ComputeMemoryUsage(
-                        JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest)), &usage);
+                    JSRuntime *qjs_runtime =
+                        JS_GetRuntime(pocketjs_guest_quickjs_context(runtime->guest));
+                    JS_ComputeMemoryUsage(qjs_runtime, &usage);
+                    gc_threshold = JS_GetGCThreshold(qjs_runtime);
                 }
                 ESP_LOGI(TAG,
-                         "mem: js_heap=%" PRIu32 "kB/%" PRIu32 "kB "
+                         "mem: js_heap=%" PRIu32 "kB/%" PRIu32 "kB gc_thresh=%" PRIu32 "kB "
                          "psram_free=%u internal_free=%u "
                          "allocs=%u obj_n=%u prop_n=%u arr_n=%u",
                          (uint32_t)(usage.malloc_size / 1024U),
                          have_heap ? (uint32_t)(mem_stats.heap_limit / 1024U) : 0U,
+                         (uint32_t)(gc_threshold / 1024U),
                          (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
                          (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                          (unsigned)usage.malloc_count,
