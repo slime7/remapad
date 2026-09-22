@@ -37,8 +37,8 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 PocketJS 屏幕 UI。
 - **前端 UI 工程 (`ui/`)**：
   - 基于 PocketJS 框架与 Vue 3 Vapor JSX 语法；样式用 PocketJS 构建期 Tailwind CSS 子集，字体由构建器光栅化烘焙。
   - 依赖由 pnpm 管理，PocketJS 编译器由 Bun 执行，来源为 `@pocketjs/framework` 官方 npm 依赖。
-  - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部页面（发布构建六个，dev 构建含调试页七个），切页只翻转各页根节点的 `hidden`，新增页面直接写进 JSX
-    （[ADR 0016](docs/adr/0016-mount-all-pages-before-first-frame.md)）。
+  - 页面由 `ui/src/App.tsx` 组织：首次渲染一次性挂载全部页面（发布构建七个，dev 构建含调试页八个），
+    轮播顺序来自文件顶部的页表（`PAGE_KEYS`，槽位由数组位置推出，各页按页名取），切页只翻转各页根节点的 `hidden`。
 - **设备固件工程 (`firmware/`)**：
   - 基于 PocketJS 官方要求的 ESP-IDF `>=6.0,<6.2` 与 C 语言；硬件绑定微雪 ESP32-S3-Touch-LCD-1.69
     （16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏），规格与引脚见 [docs/hardware.md](docs/hardware.md)。

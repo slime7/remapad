@@ -20,11 +20,13 @@ interface MockHardwareState {
   controllerConfig: ControllerConfig;
   dsBehavior: DsBehaviorConfig;
   usbRole: UsbRole;
-  /** host 数据面未接入，mock 里只有 device 角色是"生效"的。 */
+  /** 角色是否已生效：两个角色都接了数据面，浏览器 mock 恒为 true。 */
   usbRoleActive: boolean;
   /** 主机下发的玩家序号灯掩码（bit0-3），无主机时为 0。 */
   playerLed: number;
   padUiMode: boolean;
+  /** PC 串口接入状态：浏览器预览没有 USB 复用开关，始终当作已连上 PC。 */
+  pcLink: boolean;
   bootAt: number;
   heapSize: number;
   heapFree: number;
@@ -67,6 +69,7 @@ const state: MockHardwareState = {
   usbRoleActive: true,
   playerLed: 0,
   padUiMode: false,
+  pcLink: true,
   bootAt: Date.now(),
   heapSize: 320 * 1024,
   heapFree: 186 * 1024,
@@ -194,6 +197,7 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
         playerLed: state.playerLed,
         /* 浏览器预览下可通过 debugKey('ui') 模拟进入/退出手柄操控模式。 */
         padUiMode: state.padUiMode,
+        pcLink: state.pcLink,
         uptimeMs: Date.now() - state.bootAt,
         heapFree: state.heapFree,
         heapSize: state.heapSize,
@@ -238,15 +242,11 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       break;
 
     case 'setUsbRole': {
-      // 桥接（otg）开发期临时禁用防误操作：后端静默跳过，不应用也不报错。
-      if (cmd.role === 'otg') {
-        reply({ t: 'usbRoleSet', id, role: state.usbRole, active: state.usbRoleActive });
-        break;
-      }
+      /* 浏览器预览没有 USB 复用开关：两个角色都直接生效，只回报状态。 */
       state.usbRole = cmd.role;
-      state.usbRoleActive = cmd.role !== 'host';
-      reply({ t: 'usbRoleSet', id, role: cmd.role, active: state.usbRoleActive });
-      emit({ t: 'usbRoleChanged', role: cmd.role, active: state.usbRoleActive });
+      state.usbRoleActive = true;
+      reply({ t: 'usbRoleSet', id, role: cmd.role, active: true });
+      emit({ t: 'usbRoleChanged', role: cmd.role, active: true });
       break;
     }
 

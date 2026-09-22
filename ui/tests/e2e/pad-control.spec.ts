@@ -12,12 +12,12 @@ test('方向键左右切换四叶草页面', async ({ app }) => {
   await app.goto();
   expect(await app.hasVisibleText('2')).toBe(true);
 
-  // 按右键切换到第 2 页：手柄设置
+  // 按右键切到手柄设置页
   await app.pad.press('ArrowRight');
   await expect.poll(() => app.hasVisibleText('SN: HEJ71001123456')).toBe(true);
   await expect.poll(() => app.hasVisibleText('2')).toBe(false);
 
-  // 按左键切换回第 1 页：亮度调节
+  // 按左键切回亮度调节页
   await app.pad.press('ArrowLeft');
   await expect.poll(() => app.hasVisibleText('2')).toBe(true);
   await expect.poll(() => app.hasVisibleText('SN: HEJ71001123456')).toBe(false);
@@ -27,12 +27,12 @@ test('上下方向键选择控件并回车激活：在亮度页调节背光', as
   await app.goto();
   expect(await app.hasVisibleText('2')).toBe(true);
 
-  // 第一次下移聚焦第 1 个按钮（加号），回车激活增加亮度 (2档 -> 3档)
+  // 第一次下移聚焦第一个按钮（加号），回车激活增加亮度 (2档 -> 3档)
   await app.pad.press('ArrowDown');
   await app.pad.press('Enter');
   await expect.poll(() => app.hasVisibleText('3')).toBe(true);
 
-  // 第二次下移聚焦第 2 个按钮（减号），回车激活降低亮度 (3档 -> 2档)
+  // 第二次下移聚焦第二个按钮（减号），回车激活降低亮度 (3档 -> 2档)
   await app.pad.press('ArrowDown');
   await app.pad.press('Enter');
   await expect.poll(() => app.hasVisibleText('2')).toBe(true);
@@ -53,7 +53,7 @@ test('WASD 与方向键等价', async ({ app }) => {
 
 test('手柄控屏模式激活时，底栏切换为两行按键提示文本', async ({ app }) => {
   await app.goto();
-  expect(await app.hasVisibleText('未连接')).toBe(true);
+  expect(await app.hasVisibleText('88%')).toBe(true);
 
   // 模拟手柄控屏模式广播
   await app.emitBridge({ t: 'padUiModeChanged', on: true });
@@ -65,6 +65,6 @@ test('手柄控屏模式激活时，底栏切换为两行按键提示文本', as
 
   // 退出控屏模式，恢复状态显示
   await app.emitBridge({ t: 'padUiModeChanged', on: false });
-  await expect.poll(() => app.hasVisibleText('未连接')).toBe(true);
+  await expect.poll(() => app.hasVisibleText('88%')).toBe(true);
   expect(await app.hasVisibleText('翻页')).toBe(false);
 });

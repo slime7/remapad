@@ -86,6 +86,7 @@
 | [0050](0050-repaint-friendly-screen-rules.md) | active | 屏幕动效按重绘友好选：圆角加边框的元素必须带底色，切页瞬时完成、方向提示交给翻页箭头弹一下，只有拖动预览保留跟手平移 |
 | [0051](0051-opaque-565-card-artwork.md) | active | 卡片底图烘成不透明 PSM_5650（SVG 垫根容器色底 + 位图清单声明 565），走渲染器直拷路径 |
 | [0052](0052-ui-tick-rate-back-to-60hz.md) | active | UI 帧节奏恢复 60 Hz（tickHz 以 host profile 为准），CST816T 触摸改连续点模式；部分取代 0037 的 30 Hz 取值 |
+| [0053](0053-usb-serial-phy-handback-on-role-switch.md) | active | host 切回串口时固件显式把内部 PHY 指回 USB-Serial/JTAG（进 host 前先放掉句柄），COM 口不必重启即可回来；交还失败时界面在切回后询问是否立刻重启，复位仍是保底恢复路径 |
 
 ## 创建 ADR 脚本用法
 

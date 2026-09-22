@@ -25,7 +25,8 @@ extern "C" {
  * flash 写入的禁缓存窗口内不能访问 PSRAM 栈，任何任务都不得直接写 flash。USB 连接模式只在内存中生效。
  */
 
-/** USB 连接模式。桥接（otg）双端禁切；该值不持久化，重启回到 device。 */
+/** USB 连接模式：device = 端口给 PC 串口，host = 端口给 OTG host 直插手柄。
+ *  该值不持久化，重启回到 device。 */
 typedef enum {
     APP_CONFIG_USB_DEVICE = 0,
     APP_CONFIG_USB_HOST = 1,

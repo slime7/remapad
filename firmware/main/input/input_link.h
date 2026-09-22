@@ -26,6 +26,10 @@ void input_link_stop(void);
 /** 链路是否在运行（host 模式下为 false）。 */
 bool input_link_active(void);
 
+/** PC 是否连在串口上：USB-Serial/JTAG 在收主机的 SOF 包（插充电宝不算）。
+ *  状态由 IDF 的 USJ 连接监视器维护，控制台选 USJ 时随驱动一并链接。 */
+bool input_link_pc_connected(void);
+
 /** 已解析的桥接帧数（诊断）。 */
 uint32_t input_link_frame_count(void);
 

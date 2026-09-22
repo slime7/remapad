@@ -2,7 +2,7 @@
  * 配对页：连接键（开广播）与配对副按钮。
  */
 import { CLOVER_FACE, test, expect } from './fixtures';
-import { openPairing, swipePrev } from './pages';
+import { openPairing, swipeNext, swipePrev } from './pages';
 
 test('开机静默：未配对也不广播，主按钮是「连接」', async ({ app }) => {
   await app.goto();
@@ -104,7 +104,9 @@ test('配对流程中可自由滑动切页', async ({ app }) => {
   await app.tapText('连接');
   await expect.poll(() => app.hasVisibleText('扫描中…')).toBe(true);
 
-  // 向右滑切回手柄设置页
+  // 向右滑离开配对页：配对页文案不再可见，切回来页面还在（广播流程与页面无关）
   await swipePrev(app);
-  await expect.poll(() => app.hasVisibleText('SN: HEJ71001123456')).toBe(true);
+  await expect.poll(() => app.hasVisibleText('配对')).toBe(false);
+  await swipeNext(app);
+  await expect.poll(() => app.hasVisibleText('配对')).toBe(true);
 });

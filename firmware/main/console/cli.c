@@ -70,7 +70,7 @@ static void cli_help(void)
     cli_print("                      controller colors 0xRRGGBB, persisted (no arg = current)");
     cli_print("  ds touchpad|capture [on|off]");
     cli_print("                      DS4/DS5 behavior, persisted (no arg = current)");
-    cli_print("  mode device|host    usb connection mode");
+    cli_print("  mode device|host    usb port role (device = pc serial, host = direct pad)");
     cli_print("  connect             connection key: advertising window (PWR long press)");
     cli_print("  pairing start|stop  pair a new host: drop link + discovery advertising");
     cli_print("  wake                open the wake window (drop link if connected)");
@@ -465,14 +465,13 @@ static void cli_beep(const char *arg)
 
 static void cli_mode(const char *arg)
 {
-    /* 走 bridge 命令路径：otg 在 bridge 内拒绝并回复；角色只对本次运行生效。 */
+    /* 与屏幕「USB 模式」页同一条入口（bridge 命令）：角色只对本次运行生效，
+     * 切回 device 时固件把内部 PHY 交还给 USB-Serial/JTAG。 */
     if (strcmp(arg, "device") == 0 || strcmp(arg, "host") == 0) {
         char json[64];
         snprintf(json, sizeof(json), "{\"t\":\"setUsbRole\",\"role\":\"%s\",\"id\":0}", arg);
         js_bridge_submit_command(json);
         cli_print("ok mode request queued");
-    } else if (strcmp(arg, "otg") == 0) {
-        cli_print("err bridge mode is locked");
     } else {
         cli_print("err usage: mode device|host");
     }

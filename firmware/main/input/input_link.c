@@ -137,6 +137,11 @@ bool input_link_active(void)
     return s_running;
 }
 
+bool input_link_pc_connected(void)
+{
+    return usb_serial_jtag_is_connected();
+}
+
 uint32_t input_link_frame_count(void)
 {
     return s_frames;

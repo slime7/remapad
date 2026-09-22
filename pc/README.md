@@ -130,7 +130,10 @@ rumble 200 0     手动震动（0-255 双侧，rumble off 停）；lamp 0xF 玩�
                  haptic 0x10 触觉采样（输入设备有线接入时由板载蜂鸣器发声）——
                  与主机反馈走同一条编码投递路径
 ui on            手柄操控屏幕模式（ui off 退出）
-backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣；mode host USB 角色
+backlight 60     背光（持久化）；screen off 息屏；beep 蜂鸣
+mode host        端口交给手柄（COM 口消失，日志与 CLI 改走 UART0，排查通道见
+                 [../docs/GETTING-STARTED.md](../docs/GETTING-STARTED.md) 的「USB 手柄直插（host 模式）」）；
+                 mode device 切回串口（屏幕会问是否立刻重启，复位是保底恢复路径）
 ds touchpad on   DS4/DS5 手柄行为：触摸板映射加减键（左半减号 / 右半加号）；
                  ds capture off 让触摸板按下改发减号（默认开：发截图），两项都持久化
 capture on       主机输出原始采集（off 关；开启后主机写进输出特征值的原始字节

@@ -17,7 +17,7 @@ test('慢速短拖位移小于阈值且松手无甩动速度时不触发切页',
   await app.waitSettled();
   await app.refreshTree();
 
-  // 依然保持在第 1 页
+  // 依然保持在亮度调节页
   expect(await app.hasVisibleText('2')).toBe(true);
   expect(await app.hasVisibleText('SN: HEJ71001123456')).toBe(false);
 });
@@ -31,7 +31,7 @@ test('横向滑动位移大于阈值时切换页面', async ({ app }) => {
   await app.waitSettled();
   await app.refreshTree();
 
-  // 成功切到第 2 页
+  // 成功切到手柄设置页
   await expect.poll(() => app.hasVisibleText('SN: HEJ71001123456')).toBe(true);
   expect(await app.hasVisibleText('2')).toBe(false);
 });

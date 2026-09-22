@@ -1,13 +1,13 @@
 /**
  * 系统功能测试：
- * 1. 第 1 页：背光调节（20%~100% 步进）；
- * 2. 第 4 页：电源管理（重启与关机确认弹窗）；
- * 3. 第 6 页：系统信息（固件版本与内存）。
+ * 1. 背光调节（20%~100% 步进）；
+ * 2. 电源管理（重启与关机确认弹窗）；
+ * 3. 系统信息（固件版本与内存）。
  */
 import { CLOVER_FACE, test, expect } from './fixtures';
 import { goHome, openPower, openSystemInfo } from './pages';
 
-test('第 1 页亮度调节步进（1-5 档），最低不会降到 0 档', async ({ app }) => {
+test('亮度调节步进（1-5 档），最低不会降到 0 档', async ({ app }) => {
   await app.goto();
   await goHome(app);
   expect(await app.hasVisibleText('2')).toBe(true);
@@ -42,7 +42,7 @@ test('亮度页加减钮是与背景瓣弧同心的 64 圆钮：右上加、右�
   expect(await app.colorAt(166, 188)).toBe(CLOVER_FACE);
 });
 
-test('第 4 页电源管理：重启与关机斜角放在左上/右下瓣心', async ({ app }) => {
+test('电源管理：重启与关机斜角放在左上/右下瓣心', async ({ app }) => {
   await app.goto();
   await openPower(app);
 
@@ -62,7 +62,7 @@ test('第 4 页电源管理：重启与关机斜角放在左上/右下瓣心', a
   await expect.poll(() => app.hasVisibleText('是否立即重启 Remapad 设备？')).toBe(false);
 });
 
-test('第 4 页电源管理：点击关机唤起确认弹窗', async ({ app }) => {
+test('电源管理：点击关机唤起确认弹窗', async ({ app }) => {
   await app.goto();
   await openPower(app);
 
@@ -75,7 +75,7 @@ test('第 4 页电源管理：点击关机唤起确认弹窗', async ({ app }) =
   await expect.poll(() => app.hasVisibleText('是否立即关闭 Remapad 设备？')).toBe(false);
 });
 
-test('第 6 页系统信息展示固件与内存参数', async ({ app }) => {
+test('系统信息展示固件与内存参数', async ({ app }) => {
   await app.goto();
   await openSystemInfo(app);
 

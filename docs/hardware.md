@@ -2,7 +2,8 @@
 
 本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。
 面板、触摸与背光 BSP 已接入固件（见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；
-BLE 手柄链路、蜂鸣器（GPIO42 LEDC tone）、电池电压采样、SYS_EN 电源保持与 PWR 按键已接入；USB 输入、IMU 与 RTC 仍只有硬件事实。
+BLE 手柄链路、蜂鸣器（GPIO42 LEDC tone）、电池电压采样、SYS_EN 电源保持与 PWR 按键已接入；
+USB host 直插按运行时角色切换接入（见下文「USB 控制器复用」，实机核对待做），IMU 与 RTC 仍只有硬件事实。
 
 板卡为微雪 (Waveshare) **ESP32-S3-Touch-LCD-1.69**，SKU 27350；
 本文档的规格、引脚与地址来自微雪官方文档 <https://docs.waveshare.net/ESP32-S3-Touch-LCD-1.69>。
@@ -112,7 +113,8 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 
 - **I2C 地址冲突**：板内已占用 `0x15`（触摸）、`0x6B`（IMU）、`0x51`（RTC）。外接 I2C 设备必须避开这三个地址。
 - **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志与 USB 输入共用同一个物理口，复位后默认以 `USB-Serial/JTAG` 模式枚举。
-  固件已实现运行时角色切换（`usb/usb_role.c`）：选「手柄」后该口交给 OTG host，PC 上的 COM 口消失直到复位，host 期间日志与 CLI 走 UART0。
+  固件已实现运行时角色切换（`usb/usb_role.c`）：选「手柄」后该口交给 OTG host，PC 上的 COM 口消失，host 期间日志与 CLI 走 UART0；
+  选回「串口」时固件把内部 PHY 交还 USB-Serial/JTAG，COM 口随之回来（交还不成功时界面提示重启，复位是保底路径）。
   复用开关与切换机制见下文「USB 控制器复用」，取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)。
 - **`GPIO19` / `GPIO20`** 已接 Type-C，不要当普通 GPIO 使用。
 - **`GPIO0` 是 BOOT**、`CHIP_PU` 是复位信号，都不适合作为普通用户输入。
@@ -125,7 +127,9 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 flowchart LR
     Device["device 角色：USB-Serial/JTAG（COM 口、日志、CLI、桥接帧）"] -->|"模式页「手柄」或串口 mode host"| Move["日志与 CLI 先迁到 UART0（GPIO43/44）"]
     Move --> Host["放掉 USB-Serial/JTAG、装 USB host 栈（复用开关切到 OTG host）"]
-    Host -->|"串口 mode device 或复位"| Device
+    Host -->|"模式页「串口」或串口 mode device"| Back["拆 host 栈后显式把内部 PHY 指回 USB-Serial/JTAG"]
+    Back --> Device
+    Host -->|"复位"| Device
 ```
 
 ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSLS PHY（模拟收发前端），中间隔着一片片内复用开关，同一时刻只有一个控制器能接到物理口：
@@ -150,7 +154,9 @@ ESP32-S3 片内有两个 USB 控制器，共用 GPIO19/20 上唯一的内部 FSL
 - **运行时切换是纯软件操作**。
   ESP-IDF usb_phy 驱动封装为 `usb_new_phy()`，指定 `controller = USB_PHY_CTRL_OTG`、`otg_mode = USB_OTG_MODE_HOST` 即完成切换；
   `usb_host` 协议栈安装时内部会调用，应用不需要直接写寄存器。切换后 PC 上的 COM 口消失。
-- **切回串口**：复位即回默认位；不重启切回需重新初始化 PHY 并指定 `USB_PHY_CTRL_SERIAL_JTAG`。注意 `usb_del_phy()` 只清理上拉与焊盘，不会把选择位翻回 USB-Serial/JTAG。
+- **切回串口**：复位即回默认位；不重启切回要重新初始化 PHY 并指定 `USB_PHY_CTRL_SERIAL_JTAG`——`usb_del_phy()` 只清理上拉与焊盘，不会把选择位翻回 USB-Serial/JTAG。
+  固件按这条路实现（`usb/usb_role.c` 在切回时 `usb_new_phy(USB_PHY_CTRL_SERIAL_JTAG)` 并持有句柄，进 host 前再放掉）；
+  这一步失败时 COM 口要复位才回来，界面在切回后询问是否立刻重启，见 [ADR 0053](adr/0053-usb-serial-phy-handback-on-role-switch.md)。
 
 对开发流程的影响：
 
@@ -184,7 +190,7 @@ BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller-sw
 尚未接入的硬件：
 
 - IMU（QMI8658C）与 RTC（PCF85063ATL）的驱动与状态上报；
-- USB host 输入的实机验收（代码已落地；VBUS 供电路径已按 V2.1 原理图确认为 TP1 外部注入，mux 切换与手柄枚举待实测）；
+- USB host 输入的实机验收（代码已落地；VBUS 供电路径已按 V2.1 原理图确认为 TP1 外部注入，现用外置 5V 升压板从 TP1 注入，mux 切换、角色切回与手柄枚举待实测）；
 - 充电状态与外部供电的测量：核对原理图后确认 ETA6098 的 STAT 引脚（9 脚）空置、没有引出任何网络，板上也没有 VBUS 检测网络；
   固件的充电标志是按采样电压趋势推断的，不是实测值（见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)）。要拿到实测值，得另加测量：
   在 VBUS / PMID 网络上取分压接空闲 GPIO（外部供电），或在电池回路串采样电阻、并一颗电量计（电量与充放电方向）；

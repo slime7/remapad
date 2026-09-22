@@ -5,7 +5,9 @@
  * 状态优先级：
  * 1. OTA 数据接收进度条（最高）
  * 2. 手柄操控屏幕提示模式（两行提示文本）
- * 3. 三等分状态栏（默认）：物理手柄状态、主机连接状态（带玩家指示灯，未连接点击触发信号搜索）、电池电量。
+ * 3. 三等分状态栏（默认）：USB 模式（串口→电脑图标、手柄→手柄图标，
+ *    对接的 PC / 手柄没接上就降一档颜色并写「未连接」）、主机连接状态
+ *    （带玩家指示灯，未连接点击触发信号搜索）、电池电量。
  */
 import { ref } from 'vue';
 import { View, Text, Image } from '@pocketjs/framework/vue-vapor/components';
@@ -13,6 +15,7 @@ import { onFrame } from '@pocketjs/framework/vue-vapor/lifecycle';
 import { COLOR, STYLE } from '../theme';
 import { ICON, Icon } from '../icons';
 import { connect, hw } from '../hooks/useHardware';
+import { padFamilyLabel } from '../utils';
 
 const OTA_TRACK_W = 192;
 
@@ -32,11 +35,28 @@ export function BottomBar() {
   const isOta = () => hw.ota.phase === 'receiving';
   const isPadUi = () => hw.padUiMode;
 
-  // 手柄状态：tertiary 背景上已连接使用高强调 onTertiary，未连接使用弱化 onTertiaryContainer
+  /**
+   * 左区是 USB 模式指示：串口档显示电脑图标（PC 桥接与烧录），手柄档显示手柄图标，
+   * 对接的 PC / 手柄没接上就换成同族的禁用字形并写上「未连接」（电脑那对是同一台
+   * 显示器）；图标与「USB 模式」页两张卡一一对应。
+   * 底色是 tertiary，接入到位用高强调 onTertiary，没接上时用弱化 onTertiaryContainer。
+   */
+  const usbModeHost = () => hw.usbRole === 'host';
   const padAttached = () => hw.physicalPad.attached;
-  const padGlyph = () => (padAttached() ? ICON.videogameAsset : ICON.videogameAssetOff);
-  const padColor = () => (padAttached() ? COLOR.onTertiary : COLOR.onTertiaryContainer);
-  const padLabel = () => (padAttached() ? (hw.physicalPad.name || 'PRO') : '未连接');
+  const modeReady = () => (usbModeHost() ? padAttached() : hw.pcLink);
+  const modeGlyph = () => {
+    if (usbModeHost()) {
+      return padAttached() ? ICON.videogameAsset : ICON.videogameAssetOff;
+    }
+    return hw.pcLink ? ICON.desktopWindows : ICON.desktopAccessDisabled;
+  };
+  const modeColor = () => (modeReady() ? COLOR.onTertiary : COLOR.onTertiaryContainer);
+  const modeLabel = () => {
+    if (usbModeHost()) {
+      return padAttached() ? padFamilyLabel(hw.physicalPad.name) : '未连接';
+    }
+    return hw.pcLink ? 'PC' : '未连接';
+  };
 
   // 主机连接状态
   const hostConnected = () => hw.pairing === 'connected';
@@ -129,14 +149,14 @@ export function BottomBar() {
 
       {/* 优先级 3：三等分状态显示（上行图标 h-[24]、下行状态 h-[18]，确保三列图标严格水平对齐） */}
       <View class={!isOta() && !isPadUi() ? 'w-full h-full flex-row items-center px-1' : 'hidden'}>
-        {/* 左区：物理手柄 */}
+        {/* 左区：USB 模式（图标跟模式下走） */}
         <View class="grow basis-0 h-full flex-col items-center justify-center gap-1">
           <View class="h-[24] flex-row items-center justify-center">
-            <Icon glyph={padGlyph()} class="text-xl shrink-0" color={padColor()} />
+            <Icon glyph={modeGlyph()} class="text-xl shrink-0" color={modeColor()} />
           </View>
           <View class="h-[18] flex-row items-center justify-center">
             <Text class="text-xs shrink-0" style={{ textColor: COLOR.onTertiary }}>
-              {padLabel()}
+              {modeLabel()}
             </Text>
           </View>
         </View>

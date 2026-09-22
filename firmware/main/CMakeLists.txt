@@ -6,6 +6,7 @@ set(remapad_pocketjs_requires
     esp_driver_gpio
     esp_driver_uart
     esp_driver_usb_serial_jtag
+    esp_hw_support
     esp_lcd_touch
     esp_lcd_touch_cst816s
     usb

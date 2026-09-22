@@ -83,7 +83,16 @@ export const STYLE = {
   /** 模态对话框（240×280 本应用自绘）。 */
   modalBox: 'w-[204] rounded-[16] bg-[#112035] p-3 flex-col items-center',
   modalCancelBtn: 'w-[84] h-[40] rounded-[12] bg-[#15263e] flex-row items-center justify-center active:bg-[#192d48] focus:border-2 focus:border-[#ffffff]',
+  /** 主色确认钮：可逆的设置类动作（切 USB 模式）。 */
+  modalPrimaryBtn: 'w-[84] h-[40] rounded-[12] bg-[#a6c8ff] flex-row items-center justify-center active:bg-[#7e9fd4] focus:border-2 focus:border-[#ffffff]',
   modalDangerBtn: 'w-[84] h-[40] rounded-[12] bg-[#8a1a1e] flex-row items-center justify-center active:bg-[#a02a2e] focus:border-2 focus:border-[#ffffff]',
+
+  /** USB 模式页选项卡：四叶草中央是 primaryContainer 浅蓝面，因此两态都用不透明
+   *  底色画成卡片、且都不与面色重合——未选中是比面色更亮的浅底配深蓝字，选中是
+   *  onPrimaryContainer 深蓝底配 primaryContainer 浅蓝字，哪一张被选中一眼可见。
+   *  底色与边框一起给，焦点环才走有底色圆角边框的快路径（见 docs/adr/0050）。 */
+  optionCard: 'w-full rounded-[12] bg-[#d9e6ff] px-3 py-2 flex-row items-center gap-2 active:bg-[#a6c8ff] focus:border-2 focus:border-[#ffffff]',
+  optionCardSel: 'w-full rounded-[12] bg-[#1b416f] px-3 py-2 flex-row items-center gap-2 active:bg-[#264a79] focus:border-2 focus:border-[#ffffff]',
 
   /** 手柄配色圆钮：42 尺寸圆形色块与选中指示环。
    *  环的底色必须跟着色块一起给：引擎只对「有底色的圆角边框」走两枚圆角填充

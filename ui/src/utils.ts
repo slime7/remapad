@@ -2,34 +2,8 @@
  * 屏幕文案与格式化工具。所有中文与格式字符都以字面量出现在本文件，
  * 构建期据此烘焙字体图集；数字/冒号/百分号由 theme.ts 的锚点兜底。
  */
-import type { PairingState, UsbRole } from './bridge/protocol';
+import type { PairingState } from './bridge/protocol';
 import { COLOR } from './theme';
-
-/** USB 链路展示状态：off=没插 / adb=PC+烧录（串口） / computer=PC+OTG / gamepad=手柄+主机。 */
-export type UsbLinkState = 'off' | 'adb' | 'computer' | 'gamepad';
-
-/** 由控制面的角色与生效标志推导 USB 链路状态；串口（device）对应烧录态 adb。 */
-export function usbLinkState(usbRole: UsbRole, usbRoleActive: boolean): UsbLinkState {
-  if (!usbRoleActive) {
-    return 'off';
-  }
-  if (usbRole === 'host') {
-    return 'gamepad';
-  }
-  return usbRole === 'otg' ? 'computer' : 'adb';
-}
-
-/** 状态栏的 USB 角色短标。 */
-export function usbRoleLabel(usbRole: UsbRole): string {
-  switch (usbRole) {
-    case 'host':
-      return 'HOST';
-    case 'otg':
-      return 'OTG';
-    default:
-      return 'COM';
-  }
-}
 
 /** 开机时长 → mm:ss 或 h:mm:ss。 */
 export function formatUptime(ms: number): string {
@@ -45,6 +19,26 @@ export function formatUptime(ms: number): string {
 /** 字节数 → MB 文本（一位小数，如 8.0 MB）。 */
 export function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * 直插手柄的家族短名（固件上报的机读 token）→ 底栏标签。
+ * 标签必须是本文件的字面量：固件回发的字符串没进字体图集，直接上屏会变豆腐块。
+ * 空串（未接入）与 unknown（未登记型号按家族表回落 Xbox 布局）都落到通用标签。
+ */
+export function padFamilyLabel(name: string): string {
+  switch (name) {
+    case 'ps':
+      return 'PS';
+    case 'xbox':
+      return 'XBOX';
+    case 'ns':
+      return 'NS';
+    case 'steam':
+      return 'STEAM';
+    default:
+      return 'PAD';
+  }
 }
 
 /** 配对状态中文标签。 */
@@ -84,7 +78,3 @@ export type PairingNotice =
   | '停止命令未生效'
   | '配对命令未生效'
   | '重启中…';
-
-/** USB 角色切换提示：同 PairingNotice，必须是 ui/src 里的字面量。 */
-export type RoleNotice = '' | 'USB host 数据面未接入，切换暂不生效' | 'USB 角色切换未生效';
-

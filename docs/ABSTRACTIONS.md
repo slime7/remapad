@@ -125,12 +125,16 @@ flowchart TB
   入队出队都在 owner task 上（无锁），PWR 按键与串口 CLI 等非 owner task 上下文经 `js_bridge_submit_command` / `js_bridge_post_event` 的外部队列转移。
   命令与事件清单以 `ui/src/bridge/protocol.ts` 为准。
 - **屏幕文案一律取自 ui/src 的字面量**，桥接只回状态与错误码、不回可上屏的文本：
-  字体字符集按源码字面量扫描烘焙，固件回传的文本直接渲染就是豆腐块（联合类型 `PairingNotice` / `RoleNotice` 把这条规则钉在类型上）。
+  字体字符集按源码字面量扫描烘焙，固件回传的文本直接渲染就是豆腐块（联合类型 `PairingNotice` 把这条规则钉在类型上）。
 - 玩家序号灯（主机 Command 0x09 下发的 4 位掩码）由 `ns2_session_player_leds()` 按活跃会话汇总，
   随 `systemStatus.playerLed` 与 `playerLedChanged` 事件供首页四格指示灯使用。
   用户设置（背光亮度、手柄四段配色、上报固件版本）由 `firmware/main/config/app_config.c` 持久化到 NVS（内部 RAM 栈提交任务，与 ble_creds 同一模式），开机恢复。
 - USB 角色（`usbRole`：device = 插电脑 COM 口，host = 插手柄）在运行时真实切换，顺序与约束见
   [ARCHITECTURE.md](ARCHITECTURE.md) 的「USB 角色切换」；角色只在本次运行有效、不写 NVS。
+- 底栏左区是 USB 模式指示：串口档电脑图标、手柄档手柄图标，图标与「USB 模式」页两张卡一一对应；
+  对接对象没接上时换成同族的禁用字形、颜色降一档、标签写「未连接」——直插手柄接没接由 `usb_input_attached()`
+  经 `padAttachedChanged` 推送（name 是家族机读短名，屏幕标签取自 ui/src 的字面量），
+  PC 接没接由 USB-Serial/JTAG 的 SOF 监视经 `pcLinkChanged` 推送。
 - 配对与连接状态接的是真实 BLE 会话（NimBLE 手柄外设）：配对页主按钮是连接键，广播中它发 `disconnect`（收窗口与流程、断开链路、静默）；
   副按钮配新主机走 `startPairing`（先断开当前主机再进发现广播等新主机搜索，凭证拿齐且会话注册完成才退出流程）；
   解除配对走显式 `unpair`（清 NVS 凭证并静默），UI 不暴露入口。
@@ -451,12 +455,13 @@ UI 侧把各页与底栏的 `focusable` 绑在「自己是当前页、且没有�
 - 长文案放不进可视区时用 `ui/src/components/MarqueeText.tsx`（自定义横向滚动文本）：
   框架的单行 `Text` 不自动换行，组件按「静止 2 秒 → 匀速左移到底 → 到底停留 1 秒 → 跳回起点」循环，放得下则全程静止；
   可视宽度由调用方以逻辑像素传入（框架不回读布局），滚动相位取 `virtualNow()`，文本宽度经 `getOps().measureText(text, slot)` 量取，宿主不提供该操作时退回静态文本。
-- 页面组织：`ui/src/App.tsx` 在首次渲染里一次挂完七个页面，首屏（第一次 commit）只在全部建树完成后提交，
+- 页面组织：`ui/src/App.tsx` 在首次渲染里一次挂完八个页面，首屏（第一次 commit）只在全部建树完成后提交，
   等待期由固件启动画面覆盖（选型见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
-  App 没有页面容器层也没有待挂队列，切页由每个页面根节点翻转 `hidden`（`props.active()`）完成，新增页面直接写在 JSX 里并自行负责 `hidden`。
+  App 没有页面容器层也没有待挂队列，切页由每个页面根节点翻转 `hidden`（`props.active()`）完成；
+  轮播顺序来自 App 顶部的页表（`PAGE_KEYS`，槽位由数组位置推出，各页按页名 `slot('…')` 取），新增页面在页表里加一项并写好 JSX。
 - 同页会来回切换的状态用 `hidden` 收起而不是条件渲染：每行就是一个文本节点，标签与值同节点、省掉行容器。
   运行期增删节点很贵，因此 JSX 里的 `.map(...)` 不能读响应式状态——列表取自模块级常量，可变字段留给子组件按属性绑定
-  （模式页 `RoleCard`、手柄设置页的身份信息行都是这个写法）。切换类样式也不要带 `transition-*`：过渡期间该区域每帧都要重画，观感是慢半拍。
+  （模式页 `ModeCard`、手柄设置页的身份信息行都是这个写法）。切换类样式也不要带 `transition-*`：过渡期间该区域每帧都要重画，观感是慢半拍。
 - 滚动页在滚动列末尾放 `components/BottomPlaceholder.tsx` 垫高（`BOTTOM_PAD_H`）；页面内容高度由各页静态估算后传给 `usePageScroll`
   （框架不回读布局），估算误差由垫高的余量吸收。页面能否滚动由调用方一次声明（`usePageScroll(active, scrollable, contentH)`）；
   滚动边界硬夹住（`overscroll: 0`），抛掷落点越界的会被改写成到边界的补间。全应用只注册一个纵向手势，识别区域由当前接管滚动的页面给出：

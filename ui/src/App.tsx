@@ -18,11 +18,12 @@ import { onButtonPress, onFrame } from '@pocketjs/framework/vue-vapor/lifecycle'
 import { BottomBar } from './components/BottomBar';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ICON, Icon } from './icons';
-import { useHardware, hw, powerOffDevice, rebootDevice } from './hooks/useHardware';
+import { useHardware, hw, powerOffDevice, rebootDevice, setUsbRole } from './hooks/useHardware';
 import { usePadControl } from './hooks/usePadControl';
 import { BrightnessPage } from './pages/BrightnessPage';
 import { ControllerSettingsPage } from './pages/ControllerSettingsPage';
 import { DsSettingsPage } from './pages/DsSettingsPage';
+import { ModePage } from './pages/ModePage';
 import { PairingPage } from './pages/PairingPage';
 import { PowerPage } from './pages/PowerPage';
 import { SystemInfoPage } from './pages/SystemInfoPage';
@@ -51,18 +52,55 @@ const ARROW_NUDGE_MS = 90;
 const REBOUND_DUR_MS = 60;
 const BTN_CROSS = 0x4000;
 
+/**
+ * 四叶草轮播页表：顺序即左右翻页顺序，新增或删除页面只改这里——槽位由数组
+ * 位置推出来，各页代码按页名取槽位，页面描述里不再写死序号（见 docs/adr/0041）。
+ * 开发构建把调试页接在末尾。
+ */
+const PAGE_KEYS = [
+  'brightness',
+  'controller',
+  'pairing',
+  'power',
+  'usbMode',
+  'dsSettings',
+  'systemInfo',
+] as const;
+type PageKey = (typeof PAGE_KEYS)[number] | 'debug';
+/** 页名 → 槽位索引（本页在轮播里的位置）。 */
+const SLOT = (() => {
+  const keys: PageKey[] = [...PAGE_KEYS];
+  if (IS_DEV) {
+    keys.push('debug');
+  }
+  const map = new Map<PageKey, number>();
+  keys.forEach((key, index) => map.set(key, index));
+  return map;
+})();
+const SLOT_COUNT = SLOT.size;
+/** 取页槽位：页面代码与页表之间唯一的联系。 */
+const slot = (key: PageKey) => SLOT.get(key) ?? 0;
+
+/** 页容器两种形态：整张 256 卡片（角钮页铺满，钮心与背景瓣外弧同心）
+ *  与中央内容框（列表与表单页用，130 × 130 左右）。 */
+const CARD_BOX = 'absolute left-[-8] top-[-24] w-[256] h-[256]';
+const CENTER_BOX =
+  'absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden';
+
 export default function App() {
   useHardware();
 
-  // 当前页索引（默认开机为第 0 页：亮度调节）
-  const pageIndex = ref(0);
+  // 当前页槽位（默认开机为亮度调节页）
+  const pageIndex = ref(slot('brightness'));
   // 过渡中目标页（-1 为静止态无过渡）
   const transitionTarget = ref(-1);
   const rebootAsk = ref(false);
   const powerOffAsk = ref(false);
+  /** 切到「手柄」的确认弹窗（切过去之后 PC 串口消失）。 */
+  const usbHostAsk = ref(false);
 
-  // 页面总数（若开启 dev 编译选项则包含第 7 页调试页）
-  const pageCount = () => (IS_DEV ? 7 : 6);
+  // 页面总数：发布构建七个，dev 构建含调试页八个（见上面的页表）
+  const pageCount = () => SLOT_COUNT;
 
   const prevPageIndex = () => {
     const total = pageCount();
@@ -74,7 +112,8 @@ export default function App() {
     return (pageIndex.value + 1) % total;
   };
 
-  const dialogOpen = () => rebootAsk.value || powerOffAsk.value;
+  const dialogOpen = () =>
+    rebootAsk.value || powerOffAsk.value || usbHostAsk.value || hw.usbRebootAsk;
   // 卡片可见性只看当前页码：切页是瞬时的，拖动预览期间显示的也还是当前页。
   const isCardVisible = (index: number) => pageIndex.value === index;
   const isPageActive = (index: number) => isCardVisible(index);
@@ -84,7 +123,7 @@ export default function App() {
   // 页面内容节点与拖动控制器：切页瞬时完成，只有拖动回弹与方向提示有动画，
   // 内容节点只在拖动预览里被平移（translateX）。isAnimating 必须是响应式引用，
   // 类绑定才看得见它的翻转（回弹期间焦点环要收起来）。
-  const contentNodes: (NodeMirror | null)[] = [null, null, null, null, null, null, null];
+  const contentNodes: (NodeMirror | null)[] = [];
   let fromIndex = -1;
   const isAnimating = ref(false);
   let isDragging = false;
@@ -294,6 +333,11 @@ export default function App() {
     powerOffDevice();
   };
 
+  const confirmUsbHost = () => {
+    usbHostAsk.value = false;
+    setUsbRole('host');
+  };
+
   return (
     <View class={STYLE.appRoot}>
       {/* 上半部分：四叶草单卡片区域 (y: 0 ~ 200)，取消边缘露出 */}
@@ -301,92 +345,96 @@ export default function App() {
         nodeRef={padPageRef}
         class="absolute top-0 left-0 w-full h-[200] overflow-hidden"
       >
-        {/* 第 1 页：亮度调节 (几何中心 x: 120, y: 104)。角钮页铺满整张卡片：
-            角钮要与背景瓣外弧同心，圆心落在中央内容框 (50,54,156,148) 之外。 */}
-        <View
-          class={isCardVisible(0) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
-        >
+        {/* 亮度调节。角钮页铺满整张卡片：角钮要与背景瓣外弧同心，
+            圆心落在中央内容框 (50,54,156,148) 之外。 */}
+        <View class={isCardVisible(slot('brightness')) ? CARD_BOX : 'hidden'}>
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View nodeRef={setContentRef(0)} class="absolute left-0 top-0 w-[256] h-[256]">
-            <BrightnessPage active={() => isPageActive(0)} interactive={interactive(0)} />
+          <View nodeRef={setContentRef(slot('brightness'))} class="absolute left-0 top-0 w-[256] h-[256]">
+            <BrightnessPage
+              active={() => isPageActive(slot('brightness'))}
+              interactive={interactive(slot('brightness'))}
+            />
           </View>
         </View>
 
-        {/* 第 2 页：手柄设置 (几何中心 x: 120, y: 104) */}
-        <View
-          class={isCardVisible(1) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
-        >
+        {/* 手柄设置 */}
+        <View class={isCardVisible(slot('controller')) ? CARD_BOX : 'hidden'}>
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View
-            nodeRef={setContentRef(1)}
-            class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
-          >
-            <ControllerSettingsPage active={() => isPageActive(1)} interactive={interactive(1)} />
+          <View nodeRef={setContentRef(slot('controller'))} class={CENTER_BOX}>
+            <ControllerSettingsPage
+              active={() => isPageActive(slot('controller'))}
+              interactive={interactive(slot('controller'))}
+            />
           </View>
         </View>
 
-        {/* 第 3 页：手柄配对 (几何中心 x: 120, y: 104)。角钮页，容器同第 1 页。 */}
-        <View
-          class={isCardVisible(2) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
-        >
+        {/* 手柄配对。角钮页，容器同亮度调节。 */}
+        <View class={isCardVisible(slot('pairing')) ? CARD_BOX : 'hidden'}>
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View nodeRef={setContentRef(2)} class="absolute left-0 top-0 w-[256] h-[256]">
-            <PairingPage active={() => isPageActive(2)} interactive={interactive(2)} />
+          <View nodeRef={setContentRef(slot('pairing'))} class="absolute left-0 top-0 w-[256] h-[256]">
+            <PairingPage
+              active={() => isPageActive(slot('pairing'))}
+              interactive={interactive(slot('pairing'))}
+            />
           </View>
         </View>
 
-        {/* 第 4 页：电源管理 (几何中心 x: 120, y: 104)。角钮页，容器同第 1 页。 */}
-        <View
-          class={isCardVisible(3) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
-        >
+        {/* 电源管理。角钮页，容器同亮度调节。 */}
+        <View class={isCardVisible(slot('power')) ? CARD_BOX : 'hidden'}>
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View nodeRef={setContentRef(3)} class="absolute left-0 top-0 w-[256] h-[256]">
+          <View nodeRef={setContentRef(slot('power'))} class="absolute left-0 top-0 w-[256] h-[256]">
             <PowerPage
-              active={() => isPageActive(3)}
-              interactive={interactive(3)}
+              active={() => isPageActive(slot('power'))}
+              interactive={interactive(slot('power'))}
               onAskReboot={() => { rebootAsk.value = true; }}
               onAskPowerOff={() => { powerOffAsk.value = true; }}
             />
           </View>
         </View>
 
-        {/* 第 5 页：DS4、DS5 设置 (几何中心 x: 120, y: 104) */}
-        <View
-          class={isCardVisible(4) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
-        >
+        {/* USB 模式：串口 / 手柄两档，切到「手柄」先弹确认 */}
+        <View class={isCardVisible(slot('usbMode')) ? CARD_BOX : 'hidden'}>
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View
-            nodeRef={setContentRef(4)}
-            class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
-          >
-            <DsSettingsPage active={() => isPageActive(4)} interactive={interactive(4)} />
+          <View nodeRef={setContentRef(slot('usbMode'))} class={CENTER_BOX}>
+            <ModePage
+              active={() => isPageActive(slot('usbMode'))}
+              interactive={interactive(slot('usbMode'))}
+              onAskHost={() => { usbHostAsk.value = true; }}
+            />
           </View>
         </View>
 
-        {/* 第 6 页：系统信息 (几何中心 x: 120, y: 104) */}
-        <View
-          class={isCardVisible(5) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
-        >
+        {/* DS4、DS5 设置 */}
+        <View class={isCardVisible(slot('dsSettings')) ? CARD_BOX : 'hidden'}>
           <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-          <View
-            nodeRef={setContentRef(5)}
-            class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
-          >
-            <SystemInfoPage active={() => isPageActive(5)} interactive={interactive(5)} />
+          <View nodeRef={setContentRef(slot('dsSettings'))} class={CENTER_BOX}>
+            <DsSettingsPage
+              active={() => isPageActive(slot('dsSettings'))}
+              interactive={interactive(slot('dsSettings'))}
+            />
           </View>
         </View>
 
-        {/* 第 7 页：调试指令 (开发模式) */}
+        {/* 系统信息 */}
+        <View class={isCardVisible(slot('systemInfo')) ? CARD_BOX : 'hidden'}>
+          <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
+          <View nodeRef={setContentRef(slot('systemInfo'))} class={CENTER_BOX}>
+            <SystemInfoPage
+              active={() => isPageActive(slot('systemInfo'))}
+              interactive={interactive(slot('systemInfo'))}
+            />
+          </View>
+        </View>
+
+        {/* 调试指令（仅开发构建） */}
         {IS_DEV ? (
-          <View
-            class={isCardVisible(6) ? 'absolute left-[-8] top-[-24] w-[256] h-[256]' : 'hidden'}
-          >
+          <View class={isCardVisible(slot('debug')) ? CARD_BOX : 'hidden'}>
             <Image src="main.svg" class="absolute left-0 top-0 w-[256] h-[256]" />
-            <View
-              nodeRef={setContentRef(6)}
-              class="absolute left-[50] top-[54] w-[156] h-[148] flex-col items-center justify-center overflow-hidden"
-            >
-              <DebugPage active={() => isPageActive(6)} interactive={interactive(6)} />
+            <View nodeRef={setContentRef(slot('debug'))} class={CENTER_BOX}>
+              <DebugPage
+                active={() => isPageActive(slot('debug'))}
+                interactive={interactive(slot('debug'))}
+              />
             </View>
           </View>
         ) : null}
@@ -428,6 +476,32 @@ export default function App() {
           confirmLabel="关机"
           onCancel={() => { powerOffAsk.value = false; }}
           onConfirm={confirmPowerOff}
+        />
+      ) : null}
+
+      {/* 切到「手柄」确认弹窗：切过去之后 PC 上的串口消失，只能从本屏幕切回 */}
+      {usbHostAsk.value ? (
+        <ConfirmDialog
+          title="切换到手柄模式"
+          lines={['PC 的串口会消失', '只能在本屏幕切回或重启设备']}
+          confirmLabel="切换"
+          tone="primary"
+          onCancel={() => { usbHostAsk.value = false; }}
+          onConfirm={confirmUsbHost}
+        />
+      ) : null}
+
+      {/* 切回串口后的重启询问：复位是 COM 口一定回来的那条路 */}
+      {hw.usbRebootAsk ? (
+        <ConfirmDialog
+          title="已切回串口"
+          lines={['是否立即重启设备？', '重启后 PC 的串口一定回来']}
+          confirmLabel="立即重启"
+          onCancel={() => { hw.usbRebootAsk = false; }}
+          onConfirm={() => {
+            hw.usbRebootAsk = false;
+            rebootDevice();
+          }}
         />
       ) : null}
 

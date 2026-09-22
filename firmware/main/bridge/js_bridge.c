@@ -20,9 +20,12 @@
 #include "ble_session.h"
 #include "dp_plane.h"
 #include "dp_ui.h"
+#include "input_link.h"
 #include "ns2_identity.h"
+#include "pad_device.h"
 #include "pad_state.h"
 #include "pwr_key.h"
+#include "usb_input.h"
 #include "usb_role.h"
 
 #include "pocketjs/guest.h"
@@ -71,7 +74,11 @@ static struct {
     int last_player_led;
     /** 上次上报给 UI 的手柄操控模式（两侧开机都视为关闭，变化才广播）。 */
     bool last_pad_ui_mode;
-    bool usb_role_host; /* UI 请求的角色；host 数据面未接入，仅记录。 */
+    /** 上次上报给 UI 的直插手柄接入状态；-1 表示尚未上报（开机补一次）。 */
+    int last_pad_attached;
+    /** 上次上报给 UI 的 PC 串口接入状态；-1 表示尚未上报（开机补一次）。 */
+    int last_pc_connected;
+    bool usb_role_host; /* 当前 USB 角色：true = 端口交给 OTG host（直插手柄）。 */
     int64_t reboot_at_us;
     bool reboot_pending;
     /** 关机阶段：0 空闲，1 待释放锁存，2 待确认是否已断电。 */
@@ -83,12 +90,14 @@ esp_err_t js_bridge_init(void)
 {
     memset(&s_bridge, 0, sizeof(s_bridge));
     s_bridge.last_player_led = -1;
+    s_bridge.last_pad_attached = -1;
+    s_bridge.last_pc_connected = -1;
     s_bridge.ext_cmds = xQueueCreate(REMAPAD_EXT_QUEUE_LEN, sizeof(ext_msg_slot_t));
     s_bridge.ext_events = xQueueCreate(REMAPAD_EXT_QUEUE_LEN, sizeof(ext_msg_slot_t));
     if (s_bridge.ext_cmds == NULL || s_bridge.ext_events == NULL) {
         return ESP_ERR_NO_MEM;
     }
-    /* USB 角色与手柄身份从持久化配置恢复（桥接角色永不落盘）。 */
+    /* USB 角色只在内存里生效（开机恒为串口），手柄身份从持久化配置恢复。 */
     s_bridge.usb_role_host = app_config_get()->usb_role == APP_CONFIG_USB_HOST;
     ns2_session_set_colors(app_config_get()->body_color, app_config_get()->button_color,
                            app_config_get()->accent_color, app_config_get()->grip_color);
@@ -236,6 +245,7 @@ static void handle_get_system_status(int id)
              "\"pairing\":\"%s\",\"controller\":%s,\"usbRole\":\"%s\",\"usbRoleActive\":%s,"
              "\"playerLed\":%u,"
              "\"padUiMode\":%s,"
+             "\"pcLink\":%s,"
              "\"uptimeMs\":%lld,"
              "\"heapFree\":%u,\"heapSize\":%u,\"psramFree\":%u}",
              id, (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
@@ -245,9 +255,10 @@ static void handle_get_system_status(int id)
              (ns2_session_waiting_pair() || ns2_session_host_registered())
                  ? "\"pro-controller-2\"" : "null",
              s_bridge.usb_role_host ? "host" : "device",
-             s_bridge.usb_role_host ? "false" : "true",
+             "true", /* 两个角色都已接入数据面：生效标志恒为真。 */
              (unsigned)ns2_session_player_leds(),
              dp_ui_active() ? "true" : "false",
+             input_link_active() && input_link_pc_connected() ? "true" : "false",
              (long long)(esp_timer_get_time() / 1000LL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
@@ -366,15 +377,17 @@ static void handle_set_screen_power(int id, const char *cmd)
     reply_raw(event);
 }
 
+/**
+ * USB 角色（模式页两张卡）：device = 端口给 PC 串口（桥接帧 / 烧录 / 日志），
+ * host = 端口给 OTG host 直插手柄。角色只对本次运行生效、不落盘。
+ */
 static void handle_set_usb_role(int id, const char *cmd)
 {
     size_t role_len = 0;
     const char *role = cmd_string(cmd, "role", &role_len);
     const bool want_host = role != NULL && role_len == 4 && strncmp(role, "host", 4) == 0;
-    const bool want_otg = role != NULL && role_len == 3 && strncmp(role, "otg", 3) == 0;
-    const bool known = want_host || want_otg ||
-                       (role != NULL && role_len == 6 && strncmp(role, "device", 6) == 0);
-    if (!known) {
+    const bool want_device = role != NULL && role_len == 6 && strncmp(role, "device", 6) == 0;
+    if (!want_host && !want_device) {
         char event[REMAPAD_EVENT_MAX];
         snprintf(event, sizeof(event),
                  "{\"t\":\"error\",\"id\":%d,\"code\":\"BAD_REQUEST\","
@@ -383,21 +396,8 @@ static void handle_set_usb_role(int id, const char *cmd)
         reply_raw(event);
         return;
     }
-    /* 桥接（otg）开发期临时禁用防误操作：USB PHY 切换会断开 COM（无人
-     * 值守时无法烧录）。UI 已移除该选项，这里静默跳过：
-     * 不应用、不报错，回复当前角色。 */
-    if (want_otg) {
-        char event[REMAPAD_EVENT_MAX];
-        snprintf(event, sizeof(event),
-                 "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"%s\",\"active\":%s}",
-                 id, s_bridge.usb_role_host ? "host" : "device",
-                 s_bridge.usb_role_host ? "false" : "true");
-        reply_raw(event);
-        ESP_LOGI(TAG, "usb role otg skipped (dev-time lock, no error surfaced)");
-        return;
-    }
-    /* 角色切换会动 USB PHY：切到 host 后 PC 上的 COM 口消失（复位回串口），
-     * 因此先把结论发出去再切。角色只对本次运行生效、不落盘。 */
+    /* 角色切换会动 USB PHY：切到 host 后 PC 上的 COM 口消失，因此先把结论
+     * 发出去再切；切回串口时固件显式把 PHY 交还给 USB-Serial/JTAG。 */
     char event[REMAPAD_EVENT_MAX];
     snprintf(event, sizeof(event),
              "{\"t\":\"usbRoleSet\",\"id\":%d,\"role\":\"%s\",\"active\":true}", id,
@@ -703,11 +703,54 @@ static void player_led_poll(void)
     ESP_LOGI(TAG, "player led -> 0x%x", (unsigned)led);
 }
 
+/** 每帧轮询 USB 直插手柄的接入状态：变化即广播 padAttachedChanged，
+ *  底栏左区在「手柄」档下据此把图标切成手柄或它的禁用形态。
+ *  name 是家族短名（机读 token，屏幕文案由 UI 侧的字面量给出）。 */
+static void pad_attached_poll(void)
+{
+    const bool attached = usb_input_attached();
+    if (s_bridge.last_pad_attached == (int)attached) {
+        return;
+    }
+    s_bridge.last_pad_attached = (int)attached;
+    uint16_t vid = 0;
+    uint16_t pid = 0;
+    const char *name = "unknown";
+    if (attached && usb_input_device_ids(&vid, &pid, NULL)) {
+        name = pad_family_name(pad_family_from_ids(vid, pid));
+    }
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event),
+             "{\"t\":\"padAttachedChanged\",\"attached\":%s,\"name\":\"%s\"}",
+             attached ? "true" : "false", name);
+    reply_raw(event);
+    ESP_LOGI(TAG, "pad attached -> %s (%s)", attached ? "yes" : "no", name);
+}
+
+/** 每帧轮询串口上的 PC（判据见 input_link_pc_connected：USB-Serial/JTAG 在收
+ *  主机的 SOF，插充电宝不算），端口交给 OTG host 时串口不在手上、恒报未接入。
+ *  变化即广播 pcLinkChanged，底栏左区在「串口」档下据此切成电脑图标或禁用形态。 */
+static void pc_link_poll(void)
+{
+    const bool connected = input_link_active() && input_link_pc_connected();
+    if (s_bridge.last_pc_connected == (int)connected) {
+        return;
+    }
+    s_bridge.last_pc_connected = (int)connected;
+    char event[REMAPAD_EVENT_MAX];
+    snprintf(event, sizeof(event), "{\"t\":\"pcLinkChanged\",\"connected\":%s}",
+             connected ? "true" : "false");
+    reply_raw(event);
+    ESP_LOGI(TAG, "pc link -> %s", connected ? "up" : "down");
+}
+
 void js_bridge_service(void)
 {
     pairing_state_poll();
     player_led_poll();
     pad_ui_mode_poll();
+    pad_attached_poll();
+    pc_link_poll();
 
     /* 关机两阶段：先释放电源锁存，再确认是否真的断电。电池供电时第一步
      * 之后系统已经断电、不回到这里；能走到第二步说明外部供电旁路了锁存。 */

@@ -1,7 +1,8 @@
 /**
  * 确认对话框：本应用自绘的遮罩弹窗。官方 Modal 的 portal 层按 480×272
  * fallback 视口定位，在 240×280 上会错位，因此重启与关机共用这一形态，
- * 只有标题、两行说明与确认按钮不同。
+ * 只有标题、两行说明与确认按钮不同；确认钮按动作语义取色——不可逆的破坏性
+ * 动作（重启、关机）用 error 语义，可逆的设置类动作（切 USB 模式）用 primary。
  *
  * FocusScope 把十字键遍历与圆圈键按下限制在弹窗子树内（挂载即生效）：
  * 否则弹窗外的控件（底栏连接按钮等）仍在焦点名单里，方向键会把焦点
@@ -17,9 +18,12 @@ export function ConfirmDialog(props: {
   /** 两行说明文本（单行图元不换行，长文案按行拆开）。 */
   lines: [string, string];
   confirmLabel: string;
+  /** 确认钮语义色，默认 error 语义（破坏性动作）。 */
+  tone?: 'danger' | 'primary';
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const danger = () => props.tone !== 'primary';
   return (
     <FocusScope class={STYLE.scrim}>
       <View class={STYLE.modalBox}>
@@ -38,8 +42,15 @@ export function ConfirmDialog(props: {
               取消
             </Text>
           </View>
-          <View focusable onPress={props.onConfirm} class={STYLE.modalDangerBtn}>
-            <Text class="text-sm font-bold" style={{ textColor: COLOR.onErrorContainer }}>
+          <View
+            focusable
+            onPress={props.onConfirm}
+            class={danger() ? STYLE.modalDangerBtn : STYLE.modalPrimaryBtn}
+          >
+            <Text
+              class="text-sm font-bold"
+              style={{ textColor: danger() ? COLOR.onErrorContainer : COLOR.onPrimaryContainer }}
+            >
               {props.confirmLabel}
             </Text>
           </View>

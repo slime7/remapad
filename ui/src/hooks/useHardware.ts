@@ -19,7 +19,7 @@ import type {
   PairingState,
   UsbRole,
 } from '../bridge/protocol';
-import type { PairingNotice, RoleNotice } from '../utils';
+import type { PairingNotice } from '../utils';
 
 export interface HardwareUiState {
   /** bridge 握手成功（原生固件或浏览器 mock）。 */
@@ -46,14 +46,16 @@ export interface HardwareUiState {
   controllerAddresses: ControllerAddresses;
   controller: string | null;
   usbRole: UsbRole;
-  /** USB host 数据面未接入，host 角色仅记录请求。 */
+  /** 角色是否已生效：两个角色都接了数据面，恒为 true。 */
   usbRoleActive: boolean;
+  /** 切回串口后待用户确认的重启询问（App 用它唤起弹窗）。 */
+  usbRebootAsk: boolean;
   /** 主机下发的玩家序号灯掩码（bit0-3 对应首页四格指示灯），无主机时为 0。 */
   playerLed: number;
   /** 手柄操控模式：组合键把输入收给屏幕，期间屏幕由手柄按键操作。 */
   padUiMode: boolean;
-  /** 模式页角色切换的一次性提示（如桥接禁切原因）。 */
-  roleMessage: RoleNotice;
+  /** PC 是否连在串口上：串口档下底栏左区据此在电脑图标与它的禁用形态间切换。 */
+  pcLink: boolean;
   /** 本地推算的实时开机时长。 */
   uptimeMs: number;
   /** 当前帧率（帧/秒）：只在系统页可见时采样，null = 尚无样本。 */
@@ -112,9 +114,12 @@ export const hw = reactive<HardwareUiState>({
   controller: null,
   usbRole: 'device',
   usbRoleActive: true,
+  usbRebootAsk: false,
   playerLed: 0,
   padUiMode: false,
-  roleMessage: '',
+  /* 上电默认按已接入：进设备模式的第一帧不该先闪一下禁用形态，
+   * 真实取值由开机后的 systemStatus 与 pcLinkChanged 收敛。 */
+  pcLink: true,
   uptimeMs: 0,
   fps: null,
   rebooting: false,
@@ -155,6 +160,7 @@ function applySystemStatus(msg: Extract<DeviceMsg, { t: 'systemStatus' }>): void
   hw.usbRoleActive = msg.usbRoleActive;
   hw.playerLed = msg.playerLed;
   hw.padUiMode = msg.padUiMode;
+  hw.pcLink = msg.pcLink;
   hw.uptimeMs = msg.uptimeMs;
   hw.heapFree = msg.heapFree;
   hw.heapSize = msg.heapSize;
@@ -271,16 +277,20 @@ export function unpair(): void {
   });
 }
 
+/**
+ * USB 角色：device = 端口给 PC 串口，host = 端口给 OTG host 直插手柄。
+ * 切回 device 后由固件把内部 PHY 交还 USB-Serial/JTAG，交还失败要复位才会
+ * 有 COM 口，因此切回成功后置位重启询问（询问弹窗由 App 承担）。
+ */
 export function setUsbRole(role: UsbRole): void {
+  const from = hw.usbRole;
   hardware.send({ t: 'setUsbRole', role }, (msg) => {
     if (msg.t === 'usbRoleSet') {
       hw.usbRole = msg.role;
       hw.usbRoleActive = msg.active;
-      /* host 角色在固件侧还没接数据面：如实提示，文案由 UI 给出。 */
-      hw.roleMessage =
-        msg.role === 'host' && !msg.active ? 'USB host 数据面未接入，切换暂不生效' : '';
-    } else if (msg.t === 'error') {
-      hw.roleMessage = 'USB 角色切换未生效';
+      if (msg.role === 'device' && from === 'host') {
+        hw.usbRebootAsk = true;
+      }
     }
   });
 }
@@ -394,6 +404,9 @@ export function useHardware(): void {
         hw.pairing = msg.state;
         break;
       case 'usbRoleChanged':
+        if (msg.role === 'device' && hw.usbRole === 'host') {
+          hw.usbRebootAsk = true;
+        }
         hw.usbRole = msg.role;
         hw.usbRoleActive = msg.active;
         break;
@@ -412,6 +425,9 @@ export function useHardware(): void {
       case 'padAttachedChanged':
         hw.physicalPad.attached = msg.attached;
         hw.physicalPad.name = msg.name ?? (msg.attached ? 'PRO' : '');
+        break;
+      case 'pcLinkChanged':
+        hw.pcLink = msg.connected;
         break;
       case 'otaProgress':
         hw.ota.phase = msg.phase;

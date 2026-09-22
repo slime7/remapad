@@ -8,8 +8,9 @@
 /** 手柄工作模式。 */
 export type ControllerMode = 'ble' | 'usb' | 'handheld';
 
-/** USB 控制器角色：device=插电脑（COM/烧录/日志），otg=插电脑（OTG 非串口），host=插手柄（读取输入）。 */
-export type UsbRole = 'device' | 'otg' | 'host';
+/** USB 控制器角色：device = 端口给 PC（COM 口：桥接帧、烧录与日志），
+ *  host = 端口给 OTG host 直插手柄。 */
+export type UsbRole = 'device' | 'host';
 
 /**
  * 手柄连接与配对状态：idle=未配对且静默、paired=已配对且静默（等用户按连接键）、
@@ -118,12 +119,15 @@ export type DeviceMsg =
       pairing: PairingState;
       controller: ControllerModel | null;
       usbRole: UsbRole;
+      /** 角色是否已生效：两个角色都接了数据面，恒为 true。 */
       usbRoleActive: boolean;
       /** 主机下发的玩家序号灯掩码（Command 0x09）：bit0-3 对应四格指示灯，
        *  未连接主机时为 0。 */
       playerLed: number;
       /** 手柄操控模式：组合键把输入收给屏幕，期间不向主机输出（见 dp/dp_ui.h）。 */
       padUiMode: boolean;
+      /** PC 是否连在串口上（USB-Serial/JTAG 在收主机的 SOF，插充电宝不算）。 */
+      pcLink: boolean;
       uptimeMs: number;
       /** 内部堆内存：可用 / 总量（字节）。 */
       heapFree: number;
@@ -172,6 +176,8 @@ export type DeviceMsg =
     }
   /** 物理手柄连接状态广播。 */
   | { t: 'padAttachedChanged'; attached: boolean; name?: string }
+  /** PC 串口接入状态广播：插上/拔掉 PC 时立刻通知，底栏左区据此切换图标。 */
+  | { t: 'pcLinkChanged'; connected: boolean }
   /** 关机被外部供电拦下（USB 供电时电源锁存被旁路，系统仍在运行）。 */
   | { t: 'powerOffBlocked' }
   | { t: 'lowBatteryAlert'; percentage: number };

@@ -87,7 +87,7 @@ remapad-ui.pak      样式、字体和图像资源包
 remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
 ```
 
-开发环节默认开启 dev 状态（包含第 6 页调试页）；只有通过 `pnpm run build:release`、传入 `--release` / `--prod` / `--no-dev` 参数或设置 `REMAPAD_RELEASE=1` 时，才会关闭 dev 状态并剔除调试页。
+开发环节默认开启 dev 状态（页表末尾多一页调试页）；只有通过 `pnpm run build:release`、传入 `--release` / `--prod` / `--no-dev` 参数或设置 `REMAPAD_RELEASE=1` 时，才会关闭 dev 状态并剔除调试页。
 `scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、官方 npm 安装目录 `ui/node_modules/@pocketjs/framework`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；
 默认命中项目安装的官方包。它只负责路径与参数转发、建立依赖软链接，不实现 compiler，也不改变 package 格式。
 
@@ -257,7 +257,7 @@ uv run python remapadctl.py -p COM3 version         # 运行镜像版本与分�
 uv run python remapadctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
 uv run python remapadctl.py -p COM3 backlight 60    # 背光并持久化
 uv run python remapadctl.py -p COM3 screen off      # 息屏（on 恢复）
-uv run python remapadctl.py -p COM3 mode host       # 切到 host：COM 口消失，日志与 CLI 改走 UART0（otg 仍被拒绝）
+uv run python remapadctl.py -p COM3 mode host       # 切到 host：COM 口消失，日志与 CLI 改走 UART0
 uv run python remapadctl.py -p COM3 pad             # 识别到的手柄：来源、家族、型号、命中布局行、兜底与透传状态
 uv run python remapadctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
 uv run python remapadctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
@@ -329,7 +329,7 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 
 - 升级前先跑 `pnpm run build` 与 `idf.py build`，镜像就是 `firmware/build/remapad_firmware.bin`；
   设备只接受项目名为 `remapad_firmware` 的 ESP32-S3 应用镜像，尺寸上限是应用分区容量 4 MB。
- 升级由持有 COM 口的那个进程执行：`remapadctl.py --upgrade` 自己就是持有者，桥接转发与命令行在同一会话里照常；先退出 `idf.py monitor` 等其它占用进程，设备必须处于 COM 模式（host 模式或 OTG 切换后 COM 口不存在）。
+ 升级由持有 COM 口的那个进程执行：`remapadctl.py --upgrade` 自己就是持有者，桥接转发与命令行在同一会话里照常；先退出 `idf.py monitor` 等其它占用进程，设备必须处于串口模式（host 模式下 COM 口不存在）。
   升级与设备当前是否连着 NS2 主机无关，重启后按凭证回连。
 - 校验通过后设备自动重启，首次启动处于「待验证」状态：UI 首帧成功且稳定运行满 30 秒才标记为有效，在此之前断电或重启会自动回退到升级前的镜像，此时 `version` 显示 `image=pending-verify`。
 - 升级中断（PC 退出、拔线、断电）不影响启动：`otadata` 在成功前不动，设备仍从旧镜像启动，残留在另一个分区的半镜像会在下次升级时重新擦写。
@@ -370,7 +370,8 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 - [agent-temp/](../agent-temp)：代理与调试的临时文件目录（脚本、抓包输出、截图与日志；内容不进版本库，约定见 [AGENTS.md](../AGENTS.md)）。
 - [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
 - [ui/src/App.tsx](../ui/src/App.tsx)：
-  首屏前一次挂完七个页面的页面调度（切页由页面根节点自行切换 `hidden`，新增页面直接写在 JSX 里，见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
+  首屏前一次挂完八个页面的页面调度（轮播顺序来自文件顶部的页表，各页按页名取槽位，切页由页面根节点自行切换 `hidden`；
+  新增页面在页表里加一项，见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
 - [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller-switch2.md](controller-switch2.md)：NS2 手柄广播、GATT、HID 报告、配对、指令集与 NFC 规范。
 - [docs/controller-ps.md](controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置。
@@ -384,8 +385,15 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 切换入口有两个：模式页「手柄」卡片、串口 `mode host`；角色只在本次运行有效、不写 NVS。
 切过去之后在 UART0 上敲 `pad` 看识别结果与是否透传，敲 `usb` 看 host 栈状态与收发计数。
 
-- host 模式下 PC 上不再有 COM 口：串口 CLI、桥接程序与 OTA 都用不了，日志与 CLI 改走 UART0（GPIO43/44 扩展焊盘接 USB-UART 适配器，115200）。
-- 回到串口有两条路：在 UART0 上敲 `mode device`（或从模式页切回「串口」），或者复位——复用开关复位默认回 USB-Serial/JTAG，COM 口天然回来，烧录不受影响。
+host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 host 就没有 COM 口，串口 CLI、桥接程序与 OTA 全部用不了，日志与 CLI 只剩 UART0——
+扩展焊盘 **GPIO43（TX）/ GPIO44（RX）接 3.3V USB-UART 适配器**，115200 8N1、GND 共地；固件在切 host 之前先把日志与 CLI 出口迁到那里，接上适配器就能看到切换全过程与手柄枚举日志。
+
+没有适配器时的替代只有三条：看屏幕（系统信息页、底栏手柄状态、模式页选中的角色）、整机复位（复用开关默认接 USB-Serial/JTAG，COM 口与烧录链路天然回来）、
+或先切回串口再在 PC 上查——host 期间的日志没有缓冲，切回来补看不到。
+
+- 回到串口有三条路：模式页切回「串口」、UART0 上敲 `mode device`、复位。
+  切回时固件把内部 PHY 显式交还 USB-Serial/JTAG，COM 口随之回来；这一步失败时只有复位能恢复，
+  界面因此在切回后询问是否立刻重启（取舍见 [ADR 0053](adr/0053-usb-serial-phy-handback-on-role-switch.md)）。
 - 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 Xbox 有线布局并打兜底标记。
 - 供电：host 模式要给插入的手柄供 VBUS 5V，V2.1 原理图确认板上无升压输出，需从 TP1 外部注入 5V（见 [hardware.md](hardware.md)）；手柄能否枚举仍需实机验证。
 
