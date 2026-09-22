@@ -82,7 +82,9 @@ test('第 6 页系统信息展示固件与内存参数', async ({ app }) => {
   const texts = await app.visibleTexts();
   expect(texts).toContain('设备信息');
   expect(texts.some((t) => t.startsWith('固件:'))).toBe(true);
-  expect(texts.some((t) => t.startsWith('堆内存:'))).toBe(true);
+  // 内存与 PSRAM 都报「已用 / 总共」：mock 的 320 KB 堆用掉 134 KB、8 MB PSRAM 用掉 5.2 MB
+  const memoryRows = async () => (await app.visibleTexts()).filter((t) => /^(堆内存|PSRAM):/.test(t));
+  await expect.poll(memoryRows).toEqual(['堆内存: 134 / 320 KB', 'PSRAM: 5.2 / 8 MB']);
 });
 
 test('弹窗打开时焦点锁在弹窗内：向下键不会把焦点送到底栏连接按钮', async ({ app }) => {

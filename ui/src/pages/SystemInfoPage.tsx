@@ -13,11 +13,18 @@ export function SystemInfoPage(props: {
   interactive: () => boolean;
 }) {
   const fwVer = () => hw.firmwareVersion || 'v0.4.0';
-  const heapText = () => `${(hw.heapFree / 1024).toFixed(0)} / ${(hw.heapSize / 1024).toFixed(0)} KB`;
-  const psramText = () =>
-    hw.psramSize > 0
-      ? `${(hw.psramFree / (1024 * 1024)).toFixed(1)} / ${(hw.psramSize / (1024 * 1024)).toFixed(0)} MB`
-      : '--';
+  /** 桥接上报的是可用量，两行都按「已用 / 总共」上屏。 */
+  const heapText = () => {
+    const used = Math.max(0, hw.heapSize - hw.heapFree);
+    return `${(used / 1024).toFixed(0)} / ${(hw.heapSize / 1024).toFixed(0)} KB`;
+  };
+  const psramText = () => {
+    if (hw.psramSize <= 0) {
+      return '--';
+    }
+    const used = Math.max(0, hw.psramSize - hw.psramFree);
+    return `${(used / (1024 * 1024)).toFixed(1)} / ${(hw.psramSize / (1024 * 1024)).toFixed(0)} MB`;
+  };
   const batteryText = () => `${hw.battery.percentage}% · ${(hw.battery.voltageMv / 1000).toFixed(2)}V`;
 
   return (
