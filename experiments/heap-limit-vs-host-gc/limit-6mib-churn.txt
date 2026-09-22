@@ -1,0 +1,483 @@
+I (111291) remapad_pocketjs: frames=5209 avg_turn_us=7217 avg_render_us=360 avg_damage_px=0 max_turn_us=96623 max_render_us=106699
+[   1.42s] I (116291) remapad_pocketjs: frames=5509 avg_turn_us=7207 avg_render_us=359 avg_damage_px=0 max_turn_us=96623 max_render_us=106699
+[   6.42s] I (121290) remapad_pocketjs: frames=5809 avg_turn_us=7167 avg_render_us=656 avg_damage_px=224 max_turn_us=96623 max_render_us=106699
+[  11.43s] I (126307) remapad_pocketjs: frames=5873 avg_turn_us=29558 avg_render_us=36042 avg_damage_px=25620 max_turn_us=240798 max_render_us=106699
+[  16.45s] I (131323) remapad_pocketjs: frames=5905 avg_turn_us=68371 avg_render_us=86975 avg_damage_px=56700 max_turn_us=262124 max_render_us=108104
+[  21.45s] I (136324) remapad_pocketjs: frames=5941 avg_turn_us=55586 avg_render_us=81498 avg_damage_px=53013 max_turn_us=262124 max_render_us=108104
+[  21.85s] I (136726) remapad_pocketjs: mem: js_heap=3265kB/6144kB gc_thresh=5704kB psram_free=2034864 internal_free=165199 allocs=58189 obj_n=16031 prop_n=53648 arr_n=768
+[  26.68s] I (141551) remapad_pocketjs: frames=5995 avg_turn_us=48111 avg_render_us=39556 avg_damage_px=29120 max_turn_us=262124 max_render_us=108104
+[  31.44s] I (146314) remapad_pocketjs: frames=6034 avg_turn_us=54061 avg_render_us=64958 avg_damage_px=47901 max_turn_us=262124 max_render_us=108104
+[  36.47s] I (151351) remapad_pocketjs: frames=6088 avg_turn_us=48225 avg_render_us=43372 avg_damage_px=31608 max_turn_us=262124 max_render_us=108104
+[  41.64s] I (156513) remapad_pocketjs: frames=6130 avg_turn_us=49531 avg_render_us=71007 avg_damage_px=50880 max_turn_us=262124 max_render_us=108104
+[  46.48s] I (161353) remapad_pocketjs: frames=6165 avg_turn_us=60342 avg_render_us=76564 avg_damage_px=54912 max_turn_us=262124 max_render_us=108104
+[  51.41s] I (166290) remapad_pocketjs: frames=6207 avg_turn_us=51693 avg_render_us=63686 avg_damage_px=45760 max_turn_us=262124 max_render_us=108104
+[  56.44s] I (171314) remapad_pocketjs: frames=6246 avg_turn_us=55377 avg_render_us=71051 avg_damage_px=50658 max_turn_us=262124 max_render_us=108104
+[  61.68s] I (176558) remapad_pocketjs: frames=6284 avg_turn_us=63235 avg_render_us=73376 avg_damage_px=53406 max_turn_us=262124 max_render_us=108104
+[  66.51s] I (181391) remapad_pocketjs: frames=6322 avg_turn_us=56559 avg_render_us=67624 avg_damage_px=48101 max_turn_us=262124 max_render_us=108104
+[  71.41s] I (186289) remapad_pocketjs: frames=6375 avg_turn_us=46358 avg_render_us=44056 avg_damage_px=32712 max_turn_us=262124 max_render_us=108104
+[  76.41s] I (191290) remapad_pocketjs: frames=6408 avg_turn_us=63095 avg_render_us=86995 avg_damage_px=58240 max_turn_us=265324 max_render_us=108104
+[  81.43s] I (196305) remapad_pocketjs: frames=6443 avg_turn_us=60359 avg_render_us=81505 avg_damage_px=56832 max_turn_us=265324 max_render_us=108104
+[  81.83s] I (196712) remapad_pocketjs: mem: js_heap=3308kB/6144kB gc_thresh=5704kB psram_free=1972636 internal_free=165199 allocs=59417 obj_n=16367 prop_n=54119 arr_n=939
+[  86.43s] I (201306) remapad_pocketjs: frames=6486 avg_turn_us=48098 avg_render_us=57297 avg_damage_px=37506 max_turn_us=265324 max_render_us=108104
+[  91.50s] I (206383) remapad_pocketjs: frames=6527 avg_turn_us=54696 avg_render_us=66399 avg_damage_px=42942 max_turn_us=265324 max_render_us=108139
+[  96.60s] I (211482) remapad_pocketjs: frames=6571 avg_turn_us=57460 avg_render_us=56262 avg_damage_px=37265 max_turn_us=265324 max_render_us=108139
+[ 101.45s] I (216330) remapad_pocketjs: frames=6608 avg_turn_us=57996 avg_render_us=70747 avg_damage_px=46495 max_turn_us=265324 max_render_us=108139
+[ 106.50s] I (221380) remapad_pocketjs: frames=6647 avg_turn_us=55852 avg_render_us=72072 avg_damage_px=46867 max_turn_us=265324 max_render_us=108139
+[ 111.44s] I (226325) remapad_pocketjs: frames=6683 avg_turn_us=56827 avg_render_us=78746 avg_damage_px=51520 max_turn_us=265324 max_render_us=108139
+[ 116.55s] I (231432) remapad_pocketjs: frames=6727 avg_turn_us=55500 avg_render_us=58318 avg_damage_px=38181 max_turn_us=265324 max_render_us=108139
+[ 121.49s] I (236368) remapad_pocketjs: frames=6764 avg_turn_us=62718 avg_render_us=68198 avg_damage_px=44315 max_turn_us=265324 max_render_us=108139
+[ 126.48s] I (241360) remapad_pocketjs: frames=6805 avg_turn_us=48546 avg_render_us=70598 avg_damage_px=45892 max_turn_us=265324 max_render_us=108139
+[ 131.43s] I (246316) remapad_pocketjs: frames=6839 avg_turn_us=65616 avg_render_us=78183 avg_damage_px=51388 max_turn_us=265324 max_render_us=108139
+[ 136.53s] I (251412) remapad_pocketjs: frames=6882 avg_turn_us=52613 avg_render_us=63890 avg_damage_px=42195 max_turn_us=265324 max_render_us=108139
+[ 141.50s] I (256385) remapad_pocketjs: frames=6927 avg_turn_us=52906 avg_render_us=55454 avg_damage_px=36138 max_turn_us=265324 max_render_us=108139
+[ 141.92s] I (256798) remapad_pocketjs: mem: js_heap=3351kB/6144kB gc_thresh=5704kB psram_free=1910564 internal_free=165199 allocs=60660 obj_n=16713 prop_n=54671 arr_n=1109
+[ 146.42s] I (261308) remapad_pocketjs: frames=6978 avg_turn_us=43037 avg_render_us=43507 avg_damage_px=31360 max_turn_us=265324 max_render_us=108139
+[ 151.55s] I (266430) remapad_pocketjs: frames=7019 avg_turn_us=53129 avg_render_us=69304 avg_damage_px=49498 max_turn_us=265324 max_render_us=108139
+[ 156.45s] I (271335) remapad_pocketjs: frames=7056 avg_turn_us=58598 avg_render_us=72559 avg_damage_px=53033 max_turn_us=265324 max_render_us=108139
+[ 161.68s] I (276566) remapad_pocketjs: frames=7097 avg_turn_us=58260 avg_render_us=67006 avg_damage_px=47531 max_turn_us=265324 max_render_us=108139
+[ 166.45s] I (281331) remapad_pocketjs: frames=7135 avg_turn_us=51515 avg_render_us=71968 avg_damage_px=51284 max_turn_us=265324 max_render_us=108139
+[ 171.52s] I (286407) remapad_pocketjs: frames=7173 avg_turn_us=62355 avg_render_us=69680 avg_damage_px=51637 max_turn_us=265324 max_render_us=108139
+[ 176.44s] I (291327) remapad_pocketjs: frames=7214 avg_turn_us=49464 avg_render_us=67386 avg_damage_px=47531 max_turn_us=265324 max_render_us=108139
+[ 181.47s] I (296361) remapad_pocketjs: frames=7269 avg_turn_us=47671 avg_render_us=41993 avg_damage_px=30789 max_turn_us=265324 max_render_us=108139
+[ 186.53s] I (301412) remapad_pocketjs: frames=7310 avg_turn_us=50172 avg_render_us=71050 avg_damage_px=50809 max_turn_us=265324 max_render_us=108139
+[ 191.46s] I (306348) remapad_pocketjs: frames=7346 avg_turn_us=58470 avg_render_us=77241 avg_damage_px=55253 max_turn_us=265324 max_render_us=108139
+[ 196.46s] I (311347) remapad_pocketjs: frames=7377 avg_turn_us=72422 avg_render_us=87197 avg_damage_px=56794 max_turn_us=265324 max_render_us=108139
+[ 201.43s] I (316316) remapad_pocketjs: frames=7416 avg_turn_us=52907 avg_render_us=71913 avg_damage_px=47212 max_turn_us=265324 max_render_us=108139
+[ 201.85s] I (316735) remapad_pocketjs: mem: js_heap=3392kB/6144kB gc_thresh=5704kB psram_free=1851128 internal_free=165199 allocs=61872 obj_n=17047 prop_n=55139 arr_n=1279
+[ 206.51s] I (321399) remapad_pocketjs: frames=7448 avg_turn_us=67210 avg_render_us=77076 avg_damage_px=50400 max_turn_us=265324 max_render_us=108139
+[ 211.42s] I (326305) remapad_pocketjs: frames=7481 avg_turn_us=67251 avg_render_us=79534 avg_damage_px=51723 max_turn_us=265324 max_render_us=108139
+[ 216.65s] I (331540) remapad_pocketjs: frames=7523 avg_turn_us=49548 avg_render_us=72291 avg_damage_px=50880 max_turn_us=265324 max_render_us=108139
+[ 221.44s] I (336324) remapad_pocketjs: frames=7559 avg_turn_us=60119 avg_render_us=71330 avg_damage_px=53013 max_turn_us=265324 max_render_us=108139
+[ 226.57s] I (341456) remapad_pocketjs: frames=7600 avg_turn_us=54467 avg_render_us=68617 avg_damage_px=48842 max_turn_us=265324 max_render_us=108139
+[ 231.43s] I (346321) remapad_pocketjs: frames=7639 avg_turn_us=53889 avg_render_us=68708 avg_damage_px=48590 max_turn_us=265324 max_render_us=108139
+[ 236.63s] I (351518) remapad_pocketjs: frames=7677 avg_turn_us=63019 avg_render_us=72331 avg_damage_px=53052 max_turn_us=265324 max_render_us=108139
+[ 241.47s] I (356356) remapad_pocketjs: frames=7718 avg_turn_us=45161 avg_render_us=70661 avg_damage_px=50481 max_turn_us=265324 max_render_us=108139
+[ 246.40s] I (361290) remapad_pocketjs: frames=7756 avg_turn_us=60331 avg_render_us=67912 avg_damage_px=48101 max_turn_us=265324 max_render_us=108139
+[ 251.48s] I (366365) remapad_pocketjs: frames=7793 avg_turn_us=63994 avg_render_us=71386 avg_damage_px=51943 max_turn_us=265324 max_render_us=108139
+[ 256.47s] I (371364) remapad_pocketjs: frames=7833 avg_turn_us=53049 avg_render_us=68950 avg_damage_px=50064 max_turn_us=265324 max_render_us=108139
+[ 261.43s] I (376319) remapad_pocketjs: frames=7886 avg_turn_us=48917 avg_render_us=42663 avg_damage_px=31698 max_turn_us=265324 max_render_us=108139
+[ 261.85s] I (376744) remapad_pocketjs: mem: js_heap=3435kB/6144kB gc_thresh=5704kB psram_free=1789824 internal_free=165199 allocs=63110 obj_n=17392 prop_n=55673 arr_n=1450
+[ 266.52s] I (381407) remapad_pocketjs: frames=7936 avg_turn_us=46885 avg_render_us=44483 avg_damage_px=32793 max_turn_us=265324 max_render_us=108139
+[ 271.68s] I (386568) remapad_pocketjs: frames=7989 avg_turn_us=49181 avg_render_us=46139 avg_damage_px=33473 max_turn_us=265324 max_render_us=108139
+[ 276.47s] I (391358) remapad_pocketjs: frames=8029 avg_turn_us=44895 avg_render_us=72524 avg_damage_px=51744 max_turn_us=265324 max_render_us=108139
+[ 281.47s] I (396364) remapad_pocketjs: frames=8064 avg_turn_us=67953 avg_render_us=73703 avg_damage_px=53376 max_turn_us=265324 max_render_us=108139
+[ 286.42s] I (401313) remapad_pocketjs: frames=8103 avg_turn_us=55740 avg_render_us=67751 avg_damage_px=48246 max_turn_us=265324 max_render_us=108139
+[ 291.53s] I (406426) remapad_pocketjs: frames=8143 avg_turn_us=58069 avg_render_us=68298 avg_damage_px=50736 max_turn_us=265324 max_render_us=108139
+[ 296.48s] I (411372) remapad_pocketjs: frames=8178 avg_turn_us=58740 avg_render_us=80596 avg_damage_px=52224 max_turn_us=265324 max_render_us=108139
+[ 301.69s] I (416580) remapad_pocketjs: frames=8218 avg_turn_us=60815 avg_render_us=66748 avg_damage_px=43680 max_turn_us=265324 max_render_us=108139
+[ 306.61s] I (421504) remapad_pocketjs: frames=8251 avg_turn_us=64326 avg_render_us=83452 avg_damage_px=57018 max_turn_us=265324 max_render_us=108139
+[ 311.49s] I (426387) remapad_pocketjs: frames=8289 avg_turn_us=52747 avg_render_us=61955 avg_damage_px=41734 max_turn_us=265324 max_render_us=108139
+[ 316.42s] I (431310) remapad_pocketjs: frames=8323 avg_turn_us=57061 avg_render_us=85918 avg_damage_px=55736 max_turn_us=265324 max_render_us=108139
+[ 321.46s] I (436357) remapad_pocketjs: frames=8358 avg_turn_us=64453 avg_render_us=77914 avg_damage_px=50688 max_turn_us=265324 max_render_us=108139
+[ 321.89s] I (436787) remapad_pocketjs: mem: js_heap=3477kB/6144kB gc_thresh=5704kB psram_free=1729388 internal_free=165199 allocs=64329 obj_n=17731 prop_n=56198 arr_n=1618
+[ 326.65s] I (441543) remapad_pocketjs: frames=8396 avg_turn_us=58673 avg_render_us=64031 avg_damage_px=46686 max_turn_us=265324 max_render_us=108139
+[ 331.43s] I (446329) remapad_pocketjs: frames=8436 avg_turn_us=49287 avg_render_us=67175 avg_damage_px=49056 max_turn_us=265324 max_render_us=108139
+[ 336.67s] I (451562) remapad_pocketjs: frames=8478 avg_turn_us=56857 avg_render_us=65518 avg_damage_px=46400 max_turn_us=265324 max_render_us=108139
+[ 341.45s] I (456347) remapad_pocketjs: frames=8517 avg_turn_us=50486 avg_render_us=70168 avg_damage_px=49969 max_turn_us=265324 max_render_us=108139
+[ 346.53s] I (461424) remapad_pocketjs: frames=8554 avg_turn_us=64303 avg_render_us=71504 avg_damage_px=53033 max_turn_us=265324 max_render_us=108139
+[ 351.40s] I (466295) remapad_pocketjs: frames=8594 avg_turn_us=50615 avg_render_us=69088 avg_damage_px=48720 max_turn_us=265324 max_render_us=108139
+[ 356.65s] I (471542) remapad_pocketjs: frames=8635 avg_turn_us=56848 avg_render_us=69077 avg_damage_px=48842 max_turn_us=265324 max_render_us=108139
+[ 361.43s] I (476325) remapad_pocketjs: frames=8671 avg_turn_us=60055 avg_render_us=71401 avg_damage_px=53013 max_turn_us=265324 max_render_us=108139
+[ 366.59s] I (481490) remapad_pocketjs: frames=8712 avg_turn_us=54533 avg_render_us=68584 avg_damage_px=48842 max_turn_us=265324 max_render_us=108139
+[ 371.44s] I (486342) remapad_pocketjs: frames=8751 avg_turn_us=57493 avg_render_us=64868 avg_damage_px=47212 max_turn_us=265324 max_render_us=108139
+[ 376.41s] I (491311) remapad_pocketjs: frames=8801 avg_turn_us=49056 avg_render_us=48889 avg_damage_px=36019 max_turn_us=265324 max_render_us=108139
+[ 381.44s] I (496337) remapad_pocketjs: frames=8846 avg_turn_us=47562 avg_render_us=61519 avg_damage_px=43306 max_turn_us=265324 max_render_us=108139
+[ 381.88s] I (496773) remapad_pocketjs: mem: js_heap=3519kB/6144kB gc_thresh=5704kB psram_free=1669736 internal_free=165199 allocs=65549 obj_n=18067 prop_n=56669 arr_n=1789
+[ 386.50s] I (501396) remapad_pocketjs: frames=8887 avg_turn_us=53667 avg_render_us=57685 avg_damage_px=40647 max_turn_us=265324 max_render_us=108139
+[ 391.45s] I (506346) remapad_pocketjs: frames=8922 avg_turn_us=58355 avg_render_us=81027 avg_damage_px=52992 max_turn_us=265324 max_render_us=108139
+[ 396.47s] I (511369) remapad_pocketjs: frames=8963 avg_turn_us=55029 avg_render_us=65539 avg_damage_px=43270 max_turn_us=265324 max_render_us=108139
+[ 401.42s] I (516315) remapad_pocketjs: frames=9002 avg_turn_us=59481 avg_render_us=64720 avg_damage_px=42043 max_turn_us=265324 max_render_us=108139
+[ 406.68s] I (521580) remapad_pocketjs: frames=9043 avg_turn_us=59065 avg_render_us=66449 avg_damage_px=43598 max_turn_us=265324 max_render_us=108139
+[ 411.50s] I (526402) remapad_pocketjs: frames=9081 avg_turn_us=54760 avg_render_us=70599 avg_damage_px=45978 max_turn_us=265324 max_render_us=108139
+[ 416.53s] I (531429) remapad_pocketjs: frames=9119 avg_turn_us=58095 avg_render_us=71384 avg_damage_px=46332 max_turn_us=265324 max_render_us=108139
+[ 421.51s] I (536414) remapad_pocketjs: frames=9155 avg_turn_us=62627 avg_render_us=72879 avg_damage_px=47413 max_turn_us=265324 max_render_us=108139
+[ 426.41s] I (541316) remapad_pocketjs: frames=9193 avg_turn_us=57767 avg_render_us=68590 avg_damage_px=44564 max_turn_us=265324 max_render_us=108139
+[ 431.49s] I (546386) remapad_pocketjs: frames=9229 avg_turn_us=63906 avg_render_us=74891 avg_damage_px=49280 max_turn_us=265324 max_render_us=108139
+[ 436.54s] I (551445) remapad_pocketjs: frames=9269 avg_turn_us=56947 avg_render_us=66472 avg_damage_px=43008 max_turn_us=265324 max_render_us=108139
+[ 441.45s] I (556348) remapad_pocketjs: frames=9304 avg_turn_us=62256 avg_render_us=74554 avg_damage_px=48384 max_turn_us=265324 max_render_us=108139
+[ 441.89s] I (556789) remapad_pocketjs: mem: js_heap=3561kB/6144kB gc_thresh=5704kB psram_free=1609000 internal_free=165199 allocs=66774 obj_n=18405 prop_n=57176 arr_n=1958
+[ 446.63s] I (561535) remapad_pocketjs: frames=9337 avg_turn_us=69001 avg_render_us=73399 avg_damage_px=47650 max_turn_us=265324 max_render_us=108139
+[ 451.43s] I (566331) remapad_pocketjs: frames=9374 avg_turn_us=55360 avg_render_us=71591 avg_damage_px=46858 max_turn_us=265324 max_render_us=108139
+[ 456.46s] I (571361) remapad_pocketjs: frames=9409 avg_turn_us=69227 avg_render_us=72453 avg_damage_px=47616 max_turn_us=265324 max_render_us=108139
+[ 461.68s] I (576582) remapad_pocketjs: frames=9449 avg_turn_us=61196 avg_render_us=67756 avg_damage_px=44016 max_turn_us=265324 max_render_us=108139
+[ 466.44s] I (581343) remapad_pocketjs: frames=9492 avg_turn_us=48229 avg_render_us=60330 avg_damage_px=39694 max_turn_us=265324 max_render_us=108139
+[ 471.45s] I (586350) remapad_pocketjs: frames=9530 avg_turn_us=58340 avg_render_us=71327 avg_damage_px=46332 max_turn_us=265324 max_render_us=108139
+[ 476.41s] I (591313) remapad_pocketjs: frames=9566 avg_turn_us=65008 avg_render_us=70355 avg_damage_px=46293 max_turn_us=265324 max_render_us=108139
+[ 481.42s] I (596319) remapad_pocketjs: frames=9607 avg_turn_us=48801 avg_render_us=70663 avg_damage_px=45892 max_turn_us=265324 max_render_us=108139
+[ 486.53s] I (601432) remapad_pocketjs: frames=9648 avg_turn_us=61260 avg_render_us=60361 avg_damage_px=39992 max_turn_us=265324 max_render_us=108139
+[ 491.47s] I (606378) remapad_pocketjs: frames=9695 avg_turn_us=49838 avg_render_us=53947 avg_damage_px=35458 max_turn_us=265324 max_render_us=108139
+[ 496.70s] I (611604) remapad_pocketjs: frames=9733 avg_turn_us=62419 avg_render_us=73691 avg_damage_px=48454 max_turn_us=265324 max_render_us=108139
+[ 501.44s] I (616351) remapad_pocketjs: frames=9776 avg_turn_us=46332 avg_render_us=62363 avg_damage_px=40632 max_turn_us=265324 max_render_us=108139
+[ 501.89s] I (616798) remapad_pocketjs: mem: js_heap=3604kB/6144kB gc_thresh=5704kB psram_free=1547400 internal_free=165199 allocs=68014 obj_n=18747 prop_n=57689 arr_n=2129
+[ 506.56s] I (621463) remapad_pocketjs: frames=9807 avg_turn_us=72753 avg_render_us=75592 avg_damage_px=48990 max_turn_us=265324 max_render_us=108139
+[ 511.40s] I (626303) remapad_pocketjs: frames=9845 avg_turn_us=53739 avg_render_us=71090 avg_damage_px=46686 max_turn_us=265324 max_render_us=108139
+[ 516.59s] I (631497) remapad_pocketjs: frames=9888 avg_turn_us=57001 avg_render_us=62172 avg_damage_px=40632 max_turn_us=265324 max_render_us=108139
+[ 521.42s] I (636324) remapad_pocketjs: frames=9920 avg_turn_us=66158 avg_render_us=81728 avg_damage_px=53760 max_turn_us=265324 max_render_us=108139
+[ 526.42s] I (641328) remapad_pocketjs: frames=9963 avg_turn_us=51562 avg_render_us=63134 avg_damage_px=40945 max_turn_us=265324 max_render_us=108139
+[ 531.40s] I (646304) remapad_pocketjs: frames=10005 avg_turn_us=54801 avg_render_us=61414 avg_damage_px=40640 max_turn_us=265324 max_render_us=108139
+[ 536.38s] I (651284) remapad_pocketjs: frames=10043 avg_turn_us=54419 avg_render_us=74170 avg_damage_px=48101 max_turn_us=265324 max_render_us=108139
+[ 541.50s] I (656410) remapad_pocketjs: frames=10080 avg_turn_us=67344 avg_render_us=68457 avg_damage_px=45042 max_turn_us=265324 max_render_us=108139
+[ 546.40s] I (661305) remapad_pocketjs: frames=10129 avg_turn_us=43346 avg_render_us=55085 avg_damage_px=36205 max_turn_us=265324 max_render_us=108139
+[ 551.61s] I (666513) remapad_pocketjs: frames=10172 avg_turn_us=57031 avg_render_us=62159 avg_damage_px=40632 max_turn_us=265324 max_render_us=108139
+[ 556.38s] I (671286) remapad_pocketjs: frames=10205 avg_turn_us=64478 avg_render_us=76655 avg_damage_px=50501 max_turn_us=265324 max_render_us=108139
+[ 561.42s] I (676327) remapad_pocketjs: frames=10243 avg_turn_us=57195 avg_render_us=73688 avg_damage_px=47747 max_turn_us=265324 max_render_us=108139
+[ 561.87s] I (676780) remapad_pocketjs: mem: js_heap=3647kB/6144kB gc_thresh=5704kB psram_free=1485628 internal_free=165199 allocs=69256 obj_n=19093 prop_n=58241 arr_n=2299
+[ 566.44s] I (681349) remapad_pocketjs: frames=10296 avg_turn_us=39251 avg_render_us=45148 avg_damage_px=29669 max_turn_us=265324 max_render_us=108139
+[ 571.58s] I (686486) remapad_pocketjs: frames=10337 avg_turn_us=59531 avg_render_us=64064 avg_damage_px=41631 max_turn_us=265324 max_render_us=108240
+[ 576.46s] I (691372) remapad_pocketjs: frames=10382 avg_turn_us=46504 avg_render_us=60003 avg_damage_px=39424 max_turn_us=265324 max_render_us=108240
+[ 581.45s] I (696363) remapad_pocketjs: frames=10416 avg_turn_us=62372 avg_render_us=82612 avg_damage_px=53760 max_turn_us=265324 max_render_us=108240
+[ 586.39s] I (701306) remapad_pocketjs: frames=10452 avg_turn_us=57082 avg_render_us=78330 avg_damage_px=50773 max_turn_us=265324 max_render_us=108240
+[ 591.47s] I (706378) remapad_pocketjs: frames=10493 avg_turn_us=58849 avg_render_us=61766 avg_damage_px=40647 max_turn_us=265324 max_render_us=108240
+[ 596.41s] I (711322) remapad_pocketjs: frames=10527 avg_turn_us=60507 avg_render_us=82047 avg_damage_px=53364 max_turn_us=265324 max_render_us=108240
+[ 601.41s] I (716318) remapad_pocketjs: frames=10563 avg_turn_us=59513 avg_render_us=77070 avg_damage_px=50400 max_turn_us=265324 max_render_us=108240
+[ 606.60s] I (721516) remapad_pocketjs: frames=10598 avg_turn_us=64785 avg_render_us=82161 avg_damage_px=53760 max_turn_us=265324 max_render_us=108240
+[ 611.41s] I (726319) remapad_pocketjs: frames=10632 avg_turn_us=54519 avg_render_us=70389 avg_damage_px=50992 max_turn_us=265324 max_render_us=108240
+[ 616.41s] I (731322) remapad_pocketjs: frames=10670 avg_turn_us=56740 avg_render_us=72949 avg_damage_px=51991 max_turn_us=265324 max_render_us=108240
+[ 621.66s] I (736573) remapad_pocketjs: frames=10709 avg_turn_us=61644 avg_render_us=71600 avg_damage_px=52036 max_turn_us=265324 max_render_us=108240
+[ 622.12s] I (737031) remapad_pocketjs: mem: js_heap=3688kB/6144kB gc_thresh=5704kB psram_free=1426092 internal_free=165199 allocs=70467 obj_n=19426 prop_n=58713 arr_n=2468
+[ 626.52s] I (741437) remapad_pocketjs: frames=10743 avg_turn_us=58235 avg_render_us=69924 avg_damage_px=46249 max_turn_us=265324 max_render_us=108240
+[ 631.48s] I (746390) remapad_pocketjs: frames=10783 avg_turn_us=52292 avg_render_us=70119 avg_damage_px=45696 max_turn_us=265324 max_render_us=108240
+[ 636.45s] I (751368) remapad_pocketjs: frames=10820 avg_turn_us=59862 avg_render_us=71535 avg_damage_px=46131 max_turn_us=265324 max_render_us=108240
+[ 641.62s] I (756533) remapad_pocketjs: frames=10857 avg_turn_us=67705 avg_render_us=69229 avg_damage_px=45405 max_turn_us=265324 max_render_us=108240
+[ 646.42s] I (761336) remapad_pocketjs: frames=10898 avg_turn_us=50373 avg_render_us=64567 avg_damage_px=42286 max_turn_us=265324 max_render_us=108240
+[ 651.40s] I (766318) remapad_pocketjs: frames=10935 avg_turn_us=61919 avg_render_us=70178 avg_damage_px=46495 max_turn_us=265324 max_render_us=108240
+[ 656.59s] I (771507) remapad_pocketjs: frames=10970 avg_turn_us=66725 avg_render_us=80104 avg_damage_px=55296 max_turn_us=265324 max_render_us=108240
+[ 661.40s] I (776312) remapad_pocketjs: frames=11003 avg_turn_us=61783 avg_render_us=81953 avg_damage_px=53352 max_turn_us=265324 max_render_us=108240
+[ 666.37s] I (781290) remapad_pocketjs: frames=11044 avg_turn_us=54561 avg_render_us=64803 avg_damage_px=42942 max_turn_us=265324 max_render_us=108240
+[ 671.45s] I (786368) remapad_pocketjs: frames=11085 avg_turn_us=51438 avg_render_us=70691 avg_damage_px=45892 max_turn_us=265324 max_render_us=108298
+[ 676.37s] I (791284) remapad_pocketjs: frames=11121 avg_turn_us=63463 avg_render_us=69410 avg_damage_px=45173 max_turn_us=265324 max_render_us=108298
+[ 681.43s] I (796346) remapad_pocketjs: frames=11157 avg_turn_us=60116 avg_render_us=78514 avg_damage_px=51146 max_turn_us=265324 max_render_us=108298
+[ 681.89s] I (796811) remapad_pocketjs: mem: js_heap=3731kB/6144kB gc_thresh=5704kB psram_free=1364788 internal_free=165199 allocs=71699 obj_n=19769 prop_n=59255 arr_n=2637
+[ 686.44s] I (801360) remapad_pocketjs: frames=11190 avg_turn_us=54680 avg_render_us=81765 avg_damage_px=57425 max_turn_us=265324 max_render_us=108298
+[ 691.60s] I (806514) remapad_pocketjs: frames=11227 avg_turn_us=65217 avg_render_us=72214 avg_damage_px=47221 max_turn_us=265324 max_render_us=108298
+[ 696.51s] I (811429) remapad_pocketjs: frames=11261 avg_turn_us=56961 avg_render_us=85998 avg_damage_px=55736 max_turn_us=265324 max_render_us=108298
+[ 701.47s] I (816392) remapad_pocketjs: frames=11296 avg_turn_us=56968 avg_render_us=82968 avg_damage_px=54144 max_turn_us=265324 max_render_us=108298
+[ 706.71s] I (821630) remapad_pocketjs: frames=11335 avg_turn_us=64583 avg_render_us=67105 avg_damage_px=44110 max_turn_us=265324 max_render_us=108298
+[ 711.54s] I (826465) remapad_pocketjs: frames=11378 avg_turn_us=51789 avg_render_us=58219 avg_damage_px=37819 max_turn_us=265324 max_render_us=108298
+[ 716.38s] I (831302) remapad_pocketjs: frames=11409 avg_turn_us=65332 avg_render_us=88013 avg_damage_px=57228 max_turn_us=265324 max_render_us=108298
+[ 721.37s] I (836292) remapad_pocketjs: frames=11451 avg_turn_us=53231 avg_render_us=62652 avg_damage_px=40960 max_turn_us=265324 max_render_us=108298
+[ 726.48s] I (841403) remapad_pocketjs: frames=11490 avg_turn_us=58276 avg_render_us=71216 avg_damage_px=46523 max_turn_us=265324 max_render_us=108298
+[ 731.49s] I (846414) remapad_pocketjs: frames=11527 avg_turn_us=58115 avg_render_us=74968 avg_damage_px=49037 max_turn_us=265324 max_render_us=108298
+[ 736.43s] I (851352) remapad_pocketjs: frames=11563 avg_turn_us=59387 avg_render_us=75473 avg_damage_px=49653 max_turn_us=265324 max_render_us=108298
+[ 741.68s] I (856602) remapad_pocketjs: frames=11605 avg_turn_us=58626 avg_render_us=64510 avg_damage_px=41920 max_turn_us=265324 max_render_us=108298
+[ 742.15s] I (857071) remapad_pocketjs: mem: js_heap=3773kB/6144kB gc_thresh=5704kB psram_free=1304056 internal_free=165199 allocs=72929 obj_n=20110 prop_n=59772 arr_n=2807
+[ 746.42s] I (861346) remapad_pocketjs: frames=11637 avg_turn_us=54444 avg_render_us=77726 avg_damage_px=55020 max_turn_us=265324 max_render_us=108298
+[ 751.45s] I (866373) remapad_pocketjs: frames=11676 avg_turn_us=59143 avg_render_us=67717 avg_damage_px=48246 max_turn_us=265324 max_render_us=108298
+[ 756.43s] I (871350) remapad_pocketjs: frames=11728 avg_turn_us=44714 avg_render_us=48702 avg_damage_px=36184 max_turn_us=265324 max_render_us=108298
+[ 761.38s] I (876302) remapad_pocketjs: frames=11767 avg_turn_us=54989 avg_render_us=69852 avg_damage_px=49624 max_turn_us=265324 max_render_us=108298
+[ 766.59s] I (881518) remapad_pocketjs: frames=11808 avg_turn_us=62226 avg_render_us=62694 avg_damage_px=45564 max_turn_us=265324 max_render_us=108298
+[ 771.37s] I (886293) remapad_pocketjs: frames=11848 avg_turn_us=44940 avg_render_us=72471 avg_damage_px=51744 max_turn_us=265324 max_render_us=108298
+[ 776.38s] I (891302) remapad_pocketjs: frames=11883 avg_turn_us=67987 avg_render_us=73695 avg_damage_px=53376 max_turn_us=265324 max_render_us=108298
+[ 781.42s] I (896345) remapad_pocketjs: frames=11924 avg_turn_us=53065 avg_render_us=67916 avg_damage_px=48515 max_turn_us=265324 max_render_us=108298
+[ 786.46s] I (901382) remapad_pocketjs: frames=11964 avg_turn_us=54338 avg_render_us=69228 avg_damage_px=49392 max_turn_us=265324 max_render_us=108298
+[ 791.41s] I (906332) remapad_pocketjs: frames=12001 avg_turn_us=59043 avg_render_us=72421 avg_damage_px=53033 max_turn_us=265324 max_render_us=108298
+[ 796.36s] I (911283) remapad_pocketjs: frames=12038 avg_turn_us=59397 avg_render_us=72189 avg_damage_px=50490 max_turn_us=265324 max_render_us=108298
+[ 801.60s] I (916529) remapad_pocketjs: frames=12080 avg_turn_us=58549 avg_render_us=64615 avg_damage_px=41920 max_turn_us=265324 max_render_us=108298
+[ 802.08s] I (917004) remapad_pocketjs: mem: js_heap=3815kB/6144kB gc_thresh=5704kB psram_free=1244108 internal_free=165199 allocs=74144 obj_n=20447 prop_n=60272 arr_n=2976
+[ 806.37s] I (921291) remapad_pocketjs: frames=12115 avg_turn_us=49705 avg_render_us=71045 avg_damage_px=50304 max_turn_us=265324 max_render_us=108298
+[ 811.39s] I (926311) remapad_pocketjs: frames=12153 avg_turn_us=62294 avg_render_us=67635 avg_damage_px=49162 max_turn_us=265324 max_render_us=108298
+[ 816.53s] I (931459) remapad_pocketjs: frames=12195 avg_turn_us=49525 avg_render_us=70975 avg_damage_px=50880 max_turn_us=265324 max_render_us=108298
+[ 821.37s] I (936296) remapad_pocketjs: frames=12230 avg_turn_us=60255 avg_render_us=76511 avg_damage_px=54912 max_turn_us=265324 max_render_us=108298
+[ 826.48s] I (941407) remapad_pocketjs: frames=12272 avg_turn_us=55879 avg_render_us=63662 avg_damage_px=45760 max_turn_us=265324 max_render_us=108298
+[ 831.37s] I (946301) remapad_pocketjs: frames=12310 avg_turn_us=52431 avg_render_us=72896 avg_damage_px=51991 max_turn_us=265324 max_render_us=108298
+[ 836.57s] I (951491) remapad_pocketjs: frames=12348 avg_turn_us=61657 avg_render_us=73520 avg_damage_px=53406 max_turn_us=265324 max_render_us=108298
+[ 841.37s] I (956296) remapad_pocketjs: frames=12387 avg_turn_us=55236 avg_render_us=65889 avg_damage_px=46867 max_turn_us=265324 max_render_us=108298
+[ 846.64s] I (961564) remapad_pocketjs: frames=12429 avg_turn_us=52383 avg_render_us=71026 avg_damage_px=50880 max_turn_us=265324 max_render_us=108298
+[ 851.44s] I (966369) remapad_pocketjs: frames=12465 avg_turn_us=60343 avg_render_us=71729 avg_damage_px=52640 max_turn_us=265324 max_render_us=108298
+[ 856.50s] I (971429) remapad_pocketjs: frames=12507 avg_turn_us=52289 avg_render_us=65938 avg_damage_px=46400 max_turn_us=265324 max_render_us=108298
+[ 861.39s] I (976313) remapad_pocketjs: frames=12546 avg_turn_us=58569 avg_render_us=64260 avg_damage_px=47901 max_turn_us=265324 max_render_us=108298
+[ 861.87s] I (976793) remapad_pocketjs: mem: js_heap=3855kB/6144kB gc_thresh=5704kB psram_free=1186400 internal_free=165199 allocs=75334 obj_n=20773 prop_n=60695 arr_n=3145
+[ 866.37s] I (981294) remapad_pocketjs: frames=12580 avg_turn_us=59953 avg_render_us=70987 avg_damage_px=47040 max_turn_us=265324 max_render_us=108298
+[ 871.56s] I (986489) remapad_pocketjs: frames=12619 avg_turn_us=58466 avg_render_us=71968 avg_damage_px=47212 max_turn_us=265324 max_render_us=108298
+[ 876.36s] I (991285) remapad_pocketjs: frames=12657 avg_turn_us=58981 avg_render_us=65734 avg_damage_px=42795 max_turn_us=265324 max_render_us=108298
+[ 881.43s] I (996358) remapad_pocketjs: frames=12700 avg_turn_us=54657 avg_render_us=59679 avg_damage_px=38444 max_turn_us=265324 max_render_us=108298
+[ 886.47s] I (1001397) remapad_pocketjs: frames=12739 avg_turn_us=57922 avg_render_us=68869 avg_damage_px=45489 max_turn_us=265324 max_render_us=108298
+[ 891.40s] I (1006327) remapad_pocketjs: frames=12788 avg_turn_us=47981 avg_render_us=51220 avg_damage_px=33737 max_turn_us=265324 max_render_us=108298
+[ 896.45s] I (1011385) remapad_pocketjs: frames=12827 avg_turn_us=58819 avg_render_us=69441 avg_damage_px=45144 max_turn_us=265324 max_render_us=108298
+[ 901.43s] I (1016364) remapad_pocketjs: frames=12867 avg_turn_us=51787 avg_render_us=70235 avg_damage_px=46032 max_turn_us=265324 max_render_us=108298
+[ 906.53s] I (1021460) remapad_pocketjs: frames=12910 avg_turn_us=58741 avg_render_us=57626 avg_damage_px=38132 max_turn_us=265324 max_render_us=108298
+[ 911.36s] I (1026294) remapad_pocketjs: frames=12953 avg_turn_us=43594 avg_render_us=54642 avg_damage_px=35631 max_turn_us=265324 max_render_us=108298
+[ 916.65s] I (1031579) remapad_pocketjs: frames=12989 avg_turn_us=73781 avg_render_us=71220 avg_damage_px=46666 max_turn_us=265324 max_render_us=108298
+[ 921.35s] I (1036283) remapad_pocketjs: frames=13027 avg_turn_us=55516 avg_render_us=64914 avg_damage_px=41734 max_turn_us=265324 max_render_us=108298
+[ 921.84s] I (1036770) remapad_pocketjs: mem: js_heap=3898kB/6144kB gc_thresh=5704kB psram_free=1125044 internal_free=165199 allocs=76566 obj_n=21115 prop_n=61241 arr_n=3313
+[ 926.45s] I (1041377) remapad_pocketjs: frames=13059 avg_turn_us=70603 avg_render_us=71024 avg_damage_px=46620 max_turn_us=266153 max_render_us=108298
+[ 931.43s] I (1046366) remapad_pocketjs: frames=13094 avg_turn_us=60133 avg_render_us=81000 avg_damage_px=56448 max_turn_us=266153 max_render_us=108298
+[ 936.58s] I (1051511) remapad_pocketjs: frames=13135 avg_turn_us=58104 avg_render_us=64904 avg_damage_px=46220 max_turn_us=266153 max_render_us=108298
+[ 941.36s] I (1056297) remapad_pocketjs: frames=13174 avg_turn_us=50661 avg_render_us=70023 avg_damage_px=49969 max_turn_us=266153 max_render_us=108298
+[ 946.48s] I (1061416) remapad_pocketjs: frames=13227 avg_turn_us=47454 avg_render_us=47103 avg_damage_px=34994 max_turn_us=266153 max_render_us=108298
+[ 951.40s] I (1066329) remapad_pocketjs: frames=13263 avg_turn_us=60061 avg_render_us=74455 avg_damage_px=52640 max_turn_us=266153 max_render_us=108298
+[ 956.36s] I (1071295) remapad_pocketjs: frames=13295 avg_turn_us=63483 avg_render_us=90303 avg_damage_px=58800 max_turn_us=266153 max_render_us=108298
+[ 961.56s] I (1076496) remapad_pocketjs: frames=13335 avg_turn_us=60913 avg_render_us=66427 avg_damage_px=43008 max_turn_us=266153 max_render_us=108298
+[ 966.37s] I (1081305) remapad_pocketjs: frames=13371 avg_turn_us=54224 avg_render_us=77396 avg_damage_px=50400 max_turn_us=266153 max_render_us=108298
+[ 971.59s] I (1086528) remapad_pocketjs: frames=13416 avg_turn_us=56630 avg_render_us=57373 avg_damage_px=37930 max_turn_us=266153 max_render_us=108298
+[ 976.51s] I (1091450) remapad_pocketjs: frames=13449 avg_turn_us=64221 avg_render_us=83492 avg_damage_px=57018 max_turn_us=266153 max_render_us=108298
+[ 981.37s] I (1096304) remapad_pocketjs: frames=13491 avg_turn_us=44312 avg_render_us=68950 avg_damage_px=49280 max_turn_us=266153 max_render_us=108298
+[ 981.86s] I (1096796) remapad_pocketjs: mem: js_heap=3939kB/6144kB gc_thresh=5704kB psram_free=1065632 internal_free=165199 allocs=77778 obj_n=21449 prop_n=61709 arr_n=3483
+[ 986.35s] I (1101286) remapad_pocketjs: frames=13536 avg_turn_us=48091 avg_render_us=49274 avg_damage_px=35242 max_turn_us=266153 max_render_us=108298
+[ 991.35s] I (1106284) remapad_pocketjs: frames=13578 avg_turn_us=52061 avg_render_us=64561 avg_damage_px=46080 max_turn_us=266153 max_render_us=108298
+[ 996.43s] I (1111365) remapad_pocketjs: frames=13617 avg_turn_us=55472 avg_render_us=72834 avg_damage_px=52036 max_turn_us=266153 max_render_us=108298
+[1001.35s] I (1116289) remapad_pocketjs: frames=13655 avg_turn_us=57474 avg_render_us=70666 avg_damage_px=51637 max_turn_us=266153 max_render_us=108298
+[1006.57s] I (1121506) remapad_pocketjs: frames=13696 avg_turn_us=57952 avg_render_us=67110 avg_damage_px=47531 max_turn_us=266153 max_render_us=108298
+[1011.36s] I (1126297) remapad_pocketjs: frames=13735 avg_turn_us=50411 avg_render_us=70165 avg_damage_px=49969 max_turn_us=266153 max_render_us=108298
+[1016.44s] I (1131373) remapad_pocketjs: frames=13772 avg_turn_us=64263 avg_render_us=71502 avg_damage_px=53033 max_turn_us=266153 max_render_us=108298
+[1021.45s] I (1136390) remapad_pocketjs: frames=13812 avg_turn_us=50788 avg_render_us=71635 avg_damage_px=50400 max_turn_us=266153 max_render_us=108298
+[1026.37s] I (1141311) remapad_pocketjs: frames=13866 avg_turn_us=48344 avg_render_us=40875 avg_damage_px=30115 max_turn_us=266153 max_render_us=108298
+[1031.44s] I (1146378) remapad_pocketjs: frames=13907 avg_turn_us=50253 avg_render_us=71067 avg_damage_px=50809 max_turn_us=266153 max_render_us=108298
+[1036.39s] I (1151324) remapad_pocketjs: frames=13943 avg_turn_us=58753 avg_render_us=77243 avg_damage_px=55253 max_turn_us=266153 max_render_us=108298
+[1041.39s] I (1156326) remapad_pocketjs: frames=13984 avg_turn_us=57087 avg_render_us=62767 avg_damage_px=45237 max_turn_us=266153 max_render_us=108298
+[1041.88s] I (1156824) remapad_pocketjs: mem: js_heap=3982kB/6144kB gc_thresh=5704kB psram_free=1004008 internal_free=165199 allocs=79011 obj_n=21796 prop_n=62279 arr_n=3652
+[1046.37s] I (1161310) remapad_pocketjs: frames=14019 avg_turn_us=55986 avg_render_us=69745 avg_damage_px=48384 max_turn_us=266153 max_render_us=108298
+[1051.50s] I (1166445) remapad_pocketjs: frames=14057 avg_turn_us=57161 avg_render_us=76116 avg_damage_px=49515 max_turn_us=266153 max_render_us=108298
+[1056.43s] I (1171372) remapad_pocketjs: frames=14092 avg_turn_us=58245 avg_render_us=80994 avg_damage_px=52992 max_turn_us=266153 max_render_us=108298
+[1061.54s] I (1176481) remapad_pocketjs: frames=14131 avg_turn_us=61694 avg_render_us=65820 avg_damage_px=43076 max_turn_us=266153 max_render_us=108298
+[1066.44s] I (1181376) remapad_pocketjs: frames=14168 avg_turn_us=55787 avg_render_us=73847 avg_damage_px=47948 max_turn_us=266153 max_render_us=108298
+[1071.45s] I (1186388) remapad_pocketjs: frames=14202 avg_turn_us=62939 avg_render_us=82798 avg_damage_px=53760 max_turn_us=266153 max_render_us=108298
+[1076.38s] I (1191325) remapad_pocketjs: frames=14240 avg_turn_us=51607 avg_render_us=76152 avg_damage_px=49515 max_turn_us=266153 max_render_us=108298
+[1081.49s] I (1196429) remapad_pocketjs: frames=14278 avg_turn_us=63325 avg_render_us=68313 avg_damage_px=44564 max_turn_us=266153 max_render_us=108298
+[1086.42s] I (1201360) remapad_pocketjs: frames=14313 avg_turn_us=55617 avg_render_us=83447 avg_damage_px=54144 max_turn_us=266153 max_render_us=108298
+[1091.34s] I (1206286) remapad_pocketjs: frames=14347 avg_turn_us=65821 avg_render_us=77220 avg_damage_px=50202 max_turn_us=266153 max_render_us=108298
+[1096.65s] I (1211595) remapad_pocketjs: frames=14386 avg_turn_us=56364 avg_render_us=77331 avg_damage_px=50313 max_turn_us=266153 max_render_us=108298
+[1101.44s] I (1216381) remapad_pocketjs: frames=14420 avg_turn_us=63719 avg_render_us=73515 avg_damage_px=47830 max_turn_us=266153 max_render_us=108298
+[1101.94s] I (1216884) remapad_pocketjs: mem: js_heap=4024kB/6144kB gc_thresh=5704kB psram_free=944252 internal_free=165199 allocs=80234 obj_n=22133 prop_n=62768 arr_n=3822
+[1106.36s] I (1221309) remapad_pocketjs: frames=14456 avg_turn_us=57765 avg_render_us=63705 avg_damage_px=41440 max_turn_us=266153 max_render_us=108298
+[1111.39s] I (1226337) remapad_pocketjs: frames=14492 avg_turn_us=63974 avg_render_us=73329 avg_damage_px=47413 max_turn_us=266153 max_render_us=108298
+[1116.37s] I (1231317) remapad_pocketjs: frames=14529 avg_turn_us=58571 avg_render_us=73442 avg_damage_px=47948 max_turn_us=266153 max_render_us=108298
+[1121.50s] I (1236444) remapad_pocketjs: frames=14566 avg_turn_us=58482 avg_render_us=78217 avg_damage_px=50854 max_turn_us=266153 max_render_us=108298
+[1126.43s] I (1241374) remapad_pocketjs: frames=14601 avg_turn_us=55530 avg_render_us=83596 avg_damage_px=54144 max_turn_us=266153 max_render_us=108298
+[1131.53s] I (1246479) remapad_pocketjs: frames=14639 avg_turn_us=63528 avg_render_us=68356 avg_damage_px=44564 max_turn_us=266153 max_render_us=108298
+[1136.39s] I (1251335) remapad_pocketjs: frames=14677 avg_turn_us=53606 avg_render_us=71495 avg_damage_px=47040 max_turn_us=266153 max_render_us=108298
+[1141.35s] I (1256298) remapad_pocketjs: frames=14723 avg_turn_us=51865 avg_render_us=53915 avg_damage_px=35060 max_turn_us=266153 max_render_us=108298
+[1146.35s] I (1261293) remapad_pocketjs: frames=14757 avg_turn_us=62333 avg_render_us=82626 avg_damage_px=53760 max_turn_us=266153 max_render_us=108298
+[1151.50s] I (1266447) remapad_pocketjs: frames=14796 avg_turn_us=55938 avg_render_us=73960 avg_damage_px=48246 max_turn_us=266153 max_render_us=108298
+[1156.42s] I (1271368) remapad_pocketjs: frames=14831 avg_turn_us=60690 avg_render_us=77693 avg_damage_px=51072 max_turn_us=266153 max_render_us=108298
+[1161.38s] I (1276327) remapad_pocketjs: frames=14873 avg_turn_us=53337 avg_render_us=63300 avg_damage_px=41920 max_turn_us=266153 max_render_us=108298
+[1161.89s] I (1276835) remapad_pocketjs: mem: js_heap=4066kB/6144kB gc_thresh=5704kB psram_free=883560 internal_free=165199 allocs=81459 obj_n=22472 prop_n=63282 arr_n=3991
+[1166.35s] I (1281301) remapad_pocketjs: frames=14909 avg_turn_us=56310 avg_render_us=66309 avg_damage_px=43680 max_turn_us=266153 max_render_us=108298
+[1171.44s] I (1286387) remapad_pocketjs: frames=14950 avg_turn_us=54678 avg_render_us=67961 avg_damage_px=44253 max_turn_us=266153 max_render_us=108298
+[1176.44s] I (1291390) remapad_pocketjs: frames=14986 avg_turn_us=55514 avg_render_us=81422 avg_damage_px=53013 max_turn_us=266153 max_render_us=108298
+[1181.56s] I (1296510) remapad_pocketjs: frames=15022 avg_turn_us=66218 avg_render_us=72720 avg_damage_px=47786 max_turn_us=266153 max_render_us=108298
+[1186.39s] I (1301340) remapad_pocketjs: frames=15062 avg_turn_us=52209 avg_render_us=67088 avg_damage_px=43680 max_turn_us=266153 max_render_us=108298
+[1191.40s] I (1306346) remapad_pocketjs: frames=15100 avg_turn_us=56763 avg_render_us=73039 avg_damage_px=47747 max_turn_us=266153 max_render_us=108298
+[1196.42s] I (1311370) remapad_pocketjs: frames=15136 avg_turn_us=59728 avg_render_us=77780 avg_damage_px=51146 max_turn_us=266153 max_render_us=108298
+[1201.65s] I (1316595) remapad_pocketjs: frames=15182 avg_turn_us=53801 avg_render_us=57788 avg_damage_px=37398 max_turn_us=266153 max_render_us=108298
+[1206.43s] I (1321381) remapad_pocketjs: frames=15219 avg_turn_us=58979 avg_render_us=67646 avg_damage_px=43952 max_turn_us=266153 max_render_us=108298
+[1211.48s] I (1326429) remapad_pocketjs: frames=15251 avg_turn_us=57238 avg_render_us=81438 avg_damage_px=57540 max_turn_us=266153 max_render_us=108298
+[1216.34s] I (1331293) remapad_pocketjs: frames=15290 avg_turn_us=57321 avg_render_us=64985 avg_damage_px=47212 max_turn_us=266153 max_render_us=108298
+[1221.36s] I (1336309) remapad_pocketjs: frames=15328 avg_turn_us=56807 avg_render_us=72933 avg_damage_px=53052 max_turn_us=266153 max_render_us=108298
+[1221.87s] I (1336824) remapad_pocketjs: mem: js_heap=4108kB/6144kB gc_thresh=5704kB psram_free=823548 internal_free=165199 allocs=82678 obj_n=22809 prop_n=63782 arr_n=4160
+[1226.53s] I (1341483) remapad_pocketjs: frames=15379 avg_turn_us=48477 avg_render_us=41321 avg_damage_px=30569 max_turn_us=266153 max_render_us=108298
+[1231.45s] I (1346398) remapad_pocketjs: frames=15434 avg_turn_us=41839 avg_render_us=45548 avg_damage_px=33477 max_turn_us=266153 max_render_us=108298
+[1236.41s] I (1351359) remapad_pocketjs: frames=15475 avg_turn_us=49371 avg_render_us=69656 avg_damage_px=48842 max_turn_us=266153 max_render_us=108298
+[1241.46s] I (1356408) remapad_pocketjs: frames=15515 avg_turn_us=57768 avg_render_us=66052 avg_damage_px=47040 max_turn_us=266153 max_render_us=108298
+[1246.34s] I (1361293) remapad_pocketjs: frames=15552 avg_turn_us=58917 avg_render_us=71717 avg_damage_px=53396 max_turn_us=266153 max_render_us=108298
+[1251.37s] I (1366323) remapad_pocketjs: frames=15592 avg_turn_us=55705 avg_render_us=68037 avg_damage_px=48384 max_turn_us=266153 max_render_us=108298
+[1256.58s] I (1371534) remapad_pocketjs: frames=15646 avg_turn_us=48606 avg_render_us=45304 avg_damage_px=32853 max_turn_us=266153 max_render_us=108298
+[1261.37s] I (1376326) remapad_pocketjs: frames=15686 avg_turn_us=45016 avg_render_us=72492 avg_damage_px=51744 max_turn_us=266153 max_render_us=108298
+[1266.37s] I (1381323) remapad_pocketjs: frames=15721 avg_turn_us=67676 avg_render_us=73673 avg_damage_px=53376 max_turn_us=266153 max_render_us=108298
+[1271.36s] I (1386309) remapad_pocketjs: frames=15762 avg_turn_us=53326 avg_render_us=66137 avg_damage_px=47203 max_turn_us=266153 max_render_us=108298
+[1276.45s] I (1391400) remapad_pocketjs: frames=15801 avg_turn_us=55540 avg_render_us=72801 avg_damage_px=52036 max_turn_us=266153 max_render_us=108298
+[1281.36s] I (1396314) remapad_pocketjs: frames=15838 avg_turn_us=58843 avg_render_us=72538 avg_damage_px=53033 max_turn_us=266153 max_render_us=108298
+[1281.88s] I (1396833) remapad_pocketjs: mem: js_heap=4150kB/6144kB gc_thresh=5704kB psram_free=763232 internal_free=165199 allocs=83896 obj_n=23147 prop_n=64289 arr_n=4329
+[1286.34s] I (1401294) remapad_pocketjs: frames=15866 avg_turn_us=69990 avg_render_us=87905 avg_damage_px=57600 max_turn_us=266153 max_render_us=108298
+[1291.47s] I (1406430) remapad_pocketjs: frames=15904 avg_turn_us=63072 avg_render_us=68954 avg_damage_px=45271 max_turn_us=266153 max_render_us=108298
+[1296.33s] I (1411285) remapad_pocketjs: frames=15943 avg_turn_us=55820 avg_render_us=67236 avg_damage_px=44110 max_turn_us=266153 max_render_us=108298
+[1301.40s] I (1416352) remapad_pocketjs: frames=15991 avg_turn_us=49449 avg_render_us=54695 avg_damage_px=35840 max_turn_us=266153 max_render_us=108298
+[1306.42s] I (1421378) remapad_pocketjs: frames=16038 avg_turn_us=49373 avg_render_us=56124 avg_damage_px=36888 max_turn_us=266153 max_render_us=108298
+[1311.55s] I (1426510) remapad_pocketjs: frames=16073 avg_turn_us=61482 avg_render_us=83378 avg_damage_px=54144 max_turn_us=266153 max_render_us=108298
+[1316.38s] I (1431340) remapad_pocketjs: frames=16111 avg_turn_us=51584 avg_render_us=73399 avg_damage_px=47747 max_turn_us=266153 max_render_us=108298
+[1321.63s] I (1436582) remapad_pocketjs: frames=16153 avg_turn_us=60363 avg_render_us=61503 avg_damage_px=40640 max_turn_us=266153 max_render_us=108298
+[1326.37s] I (1441327) remapad_pocketjs: frames=16191 avg_turn_us=54435 avg_render_us=68989 avg_damage_px=44917 max_turn_us=266153 max_render_us=108298
+[1331.45s] I (1446407) remapad_pocketjs: frames=16228 avg_turn_us=60825 avg_render_us=73200 avg_damage_px=47948 max_turn_us=266153 max_render_us=108298
+[1336.33s] I (1451289) remapad_pocketjs: frames=16275 avg_turn_us=49757 avg_render_us=52687 avg_damage_px=34886 max_turn_us=266153 max_render_us=108298
+[1341.37s] I (1456325) remapad_pocketjs: frames=16314 avg_turn_us=59931 avg_render_us=67441 avg_damage_px=43766 max_turn_us=266153 max_render_us=108298
+[1341.89s] I (1456851) remapad_pocketjs: mem: js_heap=4193kB/6144kB gc_thresh=5704kB psram_free=701360 internal_free=165199 allocs=85139 obj_n=23493 prop_n=64841 arr_n=4499
+[1346.33s] I (1461286) remapad_pocketjs: frames=16346 avg_turn_us=56362 avg_render_us=80814 avg_damage_px=57120 max_turn_us=266153 max_render_us=108298
+[1351.39s] I (1466345) remapad_pocketjs: frames=16386 avg_turn_us=57588 avg_render_us=67459 avg_damage_px=44352 max_turn_us=266153 max_render_us=108298
+[1356.63s] I (1471584) remapad_pocketjs: frames=16425 avg_turn_us=65572 avg_render_us=67345 avg_damage_px=43766 max_turn_us=266153 max_render_us=108298
+[1361.49s] I (1476447) remapad_pocketjs: frames=16466 avg_turn_us=54113 avg_render_us=61003 avg_damage_px=39664 max_turn_us=266153 max_render_us=108298
+[1366.41s] I (1481373) remapad_pocketjs: frames=16502 avg_turn_us=57419 avg_render_us=76154 avg_damage_px=49280 max_turn_us=266153 max_render_us=108298
+[1371.35s] I (1486308) remapad_pocketjs: frames=16537 avg_turn_us=64061 avg_render_us=74914 avg_damage_px=49152 max_turn_us=266153 max_render_us=108298
+[1376.34s] I (1491298) remapad_pocketjs: frames=16584 avg_turn_us=49855 avg_render_us=54902 avg_damage_px=36316 max_turn_us=266153 max_render_us=108298
+[1381.40s] I (1496357) remapad_pocketjs: frames=16634 avg_turn_us=47392 avg_render_us=52347 avg_damage_px=34406 max_turn_us=266153 max_render_us=108298
+[1386.45s] I (1501416) remapad_pocketjs: frames=16674 avg_turn_us=57294 avg_render_us=67710 avg_damage_px=44016 max_turn_us=266153 max_render_us=108298
+[1391.42s] I (1506379) remapad_pocketjs: frames=16713 avg_turn_us=52878 avg_render_us=71994 avg_damage_px=47212 max_turn_us=266153 max_render_us=108298
+[1396.52s] I (1511485) remapad_pocketjs: frames=16761 avg_turn_us=53318 avg_render_us=51629 avg_damage_px=34160 max_turn_us=266153 max_render_us=108298
+[1401.32s] I (1516285) remapad_pocketjs: frames=16797 avg_turn_us=59246 avg_render_us=72653 avg_damage_px=47786 max_turn_us=266153 max_render_us=108298
+[1401.85s] I (1516817) remapad_pocketjs: mem: js_heap=4235kB/6144kB gc_thresh=5704kB psram_free=640348 internal_free=165199 allocs=86371 obj_n=23834 prop_n=65358 arr_n=4669
+[1406.41s] I (1521375) remapad_pocketjs: frames=16835 avg_turn_us=56537 avg_render_us=60673 avg_damage_px=39966 max_turn_us=266153 max_render_us=108298
+[1411.33s] I (1526288) remapad_pocketjs: frames=16873 avg_turn_us=56971 avg_render_us=70890 avg_damage_px=46686 max_turn_us=266153 max_render_us=108298
+[1416.43s] I (1531392) remapad_pocketjs: frames=16915 avg_turn_us=52382 avg_render_us=67358 avg_damage_px=43840 max_turn_us=266153 max_render_us=108298
+[1421.32s] I (1536289) remapad_pocketjs: frames=16951 avg_turn_us=63500 avg_render_us=70119 avg_damage_px=46293 max_turn_us=266153 max_render_us=108298
+[1426.59s] I (1541553) remapad_pocketjs: frames=16986 avg_turn_us=66846 avg_render_us=82158 avg_damage_px=56832 max_turn_us=266153 max_render_us=108298
+[1431.33s] I (1546291) remapad_pocketjs: frames=17024 avg_turn_us=56621 avg_render_us=66654 avg_damage_px=43856 max_turn_us=266153 max_render_us=108298
+[1436.45s] I (1551408) remapad_pocketjs: frames=17073 avg_turn_us=47694 avg_render_us=55312 avg_damage_px=36205 max_turn_us=266153 max_render_us=108298
+[1441.33s] I (1556297) remapad_pocketjs: frames=17114 avg_turn_us=56119 avg_render_us=60342 avg_damage_px=39992 max_turn_us=266153 max_render_us=108298
+[1446.36s] I (1561325) remapad_pocketjs: frames=17153 avg_turn_us=59841 avg_render_us=67476 avg_damage_px=43766 max_turn_us=266153 max_render_us=108298
+[1451.43s] I (1566398) remapad_pocketjs: frames=17196 avg_turn_us=57757 avg_render_us=56658 avg_damage_px=36569 max_turn_us=266153 max_render_us=108298
+[1456.40s] I (1571362) remapad_pocketjs: frames=17236 avg_turn_us=51244 avg_render_us=70116 avg_damage_px=46032 max_turn_us=266153 max_render_us=108298
+[1461.63s] I (1576600) remapad_pocketjs: frames=17275 avg_turn_us=65513 avg_render_us=67336 avg_damage_px=43766 max_turn_us=266153 max_render_us=108298
+[1462.17s] I (1577136) remapad_pocketjs: mem: js_heap=4278kB/6144kB gc_thresh=5704kB psram_free=579708 internal_free=165199 allocs=87601 obj_n=24173 prop_n=65861 arr_n=4839
+[1466.59s] I (1581560) remapad_pocketjs: frames=17307 avg_turn_us=56111 avg_render_us=80743 avg_damage_px=57120 max_turn_us=266153 max_render_us=108298
+[1471.37s] I (1586335) remapad_pocketjs: frames=17345 avg_turn_us=60200 avg_render_us=63986 avg_damage_px=42088 max_turn_us=266153 max_render_us=108298
+[1476.32s] I (1591289) remapad_pocketjs: frames=17386 avg_turn_us=51329 avg_render_us=68036 avg_damage_px=44253 max_turn_us=266153 max_render_us=108298
+[1481.54s] I (1596512) remapad_pocketjs: frames=17422 avg_turn_us=66874 avg_render_us=75001 avg_damage_px=48906 max_turn_us=266153 max_render_us=108298
+[1486.48s] I (1601450) remapad_pocketjs: frames=17459 avg_turn_us=62514 avg_render_us=68307 avg_damage_px=44315 max_turn_us=266153 max_render_us=108298
+[1491.35s] I (1606319) remapad_pocketjs: frames=17502 avg_turn_us=48525 avg_render_us=62770 avg_damage_px=41257 max_turn_us=266153 max_render_us=108298
+[1496.59s] I (1611563) remapad_pocketjs: frames=17543 avg_turn_us=59254 avg_render_us=65985 avg_damage_px=42942 max_turn_us=266153 max_render_us=108298
+[1501.32s] I (1616289) remapad_pocketjs: frames=17576 avg_turn_us=64344 avg_render_us=76653 avg_damage_px=50501 max_turn_us=266153 max_render_us=108298
+[1506.40s] I (1621370) remapad_pocketjs: frames=17622 avg_turn_us=49055 avg_render_us=59272 avg_damage_px=38274 max_turn_us=266153 max_render_us=108298
+[1511.39s] I (1626363) remapad_pocketjs: frames=17653 avg_turn_us=56485 avg_render_us=83861 avg_damage_px=59396 max_turn_us=266153 max_render_us=108298
+[1516.56s] I (1631526) remapad_pocketjs: frames=17694 avg_turn_us=56913 avg_render_us=66528 avg_damage_px=47203 max_turn_us=266153 max_render_us=108298
+[1521.33s] I (1636305) remapad_pocketjs: frames=17729 avg_turn_us=60497 avg_render_us=73400 avg_damage_px=54528 max_turn_us=266153 max_render_us=108298
+[1521.88s] I (1636847) remapad_pocketjs: mem: js_heap=4318kB/6144kB gc_thresh=5704kB psram_free=522160 internal_free=165199 allocs=88783 obj_n=24495 prop_n=66278 arr_n=5006
+[1526.34s] I (1641313) remapad_pocketjs: frames=17766 avg_turn_us=52597 avg_render_us=65820 avg_damage_px=46495 max_turn_us=266153 max_render_us=108298
+[1531.40s] I (1646366) remapad_pocketjs: frames=17803 avg_turn_us=57766 avg_render_us=77413 avg_damage_px=55212 max_turn_us=266153 max_render_us=108298
+[1536.61s] I (1651580) remapad_pocketjs: frames=17841 avg_turn_us=63241 avg_render_us=72124 avg_damage_px=50576 max_turn_us=266153 max_render_us=108298
+[1541.33s] I (1656296) remapad_pocketjs: frames=17873 avg_turn_us=62909 avg_render_us=82700 avg_damage_px=54180 max_turn_us=266153 max_render_us=108298
+[1546.32s] I (1661288) remapad_pocketjs: frames=17917 avg_turn_us=50924 avg_render_us=60376 avg_damage_px=39403 max_turn_us=266153 max_render_us=108298
+[1551.43s] I (1666399) remapad_pocketjs: frames=17955 avg_turn_us=59982 avg_render_us=71767 avg_damage_px=46686 max_turn_us=266153 max_render_us=108298
+[1556.47s] I (1671442) remapad_pocketjs: frames=17991 avg_turn_us=60055 avg_render_us=78476 avg_damage_px=50773 max_turn_us=266153 max_render_us=108298
+[1561.34s] I (1676312) remapad_pocketjs: frames=18028 avg_turn_us=62285 avg_render_us=66723 avg_damage_px=44678 max_turn_us=266153 max_render_us=108298
+[1566.59s] I (1681564) remapad_pocketjs: frames=18066 avg_turn_us=57787 avg_render_us=78627 avg_damage_px=51284 max_turn_us=266153 max_render_us=108298
+[1571.33s] I (1686303) remapad_pocketjs: frames=18100 avg_turn_us=62734 avg_render_us=74469 avg_damage_px=49016 max_turn_us=266153 max_render_us=108298
+[1576.49s] I (1691465) remapad_pocketjs: frames=18142 avg_turn_us=52434 avg_render_us=68931 avg_damage_px=44800 max_turn_us=266153 max_render_us=108298
+[1581.35s] I (1696322) remapad_pocketjs: frames=18178 avg_turn_us=56667 avg_render_us=76429 avg_damage_px=50026 max_turn_us=266153 max_render_us=108298
+[1581.90s] I (1696870) remapad_pocketjs: mem: js_heap=4360kB/6144kB gc_thresh=5704kB psram_free=460992 internal_free=165199 allocs=90015 obj_n=24839 prop_n=66827 arr_n=5175
+[1586.35s] I (1701323) remapad_pocketjs: frames=18212 avg_turn_us=58216 avg_render_us=71325 avg_damage_px=48225 max_turn_us=266153 max_render_us=108298
+[1591.50s] I (1706476) remapad_pocketjs: frames=18256 avg_turn_us=58034 avg_render_us=57640 avg_damage_px=37876 max_turn_us=266153 max_render_us=108298
+[1596.39s] I (1711363) remapad_pocketjs: frames=18300 avg_turn_us=50901 avg_render_us=56996 avg_damage_px=36960 max_turn_us=266153 max_render_us=108298
+[1601.63s] I (1716601) remapad_pocketjs: frames=18337 avg_turn_us=69702 avg_render_us=69175 avg_damage_px=44678 max_turn_us=266153 max_render_us=108298
+[1606.39s] I (1721368) remapad_pocketjs: frames=18375 avg_turn_us=51371 avg_render_us=71442 avg_damage_px=46332 max_turn_us=266153 max_render_us=108298
+[1611.42s] I (1726398) remapad_pocketjs: frames=18414 avg_turn_us=57653 avg_render_us=68912 avg_damage_px=45489 max_turn_us=266153 max_render_us=108298
+[1616.38s] I (1731358) remapad_pocketjs: frames=18462 avg_turn_us=49114 avg_render_us=52784 avg_damage_px=34720 max_turn_us=266153 max_render_us=108298
+[1621.36s] I (1736333) remapad_pocketjs: frames=18502 avg_turn_us=52602 avg_render_us=69986 avg_damage_px=45360 max_turn_us=266153 max_render_us=108298
+[1626.32s] I (1741292) remapad_pocketjs: frames=18538 avg_turn_us=65826 avg_render_us=69722 avg_damage_px=48533 max_turn_us=266153 max_render_us=108298
+[1631.48s] I (1746455) remapad_pocketjs: frames=18581 avg_turn_us=52174 avg_render_us=65493 avg_damage_px=46571 max_turn_us=266153 max_render_us=108298
+[1636.34s] I (1751312) remapad_pocketjs: frames=18625 avg_turn_us=53774 avg_render_us=54372 avg_damage_px=40320 max_turn_us=266153 max_render_us=108298
+[1641.39s] I (1756368) remapad_pocketjs: frames=18662 avg_turn_us=53918 avg_render_us=81324 avg_damage_px=56665 max_turn_us=266153 max_render_us=108298
+[1641.95s] I (1756922) remapad_pocketjs: mem: js_heap=4403kB/6144kB gc_thresh=5704kB psram_free=399656 internal_free=165199 allocs=91252 obj_n=25181 prop_n=67340 arr_n=5346
+[1646.31s] I (1761287) remapad_pocketjs: frames=18696 avg_turn_us=61657 avg_render_us=64437 avg_damage_px=42691 max_turn_us=266153 max_render_us=108298
+[1651.33s] I (1766310) remapad_pocketjs: frames=18741 avg_turn_us=49425 avg_render_us=60405 avg_damage_px=39125 max_turn_us=266153 max_render_us=108298
+[1656.32s] I (1771302) remapad_pocketjs: frames=18781 avg_turn_us=55233 avg_render_us=66711 avg_damage_px=43680 max_turn_us=266153 max_render_us=108298
+[1661.44s] I (1776416) remapad_pocketjs: frames=18820 avg_turn_us=57361 avg_render_us=71421 avg_damage_px=46523 max_turn_us=266153 max_render_us=108298
+[1666.34s] I (1781313) remapad_pocketjs: frames=18855 avg_turn_us=57002 avg_render_us=80817 avg_damage_px=52608 max_turn_us=266153 max_render_us=108298
+[1671.35s] I (1786325) remapad_pocketjs: frames=18889 avg_turn_us=62997 avg_render_us=82705 avg_damage_px=53760 max_turn_us=266153 max_render_us=108298
+[1676.34s] I (1791314) remapad_pocketjs: frames=18927 avg_turn_us=60769 avg_render_us=66712 avg_damage_px=43856 max_turn_us=266153 max_render_us=108298
+[1681.42s] I (1796405) remapad_pocketjs: frames=18972 avg_turn_us=50051 avg_render_us=60888 avg_damage_px=39722 max_turn_us=266153 max_render_us=108298
+[1686.31s] I (1801287) remapad_pocketjs: frames=19010 avg_turn_us=60722 avg_render_us=64678 avg_damage_px=41734 max_turn_us=266153 max_render_us=108298
+[1691.34s] I (1806317) remapad_pocketjs: frames=19049 avg_turn_us=57710 avg_render_us=68843 avg_damage_px=45489 max_turn_us=266153 max_render_us=108298
+[1696.37s] I (1811351) remapad_pocketjs: frames=19090 avg_turn_us=57037 avg_render_us=64155 avg_damage_px=41631 max_turn_us=266153 max_render_us=108298
+[1701.38s] I (1816358) remapad_pocketjs: frames=19129 avg_turn_us=55893 avg_render_us=69798 avg_damage_px=45144 max_turn_us=266153 max_render_us=108298
+[1701.94s] I (1816917) remapad_pocketjs: mem: js_heap=4446kB/6144kB gc_thresh=5704kB psram_free=338228 internal_free=165199 allocs=92487 obj_n=25525 prop_n=67889 arr_n=5515
+[1706.40s] I (1821386) remapad_pocketjs: frames=19174 avg_turn_us=48191 avg_render_us=49002 avg_damage_px=31957 max_turn_us=266153 max_render_us=108298
+[1711.60s] I (1826587) remapad_pocketjs: frames=19215 avg_turn_us=55421 avg_render_us=68414 avg_damage_px=44909 max_turn_us=266215 max_render_us=108298
+[1716.42s] I (1831399) remapad_pocketjs: frames=19249 avg_turn_us=56786 avg_render_us=82894 avg_damage_px=53760 max_turn_us=266215 max_render_us=108298
+[1721.31s] I (1836296) remapad_pocketjs: frames=19288 avg_turn_us=57015 avg_render_us=65937 avg_damage_px=43076 max_turn_us=266215 max_render_us=108298
+[1726.38s] I (1841358) remapad_pocketjs: frames=19327 avg_turn_us=57823 avg_render_us=69578 avg_damage_px=45833 max_turn_us=266215 max_render_us=108298
+[1731.55s] I (1846530) remapad_pocketjs: frames=19367 avg_turn_us=57692 avg_render_us=70191 avg_damage_px=45696 max_turn_us=266215 max_render_us=108298
+[1736.33s] I (1851315) remapad_pocketjs: frames=19404 avg_turn_us=58964 avg_render_us=67664 avg_damage_px=43952 max_turn_us=266215 max_render_us=108298
+[1741.63s] I (1856615) remapad_pocketjs: frames=19445 avg_turn_us=55826 avg_render_us=70705 avg_damage_px=46548 max_turn_us=266215 max_render_us=108298
+[1746.53s] I (1861516) remapad_pocketjs: frames=19483 avg_turn_us=60945 avg_render_us=66470 avg_damage_px=43149 max_turn_us=266215 max_render_us=108298
+[1751.38s] I (1866364) remapad_pocketjs: frames=19521 avg_turn_us=57831 avg_render_us=65831 avg_damage_px=42795 max_turn_us=266215 max_render_us=108298
+[1756.30s] I (1871285) remapad_pocketjs: frames=19556 avg_turn_us=58482 avg_render_us=80246 avg_damage_px=52224 max_turn_us=266215 max_render_us=108298
+[1761.42s] I (1876401) remapad_pocketjs: frames=19600 avg_turn_us=52403 avg_render_us=61870 avg_damage_px=40625 max_turn_us=266215 max_render_us=108298
+[1761.98s] I (1876965) remapad_pocketjs: mem: js_heap=4488kB/6144kB gc_thresh=5704kB psram_free=277492 internal_free=165199 allocs=93719 obj_n=25865 prop_n=68399 arr_n=5685
+[1766.30s] I (1881289) remapad_pocketjs: frames=19650 avg_turn_us=40835 avg_render_us=43754 avg_damage_px=31718 max_turn_us=266215 max_render_us=108298
+[1771.33s] I (1886317) remapad_pocketjs: frames=19689 avg_turn_us=55489 avg_render_us=71024 avg_damage_px=50658 max_turn_us=266215 max_render_us=108298
+[1776.34s] I (1891322) remapad_pocketjs: frames=19727 avg_turn_us=57345 avg_render_us=72963 avg_damage_px=53052 max_turn_us=266215 max_render_us=108298
+[1781.46s] I (1896447) remapad_pocketjs: frames=19767 avg_turn_us=59369 avg_render_us=66682 avg_damage_px=47376 max_turn_us=266215 max_render_us=108298
+[1786.31s] I (1901297) remapad_pocketjs: frames=19807 avg_turn_us=49528 avg_render_us=68359 avg_damage_px=48720 max_turn_us=266215 max_render_us=108298
+[1791.41s] I (1906397) remapad_pocketjs: frames=19855 avg_turn_us=48563 avg_render_us=56259 avg_damage_px=37240 max_turn_us=266215 max_render_us=108298
+[1796.33s] I (1911321) remapad_pocketjs: frames=19890 avg_turn_us=58118 avg_render_us=80933 avg_damage_px=52992 max_turn_us=266215 max_render_us=108298
+[1801.45s] I (1916434) remapad_pocketjs: frames=19935 avg_turn_us=54428 avg_render_us=56958 avg_damage_px=37333 max_turn_us=266215 max_render_us=108298
+[1806.45s] I (1921432) remapad_pocketjs: frames=19973 avg_turn_us=61135 avg_render_us=67353 avg_damage_px=43503 max_turn_us=266215 max_render_us=108298
+[1811.37s] I (1926355) remapad_pocketjs: frames=20008 avg_turn_us=51255 avg_render_us=68726 avg_damage_px=44544 max_turn_us=266215 max_render_us=108298
+[1816.34s] I (1931331) remapad_pocketjs: frames=20048 avg_turn_us=51721 avg_render_us=70405 avg_damage_px=50400 max_turn_us=266215 max_render_us=108298
+[1821.42s] I (1936412) remapad_pocketjs: frames=20085 avg_turn_us=64355 avg_render_us=71531 avg_damage_px=53033 max_turn_us=266215 max_render_us=108298
+[1821.99s] I (1936981) remapad_pocketjs: mem: js_heap=4529kB/6144kB gc_thresh=5704kB psram_free=219048 internal_free=165199 allocs=94910 obj_n=26193 prop_n=68858 arr_n=5852
+[1826.30s] I (1941289) remapad_pocketjs: frames=20120 avg_turn_us=49461 avg_render_us=70291 avg_damage_px=49920 max_turn_us=266215 max_render_us=108298
+[1831.34s] I (1946325) remapad_pocketjs: frames=20174 avg_turn_us=48364 avg_render_us=42855 avg_damage_px=30862 max_turn_us=266215 max_render_us=108298
+[1836.44s] I (1951430) remapad_pocketjs: frames=20214 avg_turn_us=54388 avg_render_us=71076 avg_damage_px=50736 max_turn_us=266215 max_render_us=108298
+[1841.36s] I (1956347) remapad_pocketjs: frames=20251 avg_turn_us=58948 avg_render_us=72521 avg_damage_px=53033 max_turn_us=266215 max_render_us=108298
+[1846.57s] I (1961561) remapad_pocketjs: frames=20291 avg_turn_us=59432 avg_render_us=68716 avg_damage_px=48720 max_turn_us=266215 max_render_us=108298
+[1851.36s] I (1966349) remapad_pocketjs: frames=20330 avg_turn_us=50544 avg_render_us=70058 avg_damage_px=49969 max_turn_us=266215 max_render_us=108298
+[1856.43s] I (1971417) remapad_pocketjs: frames=20367 avg_turn_us=64064 avg_render_us=71512 avg_damage_px=53033 max_turn_us=266215 max_render_us=108298
+[1861.38s] I (1976365) remapad_pocketjs: frames=20408 avg_turn_us=45332 avg_render_us=72117 avg_damage_px=50481 max_turn_us=266215 max_render_us=108298
+[1866.31s] I (1981300) remapad_pocketjs: frames=20440 avg_turn_us=70503 avg_render_us=81935 avg_damage_px=53340 max_turn_us=266215 max_render_us=108298
+[1871.34s] I (1986333) remapad_pocketjs: frames=20478 avg_turn_us=58439 avg_render_us=71430 avg_damage_px=46332 max_turn_us=266215 max_render_us=108298
+[1876.29s] I (1991284) remapad_pocketjs: frames=20514 avg_turn_us=63270 avg_render_us=71942 avg_damage_px=47413 max_turn_us=266215 max_render_us=108298
+[1881.31s] I (1996301) remapad_pocketjs: frames=20562 avg_turn_us=50218 avg_render_us=52861 avg_damage_px=34720 max_turn_us=266215 max_render_us=108298
+[1881.89s] I (1996877) remapad_pocketjs: mem: js_heap=4572kB/6144kB gc_thresh=5704kB psram_free=157776 internal_free=165199 allocs=96142 obj_n=26538 prop_n=69414 arr_n=6021
+[1886.55s] I (2001538) remapad_pocketjs: frames=20592 avg_turn_us=74740 avg_render_us=79205 avg_damage_px=52416 max_turn_us=266215 max_render_us=108298
+[1891.43s] I (2006419) remapad_pocketjs: frames=20625 avg_turn_us=69315 avg_render_us=76551 avg_damage_px=49687 max_turn_us=266215 max_render_us=108298
+[1896.41s] I (2011399) remapad_pocketjs: frames=20667 avg_turn_us=53125 avg_render_us=62117 avg_damage_px=40320 max_turn_us=266215 max_render_us=108298
+[1901.32s] I (2016316) remapad_pocketjs: frames=20703 avg_turn_us=57156 avg_render_us=75923 avg_damage_px=49280 max_turn_us=266215 max_render_us=108298
+[1906.47s] I (2021468) remapad_pocketjs: frames=20741 avg_turn_us=64596 avg_render_us=68737 avg_damage_px=44564 max_turn_us=266215 max_render_us=108298
+[1911.34s] I (2026333) remapad_pocketjs: frames=20781 avg_turn_us=56252 avg_render_us=62493 avg_damage_px=40656 max_turn_us=266215 max_render_us=108298
+[1916.30s] I (2031290) remapad_pocketjs: frames=20817 avg_turn_us=62715 avg_render_us=72900 avg_damage_px=47413 max_turn_us=266215 max_render_us=108298
+[1921.31s] I (2036300) remapad_pocketjs: frames=20864 avg_turn_us=45060 avg_render_us=59748 avg_damage_px=39176 max_turn_us=266215 max_render_us=108298
+[1926.40s] I (2041390) remapad_pocketjs: frames=20911 avg_turn_us=54175 avg_render_us=52676 avg_damage_px=34886 max_turn_us=266215 max_render_us=108298
+[1931.31s] I (2046302) remapad_pocketjs: frames=20945 avg_turn_us=60075 avg_render_us=82587 avg_damage_px=53760 max_turn_us=266215 max_render_us=108298
+[1936.38s] I (2051376) remapad_pocketjs: frames=20987 avg_turn_us=53421 avg_render_us=65318 avg_damage_px=43200 max_turn_us=266215 max_render_us=108298
+[1941.51s] I (2056510) remapad_pocketjs: frames=21019 avg_turn_us=73039 avg_render_us=84829 avg_damage_px=55860 max_turn_us=266842 max_render_us=108298
+[1942.10s] I (2057091) remapad_pocketjs: mem: js_heap=4614kB/6144kB gc_thresh=5704kB psram_free=99916 internal_free=162143 allocs=97376 obj_n=26878 prop_n=69924 arr_n=6191
+[1946.33s] I (2061323) remapad_pocketjs: frames=21047 avg_turn_us=68290 avg_render_us=81432 avg_damage_px=53760 max_turn_us=272999 max_render_us=108298
+[1951.58s] I (2066575) remapad_pocketjs: frames=21096 avg_turn_us=53939 avg_render_us=51783 avg_damage_px=34011 max_turn_us=272999 max_render_us=108298
+[1956.48s] I (2071480) remapad_pocketjs: frames=21137 avg_turn_us=58709 avg_render_us=59469 avg_damage_px=39008 max_turn_us=273298 max_render_us=108298
+[1961.46s] I (2076461) remapad_pocketjs: frames=21170 avg_turn_us=71270 avg_render_us=77542 avg_damage_px=50094 max_turn_us=273298 max_render_us=108298
+[1966.29s] I (2081286) remapad_pocketjs: frames=21208 avg_turn_us=59713 avg_render_us=64892 avg_damage_px=42442 max_turn_us=275180 max_render_us=108298
+[1971.37s] I (2086365) remapad_pocketjs: frames=21240 avg_turn_us=73758 avg_render_us=83174 avg_damage_px=53760 max_turn_us=275180 max_render_us=108298
+[1976.46s] I (2091453) remapad_pocketjs: frames=21280 avg_turn_us=63415 avg_render_us=60886 avg_damage_px=39312 max_turn_us=275180 max_render_us=108298
+[1981.45s] I (2096449) remapad_pocketjs: frames=21311 avg_turn_us=76210 avg_render_us=81252 avg_damage_px=52892 max_turn_us=275180 max_render_us=108298
+[1986.36s] I (2101357) remapad_pocketjs: frames=21345 avg_turn_us=65963 avg_render_us=76661 avg_damage_px=49807 max_turn_us=275180 max_render_us=108298
+[1991.55s] I (2106546) remapad_pocketjs: frames=21380 avg_turn_us=75594 avg_render_us=70151 avg_damage_px=45312 max_turn_us=275180 max_render_us=108298
+[1996.41s] I (2111405) remapad_pocketjs: frames=21417 avg_turn_us=61295 avg_render_us=67516 avg_damage_px=43952 max_turn_us=275180 max_render_us=108298
+[2001.33s] I (2116326) remapad_pocketjs: frames=21455 avg_turn_us=63461 avg_render_us=63215 avg_damage_px=41027 max_turn_us=275180 max_render_us=108298
+[2001.91s] I (2116910) remapad_pocketjs: mem: js_heap=4656kB/6144kB gc_thresh=5704kB psram_free=98916 internal_free=102331 allocs=98606 obj_n=27215 prop_n=70424 arr_n=6360
+[2006.37s] I (2121367) remapad_pocketjs: frames=21495 avg_turn_us=50378 avg_render_us=59610 avg_damage_px=39312 max_turn_us=275180 max_render_us=108298
+[2011.49s] I (2126486) remapad_pocketjs: frames=21536 avg_turn_us=61684 avg_render_us=61722 avg_damage_px=39992 max_turn_us=275180 max_render_us=108298
+[2016.30s] I (2131296) remapad_pocketjs: frames=21570 avg_turn_us=70189 avg_render_us=68793 avg_damage_px=44668 max_turn_us=275180 max_render_us=108298
+[2021.36s] I (2136358) remapad_pocketjs: frames=21604 avg_turn_us=65451 avg_render_us=79961 avg_damage_px=51783 max_turn_us=275180 max_render_us=108298
+[2026.51s] I (2141506) remapad_pocketjs: frames=21637 avg_turn_us=75609 avg_render_us=78605 avg_damage_px=51316 max_turn_us=275180 max_render_us=108298
+[2031.37s] I (2146372) remapad_pocketjs: frames=21672 avg_turn_us=67201 avg_render_us=69510 avg_damage_px=45696 max_turn_us=275180 max_render_us=108298
+[2036.30s] I (2151305) remapad_pocketjs: frames=21714 avg_turn_us=57889 avg_render_us=58120 avg_damage_px=38080 max_turn_us=276207 max_render_us=108298
+[2041.39s] I (2156392) remapad_pocketjs: frames=21746 avg_turn_us=74223 avg_render_us=83044 avg_damage_px=53760 max_turn_us=276207 max_render_us=108298
+[2046.36s] I (2161361) remapad_pocketjs: frames=21783 avg_turn_us=61716 avg_render_us=70520 avg_damage_px=45768 max_turn_us=276207 max_render_us=108298
+[2051.30s] I (2166306) remapad_pocketjs: frames=21815 avg_turn_us=73639 avg_render_us=78717 avg_damage_px=51240 max_turn_us=276207 max_render_us=108298
+[2056.37s] I (2171373) remapad_pocketjs: frames=21853 avg_turn_us=66765 avg_render_us=64031 avg_damage_px=41381 max_turn_us=276207 max_render_us=108298
+[2061.38s] I (2176382) remapad_pocketjs: frames=21887 avg_turn_us=70436 avg_render_us=74952 avg_damage_px=48621 max_turn_us=276207 max_render_us=108298
+[2061.97s] I (2176972) remapad_pocketjs: mem: js_heap=4699kB/6144kB gc_thresh=5704kB psram_free=98824 internal_free=40999 allocs=99848 obj_n=27556 prop_n=70941 arr_n=6530
+[2066.51s] I (2181513) remapad_pocketjs: frames=21918 avg_turn_us=59140 avg_render_us=84277 avg_damage_px=56794 max_turn_us=276207 max_render_us=108298
+[2071.34s] I (2186349) remapad_pocketjs: frames=21952 avg_turn_us=71697 avg_render_us=69070 avg_damage_px=45458 max_turn_us=278260 max_render_us=108298
+[2076.31s] I (2191317) remapad_pocketjs: frames=21997 avg_turn_us=58643 avg_render_us=50341 avg_damage_px=32853 max_turn_us=280437 max_render_us=108298
+[2081.34s] I (2196345) remapad_pocketjs: frames=22039 avg_turn_us=58926 avg_render_us=59333 avg_damage_px=38720 max_turn_us=280862 max_render_us=108298
+[2086.36s] I (2201360) remapad_pocketjs: frames=22071 avg_turn_us=78691 avg_render_us=75999 avg_damage_px=49140 max_turn_us=280862 max_render_us=108298
+[2090.43s] E (2205431) pocketjs_ui_core: Rust core panicked
+[2090.43s] abort() was called at PC 0x42011d8f on core 1
+[2090.43s] Backtrace: 0x40387bb1:0x3c384460 0x40387b7d:0x3c384480 0x4038555e:0x3c3844a0 0x42011d8f:0x3c384510 0x420e0afe:0x3c384530 0x420e1e88:0x3c384550 0x420e0b71:0x3c384590 0x420d277e:0x3c3845c0 0x420e0ba6:0x3c3845e0 0x420e0b3b:0x3c384600 0x420d624e:0x3c384620 0x420fc1d6:0x3c384850 0x4210365b:0x3c384d30 0x420fcdf1:0x3c384d70 0x4210365b:0x3c385250 0x420fca78:0x3c385290 0x4210365b:0x3c385770 0x420fca78:0x3c3857b0 0x4210365b:0x3c385c90 0x420fcee1:0x3c385cd0 0x4210365b:0x3c3861b0 0x421024e2:0x3c3861f0 0x4210365b:0x3c3866d0 0x421024e2:0x3c386710 0x4210365b:0x3c386bf0 0x421024e2:0x3c386c30 0x4210365b:0x3c387110 0x420f9592:0x3c387150 0x420f9b9b:0x3c3872b0 0x42101489:0x3c387320 0x4210365b:0x3c387800 0x420f9592:0x3c387840 0x420f9b9b:0x3c3879a0 0x42101489:0x3c387a10 0x420d9b60:0x3c387ef0 0x420d792c:0x3c388040 0x420d7403:0x3c388090 0x420d50bf:0x3c388340 0x420d24a7:0x3c3883c0 0x42012029:0x3c3883e0 0x42057279:0x3c388400 0x42012a7f:0x3c3884b0
+[2090.43s] rst:0xc (RTC_SW_CPU_RST),boot:0x9 (SPI_FAST_FLASH_BOOT)
+[2097.21s] E (6785) task_wdt: Print CPU 1 backtrace
+[2097.21s] Backtrace: 0x4037EFFE:0x3FCA00B0 0x4037E82D:0x3FCA00D0 0x4005706E:0x3C387FC0 0x4206F71F:0x3C387FE0 0x420853FC:0x3C3880A0 0x420852EE:0x3C388180 0x420852EE:0x3C388260 0x420B8BDC:0x3C388340 0x4208E7F1:0x3C388400 0x4208E81D:0x3C388440 0x42057704:0x3C388480 0x42012522:0x3C3884B0
+[2106.82s] I (16389) remapad_pocketjs: js heap after eval: used=3244kB limit=6144kB
+[2106.82s] I (16390) remapad_pocketjs: strip buffers: 3 x 15360 bytes in internal, internal free=162019 psram free=2488672
+[2106.82s] I (16391) remapad_pocketjs: native bridge ready: __nativeBridge.postMessage -> js_bridge
+[2106.84s] I (16409) remapad_pocketjs: PocketJS UI ready, boot splash handed over
+[2106.84s] I (16410) remapad_pocketjs: PocketJS owner task running at 60 Hz (stack 294912 bytes)
+[2107.04s] I (16615) remapad_pocketjs: PocketJS frame ready: 240x280 @1x, damage regions=1
+[2111.86s] I (21429) remapad_pocketjs: frames=106 avg_turn_us=31703 avg_render_us=5933 avg_damage_px=1988 max_turn_us=96694 max_render_us=107939
+[2116.85s] I (26423) remapad_pocketjs: frames=241 avg_turn_us=30839 avg_render_us=4793 avg_damage_px=1280 max_turn_us=96694 max_render_us=107939
+[2121.85s] I (31419) remapad_pocketjs: frames=377 avg_turn_us=29715 avg_render_us=4563 avg_damage_px=1214 max_turn_us=96694 max_render_us=107939
+[2126.85s] I (36419) remapad_pocketjs: frames=677 avg_turn_us=7351 avg_render_us=319 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2131.85s] I (41420) remapad_pocketjs: frames=977 avg_turn_us=7299 avg_render_us=318 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2136.85s] I (46419) remapad_pocketjs: frames=1277 avg_turn_us=7299 avg_render_us=323 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2141.85s] I (51420) remapad_pocketjs: frames=1577 avg_turn_us=7309 avg_render_us=317 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2146.85s] I (56419) remapad_pocketjs: frames=1877 avg_turn_us=7324 avg_render_us=314 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2151.85s] I (61419) remapad_pocketjs: frames=2177 avg_turn_us=7306 avg_render_us=323 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2156.85s] I (66419) remapad_pocketjs: frames=2477 avg_turn_us=7293 avg_render_us=330 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2161.84s] I (71419) remapad_pocketjs: frames=2777 avg_turn_us=7328 avg_render_us=322 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2166.84s] I (76419) remapad_pocketjs: frames=3077 avg_turn_us=7313 avg_render_us=318 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2167.25s] I (76820) remapad_pocketjs: mem: js_heap=3247kB/6144kB gc_thresh=5704kB psram_free=2215364 internal_free=165199 allocs=57769 obj_n=15905 prop_n=53309 arr_n=727
+[2171.84s] I (81419) remapad_pocketjs: frames=3377 avg_turn_us=7316 avg_render_us=322 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2176.84s] I (86419) remapad_pocketjs: frames=3677 avg_turn_us=7279 avg_render_us=317 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2181.84s] I (91419) remapad_pocketjs: frames=3977 avg_turn_us=7300 avg_render_us=328 avg_damage_px=0 max_turn_us=96694 max_render_us=107939
+[2186.84s] I (96419) remapad_pocketjs: frames=4277 avg_turn_us=7300 avg_render_us=317 avg_damage_px=0 max_turn_us=96694 max_render_us=107939

@@ -23,6 +23,10 @@ guest 的 JS 分配与 ui_core 原生分配都走 PSRAM 优先分配器，8MB PS
 - 依赖引擎内部阈值 GC（否决：阈值上浮让它在常驻大堆上永不触发，正是耗尽 PSRAM 的根因）
 - 帧间隙固定周期 JS_RunGC（曾短期上线后被本条取代：不看压力、稳态也在跑，垃圾仍可能积到最多一个周期）
 - 修改上游引擎：去掉阈值上浮或提供宿主 GC API（暂缓：动快照与原生归档重建，收益与 PSP 既有宿主方案重合，等上游演进再对账）
+- 只配上游 #460 的 `CONFIG_POCKETJS_GUEST_HEAP_LIMIT`、收回宿主回收（已实测否决：该配置只改 `JS_SetMemoryLimit` 的预算上限，
+  不动阈值式 GC 的阈值。4 MiB 预算下 GC 阈值 5704 kB 高于预算，堆涨到上限只剩分配失败；6 MiB 预算下阈值虽在预算内，
+  物理 PSRAM 先被原生分配吃光，`pocketjs_ui_core` panic 后 abort 重启。原始日志见
+  [experiments/heap-limit-vs-host-gc](../../experiments/heap-limit-vs-host-gc/README.md)）
 
 ## 影响
 

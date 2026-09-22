@@ -1,0 +1,1349 @@
+I (251413) remapad_pocketjs: frames=6649 avg_turn_us=6945 avg_render_us=311 avg_damage_px=0 max_turn_us=265503 max_render_us=108381
+I (256413) remapad_pocketjs: frames=6949 avg_turn_us=6941 avg_render_us=310 avg_damage_px=0 max_turn_us=265503 max_render_us=108381
+I (256824) remapad_pocketjs: mem: js_heap=3349kB/4096kB gc_thresh=5704kB psram_free=1913032 internal_free=165199 allocs=60618 obj_n=16697 prop_n=54614 arr_n=1104
+[   4.14s] I (261413) remapad_pocketjs: frames=7249 avg_turn_us=6981 avg_render_us=313 avg_damage_px=0 max_turn_us=265503 max_render_us=108381
+[   9.19s] I (266462) remapad_pocketjs: frames=7434 avg_turn_us=10780 avg_render_us=5199 avg_damage_px=3777 max_turn_us=265503 max_render_us=108381
+[  14.23s] I (271500) remapad_pocketjs: frames=7467 avg_turn_us=63749 avg_render_us=87493 avg_damage_px=58240 max_turn_us=265503 max_render_us=108381
+[  19.40s] I (276667) remapad_pocketjs: frames=7500 avg_turn_us=65223 avg_render_us=88449 avg_damage_px=57425 max_turn_us=265503 max_render_us=108381
+[  24.23s] I (281497) remapad_pocketjs: frames=7535 avg_turn_us=65798 avg_render_us=69567 avg_damage_px=45696 max_turn_us=265503 max_render_us=108381
+[  29.15s] I (286417) remapad_pocketjs: frames=7577 avg_turn_us=49617 avg_render_us=65549 avg_damage_px=42880 max_turn_us=265503 max_render_us=108381
+[  34.28s] I (291552) remapad_pocketjs: frames=7615 avg_turn_us=63615 avg_render_us=69004 avg_damage_px=45271 max_turn_us=265503 max_render_us=108381
+[  39.19s] I (296465) remapad_pocketjs: frames=7662 avg_turn_us=51056 avg_render_us=52010 avg_damage_px=34028 max_turn_us=266422 max_render_us=108381
+[  44.23s] I (301506) remapad_pocketjs: frames=7701 avg_turn_us=55915 avg_render_us=71918 avg_damage_px=47212 max_turn_us=266422 max_render_us=108381
+[  49.41s] I (306678) remapad_pocketjs: frames=7746 avg_turn_us=57074 avg_render_us=56400 avg_damage_px=37034 max_turn_us=266422 max_render_us=108381
+[  54.25s] I (311519) remapad_pocketjs: frames=7789 avg_turn_us=52125 avg_render_us=58322 avg_damage_px=37819 max_turn_us=266422 max_render_us=108381
+[  59.19s] I (316461) remapad_pocketjs: frames=7823 avg_turn_us=67941 avg_render_us=74408 avg_damage_px=48225 max_turn_us=266422 max_render_us=108381
+[  59.61s] I (316879) remapad_pocketjs: mem: js_heap=3387kB/4096kB gc_thresh=5704kB psram_free=1858816 internal_free=165199 allocs=61705 obj_n=17000 prop_n=55107 arr_n=1252
+[  64.37s] I (321648) remapad_pocketjs: frames=7859 avg_turn_us=59321 avg_render_us=71509 avg_damage_px=50773 max_turn_us=266422 max_render_us=108381
+[  69.17s] I (326441) remapad_pocketjs: frames=7897 avg_turn_us=51975 avg_render_us=72023 avg_damage_px=51284 max_turn_us=266422 max_render_us=108381
+[  74.27s] I (331539) remapad_pocketjs: frames=7934 avg_turn_us=64894 avg_render_us=71460 avg_damage_px=53033 max_turn_us=266422 max_render_us=108381
+[  79.42s] I (336691) remapad_pocketjs: frames=7994 avg_turn_us=40468 avg_render_us=42950 avg_damage_px=31136 max_turn_us=266422 max_render_us=108381
+[  84.15s] I (341420) remapad_pocketjs: frames=8029 avg_turn_us=62236 avg_render_us=71439 avg_damage_px=52608 max_turn_us=266422 max_render_us=108381
+[  89.13s] I (346409) remapad_pocketjs: frames=8070 avg_turn_us=49826 avg_render_us=69634 avg_damage_px=48842 max_turn_us=266422 max_render_us=108381
+[  94.13s] I (351410) remapad_pocketjs: frames=8123 avg_turn_us=49297 avg_render_us=42773 avg_damage_px=31698 max_turn_us=266422 max_render_us=108381
+[  99.13s] I (356408) remapad_pocketjs: frames=8163 avg_turn_us=51783 avg_render_us=71061 avg_damage_px=50736 max_turn_us=266422 max_render_us=108381
+[ 104.25s] I (361523) remapad_pocketjs: frames=8218 avg_turn_us=47853 avg_render_us=43398 avg_damage_px=31278 max_turn_us=266422 max_render_us=108381
+[ 109.17s] I (366441) remapad_pocketjs: frames=8258 avg_turn_us=49997 avg_render_us=70648 avg_damage_px=50400 max_turn_us=266422 max_render_us=108381
+[ 114.19s] I (371468) remapad_pocketjs: frames=8312 avg_turn_us=47089 avg_render_us=44553 avg_damage_px=33102 max_turn_us=266422 max_render_us=108381
+[ 119.17s] I (376451) remapad_pocketjs: frames=8353 avg_turn_us=56961 avg_render_us=62213 avg_damage_px=44909 max_turn_us=266422 max_render_us=108381
+[ 119.60s] I (376874) remapad_pocketjs: mem: js_heap=3428kB/4096kB gc_thresh=5704kB psram_free=1800028 internal_free=165199 allocs=62903 obj_n=17329 prop_n=55562 arr_n=1420
+[ 124.19s] I (381471) remapad_pocketjs: frames=8386 avg_turn_us=62496 avg_render_us=75385 avg_damage_px=54574 max_turn_us=266422 max_render_us=108381
+[ 129.15s] I (386422) remapad_pocketjs: frames=8425 avg_turn_us=59436 avg_render_us=64610 avg_damage_px=47901 max_turn_us=266422 max_render_us=108381
+[ 134.15s] I (391426) remapad_pocketjs: frames=8460 avg_turn_us=66073 avg_render_us=75440 avg_damage_px=48768 max_turn_us=266422 max_render_us=108381
+[ 139.33s] I (396609) remapad_pocketjs: frames=8500 avg_turn_us=57230 avg_render_us=69974 avg_damage_px=46032 max_turn_us=266422 max_render_us=108381
+[ 144.31s] I (401587) remapad_pocketjs: frames=8547 avg_turn_us=51255 avg_render_us=53237 avg_damage_px=34600 max_turn_us=266631 max_render_us=108381
+[ 149.44s] I (406719) remapad_pocketjs: frames=8587 avg_turn_us=62251 avg_render_us=63422 avg_damage_px=40992 max_turn_us=266631 max_render_us=108381
+[ 154.14s] I (411416) remapad_pocketjs: frames=8625 avg_turn_us=55521 avg_render_us=65029 avg_damage_px=41734 max_turn_us=266631 max_render_us=108381
+[ 159.16s] I (416441) remapad_pocketjs: frames=8662 avg_turn_us=61333 avg_render_us=72666 avg_damage_px=47948 max_turn_us=266631 max_render_us=108381
+[ 164.23s] I (421505) remapad_pocketjs: frames=8701 avg_turn_us=59775 avg_render_us=67432 avg_damage_px=43766 max_turn_us=266631 max_render_us=108381
+[ 169.37s] I (426652) remapad_pocketjs: frames=8741 avg_turn_us=60817 avg_render_us=65580 avg_damage_px=43008 max_turn_us=266631 max_render_us=108400
+[ 174.20s] I (431477) remapad_pocketjs: frames=8778 avg_turn_us=56379 avg_render_us=72582 avg_damage_px=47221 max_turn_us=266631 max_render_us=108400
+[ 179.25s] I (436531) remapad_pocketjs: frames=8817 avg_turn_us=66194 avg_render_us=60339 avg_damage_px=38941 max_turn_us=266631 max_render_us=108400
+[ 179.68s] I (436960) remapad_pocketjs: mem: js_heap=3471kB/4096kB gc_thresh=5704kB psram_free=1737412 internal_free=165199 allocs=64159 obj_n=17677 prop_n=56117 arr_n=1591
+[ 184.27s] I (441553) remapad_pocketjs: frames=8855 avg_turn_us=54119 avg_render_us=64489 avg_damage_px=46686 max_turn_us=266631 max_render_us=108400
+[ 189.15s] I (446434) remapad_pocketjs: frames=8887 avg_turn_us=64427 avg_render_us=86649 avg_damage_px=58800 max_turn_us=266631 max_render_us=108400
+[ 194.33s] I (451611) remapad_pocketjs: frames=8927 avg_turn_us=63530 avg_render_us=64159 avg_damage_px=42000 max_turn_us=266631 max_render_us=108400
+[ 199.19s] I (456471) remapad_pocketjs: frames=8969 avg_turn_us=55945 avg_render_us=58166 avg_damage_px=38080 max_turn_us=266631 max_render_us=108400
+[ 204.18s] I (461466) remapad_pocketjs: frames=9011 avg_turn_us=49714 avg_render_us=66924 avg_damage_px=43840 max_turn_us=266631 max_render_us=108400
+[ 209.28s] I (466566) remapad_pocketjs: frames=9048 avg_turn_us=66964 avg_render_us=68559 avg_damage_px=44315 max_turn_us=266631 max_render_us=108400
+[ 214.31s] I (471588) remapad_pocketjs: frames=9089 avg_turn_us=56241 avg_render_us=63329 avg_damage_px=41303 max_turn_us=266631 max_render_us=108400
+[ 219.44s] I (476722) remapad_pocketjs: frames=9129 avg_turn_us=62191 avg_render_us=63407 avg_damage_px=40992 max_turn_us=266631 max_render_us=108400
+[ 224.39s] I (481676) remapad_pocketjs: frames=9166 avg_turn_us=63146 avg_render_us=68438 avg_damage_px=44315 max_turn_us=266631 max_render_us=108400
+[ 229.17s] I (486457) remapad_pocketjs: frames=9205 avg_turn_us=52858 avg_render_us=66561 avg_damage_px=43766 max_turn_us=266631 max_render_us=108400
+[ 234.14s] I (491423) remapad_pocketjs: frames=9243 avg_turn_us=58656 avg_render_us=70592 avg_damage_px=45978 max_turn_us=266631 max_render_us=108400
+[ 239.23s] I (496513) remapad_pocketjs: frames=9279 avg_turn_us=65656 avg_render_us=73121 avg_damage_px=48160 max_turn_us=266631 max_render_us=108400
+[ 239.66s] I (496947) remapad_pocketjs: mem: js_heap=3514kB/4096kB gc_thresh=5704kB psram_free=1676120 internal_free=165199 allocs=65395 obj_n=18018 prop_n=56634 arr_n=1761
+[ 244.18s] I (501463) remapad_pocketjs: frames=9311 avg_turn_us=57270 avg_render_us=81043 avg_damage_px=57120 max_turn_us=266631 max_render_us=108400
+[ 249.16s] I (506447) remapad_pocketjs: frames=9344 avg_turn_us=69742 avg_render_us=79852 avg_damage_px=51723 max_turn_us=266631 max_render_us=108400
+[ 254.16s] I (511447) remapad_pocketjs: frames=9383 avg_turn_us=58464 avg_render_us=67432 avg_damage_px=44110 max_turn_us=266631 max_render_us=108400
+[ 259.24s] I (516524) remapad_pocketjs: frames=9422 avg_turn_us=57122 avg_render_us=71270 avg_damage_px=46523 max_turn_us=266631 max_render_us=108400
+[ 264.24s] I (521525) remapad_pocketjs: frames=9458 avg_turn_us=61509 avg_render_us=75433 avg_damage_px=48906 max_turn_us=266631 max_render_us=108400
+[ 269.18s] I (526469) remapad_pocketjs: frames=9495 avg_turn_us=61616 avg_render_us=69369 avg_damage_px=44678 max_turn_us=266631 max_render_us=108400
+[ 274.40s] I (531687) remapad_pocketjs: frames=9537 avg_turn_us=59318 avg_render_us=61912 avg_damage_px=40320 max_turn_us=266631 max_render_us=108400
+[ 279.15s] I (536435) remapad_pocketjs: frames=9570 avg_turn_us=64717 avg_render_us=76753 avg_damage_px=50501 max_turn_us=266631 max_render_us=108400
+[ 284.23s] I (541522) remapad_pocketjs: frames=9607 avg_turn_us=59090 avg_render_us=75760 avg_damage_px=49037 max_turn_us=266631 max_render_us=108400
+[ 289.43s] I (546720) remapad_pocketjs: frames=9648 avg_turn_us=60577 avg_render_us=63383 avg_damage_px=41303 max_turn_us=266631 max_render_us=108400
+[ 294.39s] I (551679) remapad_pocketjs: frames=9686 avg_turn_us=61869 avg_render_us=65673 avg_damage_px=42795 max_turn_us=266631 max_render_us=108400
+[ 299.14s] I (556424) remapad_pocketjs: frames=9726 avg_turn_us=51655 avg_render_us=64858 avg_damage_px=42672 max_turn_us=266631 max_render_us=108400
+[ 299.58s] I (556864) remapad_pocketjs: mem: js_heap=3556kB/4096kB gc_thresh=5704kB psram_free=1616196 internal_free=165199 allocs=66620 obj_n=18353 prop_n=57098 arr_n=1932
+[ 304.13s] I (561421) remapad_pocketjs: frames=9755 avg_turn_us=68640 avg_render_us=86921 avg_damage_px=56540 max_turn_us=266631 max_render_us=108400
+[ 309.12s] I (566406) remapad_pocketjs: frames=9788 avg_turn_us=67134 avg_render_us=66705 avg_damage_px=43170 max_turn_us=266631 max_render_us=108400
+[ 314.26s] I (571550) remapad_pocketjs: frames=9830 avg_turn_us=60676 avg_render_us=60383 avg_damage_px=39680 max_turn_us=266631 max_render_us=108400
+[ 319.25s] I (576541) remapad_pocketjs: frames=9867 avg_turn_us=57567 avg_render_us=75881 avg_damage_px=49764 max_turn_us=266631 max_render_us=108400
+[ 324.12s] I (581408) remapad_pocketjs: frames=9905 avg_turn_us=59519 avg_render_us=65807 avg_damage_px=42795 max_turn_us=266631 max_render_us=108400
+[ 329.18s] I (586471) remapad_pocketjs: frames=9940 avg_turn_us=57613 avg_render_us=85488 avg_damage_px=55680 max_turn_us=266631 max_render_us=108400
+[ 334.35s] I (591644) remapad_pocketjs: frames=9977 avg_turn_us=66129 avg_render_us=70996 avg_damage_px=46131 max_turn_us=266631 max_render_us=108400
+[ 339.19s] I (596479) remapad_pocketjs: frames=10015 avg_turn_us=53898 avg_render_us=71156 avg_damage_px=46686 max_turn_us=266631 max_render_us=108400
+[ 344.18s] I (601467) remapad_pocketjs: frames=10053 avg_turn_us=61124 avg_render_us=68650 avg_damage_px=44564 max_turn_us=266631 max_render_us=108400
+[ 349.17s] I (606456) remapad_pocketjs: frames=10093 avg_turn_us=52189 avg_render_us=70445 avg_damage_px=50400 max_turn_us=266631 max_render_us=108400
+[ 354.29s] I (611578) remapad_pocketjs: frames=10148 avg_turn_us=46309 avg_render_us=45373 avg_damage_px=33722 max_turn_us=266631 max_render_us=108400
+[ 359.41s] I (616699) remapad_pocketjs: frames=10189 avg_turn_us=57211 avg_render_us=65396 avg_damage_px=46220 max_turn_us=266631 max_render_us=108400
+[ 359.85s] I (617145) remapad_pocketjs: mem: js_heap=3598kB/4096kB gc_thresh=5704kB psram_free=1555420 internal_free=165199 allocs=67850 obj_n=18693 prop_n=57608 arr_n=2102
+[ 364.17s] I (621460) remapad_pocketjs: frames=10226 avg_turn_us=52382 avg_render_us=60857 avg_damage_px=43952 max_turn_us=266631 max_render_us=108400
+[ 369.13s] I (626419) remapad_pocketjs: frames=10283 avg_turn_us=40190 avg_render_us=44827 avg_damage_px=33246 max_turn_us=266631 max_render_us=108400
+[ 374.16s] I (631449) remapad_pocketjs: frames=10322 avg_turn_us=61438 avg_render_us=65652 avg_damage_px=47556 max_turn_us=266631 max_render_us=108400
+[ 379.11s] I (636407) remapad_pocketjs: frames=10374 avg_turn_us=47363 avg_render_us=46045 avg_damage_px=34116 max_turn_us=266631 max_render_us=108400
+[ 384.20s] I (641498) remapad_pocketjs: frames=10414 avg_turn_us=56407 avg_render_us=68840 avg_damage_px=48720 max_turn_us=266631 max_render_us=108400
+[ 389.18s] I (646470) remapad_pocketjs: frames=10461 avg_turn_us=51227 avg_render_us=53130 avg_damage_px=39176 max_turn_us=266631 max_render_us=108400
+[ 394.19s] I (651484) remapad_pocketjs: frames=10501 avg_turn_us=53287 avg_render_us=68737 avg_damage_px=48384 max_turn_us=266631 max_render_us=108400
+[ 399.14s] I (656432) remapad_pocketjs: frames=10536 avg_turn_us=66662 avg_render_us=73324 avg_damage_px=54528 max_turn_us=266631 max_render_us=108400
+[ 404.38s] I (661674) remapad_pocketjs: frames=10577 avg_turn_us=54825 avg_render_us=70888 avg_damage_px=50481 max_turn_us=266631 max_render_us=108400
+[ 409.30s] I (666600) remapad_pocketjs: frames=10627 avg_turn_us=46614 avg_render_us=50448 avg_damage_px=35212 max_turn_us=266631 max_render_us=108400
+[ 414.20s] I (671491) remapad_pocketjs: frames=10659 avg_turn_us=72179 avg_render_us=79222 avg_damage_px=51240 max_turn_us=266631 max_render_us=108400
+[ 419.32s] I (676620) remapad_pocketjs: frames=10706 avg_turn_us=53463 avg_render_us=54045 avg_damage_px=34886 max_turn_us=266631 max_render_us=108400
+[ 419.78s] I (677071) remapad_pocketjs: mem: js_heap=3641kB/4096kB gc_thresh=5704kB psram_free=1494540 internal_free=165199 allocs=69078 obj_n=19035 prop_n=58154 arr_n=2270
+[ 424.12s] I (681413) remapad_pocketjs: frames=10752 avg_turn_us=44306 avg_render_us=48024 avg_damage_px=31554 max_turn_us=266631 max_render_us=108400
+[ 429.20s] I (686493) remapad_pocketjs: frames=10793 avg_turn_us=53839 avg_render_us=68624 avg_damage_px=44581 max_turn_us=266631 max_render_us=108400
+[ 434.11s] I (691407) remapad_pocketjs: frames=10828 avg_turn_us=62734 avg_render_us=74517 avg_damage_px=48384 max_turn_us=266631 max_render_us=108400
+[ 439.20s] I (696498) remapad_pocketjs: frames=10864 avg_turn_us=64440 avg_render_us=74926 avg_damage_px=49280 max_turn_us=266631 max_render_us=108400
+[ 444.17s] I (701469) remapad_pocketjs: frames=10906 avg_turn_us=55157 avg_render_us=61084 avg_damage_px=39360 max_turn_us=266631 max_render_us=108400
+[ 449.17s] I (706465) remapad_pocketjs: frames=10944 avg_turn_us=58032 avg_render_us=71127 avg_damage_px=46332 max_turn_us=266631 max_render_us=108400
+[ 454.17s] I (711471) remapad_pocketjs: frames=10982 avg_turn_us=61590 avg_render_us=67107 avg_damage_px=43503 max_turn_us=266631 max_render_us=108400
+[ 459.25s] I (716549) remapad_pocketjs: frames=11021 avg_turn_us=58618 avg_render_us=69518 avg_damage_px=45489 max_turn_us=266631 max_render_us=108400
+[ 464.23s] I (721524) remapad_pocketjs: frames=11061 avg_turn_us=55764 avg_render_us=66789 avg_damage_px=43680 max_turn_us=266631 max_render_us=108400
+[ 469.23s] I (726527) remapad_pocketjs: frames=11100 avg_turn_us=59532 avg_render_us=64413 avg_damage_px=42387 max_turn_us=266631 max_render_us=108400
+[ 474.28s] I (731574) remapad_pocketjs: frames=11134 avg_turn_us=67085 avg_render_us=79925 avg_damage_px=51783 max_turn_us=266631 max_render_us=108400
+[ 479.14s] I (736443) remapad_pocketjs: frames=11172 avg_turn_us=59317 avg_render_us=65834 avg_damage_px=42795 max_turn_us=266631 max_render_us=108400
+[ 479.60s] I (736901) remapad_pocketjs: mem: js_heap=3682kB/4096kB gc_thresh=5704kB psram_free=1434780 internal_free=165199 allocs=70294 obj_n=19368 prop_n=58626 arr_n=2439
+[ 484.22s] I (741524) remapad_pocketjs: frames=11221 avg_turn_us=39961 avg_render_us=49955 avg_damage_px=32640 max_turn_us=266631 max_render_us=108400
+[ 489.26s] I (746564) remapad_pocketjs: frames=11260 avg_turn_us=63464 avg_render_us=64196 avg_damage_px=41698 max_turn_us=266631 max_render_us=108400
+[ 494.17s] I (751469) remapad_pocketjs: frames=11299 avg_turn_us=57926 avg_render_us=64959 avg_damage_px=42732 max_turn_us=266631 max_render_us=108400
+[ 499.20s] I (756504) remapad_pocketjs: frames=11331 avg_turn_us=76340 avg_render_us=79524 avg_damage_px=52080 max_turn_us=267165 max_render_us=108400
+[ 504.15s] I (761455) remapad_pocketjs: frames=11365 avg_turn_us=68124 avg_render_us=75276 avg_damage_px=48621 max_turn_us=267165 max_render_us=108400
+[ 509.24s] I (766540) remapad_pocketjs: frames=11407 avg_turn_us=59413 avg_render_us=58031 avg_damage_px=37440 max_turn_us=267165 max_render_us=108400
+[ 514.26s] I (771560) remapad_pocketjs: frames=11446 avg_turn_us=60318 avg_render_us=65717 avg_damage_px=42387 max_turn_us=267165 max_render_us=108400
+[ 519.20s] I (776502) remapad_pocketjs: frames=11485 avg_turn_us=53287 avg_render_us=72017 avg_damage_px=47212 max_turn_us=267165 max_render_us=108400
+[ 524.27s] I (781576) remapad_pocketjs: frames=11528 avg_turn_us=58934 avg_render_us=57595 avg_damage_px=38132 max_turn_us=267165 max_render_us=108400
+[ 529.22s] I (786522) remapad_pocketjs: frames=11562 avg_turn_us=57543 avg_render_us=86086 avg_damage_px=55736 max_turn_us=267165 max_render_us=108400
+[ 534.17s] I (791477) remapad_pocketjs: frames=11596 avg_turn_us=63618 avg_render_us=80526 avg_damage_px=56527 max_turn_us=267165 max_render_us=108400
+[ 539.44s] I (796746) remapad_pocketjs: frames=11636 avg_turn_us=59486 avg_render_us=70155 avg_damage_px=47376 max_turn_us=267165 max_render_us=108400
+[ 539.91s] I (797209) remapad_pocketjs: mem: js_heap=3725kB/4096kB gc_thresh=5704kB psram_free=1373368 internal_free=165199 allocs=71527 obj_n=19710 prop_n=59172 arr_n=2607
+[ 544.21s] I (801511) remapad_pocketjs: frames=11675 avg_turn_us=50262 avg_render_us=58612 avg_damage_px=38596 max_turn_us=267165 max_render_us=108400
+[ 549.25s] I (806554) remapad_pocketjs: frames=11713 avg_turn_us=60226 avg_render_us=70022 avg_damage_px=45271 max_turn_us=267165 max_render_us=108400
+[ 554.15s] I (811457) remapad_pocketjs: frames=11750 avg_turn_us=59630 avg_render_us=70594 avg_damage_px=45768 max_turn_us=267165 max_render_us=108400
+[ 559.11s] I (816417) remapad_pocketjs: frames=11787 avg_turn_us=63419 avg_render_us=68223 avg_damage_px=44315 max_turn_us=267165 max_render_us=108400
+[ 564.30s] I (821602) remapad_pocketjs: frames=11829 avg_turn_us=54812 avg_render_us=66792 avg_damage_px=43840 max_turn_us=267165 max_render_us=108400
+[ 569.15s] I (826454) remapad_pocketjs: frames=11863 avg_turn_us=60031 avg_render_us=80891 avg_damage_px=52969 max_turn_us=267165 max_render_us=108400
+[ 574.35s] I (831652) remapad_pocketjs: frames=11906 avg_turn_us=57183 avg_render_us=61683 avg_damage_px=40320 max_turn_us=267165 max_render_us=108400
+[ 579.28s] I (836582) remapad_pocketjs: frames=11945 avg_turn_us=60187 avg_render_us=63352 avg_damage_px=40664 max_turn_us=267165 max_render_us=108400
+[ 584.15s] I (841457) remapad_pocketjs: frames=11981 avg_turn_us=60756 avg_render_us=72113 avg_damage_px=47040 max_turn_us=267165 max_render_us=108400
+[ 589.44s] I (846745) remapad_pocketjs: frames=12018 avg_turn_us=70191 avg_render_us=69246 avg_damage_px=44678 max_turn_us=267165 max_render_us=108400
+[ 594.30s] I (851604) remapad_pocketjs: frames=12059 avg_turn_us=54479 avg_render_us=61052 avg_damage_px=39664 max_turn_us=267165 max_render_us=108400
+[ 599.12s] I (856422) remapad_pocketjs: frames=12092 avg_turn_us=64607 avg_render_us=79301 avg_damage_px=52130 max_turn_us=267165 max_render_us=108400
+[ 599.58s] I (856891) remapad_pocketjs: mem: js_heap=3767kB/4096kB gc_thresh=5704kB psram_free=1312624 internal_free=165199 allocs=72755 obj_n=20048 prop_n=59679 arr_n=2776
+[ 604.12s] I (861431) remapad_pocketjs: frames=12124 avg_turn_us=65808 avg_render_us=74653 avg_damage_px=53340 max_turn_us=267165 max_render_us=108400
+[ 609.13s] I (866437) remapad_pocketjs: frames=12166 avg_turn_us=54583 avg_render_us=50898 avg_damage_px=35840 max_turn_us=267165 max_render_us=108400
+[ 614.15s] I (871456) remapad_pocketjs: frames=12204 avg_turn_us=58815 avg_render_us=71483 avg_damage_px=46332 max_turn_us=267165 max_render_us=108400
+[ 619.11s] I (876417) remapad_pocketjs: frames=12240 avg_turn_us=63633 avg_render_us=72004 avg_damage_px=47413 max_turn_us=267165 max_render_us=108400
+[ 624.21s] I (881516) remapad_pocketjs: frames=12280 avg_turn_us=57623 avg_render_us=68106 avg_damage_px=44352 max_turn_us=267165 max_render_us=108400
+[ 629.41s] I (886718) remapad_pocketjs: frames=12317 avg_turn_us=61298 avg_render_us=75795 avg_damage_px=49764 max_turn_us=267165 max_render_us=108400
+[ 634.16s] I (891465) remapad_pocketjs: frames=12351 avg_turn_us=65645 avg_render_us=71707 avg_damage_px=46249 max_turn_us=267165 max_render_us=108413
+[ 639.12s] I (896429) remapad_pocketjs: frames=12394 avg_turn_us=54774 avg_render_us=57272 avg_damage_px=36881 max_turn_us=267165 max_render_us=108437
+[ 644.34s] I (901654) remapad_pocketjs: frames=12432 avg_turn_us=64044 avg_render_us=71198 avg_damage_px=46332 max_turn_us=267165 max_render_us=108437
+[ 649.29s] I (906596) remapad_pocketjs: frames=12468 avg_turn_us=64713 avg_render_us=70293 avg_damage_px=45546 max_turn_us=267165 max_render_us=108437
+[ 654.17s] I (911482) remapad_pocketjs: frames=12512 avg_turn_us=47650 avg_render_us=61447 avg_damage_px=40320 max_turn_us=267165 max_render_us=108437
+[ 659.39s] I (916699) remapad_pocketjs: frames=12557 avg_turn_us=57033 avg_render_us=57476 avg_damage_px=37930 max_turn_us=267165 max_render_us=108437
+[ 659.86s] I (917173) remapad_pocketjs: mem: js_heap=3809kB/4096kB gc_thresh=5704kB psram_free=1252876 internal_free=165199 allocs=73969 obj_n=20379 prop_n=60137 arr_n=2945
+[ 664.20s] I (921511) remapad_pocketjs: frames=12587 avg_turn_us=68147 avg_render_us=75031 avg_damage_px=48384 max_turn_us=267165 max_render_us=108437
+[ 669.17s] I (926477) remapad_pocketjs: frames=12625 avg_turn_us=61433 avg_render_us=66625 avg_damage_px=43149 max_turn_us=267165 max_render_us=108437
+[ 674.24s] I (931552) remapad_pocketjs: frames=12662 avg_turn_us=61192 avg_render_us=73554 avg_damage_px=48311 max_turn_us=267165 max_render_us=108437
+[ 679.13s] I (936440) remapad_pocketjs: frames=12698 avg_turn_us=61003 avg_render_us=72361 avg_damage_px=47040 max_turn_us=267165 max_render_us=108437
+[ 684.22s] I (941535) remapad_pocketjs: frames=12734 avg_turn_us=64317 avg_render_us=74929 avg_damage_px=49280 max_turn_us=267165 max_render_us=108437
+[ 689.21s] I (946520) remapad_pocketjs: frames=12775 avg_turn_us=58194 avg_render_us=61930 avg_damage_px=40647 max_turn_us=267165 max_render_us=108437
+[ 694.22s] I (951529) remapad_pocketjs: frames=12821 avg_turn_us=46382 avg_render_us=61065 avg_damage_px=40027 max_turn_us=267165 max_render_us=108437
+[ 699.33s] I (956647) remapad_pocketjs: frames=12868 avg_turn_us=54635 avg_render_us=52803 avg_damage_px=34886 max_turn_us=267165 max_render_us=108437
+[ 704.29s] I (961600) remapad_pocketjs: frames=12904 avg_turn_us=64649 avg_render_us=70274 avg_damage_px=45546 max_turn_us=267165 max_render_us=108437
+[ 709.15s] I (966468) remapad_pocketjs: frames=12939 avg_turn_us=58556 avg_render_us=78547 avg_damage_px=51456 max_turn_us=267165 max_render_us=108437
+[ 714.34s] I (971655) remapad_pocketjs: frames=12982 avg_turn_us=57019 avg_render_us=61761 avg_damage_px=40320 max_turn_us=267165 max_render_us=108437
+[ 719.19s] I (976508) remapad_pocketjs: frames=13019 avg_turn_us=55298 avg_render_us=73418 avg_damage_px=48311 max_turn_us=267165 max_render_us=108437
+[ 719.67s] I (976988) remapad_pocketjs: mem: js_heap=3851kB/4096kB gc_thresh=5704kB psram_free=1191940 internal_free=165199 allocs=75197 obj_n=20718 prop_n=60651 arr_n=3114
+[ 724.17s] I (981481) remapad_pocketjs: frames=13053 avg_turn_us=56586 avg_render_us=73808 avg_damage_px=47830 max_turn_us=267165 max_render_us=108437
+[ 729.13s] I (986447) remapad_pocketjs: frames=13085 avg_turn_us=70229 avg_render_us=83318 avg_damage_px=54600 max_turn_us=267165 max_render_us=108437
+[ 734.16s] I (991476) remapad_pocketjs: frames=13127 avg_turn_us=49956 avg_render_us=67583 avg_damage_px=44160 max_turn_us=267165 max_render_us=108437
+[ 739.31s] I (996624) remapad_pocketjs: frames=13163 avg_turn_us=67610 avg_render_us=72954 avg_damage_px=47413 max_turn_us=267165 max_render_us=108437
+[ 744.15s] I (1001463) remapad_pocketjs: frames=13200 avg_turn_us=61235 avg_render_us=65876 avg_damage_px=42499 max_turn_us=267165 max_render_us=108437
+[ 749.11s] I (1006425) remapad_pocketjs: frames=13234 avg_turn_us=66481 avg_render_us=77286 avg_damage_px=50202 max_turn_us=267165 max_render_us=108437
+[ 754.24s] I (1011554) remapad_pocketjs: frames=13273 avg_turn_us=63586 avg_render_us=65054 avg_damage_px=42043 max_turn_us=267165 max_render_us=108437
+[ 759.19s] I (1016510) remapad_pocketjs: frames=13312 avg_turn_us=60404 avg_render_us=64022 avg_damage_px=41698 max_turn_us=267165 max_render_us=108437
+[ 764.18s] I (1021494) remapad_pocketjs: frames=13354 avg_turn_us=49803 avg_render_us=66872 avg_damage_px=43840 max_turn_us=267165 max_render_us=108437
+[ 769.14s] I (1026459) remapad_pocketjs: frames=13387 avg_turn_us=68060 avg_render_us=80530 avg_damage_px=52945 max_turn_us=267165 max_render_us=108437
+[ 774.23s] I (1031550) remapad_pocketjs: frames=13432 avg_turn_us=50348 avg_render_us=60928 avg_damage_px=39722 max_turn_us=267165 max_render_us=108437
+[ 779.13s] I (1036452) remapad_pocketjs: frames=13468 avg_turn_us=63103 avg_render_us=70367 avg_damage_px=45546 max_turn_us=267165 max_render_us=108437
+[ 779.62s] I (1036937) remapad_pocketjs: mem: js_heap=3894kB/4096kB gc_thresh=5704kB psram_free=1130600 internal_free=165199 allocs=76432 obj_n=21061 prop_n=61193 arr_n=3283
+[ 784.17s] I (1041487) remapad_pocketjs: frames=13513 avg_turn_us=44932 avg_render_us=53154 avg_damage_px=34944 max_turn_us=267165 max_render_us=108437
+[ 789.36s] I (1046676) remapad_pocketjs: frames=13552 avg_turn_us=62669 avg_render_us=68280 avg_damage_px=44110 max_turn_us=267165 max_render_us=108437
+[ 794.19s] I (1051510) remapad_pocketjs: frames=13589 avg_turn_us=55391 avg_render_us=72943 avg_damage_px=47948 max_turn_us=267165 max_render_us=108437
+[ 799.09s] I (1056406) remapad_pocketjs: frames=13634 avg_turn_us=52038 avg_render_us=55304 avg_damage_px=36437 max_turn_us=267165 max_render_us=108437
+[ 804.33s] I (1061652) remapad_pocketjs: frames=13672 avg_turn_us=67449 avg_render_us=69145 avg_damage_px=44917 max_turn_us=267165 max_render_us=108437
+[ 809.20s] I (1066520) remapad_pocketjs: frames=13713 avg_turn_us=54365 avg_render_us=61104 avg_damage_px=39664 max_turn_us=267165 max_render_us=108437
+[ 814.15s] I (1071467) remapad_pocketjs: frames=13748 avg_turn_us=61571 avg_render_us=77626 avg_damage_px=51072 max_turn_us=267165 max_render_us=108437
+[ 819.16s] I (1076476) remapad_pocketjs: frames=13790 avg_turn_us=53977 avg_render_us=63085 avg_damage_px=40640 max_turn_us=267165 max_render_us=108437
+[ 824.17s] I (1081493) remapad_pocketjs: frames=13826 avg_turn_us=70739 avg_render_us=65128 avg_damage_px=42186 max_turn_us=267165 max_render_us=108437
+[ 829.15s] I (1086470) remapad_pocketjs: frames=13869 avg_turn_us=57895 avg_render_us=54317 avg_damage_px=35006 max_turn_us=267165 max_render_us=108437
+[ 834.14s] I (1091466) remapad_pocketjs: frames=13906 avg_turn_us=56111 avg_render_us=76819 avg_damage_px=49764 max_turn_us=267165 max_render_us=108437
+[ 839.20s] I (1096526) remapad_pocketjs: frames=13946 avg_turn_us=62526 avg_render_us=60983 avg_damage_px=39312 max_turn_us=267165 max_render_us=108437
+[ 839.70s] I (1097017) remapad_pocketjs: mem: js_heap=3936kB/4096kB gc_thresh=5704kB psram_free=1070372 internal_free=165199 allocs=77658 obj_n=21395 prop_n=61661 arr_n=3453
+[ 844.30s] I (1101622) remapad_pocketjs: frames=13977 avg_turn_us=72822 avg_render_us=73728 avg_damage_px=48123 max_turn_us=267165 max_render_us=108437
+[ 849.09s] I (1106413) remapad_pocketjs: frames=14015 avg_turn_us=59619 avg_render_us=64158 avg_damage_px=41381 max_turn_us=267165 max_render_us=108437
+[ 854.39s] I (1111711) remapad_pocketjs: frames=14054 avg_turn_us=65564 avg_render_us=67321 avg_damage_px=43766 max_turn_us=267165 max_render_us=108437
+[ 859.14s] I (1116459) remapad_pocketjs: frames=14094 avg_turn_us=51683 avg_render_us=64807 avg_damage_px=42672 max_turn_us=267165 max_render_us=108437
+[ 864.16s] I (1121483) remapad_pocketjs: frames=14128 avg_turn_us=64896 avg_render_us=79759 avg_damage_px=51783 max_turn_us=267165 max_render_us=108437
+[ 869.10s] I (1126425) remapad_pocketjs: frames=14162 avg_turn_us=68718 avg_render_us=74493 avg_damage_px=49016 max_turn_us=267165 max_render_us=108437
+[ 874.40s] I (1131723) remapad_pocketjs: frames=14207 avg_turn_us=51707 avg_render_us=64579 avg_damage_px=42410 max_turn_us=267165 max_render_us=108437
+[ 879.15s] I (1136478) remapad_pocketjs: frames=14242 avg_turn_us=64043 avg_render_us=69604 avg_damage_px=44928 max_turn_us=267165 max_render_us=108437
+[ 884.13s] I (1141451) remapad_pocketjs: frames=14283 avg_turn_us=56257 avg_render_us=61850 avg_damage_px=39992 max_turn_us=267165 max_render_us=108437
+[ 889.12s] I (1146444) remapad_pocketjs: frames=14326 avg_turn_us=54102 avg_render_us=60041 avg_damage_px=39694 max_turn_us=267165 max_render_us=108437
+[ 894.20s] I (1151528) remapad_pocketjs: frames=14364 avg_turn_us=61293 avg_render_us=71044 avg_damage_px=46686 max_turn_us=267165 max_render_us=108437
+[ 899.25s] I (1156579) remapad_pocketjs: frames=14408 avg_turn_us=54933 avg_render_us=57692 avg_damage_px=37876 max_turn_us=267165 max_render_us=108437
+[ 899.75s] I (1157075) remapad_pocketjs: mem: js_heap=3979kB/4096kB gc_thresh=5704kB psram_free=1008508 internal_free=165199 allocs=78900 obj_n=21740 prop_n=62217 arr_n=3622
+[ 904.38s] I (1161709) remapad_pocketjs: frames=14449 avg_turn_us=53416 avg_render_us=58130 avg_damage_px=38353 max_turn_us=267165 max_render_us=108437
+[ 909.33s] I (1166655) remapad_pocketjs: frames=14478 avg_turn_us=67840 avg_render_us=82417 avg_damage_px=55150 max_turn_us=267165 max_render_us=108437
+[ 914.10s] I (1171428) remapad_pocketjs: frames=14517 avg_turn_us=47670 avg_render_us=72490 avg_damage_px=51692 max_turn_us=267165 max_render_us=108437
+[ 919.15s] I (1176479) remapad_pocketjs: frames=14569 avg_turn_us=48808 avg_render_us=46892 avg_damage_px=34116 max_turn_us=267165 max_render_us=108437
+[ 924.36s] I (1181684) remapad_pocketjs: frames=14612 avg_turn_us=54979 avg_render_us=63488 avg_damage_px=45008 max_turn_us=267165 max_render_us=108437
+[ 929.16s] I (1186487) remapad_pocketjs: frames=14648 avg_turn_us=60693 avg_render_us=71316 avg_damage_px=53013 max_turn_us=267165 max_render_us=108437
+[ 934.12s] I (1191445) remapad_pocketjs: frames=14696 avg_turn_us=50117 avg_render_us=51740 avg_damage_px=38360 max_turn_us=267165 max_render_us=108437
+[ 939.16s] I (1196489) remapad_pocketjs: frames=14735 avg_turn_us=56395 avg_render_us=69777 avg_damage_px=48935 max_turn_us=267165 max_render_us=108437
+[ 944.29s] I (1201622) remapad_pocketjs: frames=14773 avg_turn_us=64963 avg_render_us=68383 avg_damage_px=44564 max_turn_us=267165 max_render_us=108437
+[ 949.14s] I (1206472) remapad_pocketjs: frames=14808 avg_turn_us=61380 avg_render_us=74781 avg_damage_px=49152 max_turn_us=267165 max_render_us=108437
+[ 954.15s] I (1211475) remapad_pocketjs: frames=14851 avg_turn_us=53839 avg_render_us=61050 avg_damage_px=40007 max_turn_us=267165 max_render_us=108437
+[ 959.34s] I (1216671) remapad_pocketjs: frames=14894 avg_turn_us=58148 avg_render_us=60521 avg_damage_px=39382 max_turn_us=267165 max_render_us=108437
+[ 959.84s] I (1217174) remapad_pocketjs: mem: js_heap=4020kB/4096kB gc_thresh=5704kB psram_free=949472 internal_free=165199 allocs=80102 obj_n=22069 prop_n=62672 arr_n=3790
+[ 964.14s] I (1221468) remapad_pocketjs: frames=14925 avg_turn_us=66528 avg_render_us=70534 avg_damage_px=45956 max_turn_us=267165 max_render_us=108437
+[ 969.14s] I (1226473) remapad_pocketjs: frames=14958 avg_turn_us=64698 avg_render_us=85178 avg_damage_px=55389 max_turn_us=267165 max_render_us=108437
+[ 974.16s] I (1231490) remapad_pocketjs: frames=14996 avg_turn_us=61560 avg_render_us=67387 avg_damage_px=43503 max_turn_us=267165 max_render_us=108437
+[ 979.29s] I (1236619) remapad_pocketjs: frames=15038 avg_turn_us=60015 avg_render_us=58149 avg_damage_px=38080 max_turn_us=267165 max_render_us=108437
+[ 984.12s] I (1241455) remapad_pocketjs: frames=15073 avg_turn_us=61207 avg_render_us=74832 avg_damage_px=49152 max_turn_us=267165 max_render_us=108437
+[ 989.13s] I (1246464) remapad_pocketjs: frames=15117 avg_turn_us=51485 avg_render_us=60177 avg_damage_px=38792 max_turn_us=267165 max_render_us=108437
+[ 994.07s] I (1251406) remapad_pocketjs: frames=15155 avg_turn_us=61023 avg_render_us=66398 avg_damage_px=43149 max_turn_us=267165 max_render_us=108437
+[ 999.27s] I (1256600) remapad_pocketjs: frames=15194 avg_turn_us=63268 avg_render_us=67090 avg_damage_px=43421 max_turn_us=267165 max_render_us=108437
+[1004.15s] I (1261487) remapad_pocketjs: frames=15231 avg_turn_us=59408 avg_render_us=70181 avg_damage_px=45768 max_turn_us=267165 max_render_us=108437
+[1009.16s] I (1266493) remapad_pocketjs: frames=15269 avg_turn_us=61733 avg_render_us=67367 avg_damage_px=43503 max_turn_us=267165 max_render_us=108437
+[1014.12s] I (1271455) remapad_pocketjs: frames=15307 avg_turn_us=59041 avg_render_us=67771 avg_damage_px=44210 max_turn_us=267165 max_render_us=108437
+[1019.16s] I (1276496) remapad_pocketjs: frames=15344 avg_turn_us=62731 avg_render_us=71277 avg_damage_px=46131 max_turn_us=267165 max_render_us=108437
+[1019.67s] I (1277004) remapad_pocketjs: mem: js_heap=4063kB/4096kB gc_thresh=5704kB psram_free=887588 internal_free=165199 allocs=81346 obj_n=22414 prop_n=63228 arr_n=3959
+[1024.09s] I (1281423) remapad_pocketjs: frames=15382 avg_turn_us=56729 avg_render_us=57898 avg_damage_px=38197 max_turn_us=267165 max_render_us=108437
+[1029.34s] I (1286670) remapad_pocketjs: frames=15417 avg_turn_us=62047 avg_render_us=86383 avg_damage_px=56064 max_turn_us=267165 max_render_us=108437
+[1034.13s] I (1291460) remapad_pocketjs: frames=15455 avg_turn_us=55070 avg_render_us=68335 avg_damage_px=44564 max_turn_us=267165 max_render_us=108437
+[1039.15s] I (1296487) remapad_pocketjs: frames=15495 avg_turn_us=61967 avg_render_us=60946 avg_damage_px=39312 max_turn_us=267165 max_render_us=108437
+[1044.09s] I (1301428) remapad_pocketjs: frames=15531 avg_turn_us=64619 avg_render_us=70171 avg_damage_px=45546 max_turn_us=267165 max_render_us=108437
+[1049.12s] I (1306457) remapad_pocketjs: frames=15572 avg_turn_us=51102 avg_render_us=68469 avg_damage_px=44909 max_turn_us=267165 max_render_us=108437
+[1054.24s] I (1311576) remapad_pocketjs: frames=15613 avg_turn_us=61908 avg_render_us=60487 avg_damage_px=39992 max_turn_us=267165 max_render_us=108437
+[1059.18s] I (1316514) remapad_pocketjs: frames=15649 avg_turn_us=57685 avg_render_us=78002 avg_damage_px=50773 max_turn_us=267165 max_render_us=108437
+[1063.24s] [error] null
+[1064.13s] I (1321470) remapad_pocketjs: frames=15695 avg_turn_us=49243 avg_render_us=56892 avg_damage_px=36813 max_turn_us=267165 max_render_us=108437
+[1064.27s] [error] null
+[1064.30s] [error] null
+[1064.86s] [error] null
+[1065.16s] [error] null
+[1065.22s] [error] null
+[1065.23s] [error] null
+[1066.54s] [error] null
+[1066.62s] [error] null
+[1066.82s] [error] null
+[1067.73s] [error] null
+[1067.92s] [error] null
+[1068.20s] [error] null
+[1068.36s] [error] null
+[1068.62s] [error] null
+[1068.65s] [error] null
+[1068.66s] [error] null
+[1068.67s] [error] null
+[1069.17s] I (1326503) remapad_pocketjs: frames=15766 avg_turn_us=47876 avg_render_us=19776 avg_damage_px=13391 max_turn_us=267165 max_render_us=111323
+[1069.77s] [error] null
+[1069.79s] [error] null
+[1069.98s] [error] null
+[1071.12s] [error] null
+[1071.43s] [error] null
+[1071.45s] [error] null
+[1071.61s] [error] null
+[1071.67s] [error] null
+[1072.91s] [error] null
+[1073.11s] [error] null
+[1073.52s] [error] null
+[1073.70s] [error] null
+[1074.09s] I (1331424) remapad_pocketjs: frames=15889 avg_turn_us=29045 avg_render_us=8382 avg_damage_px=5791 max_turn_us=267165 max_render_us=111323
+[1074.27s] [error] null
+[1074.91s] [error] null
+[1074.93s] [error] null
+[1074.95s] [error] null
+[1075.08s] [error] null
+[1075.64s] [error] null
+[1076.10s] [error] null
+[1076.32s] [error] null
+[1077.02s] [error] null
+[1077.40s] [error] null
+[1077.71s] [error] null
+[1078.42s] [error] null
+[1079.12s] I (1336461) remapad_pocketjs: frames=16173 avg_turn_us=14742 avg_render_us=277 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1079.64s] I (1336973) remapad_pocketjs: mem: js_heap=4094kB/4096kB gc_thresh=5704kB psram_free=807148 internal_free=165199 allocs=82421 obj_n=22660 prop_n=63102 arr_n=4127
+[1079.81s] [error] null
+[1079.84s] [error] null
+[1079.93s] [error] null
+[1080.21s] [error] null
+[1080.62s] [error] null
+[1081.92s] [error] null
+[1082.25s] [error] null
+[1083.65s] E (1340989) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1084.00s] E (1341339) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1084.12s] I (1341461) remapad_pocketjs: frames=16440 avg_turn_us=11819 avg_render_us=281 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1084.35s] E (1341689) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1084.70s] E (1342039) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1085.05s] E (1342390) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1085.09s] E (1342431) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1085.14s] E (1342481) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1085.38s] E (1342714) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1085.74s] E (1343081) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1086.44s] E (1343778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1086.79s] E (1344128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1087.12s] E (1344460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1087.49s] E (1344828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1087.82s] E (1345160) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1088.19s] E (1345528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1088.52s] E (1345861) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1088.89s] E (1346228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1089.08s] I (1346412) remapad_pocketjs: frames=16740 avg_turn_us=6813 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1089.24s] E (1346578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1089.59s] E (1346928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1089.94s] E (1347278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1090.07s] E (1347410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1090.27s] E (1347611) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1090.62s] E (1347961) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1090.99s] E (1348328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1091.32s] E (1348661) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1091.69s] E (1349029) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1092.04s] E (1349378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1092.37s] E (1349711) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1092.74s] E (1350077) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1093.09s] E (1350428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1093.42s] E (1350760) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1093.79s] E (1351128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1094.07s] I (1351412) remapad_pocketjs: frames=17040 avg_turn_us=6003 avg_render_us=294 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1094.14s] E (1351478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1094.47s] E (1351811) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1094.84s] E (1352178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1095.07s] E (1352410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1095.19s] E (1352528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1095.52s] E (1352861) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1095.87s] E (1353211) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1096.24s] E (1353577) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1096.59s] E (1353928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1096.92s] E (1354261) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1097.29s] E (1354628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1097.64s] E (1354978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1097.97s] E (1355311) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1098.34s] E (1355677) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1098.69s] E (1356028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1099.02s] E (1356361) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1099.07s] I (1356413) remapad_pocketjs: frames=17340 avg_turn_us=6023 avg_render_us=299 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1099.39s] E (1356728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1099.74s] E (1357077) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1100.07s] E (1357410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1100.09s] E (1357427) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1100.44s] E (1357777) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1100.79s] E (1358128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1101.12s] E (1358461) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1101.49s] E (1358828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1101.84s] E (1359178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1102.17s] E (1359511) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1102.54s] E (1359878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1102.89s] E (1360228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1103.22s] E (1360561) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1103.59s] E (1360928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1103.94s] E (1361278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1104.07s] I (1361412) remapad_pocketjs: frames=17640 avg_turn_us=6002 avg_render_us=304 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1104.29s] E (1361628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1104.64s] E (1361978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1104.97s] E (1362310) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1105.07s] E (1362410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1105.34s] E (1362678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1105.69s] E (1363028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1106.02s] E (1363361) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1106.39s] E (1363728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1106.74s] E (1364078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1107.09s] E (1364428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1107.42s] E (1364761) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1107.79s] E (1365128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1108.12s] E (1365461) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1108.47s] E (1365811) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1108.86s] E (1366194) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1109.07s] I (1366412) remapad_pocketjs: frames=17940 avg_turn_us=5998 avg_render_us=296 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1109.19s] E (1366528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1109.52s] E (1366861) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1109.89s] E (1367228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1110.07s] E (1367410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1110.22s] E (1367561) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1110.57s] E (1367912) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1110.94s] E (1368278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1111.27s] E (1368611) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1111.64s] E (1368978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1111.99s] E (1369328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1112.34s] E (1369678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1112.67s] E (1370011) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1113.04s] E (1370377) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1113.39s] E (1370728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1113.74s] E (1371078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1114.07s] E (1371411) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1114.07s] I (1371411) remapad_pocketjs: frames=18240 avg_turn_us=6030 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1114.42s] E (1371761) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1114.79s] E (1372128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1115.07s] E (1372410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1115.14s] E (1372478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1115.49s] E (1372828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1115.82s] E (1373161) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1116.19s] E (1373527) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1116.54s] E (1373878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1116.89s] E (1374228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1117.22s] E (1374561) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1117.57s] E (1374911) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1117.94s] E (1375278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1118.29s] E (1375628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1118.64s] E (1375978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1118.99s] E (1376328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1119.07s] I (1376412) remapad_pocketjs: frames=18540 avg_turn_us=5997 avg_render_us=299 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1119.32s] E (1376661) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1119.67s] E (1377011) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1120.04s] E (1377378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1120.07s] E (1377410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1120.39s] E (1377728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1120.74s] E (1378078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1121.07s] E (1378411) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1121.42s] E (1378761) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1121.79s] E (1379128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1122.12s] E (1379462) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1122.49s] E (1379828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1122.84s] E (1380178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1123.19s] E (1380527) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1123.54s] E (1380877) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1123.89s] E (1381228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1124.07s] I (1381412) remapad_pocketjs: frames=18840 avg_turn_us=5985 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1124.24s] E (1381578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1124.57s] E (1381911) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1124.94s] E (1382278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1125.07s] E (1382410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1125.29s] E (1382628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1125.62s] E (1382961) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1125.99s] E (1383328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1126.34s] E (1383678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1126.67s] E (1384011) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1127.02s] E (1384361) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1127.40s] E (1384744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1127.72s] E (1385061) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1128.07s] E (1385411) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1128.44s] E (1385778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1128.77s] E (1386111) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1129.07s] I (1386412) remapad_pocketjs: frames=19140 avg_turn_us=5959 avg_render_us=298 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1129.14s] E (1386478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1129.47s] E (1386811) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1129.84s] E (1387178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1130.07s] E (1387410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1130.19s] E (1387528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1130.55s] E (1387877) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1130.89s] E (1388228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1131.24s] E (1388578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1131.57s] E (1388911) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1131.94s] E (1389277) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1132.29s] E (1389628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1132.64s] E (1389978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1132.99s] E (1390328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1133.34s] E (1390678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1133.70s] E (1391044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1134.04s] E (1391378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1134.07s] I (1391412) remapad_pocketjs: frames=19440 avg_turn_us=6007 avg_render_us=294 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1134.39s] E (1391728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1134.72s] E (1392061) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1135.07s] E (1392410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1135.09s] E (1392427) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1135.44s] E (1392778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1135.79s] E (1393127) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1136.12s] E (1393460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1136.49s] E (1393828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1136.82s] E (1394161) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1137.19s] E (1394528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1137.54s] E (1394878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1137.89s] E (1395228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1138.22s] E (1395560) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1138.57s] E (1395911) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1138.94s] E (1396278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1139.07s] I (1396412) remapad_pocketjs: frames=19740 avg_turn_us=5992 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1139.58s] I (1396925) remapad_pocketjs: mem: js_heap=4095kB/4096kB gc_thresh=5704kB psram_free=805156 internal_free=165111 allocs=82488 obj_n=22667 prop_n=63003 arr_n=4140
+[1139.64s] E (1396978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1139.99s] E (1397328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1140.32s] E (1397660) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1140.57s] E (1397910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1140.69s] E (1398028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1141.04s] E (1398378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1141.39s] E (1398728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1141.72s] E (1399061) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1142.09s] E (1399428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1142.44s] E (1399778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1142.79s] E (1400128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1143.14s] E (1400478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1143.49s] E (1400828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1143.82s] E (1401161) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1144.07s] I (1401412) remapad_pocketjs: frames=20010 avg_turn_us=5989 avg_render_us=296 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1144.17s] E (1401511) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1144.53s] E (1401878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1144.89s] E (1402228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1145.24s] E (1402578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1145.57s] E (1402911) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1145.58s] E (1402927) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1145.94s] E (1403278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1146.28s] E (1403628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1146.62s] E (1403961) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1146.97s] E (1404311) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1147.34s] E (1404678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1147.69s] E (1405028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1148.04s] E (1405378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1148.37s] E (1405712) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1148.74s] E (1406078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1149.07s] E (1406411) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1149.07s] I (1406411) remapad_pocketjs: frames=20310 avg_turn_us=6013 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1149.43s] E (1406778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1149.79s] E (1407128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1150.14s] E (1407478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1150.47s] E (1407811) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1150.57s] E (1407910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1150.83s] E (1408178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1151.19s] E (1408528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1151.54s] E (1408878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1151.89s] E (1409228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1152.23s] E (1409578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1152.59s] E (1409928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1152.92s] E (1410261) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1153.27s] E (1410611) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1153.64s] E (1410978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1153.99s] E (1411328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1154.07s] I (1411412) remapad_pocketjs: frames=20610 avg_turn_us=5995 avg_render_us=299 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1154.34s] E (1411678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1154.67s] E (1412011) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1155.02s] E (1412361) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1155.38s] E (1412728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1155.57s] E (1412910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1155.74s] E (1413078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1156.08s] E (1413428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1156.44s] E (1413778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1156.78s] E (1414128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1157.13s] E (1414478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1157.47s] E (1414810) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1157.83s] E (1415178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1158.19s] E (1415528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1158.53s] E (1415878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1158.88s] E (1416228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1159.07s] I (1416412) remapad_pocketjs: frames=20910 avg_turn_us=6018 avg_render_us=301 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1159.22s] E (1416560) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1159.58s] E (1416928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1159.93s] E (1417278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1160.28s] E (1417628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1160.57s] E (1417910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1160.64s] E (1417978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1160.98s] E (1418328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1161.32s] E (1418661) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1161.68s] E (1419028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1162.03s] E (1419378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1162.38s] E (1419728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1162.73s] E (1420078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1163.09s] E (1420428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1163.43s] E (1420778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1163.77s] E (1421111) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1164.07s] I (1421412) remapad_pocketjs: frames=21210 avg_turn_us=6013 avg_render_us=301 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1164.14s] E (1421478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1164.47s] E (1421811) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1164.82s] E (1422161) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1165.18s] E (1422528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1165.53s] E (1422878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1165.57s] E (1422910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1165.88s] E (1423228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1166.22s] E (1423561) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1166.58s] E (1423928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1166.94s] E (1424278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1167.28s] E (1424628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1167.63s] E (1424978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1167.97s] E (1425310) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1168.33s] E (1425678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1168.68s] E (1426028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1169.03s] E (1426378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1169.07s] I (1426412) remapad_pocketjs: frames=21510 avg_turn_us=6011 avg_render_us=307 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1169.38s] E (1426728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1169.73s] E (1427078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1170.07s] E (1427410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1170.43s] E (1427778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1170.57s] E (1427910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1170.78s] E (1428128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1171.13s] E (1428478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1171.48s] E (1428828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1171.83s] E (1429178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1172.18s] E (1429528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1172.53s] E (1429878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1172.87s] E (1430210) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1173.23s] E (1430578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1173.58s] E (1430928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1173.93s] E (1431278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1174.07s] I (1431412) remapad_pocketjs: frames=21810 avg_turn_us=6014 avg_render_us=304 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1174.28s] E (1431628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1174.62s] E (1431960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1174.97s] E (1432310) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1175.32s] E (1432661) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1175.57s] E (1432910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1175.67s] E (1433011) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1176.03s] E (1433378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1176.38s] E (1433728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1176.73s] E (1434078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1177.08s] E (1434428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1177.43s] E (1434778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1177.78s] E (1435128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1178.12s] E (1435461) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1178.48s] E (1435828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1178.83s] E (1436178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1179.07s] I (1436412) remapad_pocketjs: frames=22110 avg_turn_us=5998 avg_render_us=307 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1179.18s] E (1436528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1179.53s] E (1436878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1179.88s] E (1437228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1180.23s] E (1437578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1180.57s] E (1437910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1180.58s] E (1437927) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1180.93s] E (1438278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1181.27s] E (1438611) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1181.62s] E (1438960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1181.97s] E (1439311) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1182.33s] E (1439678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1182.67s] E (1440010) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1183.03s] E (1440378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1183.38s] E (1440728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1183.73s] E (1441078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1184.07s] I (1441414) remapad_pocketjs: frames=22410 avg_turn_us=6008 avg_render_us=303 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1184.08s] E (1441428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1184.43s] E (1441778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1184.78s] E (1442128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1185.12s] E (1442461) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1185.48s] E (1442828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1185.56s] E (1442910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1185.83s] E (1443178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1186.18s] E (1443528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1186.53s] E (1443878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1186.88s] E (1444228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1187.23s] E (1444578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1187.58s] E (1444928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1187.93s] E (1445278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1188.28s] E (1445628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1188.63s] E (1445978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1188.98s] E (1446328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1189.07s] I (1446412) remapad_pocketjs: frames=22710 avg_turn_us=6027 avg_render_us=304 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1189.33s] E (1446678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1189.68s] E (1447028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1190.03s] E (1447378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1190.38s] E (1447728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1190.57s] E (1447910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1190.72s] E (1448062) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1191.08s] E (1448428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1191.42s] E (1448761) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1191.78s] E (1449128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1192.13s] E (1449478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1192.48s] E (1449828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1192.83s] E (1450178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1193.17s] E (1450512) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1193.53s] E (1450878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1193.88s] E (1451228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1194.07s] I (1451412) remapad_pocketjs: frames=23010 avg_turn_us=6029 avg_render_us=302 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1194.22s] E (1451561) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1194.58s] E (1451928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1194.93s] E (1452278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1195.28s] E (1452628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1195.56s] E (1452910) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1195.63s] E (1452978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1195.98s] E (1453328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1196.33s] E (1453678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1196.68s] E (1454028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1197.03s] E (1454378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1197.38s] E (1454728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1197.71s] E (1455061) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1198.08s] E (1455428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1198.42s] E (1455760) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1198.77s] E (1456111) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1199.07s] I (1456412) remapad_pocketjs: frames=23310 avg_turn_us=6014 avg_render_us=307 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1199.58s] I (1456925) remapad_pocketjs: mem: js_heap=4095kB/4096kB gc_thresh=5704kB psram_free=805156 internal_free=165111 allocs=82488 obj_n=22667 prop_n=63003 arr_n=4140
+[1199.59s] E (1456933) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1199.83s] E (1457178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1200.18s] E (1457528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1200.53s] E (1457878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1200.88s] E (1458228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1201.06s] E (1458410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1201.23s] E (1458578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1201.58s] E (1458928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1201.93s] E (1459278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1202.28s] E (1459628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1202.63s] E (1459978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1202.98s] E (1460328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1203.33s] E (1460678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1203.68s] E (1461028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1204.03s] E (1461378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1204.07s] I (1461412) remapad_pocketjs: frames=23580 avg_turn_us=6051 avg_render_us=306 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1204.37s] E (1461711) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1204.73s] E (1462078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1205.08s] E (1462428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1205.43s] E (1462778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1205.78s] E (1463128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1206.06s] E (1463410) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1206.13s] E (1463478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1206.48s] E (1463828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1206.83s] E (1464178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1207.88s] E (1465228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1208.23s] E (1465578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1208.58s] E (1465928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1208.93s] E (1466278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1209.07s] I (1466412) remapad_pocketjs: frames=23847 avg_turn_us=6018 avg_render_us=305 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1209.28s] E (1466628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1209.63s] E (1466978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1209.98s] E (1467328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1210.33s] E (1467678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1210.68s] E (1468028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1211.03s] E (1468378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1211.38s] E (1468728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1211.62s] E (1468961) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1211.73s] E (1469078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1212.08s] E (1469428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1212.43s] E (1469778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1212.78s] E (1470128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1213.13s] E (1470478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1213.48s] E (1470828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1213.83s] E (1471178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1214.07s] I (1471412) remapad_pocketjs: frames=24147 avg_turn_us=6038 avg_render_us=308 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1214.16s] E (1471510) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1214.53s] E (1471878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1214.88s] E (1472228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1215.23s] E (1472578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1215.58s] E (1472928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1215.93s] E (1473278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1216.28s] E (1473628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1216.61s] E (1473960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1216.63s] E (1473977) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1216.98s] E (1474328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1217.33s] E (1474678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1217.68s] E (1475028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1218.03s] E (1475378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1218.36s] E (1475711) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1218.73s] E (1476078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1219.07s] I (1476412) remapad_pocketjs: frames=24447 avg_turn_us=6010 avg_render_us=310 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1219.08s] E (1476428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1219.43s] E (1476778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1219.78s] E (1477128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1220.13s] E (1477478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1220.48s] E (1477828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1220.83s] E (1478178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1221.18s] E (1478528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1221.53s] E (1478878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1221.61s] E (1478960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1221.88s] E (1479228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1222.25s] E (1479594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1222.58s] E (1479928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1222.93s] E (1480278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1223.28s] E (1480628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1223.63s] E (1480978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1223.98s] E (1481328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1224.07s] I (1481412) remapad_pocketjs: frames=24747 avg_turn_us=6027 avg_render_us=305 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1224.33s] E (1481678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1224.68s] E (1482028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1225.03s] E (1482378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1225.38s] E (1482728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1225.71s] E (1483061) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1226.10s] E (1483444) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1226.43s] E (1483778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1226.61s] E (1483960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1226.78s] E (1484128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1227.13s] E (1484478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1227.48s] E (1484828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1227.83s] E (1485178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1228.18s] E (1485528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1228.53s] E (1485878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1228.88s] E (1486228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1229.07s] I (1486413) remapad_pocketjs: frames=25047 avg_turn_us=6028 avg_render_us=308 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1229.23s] E (1486578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1229.58s] E (1486928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1229.93s] E (1487278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1230.28s] E (1487628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1230.63s] E (1487978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1230.98s] E (1488328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1231.33s] E (1488678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1231.61s] E (1488960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1231.68s] E (1489028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1232.03s] E (1489378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1232.38s] E (1489728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1232.73s] E (1490078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1233.08s] E (1490428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1233.43s] E (1490778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1233.78s] E (1491128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1234.07s] I (1491412) remapad_pocketjs: frames=25347 avg_turn_us=6024 avg_render_us=299 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1234.11s] E (1491461) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1234.48s] E (1491828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1234.83s] E (1492178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1235.18s] E (1492528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1235.53s] E (1492878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1235.88s] E (1493228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1236.21s] E (1493560) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1236.58s] E (1493928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1236.61s] E (1493960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1236.93s] E (1494278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1237.28s] E (1494628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1237.63s] E (1494978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1237.98s] E (1495328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1238.33s] E (1495678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1238.68s] E (1496028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1239.01s] E (1496362) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1239.06s] I (1496412) remapad_pocketjs: frames=25647 avg_turn_us=6007 avg_render_us=306 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1239.38s] E (1496728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1239.73s] E (1497078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1240.08s] E (1497428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1240.43s] E (1497778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1240.78s] E (1498128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1241.13s] E (1498478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1241.48s] E (1498828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1241.61s] E (1498960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1241.83s] E (1499178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1242.18s] E (1499528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1242.53s] E (1499878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1242.88s] E (1500228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1243.23s] E (1500578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1243.58s] E (1500928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1243.93s] E (1501278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1244.07s] I (1501413) remapad_pocketjs: frames=25947 avg_turn_us=6015 avg_render_us=302 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1244.28s] E (1501628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1244.63s] E (1501978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1244.98s] E (1502328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1245.33s] E (1502678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1245.68s] E (1503028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1246.05s] E (1503394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1246.40s] E (1503744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1246.61s] E (1503960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1246.73s] E (1504078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1247.08s] E (1504428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1247.43s] E (1504778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1247.78s] E (1505128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1248.13s] E (1505478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1248.48s] E (1505828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1248.83s] E (1506178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1249.06s] I (1506412) remapad_pocketjs: frames=26247 avg_turn_us=6024 avg_render_us=304 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1249.18s] E (1506528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1249.53s] E (1506878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1249.88s] E (1507228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1250.23s] E (1507578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1250.58s] E (1507928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1250.91s] E (1508262) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1251.28s] E (1508628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1251.61s] E (1508960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1251.64s] E (1508994) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1251.98s] E (1509328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1252.33s] E (1509678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1252.68s] E (1510028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1253.03s] E (1510378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1253.38s] E (1510728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1253.73s] E (1511078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1254.07s] I (1511412) remapad_pocketjs: frames=26547 avg_turn_us=6027 avg_render_us=303 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1254.08s] E (1511428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1254.43s] E (1511778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1254.78s] E (1512128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1255.15s] E (1512494) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1255.48s] E (1512828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1255.83s] E (1513177) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1256.18s] E (1513528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1256.53s] E (1513877) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1256.61s] E (1513960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1256.88s] E (1514228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1257.23s] E (1514578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1257.58s] E (1514928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1257.93s] E (1515277) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1258.28s] E (1515628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1258.64s] E (1515994) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1258.98s] E (1516328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1259.06s] I (1516412) remapad_pocketjs: frames=26847 avg_turn_us=6025 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1259.58s] I (1516925) remapad_pocketjs: mem: js_heap=4095kB/4096kB gc_thresh=5704kB psram_free=805156 internal_free=165111 allocs=82488 obj_n=22667 prop_n=63003 arr_n=4140
+[1259.68s] E (1517028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1260.03s] E (1517378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1260.38s] E (1517728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1260.73s] E (1518078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1261.08s] E (1518428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1261.43s] E (1518777) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1261.78s] E (1519127) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1262.11s] E (1519461) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1262.13s] E (1519477) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1262.50s] E (1519844) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1262.84s] E (1520194) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1263.19s] E (1520544) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1263.54s] E (1520894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1263.88s] E (1521228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1264.06s] I (1521412) remapad_pocketjs: frames=27117 avg_turn_us=6040 avg_render_us=303 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1264.23s] E (1521578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1264.58s] E (1521928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1264.93s] E (1522278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1265.28s] E (1522628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1265.63s] E (1522978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1265.98s] E (1523328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1266.33s] E (1523678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1266.68s] E (1524028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1267.05s] E (1524394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1267.11s] E (1524460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1267.38s] E (1524728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1267.73s] E (1525078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1268.08s] E (1525428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1268.43s] E (1525778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1268.78s] E (1526128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1269.06s] I (1526412) remapad_pocketjs: frames=27417 avg_turn_us=5994 avg_render_us=303 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1269.13s] E (1526478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1269.48s] E (1526828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1269.83s] E (1527178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1270.18s] E (1527528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1270.55s] E (1527894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1270.88s] E (1528228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1271.23s] E (1528578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1271.58s] E (1528928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1271.93s] E (1529278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1272.11s] E (1529460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1272.28s] E (1529628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1272.63s] E (1529978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1272.98s] E (1530328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1273.33s] E (1530678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1273.68s] E (1531028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1274.01s] E (1531362) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1274.06s] I (1531412) remapad_pocketjs: frames=27717 avg_turn_us=6037 avg_render_us=306 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1274.39s] E (1531744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1274.73s] E (1532078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1275.08s] E (1532428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1275.43s] E (1532777) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1275.78s] E (1533128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1276.13s] E (1533478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1276.48s] E (1533828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1276.83s] E (1534177) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1277.11s] E (1534460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1277.18s] E (1534528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1277.53s] E (1534877) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1277.88s] E (1535228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1278.24s] E (1535594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1278.59s] E (1535944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1278.95s] E (1536294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1279.06s] I (1536412) remapad_pocketjs: frames=28017 avg_turn_us=6038 avg_render_us=295 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1279.28s] E (1536628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1279.63s] E (1536978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1279.98s] E (1537328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1280.33s] E (1537678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1280.68s] E (1538028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1281.03s] E (1538378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1281.38s] E (1538728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1281.73s] E (1539077) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1282.08s] E (1539428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1282.11s] E (1539460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1282.44s] E (1539794) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1282.79s] E (1540144) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1283.14s] E (1540494) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1283.48s] E (1540828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1283.83s] E (1541177) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1284.06s] I (1541412) remapad_pocketjs: frames=28317 avg_turn_us=6009 avg_render_us=295 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1284.18s] E (1541528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1284.53s] E (1541878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1284.88s] E (1542228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1285.23s] E (1542578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1285.58s] E (1542928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1285.93s] E (1543278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1286.28s] E (1543628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1286.63s] E (1543978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1286.98s] E (1544327) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1287.11s] E (1544460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1287.34s] E (1544694) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1287.68s] E (1545028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1288.03s] E (1545378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1288.38s] E (1545728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1288.73s] E (1546078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1289.06s] I (1546412) remapad_pocketjs: frames=28617 avg_turn_us=6004 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1289.08s] E (1546428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1289.43s] E (1546778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1289.78s] E (1547128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1290.13s] E (1547478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1290.49s] E (1547844) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1290.83s] E (1548178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1291.18s] E (1548528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1291.53s] E (1548878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1291.88s] E (1549228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1292.11s] E (1549460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1292.23s] E (1549578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1292.58s] E (1549928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1292.94s] E (1550294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1293.29s] E (1550644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1293.64s] E (1550994) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1293.98s] E (1551328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1294.06s] I (1551412) remapad_pocketjs: frames=28917 avg_turn_us=6025 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1294.33s] E (1551678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1294.68s] E (1552028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1295.03s] E (1552378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1295.38s] E (1552728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1295.73s] E (1553078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1296.08s] E (1553428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1296.44s] E (1553794) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1296.79s] E (1554144) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1297.11s] E (1554460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1297.14s] E (1554494) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1297.49s] E (1554844) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1297.83s] E (1555178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1298.18s] E (1555528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1298.53s] E (1555877) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1298.88s] E (1556228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1299.06s] I (1556412) remapad_pocketjs: frames=29217 avg_turn_us=6031 avg_render_us=296 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1299.23s] E (1556578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1299.59s] E (1556944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1299.94s] E (1557294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1300.28s] E (1557628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1300.63s] E (1557977) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1300.98s] E (1558327) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1301.33s] E (1558678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1301.68s] E (1559028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1302.03s] E (1559377) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1302.11s] E (1559460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1302.38s] E (1559728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1302.73s] E (1560078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1303.09s] E (1560444) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1303.44s] E (1560794) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1303.78s] E (1561128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1304.06s] I (1561412) remapad_pocketjs: frames=29517 avg_turn_us=6034 avg_render_us=292 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1304.14s] E (1561494) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1304.49s] E (1561844) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1304.83s] E (1562178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1305.17s] E (1562528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1305.53s] E (1562878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1305.88s] E (1563228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1306.22s] E (1563578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1306.58s] E (1563928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1306.93s] E (1564278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1307.11s] E (1564460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1307.28s] E (1564628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1307.63s] E (1564978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1307.98s] E (1565328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1308.34s] E (1565694) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1308.69s] E (1566044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1309.04s] E (1566394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1309.06s] I (1566412) remapad_pocketjs: frames=29817 avg_turn_us=6027 avg_render_us=303 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1309.39s] E (1566744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1309.73s] E (1567078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1310.07s] E (1567428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1310.43s] E (1567778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1310.78s] E (1568128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1311.13s] E (1568477) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1311.47s] E (1568828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1311.83s] E (1569178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1312.11s] E (1569460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1312.17s] E (1569528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1312.53s] E (1569877) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1312.87s] E (1570228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1313.22s] E (1570577) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1313.58s] E (1570928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1313.94s] E (1571294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1314.06s] I (1571412) remapad_pocketjs: frames=30117 avg_turn_us=6031 avg_render_us=296 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1314.29s] E (1571644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1314.64s] E (1571994) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1314.97s] E (1572328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1315.33s] E (1572677) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1315.68s] E (1573028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1316.02s] E (1573378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1316.38s] E (1573728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1316.73s] E (1574077) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1317.08s] E (1574428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1317.11s] E (1574460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1317.43s] E (1574778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1317.77s] E (1575128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1318.13s] E (1575478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1318.47s] E (1575828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1318.83s] E (1576177) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1319.06s] I (1576413) remapad_pocketjs: frames=30417 avg_turn_us=6022 avg_render_us=293 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1319.57s] I (1576926) remapad_pocketjs: mem: js_heap=4095kB/4096kB gc_thresh=5704kB psram_free=805156 internal_free=165111 allocs=82488 obj_n=22667 prop_n=63003 arr_n=4140
+[1319.89s] E (1577244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1320.24s] E (1577594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1320.59s] E (1577944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1320.94s] E (1578294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1321.29s] E (1578644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1321.62s] E (1578978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1321.97s] E (1579328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1322.32s] E (1579678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1322.61s] E (1579960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1322.67s] E (1580028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1323.02s] E (1580377) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1323.38s] E (1580728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1323.72s] E (1581077) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1324.06s] I (1581412) remapad_pocketjs: frames=30687 avg_turn_us=6037 avg_render_us=292 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1324.07s] E (1581427) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1324.42s] E (1581778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1324.77s] E (1582128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1325.12s] E (1582477) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1325.47s] E (1582828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1325.82s] E (1583177) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1326.19s] E (1583544) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1326.54s] E (1583894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1326.88s] E (1584228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1327.23s] E (1584577) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1327.57s] E (1584928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1327.61s] E (1584960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1327.92s] E (1585277) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1328.27s] E (1585628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1328.62s] E (1585978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1328.99s] E (1586344) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1329.06s] I (1586413) remapad_pocketjs: frames=30987 avg_turn_us=6024 avg_render_us=293 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1329.34s] E (1586694) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1329.69s] E (1587044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1330.04s] E (1587394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1330.39s] E (1587744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1330.74s] E (1588094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1331.07s] E (1588428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1331.42s] E (1588778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1331.77s] E (1589128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1332.12s] E (1589477) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1332.47s] E (1589828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1332.61s] E (1589960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1332.84s] E (1590194) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1333.19s] E (1590544) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1333.54s] E (1590894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1333.89s] E (1591244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1334.06s] I (1591413) remapad_pocketjs: frames=31287 avg_turn_us=6050 avg_render_us=289 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1334.24s] E (1591594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1334.57s] E (1591928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1334.92s] E (1592278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1335.27s] E (1592628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1335.62s] E (1592977) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1335.97s] E (1593328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1336.32s] E (1593678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1336.67s] E (1594028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1337.02s] E (1594378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1337.37s] E (1594728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1337.61s] E (1594960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1337.74s] E (1595094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1338.09s] E (1595444) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1338.44s] E (1595794) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1338.79s] E (1596144) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1339.06s] I (1596412) remapad_pocketjs: frames=31587 avg_turn_us=6009 avg_render_us=292 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1339.12s] E (1596478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1339.47s] E (1596828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1339.82s] E (1597178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1340.17s] E (1597528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1340.54s] E (1597894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1340.89s] E (1598244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1341.24s] E (1598594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1341.59s] E (1598944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1341.94s] E (1599294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1342.27s] E (1599628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1342.61s] E (1599960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1342.62s] E (1599977) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1342.97s] E (1600328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1343.32s] E (1600678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1343.69s] E (1601044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1344.04s] E (1601394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1344.06s] I (1601412) remapad_pocketjs: frames=31887 avg_turn_us=5990 avg_render_us=298 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1344.39s] E (1601744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1344.74s] E (1602094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1345.07s] E (1602428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1345.42s] E (1602778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1345.77s] E (1603128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1346.12s] E (1603478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1346.47s] E (1603828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1346.82s] E (1604178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1347.17s] E (1604528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1347.52s] E (1604878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1347.61s] E (1604960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1347.89s] E (1605244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1348.24s] E (1605594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1348.59s] E (1605944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1348.94s] E (1606294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1349.06s] I (1606412) remapad_pocketjs: frames=32187 avg_turn_us=6015 avg_render_us=292 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1349.29s] E (1606644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1349.62s] E (1606978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1349.97s] E (1607328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1350.32s] E (1607678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1350.67s] E (1608028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1351.04s] E (1608394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1351.39s] E (1608744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1351.74s] E (1609094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1352.07s] E (1609428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1352.42s] E (1609778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1352.61s] E (1609960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1352.77s] E (1610128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1353.12s] E (1610477) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1353.47s] E (1610828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1353.82s] E (1611178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1354.06s] I (1611412) remapad_pocketjs: frames=32487 avg_turn_us=6031 avg_render_us=295 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1354.19s] E (1611544) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1354.54s] E (1611894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1354.89s] E (1612244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1355.24s] E (1612594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1355.57s] E (1612928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1355.92s] E (1613278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1356.27s] E (1613628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1356.62s] E (1613977) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1356.97s] E (1614328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1357.32s] E (1614677) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1357.60s] E (1614960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1357.67s] E (1615028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1358.02s] E (1615378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1358.37s] E (1615728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1358.74s] E (1616094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1359.06s] I (1616413) remapad_pocketjs: frames=32787 avg_turn_us=6008 avg_render_us=292 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1359.09s] E (1616444) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1359.44s] E (1616794) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1359.77s] E (1617128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1360.12s] E (1617478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1360.47s] E (1617828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1360.82s] E (1618178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1361.17s] E (1618528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1361.52s] E (1618877) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1361.87s] E (1619228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1362.22s] E (1619578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1362.59s] E (1619944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1362.60s] E (1619959) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1362.94s] E (1620294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1363.29s] E (1620644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1363.62s] E (1620977) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1363.97s] E (1621328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1364.06s] I (1621412) remapad_pocketjs: frames=33087 avg_turn_us=5990 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1364.32s] E (1621678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1364.67s] E (1622028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1365.02s] E (1622377) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1365.39s] E (1622744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1365.74s] E (1623094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1366.09s] E (1623444) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1366.44s] E (1623794) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1366.77s] E (1624128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1367.12s] E (1624477) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1367.47s] E (1624828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1367.60s] E (1624960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1367.82s] E (1625177) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1368.17s] E (1625527) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1368.52s] E (1625878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1368.87s] E (1626228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1369.06s] I (1626412) remapad_pocketjs: frames=33387 avg_turn_us=6016 avg_render_us=298 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1369.22s] E (1626578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1369.59s] E (1626944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1369.94s] E (1627294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1370.29s] E (1627644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1370.64s] E (1627994) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1370.99s] E (1628344) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1371.34s] E (1628694) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1371.67s] E (1629028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1372.02s] E (1629378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1372.37s] E (1629728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1372.60s] E (1629960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1372.72s] E (1630078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1373.07s] E (1630428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1373.42s] E (1630778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1373.79s] E (1631144) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1374.06s] I (1631412) remapad_pocketjs: frames=33687 avg_turn_us=6002 avg_render_us=298 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1374.14s] E (1631494) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1374.49s] E (1631844) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1374.84s] E (1632196) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1375.19s] E (1632544) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1375.52s] E (1632878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1375.87s] E (1633228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1376.22s] E (1633578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1376.57s] E (1633928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1376.92s] E (1634278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1377.29s] E (1634644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1377.60s] E (1634960) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1377.64s] E (1634994) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1377.99s] E (1635344) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1378.34s] E (1635694) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1378.69s] E (1636044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1379.04s] E (1636394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1379.06s] I (1636414) remapad_pocketjs: frames=33987 avg_turn_us=6012 avg_render_us=296 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1379.57s] I (1636926) remapad_pocketjs: mem: js_heap=4095kB/4096kB gc_thresh=5704kB psram_free=805156 internal_free=165111 allocs=82488 obj_n=22667 prop_n=63003 arr_n=4140
+[1379.58s] E (1636934) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1379.72s] E (1637078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1380.07s] E (1637428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1380.42s] E (1637778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1380.77s] E (1638128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1381.12s] E (1638478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1381.47s] E (1638828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1381.84s] E (1639194) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1382.19s] E (1639544) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1382.54s] E (1639894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1382.89s] E (1640244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1383.10s] E (1640460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1383.24s] E (1640596) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1383.57s] E (1640928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1383.92s] E (1641277) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1384.06s] I (1641413) remapad_pocketjs: frames=34257 avg_turn_us=5990 avg_render_us=295 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1384.27s] E (1641628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1384.62s] E (1641977) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1384.97s] E (1642328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1385.32s] E (1642678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1385.69s] E (1643044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1386.04s] E (1643394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1386.39s] E (1643744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1386.74s] E (1644095) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1387.07s] E (1644428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1387.42s] E (1644778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1387.77s] E (1645127) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1388.10s] E (1645460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1388.12s] E (1645477) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1388.49s] E (1645844) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1388.84s] E (1646194) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1389.06s] I (1646412) remapad_pocketjs: frames=34557 avg_turn_us=5972 avg_render_us=294 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1389.19s] E (1646544) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1389.54s] E (1646894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1389.89s] E (1647244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1390.22s] E (1647578) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1390.57s] E (1647928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1390.92s] E (1648277) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1391.27s] E (1648628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1391.64s] E (1648994) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1391.99s] E (1649344) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1392.34s] E (1649694) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1392.69s] E (1650044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1393.04s] E (1650394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1393.10s] E (1650460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1393.39s] E (1650744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1393.74s] E (1651094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1394.06s] I (1651412) remapad_pocketjs: frames=34857 avg_turn_us=6008 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1394.07s] E (1651428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1394.42s] E (1651778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1394.77s] E (1652128) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1395.12s] E (1652478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1395.47s] E (1652828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1395.82s] E (1653178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1396.17s] E (1653528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1396.52s] E (1653878) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1396.87s] E (1654228) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1397.24s] E (1654594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1397.59s] E (1654944) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1397.94s] E (1655294) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1398.10s] E (1655460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1398.29s] E (1655644) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1398.64s] E (1655995) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1398.99s] E (1656344) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1399.05s] I (1656412) remapad_pocketjs: frames=35157 avg_turn_us=5996 avg_render_us=298 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1399.32s] E (1656678) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1399.67s] E (1657028) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1400.02s] E (1657378) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1400.37s] E (1657728) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1400.74s] E (1658094) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1401.09s] E (1658444) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1401.44s] E (1658794) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1401.79s] E (1659144) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1402.12s] E (1659478) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1402.47s] E (1659828) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1402.82s] E (1660178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1403.10s] E (1660460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1403.17s] E (1660528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1403.54s] E (1660894) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1403.89s] E (1661244) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1404.05s] I (1661412) remapad_pocketjs: frames=35457 avg_turn_us=5981 avg_render_us=297 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1404.24s] E (1661594) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1404.57s] E (1661928) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1404.92s] E (1662278) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1405.27s] E (1662628) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1405.62s] E (1662978) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1405.97s] E (1663328) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1406.34s] E (1663694) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1406.69s] E (1664044) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1407.04s] E (1664394) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1407.39s] E (1664744) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1407.72s] E (1665078) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1408.07s] E (1665428) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1408.10s] E (1665460) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1408.42s] E (1665778) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1408.79s] E (1666144) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1409.05s] I (1666412) remapad_pocketjs: frames=35757 avg_turn_us=6006 avg_render_us=301 avg_damage_px=0 max_turn_us=267165 max_render_us=111323
+[1409.14s] E (1666494) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1409.49s] E (1666844) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1409.82s] E (1667178) remapad_pocketjs: PocketJS turn failed: ESP_FAIL
+[1410.17s] E (1667528) remapad_pocketjs: PocketJS turn failed: ESP_FAIL

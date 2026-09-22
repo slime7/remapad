@@ -1,0 +1,146 @@
+[   0.28s] I (396) esp_image: segment 1: paddr=001fa248 vaddr=3fc9da00 size=05158h ( 20824) load
+[   0.28s] I (401) esp_image: segment 2: paddr=001ff3a8 vaddr=40374000 size=00c70h (  3184) load
+[   0.28s] I (402) esp_image: segment 3: paddr=00200020 vaddr=42000020 size=140150h (1311056) map
+[   0.52s] I (641) esp_image: segment 4: paddr=00340178 vaddr=40374c70 size=18c98h (101528) load
+[   0.55s] I (665) esp_image: segment 5: paddr=00358e18 vaddr=50000000 size=00024h (    36) load
+[   0.56s] I (676) boot: Loaded app from partition at offset 0x10000
+[   0.56s] I (676) boot: Disabling RNG early entropy source...
+[   0.56s] I (677) octal_psram: vendor id    : 0x0d (AP)
+[   0.56s] I (677) octal_psram: dev id       : 0x02 (generation 3)
+[   0.56s] I (677) octal_psram: density      : 0x03 (64 Mbit)
+[   0.56s] I (677) octal_psram: good-die     : 0x01 (Pass)
+[   0.56s] I (678) octal_psram: Latency      : 0x01 (Fixed)
+[   0.56s] I (678) octal_psram: VCC          : 0x01 (3V)
+[   0.56s] I (678) octal_psram: SRF          : 0x01 (Fast Refresh)
+[   0.56s] I (678) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+[   0.56s] I (679) octal_psram: BurstLen     : 0x01 (32 Byte)
+[   0.56s] I (679) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+[   0.56s] I (679) octal_psram: DriveStrength: 0x00 (1/1)
+[   0.56s] I (679) MSPI Timing: Enter psram timing tuning
+[   0.56s] I (680) esp_psram: Found 8MB PSRAM device
+[   0.56s] I (680) esp_psram: Speed: 80MHz
+[   0.56s] I (680) cpu_start: Multicore app
+[   0.97s] I (1094) esp_psram: SPI SRAM memory test OK
+[   0.98s] I (1103) cpu_start: Pro cpu start user code
+[   0.98s] I (1103) cpu_start: cpu freq: 240000000 Hz
+[   0.98s] I (1103) app_init: Application information:
+[   0.98s] I (1103) app_init: Project name:     remapad_firmware
+[   0.98s] I (1103) app_init: App version:      a951603-dirty
+[   0.98s] I (1103) app_init: Compile time:     Sep 22 2026 08:27:45
+[   0.98s] I (1103) app_init: ELF file SHA256:  6af04d864...
+[   0.98s] I (1103) app_init: ESP-IDF:          v6.1
+[   0.98s] I (1104) efuse_init: Min chip rev:     v0.0
+[   0.98s] I (1104) efuse_init: Max chip rev:     v0.99 
+[   0.98s] I (1104) efuse_init: Chip rev:         v0.2
+[   0.98s] I (1104) heap_init: Initializing. RAM available for dynamic allocation:
+[   0.98s] I (1104) heap_init: At 3FCAA640 len 0003F0D0 (252 KiB): RAM
+[   0.98s] I (1104) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+[   0.98s] I (1105) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+[   0.98s] I (1105) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+[   0.98s] I (1105) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+[   0.99s] I (1106) spi_flash: detected chip: generic
+[   0.99s] I (1106) spi_flash: flash io: dio
+[   0.99s] I (1107) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+[   0.99s] I (1107) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+[   0.99s] I (1109) main_task: Started on CPU0
+[   0.99s] I (1109) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+[   0.99s] I (1110) main_task: Calling app_main()
+[   0.99s] I (1110) driver_pwrkey: power latch held (SYS_EN GPIO41 high)
+[   0.99s] I (1111) remapad_app: Remapad ESP32-S3 PocketJS host starting
+[   0.99s] I (1111) remapad_app: Internal SRAM free: 267351 bytes
+[   0.99s] I (1111) remapad_app: PSRAM free: 8386192 bytes
+[   1.01s] I (1129) remapad_config: loaded config: brightness=20 screen=1 role=0
+[   1.01s] I (1130) remapad_blses: controller colors -> body=232323 btn=a0a0a0 accent=e6e6e6 grip=323232 (paired=0 pairing=0)
+[   1.02s] I (1138) driver_panel: byte swap self-check ok
+[   1.02s] I (1140) remapad_app: PocketJS owner task started
+[   1.02s] I (1140) driver_buzzer: buzzer ready on GPIO42 (4000Hz)
+[   1.02s] I (1142) remapad_blcred: loaded creds (pro=2, blob 267B)
+[   1.02s] I (1142) remapad_blcred: loaded host address 8d:63:27:70:68:b8
+[   1.02s] I (1143) BLE_INIT: BT controller compile version [51d9dfd]
+[   1.02s] I (1143) BLE_INIT: Using main XTAL as clock source
+[   1.02s] I (1143) BLE_INIT: Feature Config, ADV:1, BLE_50:1, DTM:1, SCAN:1, CCA:0, SMP:1, CONNECT:1
+[   1.02s] I (1144) BLE_INIT: Bluetooth MAC: 9c:e6:35:55:41:e2
+[   1.03s] I (1146) phy_init: phy_version 712,87e8c20e,Apr 13 2026,18:51:10
+[   1.07s] I (1188) remapad_blctl: GATT chr 0x0003 (val)
+[   1.07s] I (1188) remapad_blctl: GATT chr 0x0005 (val)
+[   1.07s] I (1188) remapad_blctl: GATT chr 0x0007 (val)
+[   1.07s] I (1188) remapad_blctl: GATT chr 0x000a (val)
+[   1.07s] I (1188) remapad_blctl: GATT dsc 0x000c
+[   1.07s] I (1188) remapad_blctl: GATT chr 0x000e (val)
+[   1.07s] I (1188) remapad_blctl: GATT dsc 0x0010
+[   1.07s] I (1189) remapad_blctl: GATT chr 0x0012 (val)
+[   1.07s] I (1189) remapad_blctl: GATT chr 0x0014 (val)
+[   1.07s] I (1189) remapad_blctl: GATT chr 0x0016 (val)
+[   1.07s] I (1189) remapad_blctl: GATT chr 0x0018 (val)
+[   1.07s] I (1189) remapad_blctl: GATT chr 0x001a (val)
+[   1.07s] I (1189) remapad_blctl: GATT dsc 0x001c
+[   1.07s] I (1189) remapad_blctl: GATT chr 0x001e (val)
+[   1.07s] I (1189) remapad_blctl: GATT dsc 0x0020
+[   1.07s] I (1189) remapad_blctl: GATT chr 0x0022 (val)
+[   1.07s] I (1190) remapad_blctl: GATT dsc 0x0024
+[   1.07s] I (1190) remapad_blctl: GATT chr 0x0026 (val)
+[   1.07s] I (1190) remapad_blctl: GATT dsc 0x0028
+[   1.07s] I (1190) remapad_blctl: GATT chr 0x002a (val)
+[   1.07s] I (1190) remapad_blctl: GATT chr 0x002c (val)
+[   1.07s] I (1190) remapad_blctl: GATT chr 0x002e (val)
+[   1.07s] I (1190) remapad_blctl: GATT dsc 0x0030
+[   1.07s] I (1190) remapad_blctl: GATT chr 0x0032 (val)
+[   1.07s] I (1194) remapad_blses: factory serial=HEJ71001123456 pid=0x2069 fw=9.9.9
+[   1.07s] I (1195) remapad_blses: host synced, own MAC e2:41:55:35:e6:9c
+[   1.07s] I (1195) remapad_blses: connect: advertising for 30s
+[   1.08s] I (1195) remapad_blctl: 02 01 06 1b ff 53 05 01 00 03 7e 05 69 20 00 01
+[   1.08s] I (1196) remapad_blctl: 81 8d 63 27 70 68 b8 0f 00 00 00 00 00 00 00
+[   1.08s] I (1198) remapad_blctl: advertising started (instance=0, legacy pdu, identity=0)
+[   1.08s] I (1198) remapad_blses: advertising: identity 0 wake (2 creds)
+[   1.08s] I (1201) driver_battery: battery sampling on GPIO1 (adc unit 0 ch 0, cali=on, 4083mV)
+[   1.08s] I (1202) remapad_dp_src: input source registered: bridge (1)
+[   1.08s] I (1202) remapad_dp_src: input source registered: usb (2)
+[   1.08s] I (1202) remapad_dp_src: input source registered: synthetic (3)
+[   1.08s] I (1202) remapad_dp: data plane task running, tick=5ms, target=ns2
+[   1.08s] I (1203) remapad_cli: cli ready (type help)
+[   1.08s] I (1203) remapad_ota: ota channel ready (frames 0x30-0x32 on USB-Serial/JTAG)
+[   1.08s] I (1204) remapad_input: bridge link ready on USB-Serial/JTAG
+[   1.09s] I (1205) driver_pwrkey: pwr key polling on GPIO40
+[   1.09s] I (1205) main_task: Returned from app_main()
+[   1.55s] I (1671) CST816S: Read ID disabled
+[   1.59s] I (1707) boot_splash: splash painted (240x280), backlight 20%
+[   5.07s] I (5187) remapad_blctl: 02 01 06 1b ff 53 05 01 00 03 7e 05 69 20 00 01
+[   5.07s] I (5188) remapad_blctl: 00 8d 63 27 70 68 b8 0f 00 00 00 00 00 00 00
+[   5.07s] I (5192) remapad_blctl: advertising started (instance=0, legacy pdu, identity=0)
+[   5.07s] I (5193) remapad_blses: advertising: identity 0 reconnect (2 creds)
+[   6.59s] E (6710) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:
+[   6.59s] E (6710) task_wdt:  - IDLE0 (CPU 0)
+[   6.59s] E (6710) task_wdt: Tasks currently running:
+[   6.59s] E (6710) task_wdt: CPU 0: remapad-pjs
+[   6.59s] E (6710) task_wdt: CPU 1: IDLE1
+[   6.59s] E (6710) task_wdt: Print CPU 0 (current core) backtrace
+[   6.59s] Backtrace: 0x4211548D:0x3FC9FA90 0x4037E82D:0x3FC9FAD0 0x4205930E:0x3C387F80 0x42084635:0x3C387FE0 0x4208538A:0x3C3880A0 0x420852F2:0x3C388180 0x420852F2:0x3C388260 0x420B8BE0:0x3C388340 0x4208E7F5:0x3C388400 0x4208E821:0x3C388440 0x42057708:0x3C388480 0x42012522:0x3C3884B0
+[  16.57s] I (16693) remapad_pocketjs: js heap after eval: used=3244kB limit=4096kB
+[  16.57s] I (16694) remapad_pocketjs: strip buffers: 3 x 15360 bytes in internal, internal free=162019 psram free=2488672
+[  16.57s] I (16695) remapad_pocketjs: native bridge ready: __nativeBridge.postMessage -> js_bridge
+[  16.67s] I (16787) remapad_pocketjs: PocketJS UI ready, boot splash handed over
+[  16.67s] I (16787) remapad_pocketjs: PocketJS owner task running at 60 Hz (stack 294912 bytes)
+[  16.88s] I (16998) remapad_pocketjs: PocketJS frame ready: 240x280 @1x, damage regions=1
+[  16.97s] I (17092) remapad_bridge: pairing state -> advertising
+[  16.98s] I (17098) remapad_bridge: player led -> 0x0
+[  17.01s] I (17133) remapad_bridge: hello -> ready (psram=8388608)
+[  21.68s] I (21804) remapad_pocketjs: frames=115 avg_turn_us=32225 avg_render_us=6043 avg_damage_px=1933 max_turn_us=99394 max_render_us=110130
+[  26.70s] I (26818) remapad_pocketjs: frames=248 avg_turn_us=31343 avg_render_us=4956 avg_damage_px=1280 max_turn_us=99394 max_render_us=110130
+[  31.17s] I (31294) remapad_bridge: pairing state -> paired
+[  31.68s] I (31799) remapad_pocketjs: frames=408 avg_turn_us=24853 avg_render_us=3701 avg_damage_px=928 max_turn_us=99394 max_render_us=110130
+[  32.06s] I (32187) remapad_blses: advertising window expired: silent
+[  32.07s] I (32190) remapad_blses: silent: identity 0 advertising stopped
+[  36.68s] I (36798) remapad_pocketjs: frames=708 avg_turn_us=7448 avg_render_us=334 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  41.68s] I (41798) remapad_pocketjs: frames=1008 avg_turn_us=7423 avg_render_us=335 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  46.68s] I (46798) remapad_pocketjs: frames=1308 avg_turn_us=7431 avg_render_us=334 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  51.67s] I (51798) remapad_pocketjs: frames=1608 avg_turn_us=7442 avg_render_us=334 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  56.68s] I (56798) remapad_pocketjs: frames=1908 avg_turn_us=7434 avg_render_us=334 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  61.67s] I (61798) remapad_pocketjs: frames=2208 avg_turn_us=7435 avg_render_us=333 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  66.68s] I (66798) remapad_pocketjs: frames=2508 avg_turn_us=7425 avg_render_us=334 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  71.67s] I (71798) remapad_pocketjs: frames=2808 avg_turn_us=7423 avg_render_us=335 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  76.67s] I (76799) remapad_pocketjs: frames=3108 avg_turn_us=7435 avg_render_us=334 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  77.08s] I (77203) remapad_pocketjs: mem: js_heap=3247kB/4096kB gc_thresh=5704kB psram_free=2215364 internal_free=165199 allocs=57769 obj_n=15905 prop_n=53309 arr_n=727
+[  81.67s] I (81798) remapad_pocketjs: frames=3408 avg_turn_us=7417 avg_render_us=341 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  86.67s] I (86798) remapad_pocketjs: frames=3708 avg_turn_us=7418 avg_render_us=335 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  91.67s] I (91798) remapad_pocketjs: frames=4008 avg_turn_us=7439 avg_render_us=335 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
+[  96.67s] I (96798) remapad_pocketjs: frames=4308 avg_turn_us=7433 avg_render_us=333 avg_damage_px=0 max_turn_us=99394 max_render_us=110130
