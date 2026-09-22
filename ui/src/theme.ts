@@ -87,11 +87,16 @@ export const STYLE = {
   colorSwatch42: 'w-[42] h-[42] shrink-0 rounded-full flex-row items-center justify-center focus:border-2 focus:border-[#ffffff]',
   colorSwatchRing42: 'w-[36] h-[36] shrink-0 rounded-full border-2',
 
-  /** 设置页开关（MD3 风格，components/Switch）：36 × 20 轨道 + 14 滑块，只有
-   *  两个原生节点——滑块位置靠轨道的 justify-start / justify-end 翻转，不需要
-   *  额外的定位容器；选中态只换整条 class 字面量，不做透明度混合。 */
-  switchTrackOff: 'w-[36] h-[20] shrink-0 rounded-full bg-[#667692] flex-row items-center justify-start px-[3] active:bg-[#7d8ca6] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
-  switchTrackOn: 'w-[36] h-[20] shrink-0 rounded-full bg-[#1b416f] flex-row items-center justify-end px-[3] active:bg-[#264a79] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  /** 设置页开关（MD3 风格，components/Switch）：可点区域是 40 × 40 的命中区，
+   *  focusable 与 onPress 都挂在它身上，36 × 20 轨道与 14 滑块画在命中区里居中
+   *  ——触摸目标够大而开关视觉尺寸不变；白环描的因此是命中区，也就是实际能点到
+   *  的范围，按下时整块命中区亮成轨道原来的按下色。滑块位置靠轨道的
+   *  justify-start / justify-end 翻转，不需要定位容器；选中态只换整条 class
+   *  字面量，不做透明度混合。 */
+  switchHitOff: 'w-[40] h-[40] shrink-0 rounded-full flex-row items-center justify-center active:bg-[#7d8ca6] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  switchHitOn: 'w-[40] h-[40] shrink-0 rounded-full flex-row items-center justify-center active:bg-[#264a79] transition-colors duration-150 focus:border-2 focus:border-[#ffffff]',
+  switchTrackOff: 'w-[36] h-[20] shrink-0 rounded-full bg-[#667692] flex-row items-center justify-start px-[3]',
+  switchTrackOn: 'w-[36] h-[20] shrink-0 rounded-full bg-[#1b416f] flex-row items-center justify-end px-[3]',
   switchThumbOff: 'w-[14] h-[14] shrink-0 rounded-full bg-[#d9e6ff]',
   switchThumbOn: 'w-[14] h-[14] shrink-0 rounded-full bg-[#a6c8ff]',
 
