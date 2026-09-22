@@ -8,6 +8,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_system.h"
 #include "nvs_flash.h"
 
 #include "amiibo_store.h"
@@ -20,6 +21,9 @@
 #include "input_link.h"
 #include "ota_session.h"
 #include "pocketjs_host.h"
+
+/** 完全关机状态重新上电的开机提示音时长（毫秒）：与 PWR 长按提示同为一声短鸣。 */
+#define REMAPAD_POWER_ON_BEEP_MS 120
 
 /** NVS 存放 PHY 校准、BLE 配对凭证与用户设置；擦除恢复仅发生在介质损坏场景。 */
 static void nvs_init(void)
@@ -83,9 +87,15 @@ void app_main(void)
     ESP_ERROR_CHECK(remapad_pocketjs_start());
     ESP_LOGI("remapad_app", "PocketJS owner task started");
 
-    /* 蜂鸣器供 PWR 长按提示使用；初始化失败只影响提示音，不阻断启动。 */
+    /* 蜂鸣器供 PWR 长按提示与开机提示音使用；初始化失败只影响提示音，不阻断启动。 */
     if (buzzer_init() != ESP_OK) {
         ESP_LOGE("remapad_app", "buzzer init failed");
+    }
+    /* 完全关机状态重新上电（复位原因 power-on：按 PWR 或插上 USB 都算）时短鸣
+     * 一声作开机反馈；软件复位、OTA 重启与看门狗复位不响，不把固件自身重启当开机。 */
+    if (esp_reset_reason() == ESP_RST_POWERON) {
+        buzzer_beep(REMAPAD_POWER_ON_BEEP_MS);
+        ESP_LOGI("remapad_app", "power-on beep");
     }
 
     /* 数据面失败不阻断屏幕 UI 启动。 */

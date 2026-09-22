@@ -9,9 +9,9 @@ extern "C" {
 #endif
 
 /**
- * 板载蜂鸣器（GPIO42，无源，LEDC tone 输出）：PWR 长按到 3 秒时短鸣一声，
- * 提示用户可以松开。beep 非阻塞（输出启动后由 esp_timer 定时关闭），可在
- * 任意任务上下文调用。
+ * 板载蜂鸣器（GPIO42，无源，LEDC tone 输出）：完全关机后重新上电时短鸣一声
+ * 作开机反馈，PWR 长按到 3 秒再短鸣一声提示用户可以松开。beep 非阻塞（输出
+ * 启动后由 esp_timer 定时关闭），可在任意任务上下文调用。
  */
 
 esp_err_t buzzer_init(void);
