@@ -341,6 +341,8 @@ flowchart LR
   面板 SPI2 时钟取上限 80 MHz 的理由见 [ADR 0018](adr/0018-panel-spi2-clock-80mhz.md)。
 - 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，SPI2 取上限 80 MHz；
   选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
+- 面板初始化在 IDF 内置序列（SLPOUT/MADCTL/COLMOD/RAMCTRL）之外补发厂商的电源、VCOM 与 gamma 表，
+  取值来自微雪为同一块板自带的 Arduino 库（`firmware/main/drivers/panel.c` 的 `s_panel_vendor_tuning`）。
 - ESP32-S3 没有本项目所需的 P4 PPA；`firmware/main/render_accel.c` 用本机整数实现接管渲染器的填充、A8 掩码混合与 PSM5650 直拷回调（与官方 P4 适配层同一套 ABI）。
   其余仍走 `pocketjs_render_rgb565` 的软件路径；卡片底图按不透明 PSM5650 烘制，因此走直拷回调（见 [ADR 0051](adr/0051-opaque-565-card-artwork.md)）。
 

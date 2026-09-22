@@ -547,7 +547,7 @@ flowchart TB
 触点由 CST816T 采样转换为官方 `pocketjs_ui_touch_t` 触点数组。
 息屏（背光关闭）期间 `sample_input` 整段跳过触摸采样：画面不可见，触点只剩误触，
 亮屏由 PWR 键或命令承担、触摸不参与唤醒。
-CST816T 是单点触摸，触点 `id` 在同一按压期间恒为 0，坐标使用逻辑像素，板卡引脚见 [hardware.md](hardware.md)。
+CST816T 是单点触摸，触点 `id` 在同一按压期间恒为 0，坐标使用逻辑像素且受官方绑定的 9 位量程约束（每轴 511 以内），板卡引脚见 [hardware.md](hardware.md)。
 USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
 
 ## 渲染抽象
