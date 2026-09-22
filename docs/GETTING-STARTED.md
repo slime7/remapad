@@ -28,7 +28,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；
 BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)）。
 协议边界见 [ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，主机互操作已实机验证；
-USB 输入与 IMU/RTC 等其余外设仍待实现（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
+其余板载外设没有接入计划（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
 
 ## 最短步骤
 
@@ -470,7 +470,8 @@ PocketJS UI 首帧提交成功后启动画面交出屏幕并释放缓冲。若�
 
 从 `app_main` 到首帧就绪之间有一个十几秒的窗口（当前构建实测：启动画面约 1.6 秒落屏，约 18 秒首帧就绪，背光随启动画面点亮）。
 其中 `guest_eval` 占约 16 秒（阶段权重表按实测填写），期间 owner task 连续占用一个核，空闲任务得不到调度，`task_wdt` 会打印 `IDLE0` 未按时喂狗的告警。
-`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。若后续对启动时间有要求，需要在 BSP 阶段优化 guest eval 耗时（编译与执行整包 JS），而不是简单调大看门狗超时。
+`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。
+在 BSP 阶段优化 guest eval 耗时（编译与执行整包 JS）的尝试已做过，收益有限，已放弃；这条告警按日志噪音对待即可，不必调大看门狗超时。
 
 ### 运行时反复 `task_wdt` 告警并且 UI 掉帧
 

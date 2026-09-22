@@ -350,7 +350,7 @@ uv run python -m unittest discover -s tests -t . -v
   `--list` 的型号与连接方式可用于判断命中了哪一行。
 - 耳机状态字节与主机侧接受的档位见 [../docs/controller-ps.md](../docs/controller-ps.md) 与
   [../docs/controller-switch2.md](../docs/controller-switch2.md)，复核步骤见上文「3.5mm 耳机状态」。
-  主机经 `0x002C` 下发的耳机音频流当前只做日志留痕，尚未转发。
+  主机经 `0x002C` 下发的耳机音频流只做日志留痕：传输协议公开资料有限，无法落实转发。
 - 转发的是原始报告，不做任何按键重排：重排规则（用户自定义映射）在固件侧，本轮未做。
 - 拔线或退出程序时发送 `DETACH` 帧，设备侧状态回到静置，不会留下卡住的按键。
 - 反馈写回依赖固件里的输出报告描述（DS4 / DualSense / Xbox / DS3 / NS1 各一行）：描述与核对状态见

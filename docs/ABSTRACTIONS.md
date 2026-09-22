@@ -160,8 +160,8 @@ flowchart TB
 - 主机推送的手柄固件更新按「接住数据、逐帧应答、不重启」处理：`0x0018` 上的记录流按帧装配
   （`main/target/ns2/ns2_upgrade.c`，字节级用例在 `firmware/test/test_ns2_upgrade.c`），
   帧凑齐即按指令通道格式回一条空体应答，主机因此把整包推完；收尾的 `0x0d/0x07` 之后默认不重启——重启会被主机当成更新没生效而重推整包，
-  串口 `fwapply on` 才一次性武装收尾重启，留给实机对账。上报给主机的固件版本固化在 `main/config/app_config.h` 的 CONFIG_DEFAULT_FW_VERSION_*，
-  串口 `fwver a.b.c` 可临时覆盖并就地重建出厂块；帧应答体 `fwack` 与「更新完成后上报的版本」`fwpost` 是留给后续对齐协议的现场旋钮。
+  串口 `fwapply on` 才一次性武装收尾重启。上报给主机的固件版本固化在 `main/config/app_config.h` 的 CONFIG_DEFAULT_FW_VERSION_*，
+  串口 `fwver a.b.c` 可临时覆盖并就地重建出厂块。
   协议见 [controller-switch2.md](controller-switch2.md) 的「Command 0x0D - 手柄固件更新推送」，
   取舍见 [ADR 0032](adr/0032-ns2-fw-update-masquerade.md)。
 - 调试注入是控制面进入数据面的唯一低频通道，采样与编码仍由数据面任务独立完成（`firmware/main/dp/dp_source.c`）：

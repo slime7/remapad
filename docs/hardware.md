@@ -3,7 +3,7 @@
 本文档记录 Remapad 目标板卡的硬件事实：SoC 与存储、屏幕、触摸、其他板载外设、GPIO 分配，以及实机验证过的启动事实。
 面板、触摸与背光 BSP 已接入固件（见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；
 BLE 手柄链路、蜂鸣器（GPIO42 LEDC tone）、电池电压采样、SYS_EN 电源保持与 PWR 按键已接入；
-USB host 直插按运行时角色切换接入（见下文「USB 控制器复用」，实机核对待做），IMU 与 RTC 仍只有硬件事实。
+USB host 直插按运行时角色切换接入（见下文「USB 控制器复用」，实机核对待做）。
 
 板卡为微雪 (Waveshare) **ESP32-S3-Touch-LCD-1.69**，SKU 27350；
 本文档的规格、引脚与地址来自微雪官方文档 <https://docs.waveshare.net/ESP32-S3-Touch-LCD-1.69>。
@@ -187,9 +187,8 @@ BLE 手柄链路（`ble/`，广播 / GATT / 配对 / 回连，见 [controller-sw
 百分比由 `battery_curve.c` 的静置电压—容量表折算，实测工作范围为 2.87V - 4.07V（插电时抬升至 4.15V），
 选型与限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。
 
-尚未接入的硬件：
+尚未收尾的硬件事项：
 
-- IMU（QMI8658C）与 RTC（PCF85063ATL）的驱动与状态上报；
 - USB host 输入的实机验收（代码已落地；VBUS 供电路径已按 V2.1 原理图确认为 TP1 外部注入，现用外置 5V 升压板从 TP1 注入，mux 切换、角色切回与手柄枚举待实测）；
 - 充电状态与外部供电的测量：核对原理图后确认 ETA6098 的 STAT 引脚（9 脚）空置、没有引出任何网络，板上也没有 VBUS 检测网络；
   固件的充电标志是按采样电压趋势推断的，不是实测值（见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)）。要拿到实测值，得另加测量：
