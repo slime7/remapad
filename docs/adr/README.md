@@ -36,7 +36,7 @@
 
 | ADR | 状态 | 主题 |
 | --- | --- | --- |
-| [0001](0001-use-pocketjs-vue-vapor-for-esp32s3-ui.md) | active | 采用 PocketJS 与 Vue Vapor 驱动 ESP32-S3 屏幕 UI |
+| [0001](0001-use-pocketjs-vue-vapor-for-esp32s3-ui.md) | active | 采用 PocketJS 与 Vue Vapor 驱动 ESP32-S3 屏幕 UI；界面运行时选择由 0054 取代 |
 | [0002](0002-adopt-hardware-bridge-and-packaging-architecture.md) | active | 引入统一硬件桥接协议与双工作区分层架构；打包部分由 0003 取代 |
 | [0003](0003-use-official-esp-idf-host.md) | active | 采用官方 PocketJS ESP-IDF host 构建链路 |
 | [0004](0004-use-local-pocketjs-checkout.md) | active | PocketJS 组件与原生归档改由本地 checkout 提供，Web 预览切换为官方开发主机 |
@@ -52,7 +52,7 @@
 | [0014](0014-page-mount-on-demand-progressive-fill.md) | superseded | 页面改为按需挂载并逐帧自顶向下填充，外层容器先出现；由 0015 取代 |
 | [0015](0015-restore-deferred-page-mount-after-first-frame.md) | superseded | 恢复首帧后逐帧补挂页面，放弃按需挂载与分帧填充；由 0016 取代 |
 | [0016](0016-mount-all-pages-before-first-frame.md) | active | 首屏前一次性挂载全部页面，放弃首帧后逐帧补挂 |
-| [0017](0017-display-path-and-scroll-frame-budget.md) | active | 面板 SPI2 取 40 MHz、strip 改 32 行条带优先内部 RAM、本机加速回调接管填充与掩码混合；整幅内容按行带顺序在一帧内刷完（隔行因实机纵向错位被否决）；面板时钟取值由 0018 部分取代，60 Hz tick 的帧预算取值由 0037 部分取代 |
+| [0017](0017-display-path-and-scroll-frame-budget.md) | active | 面板 SPI2 取 40 MHz、strip 改 32 行条带优先内部 RAM、本机加速回调接管填充与掩码混合；整幅内容按行带顺序在一帧内刷完（隔行因实机纵向错位被否决）；面板时钟取值由 0018 部分取代，60 Hz tick 的帧预算取值由 0037 部分取代；随 0054 换用 Slint 渲染器，条带取值与本机加速回调不再适用 |
 | [0018](0018-panel-spi2-clock-80mhz.md) | active | 面板 SPI2 时钟取上限 80 MHz，部分取代 0017 决策 1 的时钟取值 |
 | [0019](0019-playwright-e2e-and-host-unit-tests.md) | active | 以 Playwright 端到端测试与固件主机端单元测试作为回归基线 |
 | [0020](0020-battery-adc-sampling-and-charge-inference.md) | active | 电池电量走 BAT_ADC 采样（过采样平均 + 曲线拟合校准 + 静置电压—容量表），充电状态按电压趋势推断 |
@@ -84,11 +84,12 @@
 | [0046](0046-ns-waveform-to-ds5-pcm-hd-haptics.md) | active | NS2 波形（每侧 3 个时序子帧）经布局行 `hd` 规则重整为 DS5 的 PCM HD 触觉：USB 4ch 承载频道 3/4 音圈 + 1/2 发声、蓝牙走 0x32/0x36 私有报告（3kHz 2ch s8 + CRC32；0x36 另带「一帧装整拍」的 Opus 喇叭块，需先显式路由手柄喇叭），映射与落地只在固件布局内、PC 哑渲染；振幅按 `hd` 的增益定标（DS5 两行 4 倍），私有流默认启用；延伸 0042/0043 的合成刻度与让位语义，FEEDBACK 扩到 57 字节 |
 | [0047](0047-ds-behavior-settings.md) | active | DS4/DS5 手柄行为两项设置（触摸板映射加减键默认关、截图键默认开）持久化在 NVS，数据面每拍按先触发半区改写触摸板按下的键位；触摸点改为 4 字节解析、按左右半区建模，四个 PS 布局行登记触摸偏移与量程 |
 | [0048](0048-pc-gui-settings-tab-mirrors-device-ui.md) | active | PC 图形界面新增「设置」页镜像设备 UI 的可改项（亮度与息屏、手柄配色、DS4/DS5 行为、电源，只读设备信息），读写走固件 CLI、控件值全取回读行（remapadctl.parse_device_reply）；调试动作不再放按钮，只在「命令」页填进输入框 |
-| [0049](0049-firmware-draw-list-damage-diff.md) | active | 结构变化帧的 damage 由固件侧 draw list 差分算出：框架报整屏重画时换成本机差分出的真实变化区域，失败一律退回框架计划 |
-| [0050](0050-repaint-friendly-screen-rules.md) | active | 屏幕动效按重绘友好选：圆角加边框的元素必须带底色，切页瞬时完成、方向提示交给翻页箭头弹一下，只有拖动预览保留跟手平移 |
-| [0051](0051-opaque-565-card-artwork.md) | active | 卡片底图烘成不透明 PSM_5650（SVG 垫根容器色底 + 位图清单声明 565），走渲染器直拷路径 |
-| [0052](0052-ui-tick-rate-back-to-60hz.md) | active | UI 帧节奏恢复 60 Hz（tickHz 以 host profile 为准），CST816T 触摸改连续点模式；部分取代 0037 的 30 Hz 取值 |
+| [0049](0049-firmware-draw-list-damage-diff.md) | active | 结构变化帧的 damage 由固件侧 draw list 差分算出：框架报整屏重画时换成本机差分出的真实变化区域，失败一律退回框架计划；随 0054 换用 Slint 渲染器（damage 由 Slint 自己算）不再适用 |
+| [0050](0050-repaint-friendly-screen-rules.md) | active | 屏幕动效按重绘友好选：圆角加边框的元素必须带底色，只有拖动预览保留跟手平移；「切页瞬时完成、方向提示交给翻页箭头弹一下」已被翻页滑入 16px（90 ms，见 docs/ARCHITECTURE.md）取代 |
+| [0051](0051-opaque-565-card-artwork.md) | active | 卡片底图烘成不透明 PSM_5650（SVG 垫根容器色底 + 位图清单声明 565），走渲染器直拷路径；PSM_5650 与直拷回调随 0054 换用 Slint 渲染器不再适用 |
+| [0052](0052-ui-tick-rate-back-to-60hz.md) | active | UI 帧节奏恢复 60 Hz（tickHz 以 host profile 为准），CST816T 触摸改连续点模式；部分取代 0037 的 30 Hz 取值；tickHz 与 host profile 随 0054 作废，60 Hz 的取值改由平台层的动画推进节拍（16 ms 一档）承担 |
 | [0053](0053-usb-serial-phy-handback-on-role-switch.md) | active | host 切回串口时固件显式把内部 PHY 指回 USB-Serial/JTAG（进 host 前先放掉句柄），COM 口不必重启即可回来；交还失败时界面在切回后询问是否立刻重启，复位仍是保底恢复路径 |
+| [0054](0054-screen-ui-slint-rust.md) | active | 屏幕 UI 改用 Slint + Rust：.slint 在构建期编译成 Rust 静态库链进固件、运行期走软件渲染器，业务逻辑零 unsafe（只在 C ABI 边界留口并在注释里写明原因），字形按界面用到的字符自动子集，界面用例改成宿主侧 #[test]；取代 0001 |
 
 ## 创建 ADR 脚本用法
 

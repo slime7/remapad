@@ -1,23 +1,25 @@
 # Remapad 核心概念与领域抽象
 
-本文档记录 Remapad 的两条数据路径：PocketJS 显示 UI 路径，以及 USB→NS2→BLE 控制器路径。PocketJS 包格式、C ABI、UI 输入编码和渲染指令不在项目内复制；
-需要调整时应以 PocketJS 官方 schema、组件头文件和 ESP-IDF 示例为准。
+本文档记录 Remapad 的两条数据路径：屏幕 UI 路径（Slint，Rust）与 USB→NS2→BLE 控制器路径（ESP-IDF 原生 C）。
+界面的编译口径、平台层与 C ABI 由本仓库自己持有：界面源码在 `ui/src/`，Rust 组件在 `firmware/components/slint_ui/`。
 NS2 协议内容见 [controller-switch2.md](controller-switch2.md)，PS 家族手柄数据见 [controller-ps.md](controller-ps.md)。
 
 ## 领域术语表
 
 | 术语 | 含义 |
 | :--- | :--- |
-| **Pocket manifest** | `ui/pocket.json`，描述应用入口、框架、视口和 capability 要求。 |
-| **Host profile** | `firmware/pocket.host.json`，描述设备实际提供的 ESP32-S3 host 能力和显示事实。 |
-| **Pocket package** | `.pocket` 单文件包，包含 manifest 对应的构建计划、JavaScript、PAK 和目标 variant。由官方 CLI 生成，由 `pocketjs_package` 读取。 |
-| **PAK** | PocketJS 资源包，承载样式、baked font atlas、图片等运行时资源。由 `pocketjs_ui_qjs_feed_pak` 提供给 binding。 |
-| **Guest** | `pocketjs_guest` 创建的 QuickJS 执行环境，负责运行编译后的 JavaScript。 |
-| **UI core** | `pocketjs_ui_core` 维护的 retained UI 节点、资源句柄、动画和 frame view。 |
-| **UI binding** | `pocketjs_ui_qjs` 将 `globalThis.ui`、`globalThis.__pak` 和 UI turn 连接到 guest/core。 |
-| **Damage region** | 一帧中需要重新光栅化的逻辑矩形；renderer 将其输出为 full-width RGB565 strip。 |
-| **Host BSP** | 项目自己的 ESP-IDF 硬件层，负责面板、DMA、触控、按键、电源和其他外设。 |
-| **USB input** | 由 ESP32 USB host 接收的外部输入报告，先进入产品数据面，不直接进入 PocketJS。 |
+| **Slint 组件** | `.slint` 里的界面单元：`App` 是根窗口，页面与控件都是被复用的组件（`component`）。 |
+| **属性绑定** | `.slint` 里的声明式表达式：属性依赖别的属性，依赖一变就重算；固件只写 `in-out property`。 |
+| **界面回调** | 界面把用户动作交回宿主：本项目的动作统一是 `action(name, value)`，确认键走 `activate-focused()`。 |
+| **字形烘焙** | 构建期把界面里出现过的字符按字号表（12 / 14 / 16 / 24）烘成位图，运行期不解析字体文件。 |
+| **字符集锚点** | `ui/src/app.slint` 里一条不可见的 `Text`，把只在运行期拼出来的码点钉进烘焙集合（漏了就上屏成空洞）。 |
+| **Damage region** | 一帧中需要重新光栅化的矩形（Slint 按失效元素算），平台再把它折成行带。 |
+| **行带（band）** | 一次面板提交的单位：damage 矩形按 48 行切分出来的横向条带。 |
+| **平台层 / 宿主层** | `firmware/components/slint_ui` 的 `platform.rs`（渲染、行带提交、触摸采样）与 `host.rs`（状态写入、动作分发、手柄焦点）。 |
+| **状态快照 / 动作回调** | C ABI 的两条通路：`remapad_ui_state_t` 每 50 ms 进界面一次，动作按名字出界面（接口见 `slint_ui.h`）。 |
+| **C ABI 边界** | Rust 与 C 之间唯一的一层（`abi.rs`、`boundary.rs` 与 `include/slint_ui.h`）；Rust 侧业务零 unsafe，只有这一层留口并逐处注明原因。 |
+| **硬件驱动层** | `firmware/main/drivers/`：面板、触摸、背光、按键、蜂鸣器与电池，屏幕平台只经 hooks 调它。 |
+| **USB input** | 由 ESP32 USB host 接收的外部输入报告，先进入产品数据面，不直接进入界面。 |
 | **接收段（input/、usb/）** | 输入通路的第一段：桥接帧的编解码与串口分帧、USB-Serial/JTAG 的唯一读取者、USB host 枚举与 HID 收发，以及实现 `dp_source_t` 的桥接源与 USB 源。 |
 | **处理段（pad/）** | 输入通路的第二段：家族布局表把各家手柄报告解析成私有格式 `pad_state_t`（按键按位置语义、摇杆归一、能力位）。 |
 | **转换段（target/）** | 输入通路的第三段：目标编码器 `pad_target_t` 把私有格式编码成具体目标家族的报文，现役实现为 `target/ns2/`。 |
@@ -30,37 +32,29 @@ NS2 协议内容见 [controller-switch2.md](controller-switch2.md)，PS 家族�
 | **BLE controller peripheral** | 对 NS2 主机执行广播、GATT 服务、输入通知、输出命令和配对状态管理的 ESP32 外设角色。 |
 | **Product control plane** | UI bridge 与固件控制面，用于低频状态、配置、配对操作和诊断；不承载高频输入报告。 |
 
-## 应用清单与 host profile
+## 界面契约：视口、字号与字体
 
-应用和设备各自声明事实，官方 resolver 在构建时验证兼容性：
+界面的编译口径由两个 `build.rs` 各持一份（宿主包与固件组件），两处必须一致：
 
 ```mermaid
 flowchart LR
-    App["ui/pocket.json<br/>应用声明"] --> AppEntry["entry / framework"]
-    App --> AppView["logical viewport"]
-    App --> AppReq["requires"]
-    App --> AppEnh["enhances"]
-
-    Host["firmware/pocket.host.json<br/>设备声明"] --> HostPlatform["platform = esp-idf"]
-    Host --> HostAbi["host ABI / tickHz"]
-    Host --> HostView["physical / logical viewport"]
-    Host --> HostPres["presentation / density"]
-    Host --> HostCap["capabilities"]
+    View["ui/src/app.slint 根窗口<br/>240 × 280"] --> Compile["slint-build 编译"]
+    Sizes["字号表 12 / 14 / 16 / 24"] --> Compile
+    Fonts["assets/fonts/<br/>NotoSansSC / MaterialIcons / seguisym"] --> Compile
+    Compile --> Glyphs["字形位图 + 光栅化底图<br/>按界面用到的字符自动子集"]
+    Glyphs --> Lib["libslint_ui.a"]
+    Platform["platform.rs 的 VIEW_WIDTH / VIEW_HEIGHT"] --> Lib
 ```
 
-- `requires` 是应用运行所必需的能力，host 不提供时构建应失败。
-- `enhances` 是应用可以利用但不应作为最低运行条件的能力。
-- `capabilities` 只能填写固件确实会提供的能力。当前 Remapad profile 声明 `text.glyphs.baked`、`input.touch` 与 `input.buttons`；
-  触摸能力随触摸 BSP（CST816T 采样，见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）接入一并加入。
-  按键能力自手柄组合键捕获（见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)）起声明——组合键把十字键与圆圈键映射成官方按键位，模拟量仍不在 profile 中。
-- profile 的 canonical hash 会进入构建计划和 package variant。
-  运行时 `pocketjs_package_select` 会校验目标、ABI、tick、视口、density、presentation 和 profile hash。
-- 当前设备的逻辑和物理视口均为 `240×280`。生成的 JavaScript bundle 可能仍包含官方 framework 的 `SCREEN_W = 480`、`SCREEN_H = 272` fallback 常量；
-  它们不是设备 profile 的显示事实，也不应手动修改生成产物。
-  ESP-IDF host 按 package contract 创建 `pocketjs_ui_core`，并通过 `globalThis.ui.__viewport` 发布 `240×280`；
-  构建计划和运行时 frame 才是设备尺寸的校验依据。
-
-触摸预览页可以在浏览器中提供真实触点，浏览器 host 与设备 host 各自把输入交给同一套框架语义：预览页把指针事件转换为触摸帧，设备端由 `drivers/touch.c` 把 CST816T 采样填入 `sample_input`。
+- **视口**：根窗口与平台窗口都取 240 × 280；两处不一致时画面会被裁掉或留白。
+- **字号**：只用 12 / 14 / 16 / 24 四档（`theme.slint` 的 `text-*` token 与 `build.rs` 的 `FONT_SIZES` 一致），
+  新增档位要同时改两处，否则只会退回最近的一档位图。
+- **字体**：正文用 NotoSansSC（宿主与组件的 `build.rs` 把它设成 `SLINT_DEFAULT_FONT`），
+  图标与转圈由 `components.slint` / `pages.slint` 里的 `import "../assets/fonts/*.ttf"` 引入；字体文件本身不进固件。
+- **自动子集**：烘焙集合就是界面里出现过的字符；运行期才拼出来的文本（电量、内存、版本号）必须把用到的码点
+  写进 `ui/src/app.slint` 的锚点串，否则上屏是空洞或豆腐块。
+- **PC 预览**：`uv run python scripts/ui-preview.py` 打开 `ui/preview.slint`——设备画面（同一棵 `AppContent`，240 × 280）
+  在上、控制条在下，动作在预览里按固件语义结算，因此点着就能走一遍界面；同一套字体与字号表，存盘即刷新。
 
 ## 控制器数据面
 
@@ -118,29 +112,28 @@ flowchart TB
   [controller-switch2.md](controller-switch2.md) 与 [controller-ps.md](controller-ps.md)，
   取舍见 [ADR 0035](adr/0035-ns2-headset-state-passthrough.md)。
 
-- flash 写入期间 cache 被禁用，而 PocketJS owner task 的栈在 PSRAM——从该任务直接执行任何 flash 写都会在禁缓存窗口访问 PSRAM 并触发 cache 异常重启。
-  凭证等持久化写一律收敛到 `ble_creds` 的内部 RAM 栈写任务：各任务只更新内存表并投递快照，新增持久化需求沿用同一模式。
-- `ui/src/bridge/` 与 `firmware/main/bridge/` 只承载低频的模式切换、配对开关、连接状态、电池与诊断：
-  guest 侧经 `globalThis.__nativeBridge.postMessage(json)` 发命令，owner task 每帧用 `js_bridge_service()` 处理队列并回发应答与事件；
-  入队出队都在 owner task 上（无锁），PWR 按键与串口 CLI 等非 owner task 上下文经 `js_bridge_submit_command` / `js_bridge_post_event` 的外部队列转移。
-  命令与事件清单以 `ui/src/bridge/protocol.ts` 为准。
-- **屏幕文案一律取自 ui/src 的字面量**，桥接只回状态与错误码、不回可上屏的文本：
-  字体字符集按源码字面量扫描烘焙，固件回传的文本直接渲染就是豆腐块（联合类型 `PairingNotice` 把这条规则钉在类型上）。
+- flash 写入期间 cache 被禁用：任务在禁缓存窗口里不能访问 PSRAM。凭证等持久化写因此收敛到 `ble_creds` 的内部 RAM 栈任务，
+  各任务只更新内存表并投递快照；新增持久化需求沿用同一模式。面板提交、DMA 缓冲与界面行带同理都放内部 RAM。
+- `firmware/main/bridge/` 是控制面：只承载低频的模式切换、配对开关、连接状态、电池与诊断。
+  界面侧的动作经 `action` 回调交给 `slint_host.c`，转成 JSON 命令排进队列；队列由 owner task 在每轮状态轮询里服务
+  （`js_bridge_service()`），入队出队都在同一个任务上（无锁），PWR 按键与串口 CLI 等别的上下文经
+  `js_bridge_submit_command` 的外部队列转移。命令清单见 [pc/README.md](../pc/README.md) 与串口 CLI 的 `:help`。
+- **屏幕文案一律取自 `.slint` 的字面量**，固件只回状态码、不回可上屏的文本：
+  字形只按界面里出现过的字符烘焙，固件回传的新字符串直接显示就是空洞或豆腐块（需要显示时把码点写进 `app.slint` 的锚点串）。
 - 玩家序号灯（主机 Command 0x09 下发的 4 位掩码）由 `ns2_session_player_leds()` 按活跃会话汇总，
-  随 `systemStatus.playerLed` 与 `playerLedChanged` 事件供首页四格指示灯使用。
+  经状态快照的 `player_led` 供底栏四格指示灯使用。
   用户设置（背光亮度、手柄四段配色、上报固件版本）由 `firmware/main/config/app_config.c` 持久化到 NVS（内部 RAM 栈提交任务，与 ble_creds 同一模式），开机恢复。
-- USB 角色（`usbRole`：device = 插电脑 COM 口，host = 插手柄）在运行时真实切换，顺序与约束见
+- USB 角色（`usb_role`：device = 插电脑 COM 口，host = 插手柄）在运行时真实切换，顺序与约束见
   [ARCHITECTURE.md](ARCHITECTURE.md) 的「USB 角色切换」；角色只在本次运行有效、不写 NVS。
 - 底栏左区是 USB 模式指示：串口档电脑图标、手柄档手柄图标，图标与「USB 模式」页两张卡一一对应；
-  对接对象没接上时换成同族的禁用字形、颜色降一档、标签写「未连接」——直插手柄接没接由 `usb_input_attached()`
-  经 `padAttachedChanged` 推送（name 是家族机读短名，屏幕标签取自 ui/src 的字面量），
-  PC 接没接由 USB-Serial/JTAG 的 SOF 监视经 `pcLinkChanged` 推送。
+  对接对象没接上时换成同族的禁用字形、颜色降一档、标签写「未连接」——直插手柄接没接取 `usb_input_attached()` 与 `pad_family_from_ids()`，
+  PC 接没接取 USB-Serial/JTAG 的 SOF 监视，两者都在状态快照里。
 - 配对与连接状态接的是真实 BLE 会话（NimBLE 手柄外设）：配对页主按钮是连接键，广播中它发 `disconnect`（收窗口与流程、断开链路、静默）；
   副按钮配新主机走 `startPairing`（先断开当前主机再进发现广播等新主机搜索，凭证拿齐且会话注册完成才退出流程）；
   解除配对走显式 `unpair`（清 NVS 凭证并静默），UI 不暴露入口。
   已连接却停在握手等待态的主机（手机/PC 自动回连）由 3 秒无协议活动的空闲超时断开，主机连接地址是随机地址，不能按 OUI 识别。
   配对成功以协议证据判定（初始化握手完成、凭证匹配回连，或主机在链路上启用特性 0x0C/0x04），NVS 凭证只是重启后仍成立的持久化证据，两者独立；
-  第三条证据覆盖主机换随机地址与主机已有凭证而不再重跑 0x15 两个现场，判据与用例见 `ns2_adv_host_registered()`；配对六态由此实时推导并经 `pairingStateChanged` 推送。
+  第三条证据覆盖主机换随机地址与主机已有凭证而不再重跑 0x15 两个现场，判据与用例见 `ns2_adv_host_registered()`；配对六态由此实时推导并写进状态快照。
   协议与凭证的展开见 [controller-switch2.md](controller-switch2.md)，取舍见 [ADR 0010](adr/0010-nimble-ble-controller-stack.md)。
 - 电池由 `battery.c` 真实采样（BAT_ADC=GPIO1 / ADC1_CH0，分压 3:1 还原 VBAT，静置电压—容量表折算百分比）；
   充电状态没有可测量的引脚，按电压趋势推断，限制见 [ADR 0020](adr/0020-battery-adc-sampling-and-charge-inference.md)。
@@ -204,7 +197,7 @@ flowchart TB
   轴向取 NS 家族的约定，PS 家族的轴向与符号待实机核对（见 [controller-ps.md](controller-ps.md) 的核对状态）。
 - 0x05 报文的 IMU 字段按 [controller-switch2.md](controller-switch2.md) 的偏移填真值；0x09 的 40 字节运动块结构未公开，
   因此只提供 CLI `motion 3` 的实验填充档。
-- USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
+- USB 高频输入不应经过控制面队列，也不应等待屏幕刷新或状态轮询。
 
 数据面每拍的节奏收口在这一处：
 
@@ -444,7 +437,8 @@ Steam 原生布局整族走兜底并在能力位里标记。
 判定在私有格式层完成（`firmware/main/dp/dp_ui.c`），家族表只需要把 L1/R1/L3/R3 映射到 `PAD_BTN_L1/R1/L3/R3`，既有与将来的布局都自动可用。
 dp_task 在捕获的那一刻先向主机补发一帧全松开（清掉 `raw_len` 与 `native_lang`，避免同代透传把旧按键带过去），
 其后按原来的上报节奏续发同一份中性帧——主机按稳定不跳号的上报流判断链路健康，整段停发会被它判成手柄离线。
-玩家输入从捕获起一点不上行，同时十字键与圆圈键映射成 PocketJS 按键位，经 owner task 的 `sample_input` 交给 UI。
+玩家输入从捕获起一点不上行，同时十字键与圆圈键映射成 UI 按键位（`firmware/main/dp/dp_ui.h` 的 `DP_UI_BTN_*`），
+经 50 ms 一轮的状态快照交给界面。
 
 ```mermaid
 stateDiagram-v2
@@ -455,144 +449,120 @@ stateDiagram-v2
     Captured --> Forward: 再按同样的组合（恢复转发）
 ```
 
-UI 侧把各页与底栏的 `focusable` 绑在「自己是当前页、且没有弹窗盖住」上（`interactive` 由 `ui/src/App.tsx` 往下传），
-`hooks/usePadControl.ts` 只管操控窗口与非操控状态下的焦点清理；框架的遍历因此只含画面上的控件，圆圈键与触摸点按汇入同一个 onPress 入口。
-模式状态经 `systemStatus.padUiMode` 与 `padUiModeChanged` 事件同步到 bridge，调试页、串口 `ui [on|off]` 与 `key ui` 都能在不插手柄时进出。
+界面侧把各页与底栏的焦点资格绑在「自己是当前页、且没有弹窗盖住」上：`App` 往下传 `interactive`，各页按它决定自己进不进焦点名单，
+隐藏页的可点元素因此不会留在名单里。焦点序号由固件写入，焦点环只在 `pad-active` 为真时可见（操控窗口打开，或最近 4 秒内有按键）。
+圆圈键的确认与触摸点按最终都落到 `action(name, value)` 这一个回调上；方向键 / WASD 与串口 `key ui` 走同一条通路。
+模式状态由 `dp_ui_active()` 经状态快照写进界面，调试页、串口 `ui [on|off]` 与 `key ui` 都能在不插手柄时进出。
 
-## UI 图元与资源
+## 界面图元与控件
 
-`ui/src/App.tsx` 使用 PocketJS Vue Vapor 的 `<View>`、`<Text>` 和 `<Image>` 等图元：
+界面只有三类东西：自己定位的 `Rectangle`（底色、圆角、边框）、`Text`（画的是构建期烘好的字形位图）与由它们拼出的控件，
+外加只用于底图的 `Image`。控件复用集中在 `ui/src/components.slint`：
 
-- `<View>` 提供嵌入式布局、背景、边框、间距和 focusable 交互。
-- `<Text>` 使用构建期收集的字符集和 baked font atlas；字号应使用 PocketJS 支持的 Tailwind 插槽。
-  Inter 未映射的码点（中文等）经应用目录 `fonts.json` 声明的回退字体面（当前为 Noto Sans SC）烘焙进同一图集。
-- `<Image>` 通过资源名称引用 PAK 中的图像；图片在构建期处理，不在 ESP32 上解析 SVG。
-  应用目录 `images.json` 可按资源名声明 `psm`（`0` 是 PSM_5650，缺省 `3` 是 8888）：
-  不透明的底图声明成 565 才能在设备上走本机直拷回调，带透明通道的位图只能逐像素混合（见 [ADR 0051](adr/0051-opaque-565-card-artwork.md)）。
-- `createSpriteAnimation` 只描述资源帧选择，实际资源仍由官方编译器和 PAK 管理。
-- 长文案放不进可视区时用 `ui/src/components/MarqueeText.tsx`（自定义横向滚动文本）：
-  框架的单行 `Text` 不自动换行，组件按「静止 2 秒 → 匀速左移到底 → 到底停留 1 秒 → 跳回起点」循环，放得下则全程静止；
-  可视宽度由调用方以逻辑像素传入（框架不回读布局），滚动相位取 `virtualNow()`，文本宽度经 `getOps().measureText(text, slot)` 量取，宿主不提供该操作时退回静态文本。
-- 页面组织：`ui/src/App.tsx` 在首次渲染里一次挂完八个页面，首屏（第一次 commit）只在全部建树完成后提交，
-  等待期由固件启动画面覆盖（选型见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
-  App 没有页面容器层也没有待挂队列，切页由每个页面根节点翻转 `hidden`（`props.active()`）完成；
-  轮播顺序来自 App 顶部的页表（`PAGE_KEYS`，槽位由数组位置推出，各页按页名 `slot('…')` 取），新增页面在页表里加一项并写好 JSX。
-- 同页会来回切换的状态用 `hidden` 收起而不是条件渲染：每行就是一个文本节点，标签与值同节点、省掉行容器。
-  运行期增删节点很贵，因此 JSX 里的 `.map(...)` 不能读响应式状态——列表取自模块级常量，可变字段留给子组件按属性绑定
-  （模式页 `ModeCard`、手柄设置页的身份信息行都是这个写法）。切换类样式也不要带 `transition-*`：过渡期间该区域每帧都要重画，观感是慢半拍。
-- 滚动页在滚动列末尾放 `components/BottomPlaceholder.tsx` 垫高（`BOTTOM_PAD_H`）；页面内容高度由各页静态估算后传给 `usePageScroll`
-  （框架不回读布局），估算误差由垫高的余量吸收。页面能否滚动由调用方一次声明（`usePageScroll(active, scrollable, contentH)`）；
-  滚动边界硬夹住（`overscroll: 0`），抛掷落点越界的会被改写成到边界的补间。全应用只注册一个纵向手势，识别区域由当前接管滚动的页面给出：
-  非当前页或不可滚动的页让 region 返回 null，本帧不接管新触点（官方优先级即注册顺序，逐页注册会互相抢 claim，dispose 重注册又会取消进行中的触点）。
-
-入口保持官方 Vue Vapor 形式：
-
-```jsx
-import { mount } from '@pocketjs/framework/vue-vapor';
-import Hero from './App';
-
-mount(() => <Hero />);
-```
-
-固件 `pocketjs_ui_qjs_mount` 会在应用 eval 前安装 `globalThis.ui` 和 `globalThis.__pak`；应用入口不再手动传入 PAK，也不依赖私有 prelude。
+- **布局**：需要成排/成列、还要按内容撑开的区域用 `HorizontalLayout` / `VerticalLayout` 加 `alignment`；
+  页面主体按设计稿量测值给绝对位置（例如底栏三格按整屏 240 均分），改设计稿要同步改 `ui/tests/` 的断言。
+- **文本**：字号只取 12 / 14 / 16 / 24；中文由 NotoSansSC 烘制，图标与转圈走字形（`Icon` 控件指定字形字体）。
+- **图标**：单色图标是 Material Symbols 的字形，写成 `Icon { glyph: "\u{e30c}"; size: ...; tint: ...; }`，
+  码点对照表在 [ui/README.md](../ui/README.md)；不要退回 SVG，缩放后上屏会糊。
+- **可点控件**：控件外壳是 `Rectangle`，触摸区是内部的 `DragArea`（继承 `TouchArea`，并写入全局 `Drag` 供拖动层判定）；
+  `activated` 落到页面回调，再由 `App` 转成 `action(name, value)`。
+- **焦点**：页面按 `focus-index` 画 2px 焦点环（`theme.slint` 的 `focus-ring`），并且只在 `interactive` 为真时进焦点名单。
+- **底图**：卡片与底栏的两张 SVG 在构建期光栅化成位图（`ui/assets/*.svg`），运行期只做拷贝与混合。
+- **页面组织**：八个页面（发布构建七个，开发构建多一个调试页）在 `App` 里全部常驻，
+  `visible` 由 `page` 属性决定，切页瞬时完成、没有建树成本；页表与每页的焦点项数写在
+  `function focus-count-for` 里（固件按这个行数走焦点）。新增页面在 `app.slint` 的卡片里加一个槽位并同步该函数。
+- **只改属性，不加节点**：列表长度这类会来回变的东西不要用 `for` 动态增删，写固定的槽位再按属性显示/隐藏；
+  颜色与尺寸也不要接过渡动画（`animate` 只用在翻页提示与拖动跟手上），过渡期间那片区域每帧都要重画。
+- **拖动与滚动**：卡片区域只保留跟手平移（拖动层 `DragArea` 汇入全局 `Drag`，位移封顶 ±24，
+  抬手按位移阈值或甩动方向切页）；页面自身不做滚动——内容按设计稿一次性摆好。
 
 ## 构建产物映射
 
 ```mermaid
 flowchart TB
-    Source["Vue Vapor JSX + pocket.json + host profile"]
-    Compiler["PocketJS 官方 compiler"]
-    JS["remapad-ui.js"]
-    Pak["remapad-ui.pak"]
-    Pocket["remapad-ui.pocket"]
-    Embed["pocketjs_embed_package / compile_app"]
-    Output["firmware/build/pocketjs/remapad/<br/>C 与汇编嵌入文件、生成头文件（均为 CMake 产物）"]
+    Source["ui/src/*.slint + ui/assets/（字体与 SVG）"]
+    Build["build.rs：slint-build"]
+    Generated["OUT_DIR 下生成的 Rust 代码"]
+    Cargo["cargo --target xtensa-esp32s3-none-elf"]
+    Lib["firmware/build/esp-idf/slint_ui/cargo/<br/>xtensa-esp32s3-none-elf/release/libslint_ui.a"]
+    Link["ESP-IDF 链接进应用镜像"]
 
-    Source --> Compiler
-    Compiler --> JS
-    Compiler --> Pak
-    Compiler --> Pocket
-    Pocket --> Embed
-    Embed --> Output
+    Source --> Build
+    Build --> Generated
+    Generated --> Cargo
+    Cargo --> Lib
+    Lib --> Link
 ```
 
-`firmware/build/pocketjs/remapad/` 中的 C/汇编嵌入文件和生成头文件都是 CMake 产物。项目不应再出现手写的 PCKT 解析、字节数组或 `app_pocket.h` 同步脚本。
+生成物只有两处：cargo 的 `target/`（`.gitignore` 已忽略）与 `firmware/build/`。仓库里没有手写的嵌入源、字节数组或同步脚本。
+宿主用例走另一条链：`ui/build.rs` 编译同一份 `.slint`，产物落在 `ui/target/`。
 
 ## ESP-IDF 运行时生命周期
 
-`firmware/main/pocketjs_host.c` 使用官方 C API，顺序与官方 ESP-IDF smoke 示例保持一致，但创建、mount、eval 和逐帧 turn 都在同一个产品 task 上完成：
+`firmware/main/slint_host.c` 只负责固件侧的装配与轮询，界面与渲染都在 Rust 组件里：
 
 ```mermaid
 flowchart TB
-    Package["embedded .pocket bytes"]
-    Open["pocketjs_package_open"]
-    Select["pocketjs_package_select（host contract）"]
-    Guest["guest_create（QuickJS）"]
-    Core["ui_core_create（contract viewport）"]
-    Mount["ui_qjs_create → feed_pak → mount → guest_eval"]
-    Turn["remapad-pjs owner task<br/>sample_input → pocketjs_ui_turn → after_turn"]
-    Plan["prepare damage plan"]
-    Strip["render_strip（RGB565）"]
-    Transfer["panel transfer by BSP"]
-    Commit["commit / abort"]
+    Task["remapad-slint owner task<br/>面板 / 触摸 / 背光 + 启动画面"]
+    Start["remapad_slint_ui_start(hooks, poll, action)"]
+    Platform["建平台：整帧 PSRAM 缓冲 + 内部 RAM 行带缓冲"]
+    Window["建 240 × 280 窗口并设平台"]
+    App["App::create + 首轮状态快照"]
+    Render["首帧整屏渲染"]
+    Submit["按 damage 折 48 行行带提交"]
+    Loop["事件循环：定时器 / 动画 / 触摸 / 重绘"]
 
-    Package --> Open
-    Open --> Select
-    Select -->|"borrowed JS + PAK views"| Guest
-    Guest --> Core
-    Core --> Mount
-    Mount --> Turn
-    Turn --> Plan
-    Plan --> Strip
-    Strip --> Transfer
-    Transfer --> Commit
+    Task --> Start
+    Start --> Platform
+    Platform --> Window
+    Window --> App
+    App --> Render
+    Render --> Submit
+    Submit --> Loop
 ```
 
-包中的 JavaScript 和 PAK 都是借用视图，必须在 guest、binding 和 package 销毁前保持可读。
-生成的 package header/assembly 由 CMake 管理，因此不会发生 UI 与固件手动复制不一致的问题。
+固件只经 C ABI 传两类东西：`remapad_slint_hooks_t`（面板提交与触点采样）和两个回调（状态快照、动作分发）。
+界面侧不持有任何固件指针；快照里的字符串是只读借用，回调返回后即作废。
 
 ## 输入抽象
 
-官方 `pocketjs_ui_input_t` 是一次 UI turn 的输入快照，包含：
+界面有两条输入：**触摸**（用户手指）与**手柄按键位**（组合键捕获期间的屏幕操控）。
 
-- `buttons`：设备按键位图。
-- `analog_x`、`analog_y`：左模拟量。
-- `touches`、`touch_count`：当前触点数组。
+- 触摸由固件经 `hooks.touch_sample` 提供，返回逻辑像素坐标；平台把它转成 Slint 的 `PointerMoved`、
+  `PointerPressed`、`PointerReleased` 事件序列（按住期间只补移动，抬手时补一次 `PointerExited`）。
+- 手柄按键位来自数据面的 `dp_ui_buttons()`（只在组合键捕获期间非零，含十字键、圆圈键与肩键等价出的左右，
+  见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)），由 `host.rs` 转成焦点移动、翻页与确认。
+- CST816T 是单点触摸，坐标用逻辑像素；息屏（背光关闭）期间平台整段跳过采样——画面不可见，触点只剩误触，
+  亮屏由 PWR 键或命令承担。板卡引脚见 [hardware.md](hardware.md)。
+- 平台不采样模拟量：界面没有需要模拟输入的地方。
 
-输入采样属于 host/BSP，不属于 PocketJS 应用包。当前实现由 owner task 的 `sample_input` 回调填三样：
-按键取自数据面的手柄操控映射（`dp_ui_buttons()`，只在组合键捕获期间非零，含十字键、圆圈键与肩键等价出的左 / 右，见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)）。
-模拟量恒为零。
-触点由 CST816T 采样转换为官方 `pocketjs_ui_touch_t` 触点数组。
-息屏（背光关闭）期间 `sample_input` 整段跳过触摸采样：画面不可见，触点只剩误触，
-亮屏由 PWR 键或命令承担、触摸不参与唤醒。
-CST816T 是单点触摸，触点 `id` 在同一按压期间恒为 0，坐标使用逻辑像素且受官方绑定的 9 位量程约束（每轴 511 以内），板卡引脚见 [hardware.md](hardware.md)。
-USB→NS2 的高频状态应留在产品数据面，不应为了驱动 UI 而重新设计 PocketJS runtime 的输入协议。
+USB→NS2 的高频状态留在产品数据面，界面只经状态快照看低频结果（配对、电量、USB 角色与玩家灯）。
 
 ## 渲染抽象
 
-官方 RGB565 renderer 的职责是从 UI frame view 生成像素，不负责面板控制：
+平台的职责是把界面画成像素并提交，不负责面板时序：
 
-1. `pocketjs_rgb565_prepare` 生成 damage plan 并开始目标事务。
-2. 对每个逻辑 damage region，分配或复用一个 full-width、region-height 的 RGB565 strip。
-3. `pocketjs_rgb565_render_strip` 将 strip 写入调用方提供的缓冲区；容量必须精确匹配物理宽度乘以 region 高度。
-4. BSP 将 strip 传给面板 DMA，所有传输成功后调用 `pocketjs_rgb565_commit`。
-5. 任一渲染或传输失败时调用 `pocketjs_rgb565_abort`，不要提交不完整帧。
+1. Slint 的软件渲染器只画本帧 damage 区域，结果写进整帧 RGB565 缓冲（PSRAM，240 × 280）。
+2. 每条 damage 矩形按 48 行切分，逐行拷进内部 RAM 的行带缓冲（240 × 48）。
+3. `hooks.transfer` 把行带交给面板驱动：字节序转换、SPI EDMA 与等待完成都在驱动里。
+4. 整帧缓冲同时是截图通道的数据源：`remapad_slint_ui_frame()` 给只读指针，`remapad_slint_ui_copy_frame()` 整屏拷贝。
 
-ESP32-S3 没有本项目使用的 P4 PPA 加速器，因此 renderer 使用官方软件 RGB565 路径。当前仓库只验证 strip 生成和事务，不宣称已经完成 ST7789 传输。
+面板初始化失败时平台照常渲染，只是没有可提交的去处；S3 没有 P4 那类 PPA，全程纯软件渲染（整数运算）。
 
 ## 调度抽象
 
-当前由产品自己的 `remapad-pjs` owner task 承担调度：它按 host profile 的 `tickHz` 驱动 UI turn，同时承载 guest 的创建、mount 和 eval，
-只负责调度、输入采样回调与帧消费，不拥有输入驱动或显示设备。**创建 guest 的任务与执行 UI turn 的任务必须是同一个**，
-且任务栈容量必须大于 guest 的 `stack_limit`；栈预算的推导与不接入官方 `pocketjs_runner` 的原因见
-[ARCHITECTURE.md](ARCHITECTURE.md) 的「为什么由产品 task 承载 guest 生命周期」。
-QuickJS 的栈守卫以下限 `stack_top - stack_size` 判断溢出，而 `stack_top` 取自创建 runtime 时的栈指针（`JS_UpdateStackTop` 未被调用），
-turn 换到别的任务执行时守卫量的是别人的栈、溢出不会被拦截。
+调度只有一条任务：`remapad-slint` owner task（64 KB 栈、内部 RAM、钉在 CPU1）承载面板 / 触摸 / 背光初始化、
+启动画面、`remapad_slint_ui_start` 与之后的事件循环。事件循环每轮：推进定时器与动画 → 采样触摸 → 按需重绘并提交 →
+让出 CPU（有动画时 16 ms 一档、最长 100 ms；不让出会把循环拉成自旋并饿死空闲任务）。
+
+界面状态与动作都在这个任务的上下文里交换：Slint 按单线程前提编译（`unsafe-single-threaded`），
+跨任务只走原子量（帧缓冲地址、trace 帧数、截图与内存请求）与 `bridge` 的命令队列。
+状态快照由一条 50 ms 的 Slint `Timer` 驱动，手柄按键处理与周期统计都挂在这一拍上。
 
 ## 硬件扩展边界
 
 新增外设（面板、触控、按键与模拟量、USB host、BLE、背光、电池）直接用 ESP-IDF 或对应官方驱动，在对应的 BSP / 数据面边界接入：
 面板与触控归 `drivers/`，USB 与音频触觉归 `usb/`，BLE 归 `ble/`，各自的约束写在对应目录的文件头。
-BSP 提供的事实经 [hardware.md](hardware.md) 记录，需要暴露给 UI 的能力再映射到 host profile 的 capabilities——
-没有真实硬件事实时，不在 UI manifest 或 host profile 中提前声明。
+驱动提供的事实经 [hardware.md](hardware.md) 记录，需要暴露给界面的读数再加进 `remapad_ui_state_t` 的状态快照字段——
+没有真实硬件事实时不要提前声明字段。
 协议字段与配对流程见 [controller-switch2.md](controller-switch2.md)，文档里的实验性结论不等于已完成的互操作保证。

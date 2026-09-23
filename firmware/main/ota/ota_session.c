@@ -113,6 +113,18 @@ const char *ota_session_state_name(void)
     return phase_name(s_ota.phase);
 }
 
+void ota_session_progress(int *phase, int *percent)
+{
+    const uint32_t total = s_ota.proto.image_size;
+    const uint32_t received = s_ota.proto.received;
+    if (phase != NULL) {
+        *phase = (int)s_ota.phase;
+    }
+    if (percent != NULL) {
+        *percent = total > 0U ? (int)((uint64_t)received * 100U / total) : 0;
+    }
+}
+
 const char *ota_session_running_version(void)
 {
     const esp_app_desc_t *desc = esp_app_get_description();

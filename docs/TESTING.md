@@ -1,78 +1,48 @@
 # Remapad 测试策略与回归规则
 
-本项目用自动化测试守住行为：**UI 端到端测试**（Playwright 驱动触摸预览页里的真实产物）、**固件主机端单元测试**（把与硬件无关的纯逻辑模块编译成 PC 可执行文件）与 **PC 侧主机端用例**（`pc/` 工具的纯逻辑，标准库 unittest）。三者都跑在开发机上，不需要真机。
+本项目用自动化测试守住行为：**屏幕 UI 宿主用例**（Slint 的 `#[test]`，编译真实 `.slint` 产物并渲染一帧）、
+**固件主机端单元测试**（把与硬件无关的纯逻辑模块编译成 PC 可执行文件）与
+**PC 侧主机端用例**（`pc/` 工具的纯逻辑，标准库 unittest）。三套都跑在开发机上，不需要真机。
 
-## UI 端到端测试
+## 屏幕 UI 宿主用例（Slint）
 
-### 为什么是「预览页 + 真产物」
-
-测试对象不是另写一套模拟环境，而是 `pnpm run dev` 用的同一个触摸预览页：
-
-- 页面加载 `ui/dist/` 里的真实 `.js` 与 `.pak`，由官方编译器从 `ui/src` 构建；
-- 渲染核心是官方 wasm，与真机同一条布局与光栅化路径，像素结果确定性一致；
-- 输入只有触摸屏一种，测试台把指针事件换成设备触点，与真机同一套手势与命中判定。
-
-因此「预览页里点得到、画得出」与「真机上点得到、画得出」是同一件事；帧率与内存占用另算。
-
-### 目录
-
-| 文件 | 作用 |
-| :--- | :--- |
-| [ui/playwright.config.ts](../ui/playwright.config.ts) | 配置：串行执行、启动预览服务器（与 `pnpm run dev` 同一条命令）、失败留痕 |
-| [ui/tests/e2e/fixtures.ts](../ui/tests/e2e/fixtures.ts) | 测试台：触摸驱动、组件树、像素、读数面板 |
-| [ui/tests/e2e/harness.ts](../ui/tests/e2e/harness.ts) | 页面侧探针：接住官方 DevTools 通道，提供组件树与边界命中 |
-| [ui/tests/e2e/pages.ts](../ui/tests/e2e/pages.ts) | 页面级操作：从默认状态走到某个功能页 |
-| `ui/tests/e2e/*.spec.ts` | 用例：启动、页面切换、滚动、手柄设置、配对、系统、手柄操控屏幕 |
+`ui/tests/*.rs` 是 Slint 界面的 `#[test]` 用例：同一份 `ui/src/*.slint` 与 `ui/preview.slint` 在开发机上编译，
+装 Slint 测试后端注入界面状态，再用软件渲染器渲染一帧，按**元素几何**与**画面像素**断言。
+被测对象是真实产物（同一套字体烘焙、固件里同一个软件渲染器），不需要真机与串口。
 
 ### 运行
 
 ```powershell
-pnpm run test:e2e                    # 全量跑一遍
-pnpm run test:e2e:headed             # 打开浏览器看过程
-pnpm exec playwright test -g 滚动     # 只跑匹配的用例（在 ui/ 目录下执行）
+cargo test --locked --manifest-path ui/Cargo.toml                  # 全量
+cargo test --manifest-path ui/Cargo.toml --test bottom_bar 底栏    # 只跑匹配的用例
 ```
 
-命令会先按 `pnpm run dev` 的方式编译产物并拉起预览服务器（8130）。本地已有 dev 会话时直接复用，不会重复启动。
+窗口固定按面板尺寸（240 × 280）渲染，只需要宿主 stable 工具链；xtensa 工具链只服务于固件构建。
+界面里的 id 是用例的查询入口（例如 `BottomBar::battery-text`），改 id 要同步改 `tests/`。
 
-### 三层事实来源
+### 断言口径
 
-断言越靠前越稳：
+- **布局事实用元素几何**：`ui::rect()` 拿元素相对窗口的绝对位置与尺寸；
+- **「画出来了没有」用画面墨迹**：`ui::frame()` 渲染一帧，`count_color` / `ink_bounds` / `ink_runs` 按区域找落色与墨迹分段。
+  只出现在运行期字符串里的码点不会被烘成字形，上屏是空洞或豆腐块——这类缺陷只有像素层看得见（见 [ui/README.md](../ui/README.md)）；
+- 屏幕坐标是设计稿量测值（底栏 8..232、三格按整屏 240 均分、图标与标签的中线等），换设计稿要同步改断言；
+- 元素查询只认当前画出来的元素：`visible: false` 的页与没实例化的 `if` 块都查不到，切页后再定位要复用切页前记下的盒子。
 
-1. **组件树**（`app.nodes()` / `app.visibleTexts()`）——官方节点树镜像，含文本、class 与 hidden 传播结果。只改样式、不改行为时不会误报。
-2. **屏幕像素**：`app.colorAt()` / `app.regionSignature()` / `app.colorShare()` / `app.brightShare(rect, threshold)`。
-  这一层看视觉与位移类事实。区域指纹只回答「这块画面变没变、变回去了没有」，不把整幅截图当基线；`brightShare` 数区域内「亮到发白」的像素占比，用来判 2px 焦点环这类抗锯齿描边（按精确色判会漏掉大半）。
-3. **预览页读数**（`app.readout()`）——上屏状态、帧率、触点与命中节点，用来确认宿主侧链路本身正常。
+### 覆盖范围
 
-坐标一律使用**设备逻辑像素**（240 × 280 视口）：`app.touch` 按画布实际显示尺寸换算，预览页的缩放开关不影响用例。
+| 用例 | 覆盖的行为 |
+| :--- | :--- |
+| [ui/tests/bottom_bar.rs](../ui/tests/bottom_bar.rs) | 三等分状态格的格心与图标/标签同轴居中、手柄操控提示行的对齐、OTA 进度条居中且从条槽左端起填充 |
+| [ui/tests/pairing_page.rs](../ui/tests/pairing_page.rs) | 转圈按相位轮换盲文点阵单点、状态行在有无转圈时都居中 |
+| [ui/tests/system_page.rs](../ui/tests/system_page.rs) | 电池行的中点分隔符画成小圆点（字符集锚点漏码点就会红） |
+| [ui/tests/pages.rs](../ui/tests/pages.rs) | 调试页画在末位槽号上、切页后只画当前页、翻页时卡片从行进侧滑入再回到静止位置 |
+| [ui/tests/bottom_bar.rs](../ui/tests/bottom_bar.rs) | 底栏电量图标按电量逐档变满（0-6 档加满格共八个字形） |
+| [ui/tests/preview.rs](../ui/tests/preview.rs) | 预览窗控制条翻页后设备画面切到下一张卡片、确认键走设备上的焦点分发、焦点到底再按循环到另一端（PC 预览的交互靠它守住） |
 
-### 操作与定位
+## 用例纪律
 
-- `app.touch.tap(x, y)`：点击。
-- `app.touch.drag(from, to, { steps, dwellMs })`：逐帧跟随的慢速拖动，松手速度接近 0，用于精确落点。
-- `app.touch.flick(from, to)`：整段位移在一两帧内走完并立刻抬手，用于触发惯性滚动。**抬手必须紧跟最后一次移动**：中间等帧会把触点速度采样成 0，手势层只会停在手指位置，不产生甩动。
-- `app.tapText('开始')`：按文本定位并点击。定位用官方边界命中（与触摸按下同一条判定）扫描「节点自己 → 最近的祖先 → 后代」，所以「定位到」就等于「点得到」，且不受增量重绘影响。
-- `app.pad.press('ArrowLeft')` / `app.pad.pressTimes('ArrowLeft', 3)`：手柄按键驱动。
-  预览页把方向键 / WASD 当十字键位、回车 / 空格当圆圈键位（与真机同一份按键位契约，见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)）。
-  每次按下至少跨一帧应用才看得到，连按是逐次独立的下沿。
-
-### 三个已知坑
-
-1. **官方 `inspect` 会给整幅画面加调试着色**（像素整体变亮，`inspect(0)` 之前不消失）。`app.inspectRect()` 读完矩形会立刻清掉并等两帧重绘；
-   连续采样请用 `app.sampleScroll()`。
-2. **`inspect` 只在节点被重绘的那一帧拿得到矩形**，静止且无重绘时它会超时返回 `null`。需要位置时优先用 `app.tapText()` 的边界命中。
-3. **状态栏每秒更新一次运行时长**：像素指纹的区域要避开顶部 26 px，用例里统一从 y=34 起采样。
-
-## 缺陷修复必须先有用例
-
-**修 UI bug 的流程是：先加一条能复现的 E2E 用例（此时必须是红的），再改 `ui/src`，用例转绿才算修完。** 固件里与硬件无关的逻辑缺陷（编码、校验、合成、像素）同理，先补主机端用例。
-PC 侧工具里与设备无关的逻辑缺陷（串口枚举、镜像校验、帧编解码、工具命令解析）同样先补 `pc/tests/` 的用例。
-
-这条规则的用意是让每个修过的 bug 都留下一条可重复执行的证据：没有用例的修复无法证明问题真的消失，也无法保证下次重构不再犯。具体要求：
-
-- 用例标题写「用户看到的现象」，不写实现细节（例如「甩动到边界不越界不回弹」，而不是「scroller 改用 tween」）。
-- 断言要能真的失败：写完用例后先确认它在未修复的版本上失败，再动手改代码。
-- 不要为了让用例通过而放宽断言或删掉用例。行为确实变了就改断言。
-- 同一个行为只保留一条用例。发现重复时合并，不新增。
+先写用例、确认它在改动前是红的再动实现、优先在端到端层断言、开发期间不跑端到端套件——这些以 [AGENTS.md](../AGENTS.md) 为准。
+本文只写运行方式、断言分层与各套用例的覆盖范围。
 
 ## 固件主机端单元测试
 
@@ -94,19 +64,17 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 | `main/input/input_frame.c` | 帧校验与失步重同步写错会表现为「手柄偶尔失灵」或命令行冒出乱码，两种现象都难复现 |
 | `main/ota/ota_proto.c` | 升级序号判定、窗口应答、4 KB 聚合与超时写错会表现为「升级卡住」「写坏镜像」或「PC 以为成功而设备没换分区」；载荷布局与应答字节在这里逐条钉住（`ota_session` 依赖 `esp_ota`，不进这套测试） |
 | `main/target/ns2/ns2_target.c` 与 `ns2_output.c` | 私有格式到 NS2 报文的映射（面键位置、背键折并 GL/GR、扳机 50% 阈值、电量折进报告）错了就是实机上「按键对不上」；测试驱动真实编码路径断言报文字节 |
-| `main/render_accel.c` | 本机像素回调必须与软件路径逐像素一致，差一档就是色带或错行 |
-| `main/render_damage.c` | 本机差分决定结构变化帧的重画范围：切页只重画内容框、逐字一致时零重画；范围算错会表现为画面残影或缺块，只在特定切页路径上偶发，真机复现代价高 |
 | `main/dp/dp_source.c` | 多路输入叠加规则错了会表现为摇杆漂移、注入按键卡住；按键名表与摇杆注入的分侧语义也在这里钉住 |
 | `main/dp/dp_capture.c` | 主机原始输出采集的入环/出队写错会表现为 PC 抓包缺包乱序、长块尾巴静默丢失；排队次序、截断标记、满队丢包计数与开关清理在这里钉住 |
 | `main/dp/dp_ui.c` | 组合键捕获的判定错了会表现为「按住组合键没反应」或普通按键被吞掉，真机上不好复现；四键同按、300 ms 阈值与十字键 / 圆圈键到官方按键位的映射在这里钉住 |
 
-不在这套测试里：面板/触摸/背光驱动、BLE 与 NVS、USB host、桥接链路的串口驱动与接收任务、启动画面与 owner task 调度——它们依赖真实硬件时序与协议栈，只能在真机上验证。
+不在这套测试里：面板/触摸/背光驱动、BLE 与 NVS、USB host、桥接链路的串口驱动与接收任务、启动画面与 UI 任务调度——它们依赖真实硬件时序与协议栈，只能在真机上验证。
 
 ### 目录
 
 | 文件 | 作用 |
 | :--- | :--- |
-| [scripts/firmware-test.mjs](../scripts/firmware-test.mjs) | 编译并运行：探测编译器、编译被测源码与用例、跑可执行文件 |
+| [scripts/firmware-test.py](../scripts/firmware-test.py) | 编译并运行：探测编译器、编译被测源码与用例、跑可执行文件 |
 | `firmware/test/support/host_test.h` / `.c` | 断言宏与运行器（几十行，够用即可） |
 | `firmware/test/suites.c` | 套件注册表 |
 | `firmware/test/support/stubs/` | 只在主机编译时生效的 ESP-IDF 最小替身 |
@@ -119,7 +87,7 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 ### 运行
 
 ```powershell
-pnpm run test:firmware
+uv run python scripts/firmware-test.py
 ```
 
 编译器按 `CC` 环境变量、MSVC（自动探测 `vcvars64.bat`）、`clang`、`gcc` 的顺序探测，`CC=clang` 可以强制指定。
@@ -128,7 +96,7 @@ pnpm run test:firmware
 ### 新增用例
 
 1. 在 `firmware/test/test_<模块>.c` 里加一个函数与一条 `HOST_TEST_SUITE` 表项；
-2. 新文件要在 `firmware/test/suites.c` 注册，并在 `scripts/firmware-test.mjs` 的 `TEST_SOURCES` 里列出来；
+2. 新文件要在 `firmware/test/suites.c` 注册，并在 `scripts/firmware-test.py` 的 `TEST_SOURCES` 里列出来；
 3. 断言用 `CHECK` / `REQUIRE` / `CHECK_EQ` / `CHECK_BYTES`；定长报文优先用 `CHECK_BYTES` 写黄金样本，任何一位错位都会指名道姓地报出第一个不同的字节。
 
 注意 `dp_source` 的源注册表是进程级静态状态，同一个文件里的用例按注册顺序相互影响，新增用例不要假设注册表是空的。
@@ -148,8 +116,8 @@ pnpm run test:firmware
 | `pc/tests/test_settings_reply.py` | 设置回读行的解析错了会表现为界面显示的亮度、配色或开关与设备不一致（固件是唯一事实源，界面只跟回读走），接上设备之前看不出来 |
 
 ```powershell
-pnpm run test:pc                                            # 仓库根
-cd pc ; uv run python -m unittest discover -s tests -t . -v  # 单独跑
+cd pc ; uv run python -m unittest discover -s tests -t .     # 仓库根或 pc/ 下都是这条
+cd pc ; uv run python -m unittest discover -s tests -t . -v  # 加 -v 看每条用例名
 ```
 
 用例跑的是 `pc/` 下的真源码（`import remapadctl` / `import link`），不复制被测逻辑，也不创建窗口：

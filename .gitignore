@@ -8,25 +8,11 @@ dependencies.lock
 managed_components/
 compile_commands.json
 
-# Node / Bun 前端依赖与产物
-node_modules/
-dist/
-ui/dist/
-# 官方编译器在入口目录生成又删除的类型检查临时目录
-ui/src/.pocketjs-app-check-*/
-# Playwright 端到端测试的运行产物
-ui/test-results/
-ui/playwright-report/
-.pocket/
-ui/.pocket/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-.pnpm-store/
 # Python 脚本（scripts/ 与 pc/）运行后产生的字节码缓存
 __pycache__/
 *.pyc
+# pnpm 时代的遗留依赖目录（Node 已移除，本目录可以直接删掉）
+node_modules/
 # uv 为 pc/ 桥接程序建的虚拟环境（uv.lock 需要提交）
 .venv/
 # remapadctl --shot 落地的实机截图（调试产物，不进仓库）
@@ -35,7 +21,7 @@ pc/shots/
 agent-temp/*
 !agent-temp/.gitkeep
 
-# Rust 编译临时产物 (若本地引入 Rust 渲染核心)
+# Rust 编译产物（屏幕 UI 组件与宿主用例）
 target/
 # 固件目标编码目录与 Rust 产物同名，这里显式取消忽略
 !firmware/main/target/

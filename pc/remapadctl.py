@@ -1549,7 +1549,7 @@ class Session:
         """发一条设备命令并等回复安静下来；收到任何行都返回 True。
 
         hold_full_window 用于应答不在 CLI 任务上、晚几拍才回的命令（mem 的
-        报告由 PocketJS owner task 下一帧打印）：这类命令禁用安静窗提前退出，
+        报告由 UI 任务下一帧打印）：这类命令禁用安静窗提前退出，
         等满 --reply-wait，否则会话在 ok 之后、报告到达之前就退了。
         """
         self.link.purge_input()

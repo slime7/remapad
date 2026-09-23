@@ -1,6 +1,6 @@
 # Remapad 新手开发与上手指南
 
-本指南面向微雪 ESP32-S3-Touch-LCD-1.69 目标板，说明 UI 检查、PocketJS 包构建、ESP-IDF 编译和当前 bring-up 边界。
+本指南面向微雪 ESP32-S3-Touch-LCD-1.69 目标板，说明界面预览与用例、ESP-IDF 编译和当前 bring-up 边界。
 Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，并通过屏幕 UI 管理连接和配对；
 协议资料见 [controller-switch2.md](controller-switch2.md) 与 [controller-ps.md](controller-ps.md)，
 板卡规格与引脚见 [hardware.md](hardware.md)。
@@ -9,19 +9,17 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 
 | 工具 | 版本/要求 | 用途 |
 | :--- | :--- | :--- |
-| Node.js | 18 或更高 | 运行项目脚本和已发布 CLI |
-| pnpm | 当前稳定版 | 工作区依赖与任务调度 |
-| Bun | PocketJS 官方要求的版本 | 执行官方 compiler、官方构建脚本和 Web 开发主机 |
-| PocketJS compiler | `@pocketjs/framework` 0.12.0 npm 依赖 | 提供 `tools/pocket.ts` 与 ESP-IDF host profile 官方支持 |
-| Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0` | 仅在升级组件、重新生成 ESP32-S3 原生归档时需要 |
-| Python | 由 ESP-IDF 安装环境提供 | `idf.py`、ESP-IDF 工具链和官方 package 嵌入步骤 |
-| uv | 当前稳定版 | 运行 `pc/` 下的工具（`cd pc ; uv run python remapadctl.py -p COMx` 与图形入口 `uv run python remapadgui.py`）；第三方依赖是 `hidapi` 与 `customtkinter`，由 uv 按 `pc/pyproject.toml` 装进 `pc/.venv`，解释器要 3.10 或更高，uv 找不到会自己下载 |
-| ESP-IDF | `>=6.0,<6.2` | PocketJS 官方 ESP-IDF 组件要求；本仓库已在 6.1 上验证 |
+| Rust（宿主 stable） | 当前 stable | 编译界面与宿主用例（`cargo test`），以及安装预览工具 |
+| Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0`（rustup 工具链名默认 `esp`） | 把 `firmware/components/slint_ui` 交叉编译成 ESP32-S3 静态库；一键安装是 `uv run python scripts/setup-rust-toolchain.py` |
+| slint-viewer | 1.18.1 | PC 预览界面：`cargo install slint-viewer --version 1.18.1 --locked` |
+| Python | 3.10 或更高（由 uv 准备；`idf.py` 另用 ESP-IDF 自带的解释器） | `scripts/*.py` 全部脚本与 `pc/` 下的工具 |
+| uv | 当前稳定版 | 所有 Python 入口都经它执行：`uv run python scripts/<名字>.py`（根目录 `pyproject.toml` + `uv.lock`）与 `cd pc ; uv run python remapadctl.py -p COMx`（`pc/pyproject.toml` + `pc/uv.lock`，依赖是 `hidapi` 与 `customtkinter`） |
+| ESP-IDF | `>=6.0,<6.2` | 本仓库已在 6.1 上验证 |
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
 目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围。
 两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）的代码都已落地，实机核对待做（VBUS 供电路径已按 V2.1 原理图确认为 TP1 外部注入）。
-不要因为 Web 预览可以交互就认为真实 BLE 链路已经可用。
+不要因为 PC 预览能看界面就认为真实 BLE 链路已经可用：预览只画排版，动作要连到固件才生效。
 
 板卡已知信息都记录在 [hardware.md](hardware.md)：
 屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。
@@ -32,101 +30,42 @@ BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.m
 
 ## 最短步骤
 
-### 1. 安装依赖
+### 1. 准备 Rust 工具链
 
 ```powershell
-pnpm install
+uv run python scripts/setup-rust-toolchain.py          # 装 Xtensa 工具链（缺什么装什么）
+uv run python scripts/setup-rust-toolchain.py --check  # 只检查，不改动环境
+cargo install slint-viewer --version 1.18.1 --locked   # PC 预览工具，只需装一次
 ```
 
-六个官方 ESP-IDF 组件与 ESP32-S3 原生归档已随仓库固定在 `firmware/components/`。
-Web 开发主机随 `ui/node_modules/@pocketjs/framework` 一起安装，因此这一条之后就只剩构建命令。
+界面与宿主用例只需要宿主 stable 工具链；Xtensa 工具链只服务于固件构建，换机步骤与 CMake 变量见 [ui/README.md](../ui/README.md)。
+界面依赖（slint、slint-build）由 `Cargo.lock` 锁定，首次构建从 crates.io 拉取，之后走本地缓存。
 
-前端检查、编译和打包使用官方 `@pocketjs/framework` npm 依赖，依赖由 `pnpm install` 安装，因此不需要额外准备。
+仓库里的 Python 脚本都由 uv 托管：根目录 `pyproject.toml` + `uv.lock` 管 `scripts/`，`pc/` 自己一套；
+装好 uv 后 `uv run python <路径>` 会自动准备解释器与依赖，不需要手动建虚拟环境（首次执行会在仓库根建 `.venv`）。
 
-### 2. 准备 PocketJS ESP-IDF 依赖（升级时）
-
-组件随仓库提供，日常开发不需要这一步。只有在登记上游 PocketJS 更新、或 ESPComponentRegistry 的 `espressif/quickjs-ng` 内容变化时，才需要重新对账：
-
-1. 把上游 `hosts/esp-idf/components/` 的最新源码同步进本仓库的 `firmware/components/`。
-2. 用固定版本的 Xtensa Rust 重新生成 ESP32-S3 原生归档：
+### 2. 预览界面与跑宿主用例
 
 ```powershell
-# 指向 esp-rs/rust-build v1.97.0.0 的 cargo，路径按本机安装位置调整
-$env:POCKETJS_CARGO = "$env:USERPROFILE\.esp-rust\1.97.0.0\bin\cargo"
-pnpm run native
+uv run python scripts/ui-preview.py                     # 交互预览：设备画面 240 × 280 + 控制条，存盘即刷新
+uv run python scripts/ui-preview.py --file src/app.slint  # 只看设备画面
+uv run python scripts/ui-preview.py --check              # 只编译并打印诊断
+cargo test --locked --manifest-path ui/Cargo.toml          # 界面宿主用例（元素几何 + 画面像素）
 ```
 
-3. 核对 `pocketjs_guest` 的 QuickJS 源码校验值。本仓库固定的副本已经使用 Registry 当前的哈希；
-   若上游换用新的 `espressif/quickjs-ng`，按 [patches/README.md](../patches/README.md) 重新记录，并同步 `build-receipt.json` 中的编译器信息。
+预览按 1:1 逻辑像素打开（`SLINT_SCALE_FACTOR=1`），字体与字号表按固件构建同款口径喂给编译器，
+因此中文与图标与实机同源；想放大看细节自己设 `SLINT_SCALE_FACTOR`。
+预览窗的下半截是控制条：设备画面里的控件照常发动作，动作在预览里按固件语义结算，
+所以翻页、拖动、亮度、确认弹窗、配对档位、USB 角色与 OTA 进度都能点着走一遍；
+控制条还能直接点出手柄操控窗口的焦点环（「手柄操控 / 焦点 ± / 确认键」）。
+预览只验界面与动作结算：电池、内存、版本号是模拟值，固件行为要在实机上验（串口 `key ui` / `ui on|off`）。
 
-`pnpm run native` 需要能访问 PocketJS 源码（`POCKETJS_ROOT` 或仓库同级 `../pocketjs`），产物直接写入 `firmware/components/*/lib/esp32s3/`；
-`idf.py build` 本身不需要 Rust。
+### 3. 检查界面改动
 
-### 3. 检查 UI 与设备契约
+界面没有单独的 lint 或打包步骤：`.slint` 在固件构建期编译，语法与烘焙错误会直接出现在 `idf.py build` 的输出里。
+只想快速验证语法用 `uv run python scripts/ui-preview.py --check`。
 
-```powershell
-pnpm run lint
-pnpm run check
-```
-
-`check` 会使用 `ui/pocket.json` 和 `firmware/pocket.host.json`，由官方 resolver 检查 manifest、能力、视口、tick 和 host profile。它不修改 UI 包。
-
-### 4. 编译 UI 资源与 `.pocket`
-
-```powershell
-pnpm run compile       # 编译资源（默认 dev 状态，包含调试页）
-pnpm run build         # 打包应用（默认 dev 状态，包含调试页）
-pnpm run build:release # 正式发布打包（带 --release，摇树剔除调试页）
-```
-
-脚本最终调用 PocketJS 官方 CLI，输出到 `ui/dist/`：
-
-```text
-remapad-ui.js       编译后的 JavaScript bundle
-remapad-ui.pak      样式、字体和图像资源包
-remapad-ui.pocket   面向 remapad-s3 host profile 的单文件包
-```
-
-开发环节默认开启 dev 状态（页表末尾多一页调试页）；只有通过 `pnpm run build:release`、传入 `--release` / `--prod` / `--no-dev` 参数或设置 `REMAPAD_RELEASE=1` 时，才会关闭 dev 状态并剔除调试页。
-`scripts/pocketjs.mjs` 按 `POCKETJS_ROOT`、官方 npm 安装目录 `ui/node_modules/@pocketjs/framework`、仓库同级 `../pocketjs` 的顺序定位包含 `--host-profile` 的官方脚本；
-默认命中项目安装的官方包。它只负责路径与参数转发、建立依赖软链接，不实现 compiler，也不改变 package 格式。
-
-官方命令的语义如下，`pocket build` 的 `--host-profile` 形式等价于上面的项目脚本：
-
-```powershell
-bun node_modules/@pocketjs/framework/tools/pocket.ts build --manifest pocket.json `
-  --host-profile ../firmware/pocket.host.json `
-  --project-root . --outdir dist `
-  --output dist/remapad-ui.pocket
-```
-
-不要将 `--target psp` 用在本项目上。`psp` 是 Sony PSP 后端的 target 名称；ESP32 使用自定义 `--host-profile`。
-
-### 5. 触摸屏预览
-
-```powershell
-pnpm run dev
-```
-
-该命令先用官方 `compile` 把 bundle 与 PAK 写入 `ui/dist/`，再启动项目内的触摸预览页。
-打开 [http://127.0.0.1:8130](http://127.0.0.1:8130) 可以看到 240 × 280 屏幕、触摸输入和运行读数。
-同一命令还会用官方包内 `hosts/web/serve.ts` 拉起官方 DevTools 服务器。
-预览页的「DevTools 面板」按钮会打开 [http://127.0.0.1:8131/devtools](http://127.0.0.1:8131/devtools)：
-组件树与屏幕高亮、暂停/单步、console 镜像与 REPL、输入磁带导出/重放/时序回退、截图，全部由官方面板与 hub 承载，预览页只负责按官方 `engine.js` 的设备协议接入 `/ws`。
-
-注意浏览器会把后台标签页的 `requestAnimationFrame` 停掉：聚焦面板标签页时预览页（后台）帧循环暂停，面板数据随之静止。请使用并排窗口或双显示器让预览页保持可见，或者只在暂停调试时聚焦面板。
-
-交互方式按设备的触摸屏设计：在屏幕上按下、拖动、抬起即可，没有虚拟按键和键盘映射。
-预览页把指针事件转换为官方触摸帧契约（`frame(buttons, analog, touches, hits)`），触点坐标使用逻辑像素，命中事实在按下瞬间查询一次，因此点击、拖动和手势与真机走同一套判定逻辑。
-
-预览页是项目自己的页面（`ui/preview/index.html` + `scripts/preview-server.mjs`），渲染核心和触摸语义来自官方 `@pocketjs/framework` 的浏览器运行时；
-官方 playground 面向 PSP 按键，本项目不使用它。首次运行需要 Rust 的 `wasm32-unknown-unknown` target 构建 `pocketjs.wasm`，之后直接复用。
-
-面板读数中的「触摸帧」是含触点的帧数，「命中节点」是按下时的命中结果，可用于确认触摸链路是否正常。
-
-面板的「屏幕尺寸」开关在原始尺寸（1×）与放大尺寸（2×）之间切换，也可以按屏幕实际像素观察绘制结果。它只改变浏览器里的显示大小，触点坐标按画布实际尺寸换算，切换尺寸不影响触摸判定；选择记录在浏览器本地，刷新后保留。
-
-### 6. 编译 ESP-IDF 固件
+### 4. 编译 ESP-IDF 固件
 
 固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行：
 `firmware/build/CMakeCache.txt` 记录了解释器路径（`rg -n '^PYTHON' firmware/build/CMakeCache.txt` 可以查到）。
@@ -147,17 +86,12 @@ idf.py build
   输出里会同时给出「当前环境用的解释器」与「配置工程时用的解释器」两条路径，照着切回去即可；
 - 想换到另一套环境长期使用，就在那套环境里 `idf.py fullclean` 后重新配置（代价是完整重编一次）。
 
-`firmware/components/` 中的官方组件由 ESP-IDF 自动发现，`firmware/main/CMakeLists.txt` 按顺序接入包：
+`firmware/components/slint_ui` 由 ESP-IDF 自动发现，它在配置阶段检查 cargo 与 Xtensa 工具链、在构建阶段用 cargo 把界面编成静态库；
+`ui/src/*.slint` 与 `ui/assets/*.svg` 登记为构建依赖，改完界面直接 `idf.py build` 即可，不需要删除 `firmware/build/`。
+带调试页的开发构建是默认值；发布构建设 `$env:REMAPAD_RELEASE = "1"` 后重跑配置。
+组件构建的细节（工具链名、字体变量、字号表）见 [ui/README.md](../ui/README.md) 与 [ARCHITECTURE.md](ARCHITECTURE.md) 的「构建链路」。
 
-1. 如果 `ui/dist/remapad-ui.pocket` 存在，使用官方 `pocketjs_embed_package`。
-2. 否则使用官方 `pocketjs_compile_app`，让 CMake 调用 PocketJS CLI 生成 build 目录内的包。
-
-建议先运行 `pnpm run build`，再运行 `idf.py build`。预构建路径只需要 Python 执行官方嵌入脚本，不需要 Bun；编译路径则需要可被 CMake 找到的官方 `pocket` CLI 和 Bun。
-
-嵌入过程把 `ui/dist/remapad-ui.pocket` 登记为 CMake 依赖。
-所以改完 `ui/src` 之后重新执行 `pnpm run build` 与 `idf.py build`，固件会自动重新嵌入新包，不需要删除 `firmware/build/`。
-
-### 7. 烧录与监视
+### 5. 烧录与监视
 
 ```powershell
 idf.py -p COM3 flash monitor
@@ -181,7 +115,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item Env:MSYSTEM 
 | `build/partition_table/partition-table.bin` | `0x8000` |
 | `build/remapad_firmware.bin` | `0x10000` |
 
-应用镜像已经内嵌 `.pocket` 包，烧完这三个文件就是完整的设备固件。
+界面已经编在应用镜像里，烧完这三个文件就是完整的设备固件。
 
 日常迭代只改应用层（`ui/` 产物或 `firmware/main/`）时，bootloader 和分区表没有变化，可以只重写 `0x10000` 处的应用分区，比整片烧录快，对 Flash 的擦写也更少：
 
@@ -219,16 +153,16 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 三套测试都在开发机上跑，不需要真板；细节与回归规则见 [TESTING.md](TESTING.md)。
 
 ```powershell
-pnpm run test:e2e         # UI 端到端：Playwright 驱动触摸预览页，断言行为与像素
-pnpm run test:firmware    # 固件主机端：把纯逻辑模块编译成本机可执行文件并运行
-pnpm run test:pc          # PC 侧：串口枚举、镜像校验、帧编解码与输出分流（标准库 unittest）
+cargo test --locked --manifest-path ui/Cargo.toml   # 屏幕 UI：编译真实 .slint 产物，按元素几何与像素断言
+uv run python scripts/firmware-test.py              # 固件主机端：把纯逻辑模块编译成本机可执行文件并运行
+cd pc ; uv run python -m unittest discover -s tests -t .   # PC 侧：串口枚举、镜像校验、帧编解码与输出分流
 ```
 
-`test:e2e` 会自己按 `pnpm run dev` 的方式编译产物并拉起预览服务器（8130），本地已有 dev 会话时直接复用；
-加 `--headed`（根脚本是 `pnpm run test:e2e:headed`）可以看到点击过程。`test:firmware` 会自动探测本机编译器（MSVC / clang / gcc，可用 `CC` 指定），几秒钟出结果。
+界面用例在开发机上跑真实 `.slint` 产物（同一套字体烘焙与软件渲染器）；
+固件主机端测试会自动探测本机编译器（MSVC / clang / gcc，可用 `CC` 指定），几秒钟出结果。
+界面排版与配色也可以先用 `uv run python scripts/ui-preview.py` 点着看，但预览不产生断言。
 
-改 UI 的 bug 时先在 `ui/tests/e2e/` 写一条能复现的用例，改完让用例转绿；改固件里与硬件无关的逻辑（NS2 编码、序列号、命令帧、像素回调、输入源合成）同理，先补 `firmware/test/` 下的用例。
-PC 侧工具里与设备无关的逻辑（串口枚举、镜像校验、帧编解码、命令解析）同样先补 `pc/tests/` 下的用例。
+用例纪律（先写用例、确认红过再改、优先端到端、开发期间不跑端到端套件）与各套用例的位置、运行方式以 [AGENTS.md](../AGENTS.md) 与 [TESTING.md](TESTING.md) 为准。
 
 ## 串口 CLI 与 PWR 按键
 
@@ -313,7 +247,7 @@ PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmwa
 
 ## 固件 OTA 升级
 
-整包应用镜像（固件 + 内嵌 `.pocket`）可以在不接线烧录的情况下升级：PC 端把镜像经 USB-Serial/JTAG 推给设备，设备写进当前未运行的应用分区，`esp_ota_end` 校验通过后切换启动分区并重启。
+整包应用镜像（界面已编在应用里）可以在不接线烧录的情况下升级：PC 端把镜像经 USB-Serial/JTAG 推给设备，设备写进当前未运行的应用分区，`esp_ota_end` 校验通过后切换启动分区并重启。
 选型与协议见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)。
 设备侧实现在 `firmware/main/ota/`，PC 端入口是 [pc/remapadctl.py](../pc/remapadctl.py) 的 `--upgrade`：
 
@@ -328,7 +262,7 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 
 要点：
 
-- 升级前先跑 `pnpm run build` 与 `idf.py build`，镜像就是 `firmware/build/remapad_firmware.bin`；
+- 升级前先跑 `idf.py build`，镜像就是 `firmware/build/remapad_firmware.bin`；
   设备只接受项目名为 `remapad_firmware` 的 ESP32-S3 应用镜像，尺寸上限是应用分区容量 4 MB。
  升级由持有 COM 口的那个进程执行：`remapadctl.py --upgrade` 自己就是持有者，桥接转发与命令行在同一会话里照常；先退出 `idf.py monitor` 等其它占用进程，设备必须处于串口模式（host 模式下 COM 口不存在）。
   升级与设备当前是否连着 NS2 主机无关，重启后按凭证回连。
@@ -339,13 +273,11 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 
 ## 关键文件
 
-- [ui/pocket.json](../ui/pocket.json)：应用清单和应用侧 capability。
-- [ui/src/fonts.json](../ui/src/fonts.json)：应用目录的回退字体清单；中文字体烘焙见 [ui/assets/fonts/](../ui/assets/fonts)。
-- [firmware/pocket.host.json](../firmware/pocket.host.json)：ESP32-S3 host profile。
-- [firmware/components/](../firmware/components)：固定的官方 ESP-IDF 组件与 ESP32-S3 原生归档。
-- [firmware/main/CMakeLists.txt](../firmware/main/CMakeLists.txt)：官方 package embed/compile 接入。
-- [firmware/main/pocketjs_host.c](../firmware/main/pocketjs_host.c)：
-  package、guest、binding、renderer 生命周期与 `remapad-pjs` owner task。
+- [ui/src/](../ui/src)：界面源码（`app.slint` 页表与根窗口、`pages.slint`、`components.slint`、`theme.slint`）。
+- [ui/assets/](../ui/assets)：字体（正文 / 图标 / 转圈）与卡片、底栏底图 SVG。
+- [ui/tests/](../ui/tests)：界面宿主用例（Slint 测试后端 + 软件渲染器）。
+- [firmware/components/slint_ui/](../firmware/components/slint_ui)：Rust 界面组件：平台层、宿主层、C ABI 与 `rust_heap.c`。
+- [firmware/main/slint_host.c](../firmware/main/slint_host.c)：owner task、状态聚合、动作分发与截图/内存请求。
 - [firmware/main/boot_splash.c](../firmware/main/boot_splash.c)：UI 就绪前的固件自绘启动画面（主题底色 + 手柄标记 + 阶段进度条），同时在启动画面落屏后提前点亮背光。
 - [firmware/main/config/app_config.c](../firmware/main/config/app_config.c)：用户设置 NVS 持久化（亮度 / 连接模式 / 手柄身份）。
 - [firmware/main/console/cli.c](../firmware/main/console/cli.c)：串口行命令 CLI（USB-Serial/JTAG）。
@@ -367,13 +299,8 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 - [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端入口是 `remapadctl.py --upgrade`。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。
-- [scripts/pocketjs.mjs](../scripts/pocketjs.mjs)：编译器、触摸预览和原生归档脚本的统一入口。
+- [scripts/](../scripts)：`setup-rust-toolchain.py`（工具链）、`ui-preview.py`（预览）、`firmware-test.py`（主机端用例）、`create_adr.py`（新建 ADR）。
 - [agent-temp/](../agent-temp)：代理与调试的临时文件目录（脚本、抓包输出、截图与日志；内容不进版本库，约定见 [AGENTS.md](../AGENTS.md)）。
-- [ui/preview/index.html](../ui/preview/index.html)：触摸屏预览页与触摸帧契约实现。
-- [ui/src/App.tsx](../ui/src/App.tsx)：
-  首屏前一次挂完八个页面的页面调度（轮播顺序来自文件顶部的页表，各页按页名取槽位，切页由页面根节点自行切换 `hidden`；
-  新增页面在页表里加一项，见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
-- [patches/README.md](../patches/README.md)：与上游组件的差异记录、QuickJS 校验值核对与升级步骤。
 - [docs/controller-switch2.md](controller-switch2.md)：NS2 手柄广播、GATT、HID 报告、配对、指令集与 NFC 规范。
 - [docs/controller-ps.md](controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置。
 - [docs/hardware.md](hardware.md)：目标板卡的 SoC/存储、屏幕、触摸、外设、GPIO 分配和板级注意事项。
@@ -400,22 +327,29 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 
 ## 常见问题
 
-### `bun not found`
+### 预览时报找不到 `slint-viewer`
 
-项目脚本通过 Bun 执行 `@pocketjs/framework` 与 `@pocketjs/cli` 里的官方编译器。
-安装官方 Bun 并确保它位于当前 PowerShell 的 `PATH`，再重试 `pnpm run check` 或 `pnpm run build`；如果看到缺少依赖的报错，先执行一次 `pnpm install`。
+预览工具不是本仓库的依赖，要单独装一次：`cargo install slint-viewer --version 1.18.1 --locked`。
+装完重开终端让 `%USERPROFILE%\.cargo\bin` 进 `PATH`；脚本给的提示里就是这条命令。
+版本要与界面用的 Slint 对齐（`ui/Cargo.toml` 的 `slint = "1.18"`），版本差太多时新语法会编译不过。
 
 ### 屏幕上中文显示为方框（tofu）
 
-中文字形是否可用取决于烘焙图集。
-`ui/src/fonts.json` 已把 `ui/assets/fonts/NotoSansSC-Regular.otf` 声明为回退字体面，源码字符串里出现过的中文会在 `pnpm run compile` 时自动烘焙进各字号槽位。
-仍显示方框的常见原因：文本是运行时动态拼接、且字符从未出现在任何源码字面量里；或使用了字体不覆盖的码点（emoji 等符号没有字形，只会渲染为方框）。
-新增或修改文案后重新执行 `pnpm run compile`（或 `pnpm run build`）即可。
+中文字形是否可用取决于构建期烘出来的字形位图：`build.rs` 把 `assets/fonts/NotoSansSC-Regular.otf` 作为默认字体，
+界面里出现过的中文会被烘进各字号槽位。仍显示方框或空洞的常见原因：
+文本是运行期拼出来的、字符从未出现在任何 `.slint` 字面量里（把码点加进 `ui/src/app.slint` 的锚点串），
+或用了字体不覆盖的码点（emoji 没有字形，只能显示为方框）。改完文案重新 `idf.py build` 即可。
 
-### `pocketjs_compile_app requires the PocketJS CLI in PATH`
+### `cargo +esp 不可用` 或 `工具链缺 rust-src 组件`
 
-这是官方 CMake helper 的预期错误。优先在项目根目录执行 `pnpm run build` 生成 `ui/dist/remapad-ui.pocket`；
-如果要使用 CMake 自动编译路径，需要把官方 `pocket` CLI 放入 ESP-IDF 构建进程的 `PATH`，并确保它能定位 PocketJS framework checkout。
+配置阶段的这两条报错来自 `firmware/components/slint_ui/CMakeLists.txt` 的工具链自检，按提示修：
+
+```powershell
+uv run python scripts/setup-rust-toolchain.py               # 装 Xtensa 工具链
+rustup component add rust-src --toolchain esp               # 缺 rust-src 时
+```
+
+工具链装在别的名字下时设 `$env:REMAPAD_SLINT_RUST_TOOLCHAIN` 再 `idf.py reconfigure`（见 [ui/README.md](../ui/README.md)）。
 
 ### `idf.py build` 秒退且没有编译输出
 
@@ -426,65 +360,43 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 ```
 这不是构建成功：`firmware/build/CMakeCache.txt` 记录了配置工程时用的 Python 解释器（`rg -n '^PYTHON' firmware/build/CMakeCache.txt`）。
 换到另一套 IDF 环境后 `idf.py` 只做校验就返回，一步都不编译。按提示里的两条路径切回配置工程时用的那套环境即可；
-要换环境长期使用则在当前环境里 `idf.py fullclean` 后重新配置（见「6. 编译 ESP-IDF 固件」）。想确认工程到底有没有活干，可以先试运行一次 ninja，它只列步骤、不改文件：
+要换环境长期使用则在当前环境里 `idf.py fullclean` 后重新配置（见「4. 编译 ESP-IDF 固件」）。想确认工程到底有没有活干，可以先试运行一次 ninja，它只列步骤、不改文件：
 
 ```powershell
 ninja -C firmware\build -n
 ```
 
-### 固件日志有 package admission 错误
-
-确认 `.pocket` 是由同一份 `firmware/pocket.host.json` 生成的，且没有手动修改 profile 的视口、tick、presentation、raster density 或 capabilities。
-改动 profile 后重新执行 `pnpm run build`。
-
 ### 烧录后没有屏幕画面
 
 面板由 `drivers/panel.c` 驱动（esp_lcd 内置 ST7789，SPI2 80 MHz，见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）。正常时序是：
 `firmware/main/boot_splash.c` 在面板与触摸初始化成功后自绘启动画面，背光随启动画面落屏由 `drivers/backlight.c` 点亮，随后每个启动阶段推进一次进度条；
-PocketJS UI 首帧提交成功后启动画面交出屏幕并释放缓冲。若画面不可见，先看串口日志：`panel init failed` 表示面板初始化失败（此时固件跳过启动画面，退回无面板渲染，帧只进 PSRAM）；
+Slint 首帧提交成功后启动画面交出屏幕并释放缓冲。若画面不可见，先看串口日志：`panel init failed` 表示面板初始化失败（此时固件跳过启动画面，画面仍渲染进 PSRAM）；
 有启动画面日志但屏幕黑，再检查背光（`GPIO15` 需要显式驱动，若 `backlight init failed` 会有对应日志）与面板排线；日志里没有启动画面但 UI 正常，说明是从旧镜像启动，重新烧录即可。
 修改面板方向/偏移配置时要对照 [hardware.md](hardware.md) 与微雪官方示例，不要凭空猜测初始化序列。
 
+### `slint ui start failed (internal=… largest=… psram=…) `
+
+这条日志表示 UI 平台建不起来，括号里的三个数字是当时的空闲内存。平台要两块钱：
+整帧缓冲 240 × 280 × 2 字节（约 134 KB，进 PSRAM）与行带缓冲 240 × 48 × 2 字节（约 23 KB，要内部 RAM 且 DMA 可达），
+另外 owner task 的 64 KB 栈也在内部 RAM。largest 明显小于 23 KB 时先看谁把内部 RAM 占住了。
+
 ### 启动时崩溃重启，崩溃位置每次都不一样
 
-典型现象是日志停在 `remapad_app: PSRAM free: ...` 之后，然后出现 `Interrupt wdt timeout`、堆锁卡死，或 `LoadProhibited` 且两次复位的崩溃点不同。
-这类“位置漂移”的崩溃通常不是空指针，而是栈溢出写穿了相邻内存。
+这类「位置漂移」的崩溃通常不是空指针，而是某个任务写穿了自己的栈。界面的渲染路径在 owner task 的 64 KB 栈上跑，
+改平台层（`platform.rs`）或加深界面嵌套以后，先把栈量一遍再往上加代码；不要只调大行带缓冲而不看栈。
 
-根因在 QuickJS 的栈守卫：`pocketjs_guest` 默认把 `stack_limit` 设为 256 KB，而守卫判据是 `stack_top - stack_size`。
-其中 `stack_top` 取自**创建 runtime 的那个任务**（`JS_UpdateStackTop` 在本仓库和组件里都没有人调用）。
-如果调用它的任务栈比这个预算小，守卫永远不会触发，Vue Vapor 的 mount 递归会直接压坏隔壁的堆元数据。
+### 启动阶段出现 `task_wdt` 告警
 
-因此**整套 guest 生命周期（创建、mount、eval、逐帧 turn）必须跑在同一个任务上**，并且给这个任务足够的栈。
-当前由 `firmware/main/pocketjs_host.c` 里的 `remapad-pjs` owner task 承担，栈放在 PSRAM。
-改动这块时不要只调 `stack_limit` 而不动任务栈，也不要让 turn 换到另一个任务上执行。
+从 `app_main` 到首帧就绪之间的阶段权重是 60 / 60 / 80 / 20 ms（面板与平台、建界面、首帧、进事件循环），
+正常情况几秒钟内交屏，不该长时间占住一个核。持续告警时先看是不是卡在面板初始化或某次超长传输上
+（`trace` 逐帧打印渲染与提交耗时）。`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，告警本身不会重启设备。
 
-### 设备上看到的错误是 `TypeError: not a function`
+### 运行时反复 `task_wdt` 告警并且界面掉帧
 
-这是错误上报路径自己失败，不是真正的故障。quickjs-ng 的 `js_std_add_helpers` 只给全局 `console` 装了 `log`。
-而框架 polyfill 的守卫写的是 `typeof console !== 'object'`，看到这个半成品对象就跳过补齐，于是 `console.warn` / `console.error` 从未安装。
-框架渲染器把所有捕获到的异常都交给 `console.error`，方法缺失时原始错误就被 `TypeError: not a function` 顶替。
-
-`ui/src/index.tsx` 现在会在挂载前补齐缺失的 `console.warn` / `console.error`，转发到 native `console.log`（经 QuickJS `js_print` 进串口）。
-如果又看到这个报错，先确认那段垫片还在。诊断时还可以临时提高 `Error.stackTraceLimit`：QuickJS 默认只保留 10 层栈帧，栈溢出会被截断成看不出形态的短栈。
-
-### 启动 guest eval 阶段出现 `task_wdt` 告警
-
-从 `app_main` 到首帧就绪之间有一个十几秒的窗口（当前构建实测：启动画面约 1.6 秒落屏，约 18 秒首帧就绪，背光随启动画面点亮）。
-其中 `guest_eval` 占约 16 秒（阶段权重表按实测填写），期间 owner task 连续占用一个核，空闲任务得不到调度，`task_wdt` 会打印 `IDLE0` 未按时喂狗的告警。
-`CONFIG_ESP_TASK_WDT_PANIC` 没有开启，所以这只是日志噪音，不影响运行。
-在 BSP 阶段优化 guest eval 耗时（编译与执行整包 JS）的尝试已做过，收益有限，已放弃；这条告警按日志噪音对待即可，不必调大看门狗超时。
-
-### 运行时反复 `task_wdt` 告警并且 UI 掉帧
-
-先看 owner task 打印的帧统计（每 5 秒一条，`frames=` / `avg_turn_us=` / `avg_render_us=`）。
-`avg_turn_us + avg_render_us` 接近或超过 `1e6 / tickHz` 时，说明每帧把整个周期都吃满了，空闲任务自然喂不上狗。
-
-已知的一个原因是 CPU 频率停留在默认的 160 MHz；`firmware/sdkconfig.defaults` 现在显式配置为 240 MHz。提高频率后仍有告警，就要从应用侧入手（减少每帧重绘区域或降低动画频率），而不是继续加栈。
-
-### 移除 `pocketjs_runner` 后编译报 `esp_timer.h: No such file or directory`
-
-`esp_timer` 之前是由 `pocketjs_runner` 间接引入的。
-改用产品 owner task 后需要在 `firmware/main/CMakeLists.txt` 的 `REQUIRES` 里显式声明 `esp_timer`。同一原则适用于任何原先依赖 runner 传递的头文件。
+先看 owner task 每 5 秒一条的统计：`frames=… avg_render_us=… avg_flush_us=… avg_damage_px=… max_render_us=… max_flush_us=…`。
+渲染与提交之和接近或超过 16 ms 时，说明每帧把整个周期都吃满了，空闲任务自然喂不上狗。
+先用串口 `trace 60` 看清是哪一类帧贵：`damage_px` 大说明重画范围大，`flush_us` 大说明面板传输慢（行带太碎或 SPI 争用）。
+CPU 频率在 `firmware/sdkconfig.defaults` 里显式配置为 240 MHz；降不下来就要从界面写法入手（见 [ADR 0050](adr/0050-repaint-friendly-screen-rules.md)）。
 
 ### `Could not open COM3, the port is busy`
 
@@ -496,7 +408,7 @@ Get-CimInstance Win32_Process |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 ```
 
-不要按 `node.exe` 或 `python.exe` 之类的进程名批量结束，这些是多个项目共用的进程。
+不要按 `python.exe` 之类的进程名批量结束，这些是多个项目共用的进程。
 
 ### 屏幕上没有出现 BLE 手柄广播
 
@@ -505,28 +417,17 @@ BLE 手柄外设已接入（`firmware/main/ble/`）：
 排查顺序：先看启动日志有无 `host synced` 与 GATT 句柄表，再确认广播载荷，最后对照 [controller-switch2.md](controller-switch2.md) 逐段核对。
 USB host 直插与 PC 桥接两条输入路径都已接入（`firmware/main/usb/`、`firmware/main/input/`），调试页的注入按钮仍可合成按键。
 
-### `unsupported QuickJS source; review immutable-buffer patch before upgrading`
+### 预览里点了没反应
 
-仓库内的 `firmware/components/pocketjs_guest` 已经按 Registry 实际内容修正了该校验值，出现这个报错说明组件被上游版本覆盖过。
-按 [patches/README.md](../patches/README.md) 重新核对并修正。
+预览是纯前端渲染，控件动作都经 `action` 回调交回固件，预览里没有固件接这些回调，因此点按不会切页、也不会改设置。
+想在预览里看别的页面，就在 slint-viewer 的属性面板里改 `page`（可选属性都挂在 `App` 上）。
 
-### `Missing pocketjs_idf_ui_core for esp32s3`
+### 实机上触摸无效
 
-ESP32-S3 原生归档随组件固定在 `firmware/components/*/lib/esp32s3/`，正常构建不需要额外操作。出现这个报错说明归档或它的 build receipt 缺失：从 Git 恢复这两个文件即可。
-只有在登记上游更新、需要重新生成归档时才执行 `pnpm run native`（配合固定版本的 Xtensa Rust）；官方 CMake 不会自行下载或构建工具链。
+设备端触摸由 `drivers/touch.c` 采样 CST816T，触点经 `hooks.touch_sample` 交给界面。
+先看启动日志有无 `touch init failed`（多为 I2C 无应答，检查地址 `0x15` 与共享总线接线）；init 失败时固件继续运行，但每帧触点为零。
+息屏期间触摸整段跳过，按 PWR 键或发命令亮屏后再试。
 
-### 预览页提示缺少 wasm 核心
+### `firmware/build` 或 `ui/target` 出现文件
 
-触摸预览需要 Rust 构建的官方 wasm 核心。
-执行 `rustup target add wasm32-unknown-unknown` 后重试 `pnpm run dev`，脚本会在缺少 `pocketjs.wasm` 时调用官方 `tools/wasm.ts` 生成。
-
-### 预览页可以点，但固件上触摸无效
-
-设备端触摸由 `drivers/touch.c` 采样 CST816T。
-触点经 owner task 的 `sample_input` 填入官方触点契约（`firmware/pocket.host.json` 已声明 `input.touch`）。
-触摸无效时先看启动日志有无 `touch init failed`（多为 I2C 无应答，检查地址 `0x15` 与共享总线接线）；init 失败时固件继续运行，但每帧触点为零。
-改过 profile 或驱动后需要重新 `pnpm run build` 与 `idf.py build`，旧包不会带新能力。
-
-### `ui/dist` 或 `firmware/build` 出现文件
-
-这些目录是生成目录，已被 Git 忽略。不要手动编辑其中的 JavaScript、PAK、`.pocket`、C/汇编嵌入源或生成头文件。
+这两个目录是生成目录，已被 Git 忽略。不要手动编辑其中的 Rust 生成代码、静态库或镜像。

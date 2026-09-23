@@ -187,7 +187,7 @@ USB 手柄，按顺序选柄可能把它当桥接目标抓走——输入转发�
 
 ## 实机截图（--shot / :shot）
 
-固件侧的串口 `shot` 命令只置一个标志：PocketJS owner task 在下一帧把当前画面按整屏
+固件侧的串口 `shot` 命令只置一个标志：UI 任务在下一帧把当前画面按整屏
 重渲染一遍（与面板上看到的是同一条渲染路径，含本机渲染加速器），再按 200 字节分块经
 图像帧回传。PC 侧按偏移把分块拼齐，写进 `pc/shots/remapad-<时间戳>.png`（`--out` 可
 指定路径）；缺块、越界或超时都不写文件，只报一行原因。
@@ -339,7 +339,7 @@ cd pc
 uv run python -m unittest discover -s tests -t . -v
 ```
 
-仓库根也提供同一条命令：`pnpm run test:pc`。用例跑的是 `pc/` 下的真源码，不复制被测逻辑；
+仓库根的写法与这里一致（`cd pc ; uv run python -m unittest discover -s tests -t .`）。用例跑的是 `pc/` 下的真源码，不复制被测逻辑；
 范围与规则见 [TESTING.md](../docs/TESTING.md) 的「PC 侧主机端用例」。
 
 ## 已知限制

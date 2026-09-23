@@ -1,0 +1,477 @@
+// PC 交互预览：上半是设备画面（与固件同一棵 AppContent），下半是控制条。
+// 控制条与设备画面上的控件走同一套动作名，动作按固件侧的分发语义
+// （firmware/main/slint_host.c 的 ui_action）在本文件里结算，因此能在 PC 上点着走一遍界面。
+// 本文件只给预览用，不参与固件构建；设备尺寸仍是 240 × 280（控制条在它下面）。
+
+// App 只作为宿主侧包的入口一起编进来（用例拿的是 App，预览拿的是 PreviewApp）。
+import { App, AppContent } from "src/app.slint";
+import { Theme } from "src/theme.slint";
+
+/** 控制条按键：一枚小圆角键，按下触发 clicked。 */
+component Key inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> active: false;
+    callback clicked();
+
+    width: 72px;
+    height: 24px;
+    border-radius: 6px;
+    background: root.active ? Theme.primary-dim : Theme.surface-container-highest;
+    border-width: 1px;
+    border-color: Theme.outline-variant;
+    Text {
+        text: root.label;
+        color: Theme.on-surface;
+        font-family: "Noto Sans SC";
+        font-size: Theme.text-xs;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width;
+        height: parent.height;
+    }
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component PreviewApp inherits Window {
+    width: 240px;
+    height: 570px;
+    background: Theme.surface-container-low;
+    title: "Remapad 预览：设备画面 240 × 280 + 控制条";
+
+    // ---- 模拟状态：固件侧本该写进来的取值，这里由控制条与动作结算维护 ----
+    in-out property <int> page: 0;
+    in-out property <int> page-count: 8;
+    in-out property <int> focus-index: 0;
+    in-out property <bool> pad-active: false;
+    in-out property <int> backlight: 60;
+    in-out property <int> battery-percent: 76;
+    in-out property <int> pairing: 2;
+    in-out property <int> notice: 0;
+    in-out property <int> tick: 0;
+    in-out property <int> usb-role: 0;
+    in-out property <bool> pc-link: true;
+    in-out property <bool> pad-attached: true;
+    in-out property <int> pad-family: 1;
+    in-out property <int> player-led: 3;
+    in-out property <int> ota-percent: 0;
+    in-out property <int> selected-colorway: 1;
+    in-out property <bool> ds-touchpad-plus-minus: false;
+    in-out property <bool> ds-capture-key: true;
+    in-out property <int> debug-flash: -1;
+    in-out property <int> dialog: 0;
+    in-out property <int> dialog-focus: 0;
+    in-out property <bool> rebooting: false;
+    in-out property <bool> powering-off: false;
+    /** 控制条最后一行：最近一次动作与结算结果，动作看着没生效时先看这里。 */
+    in-out property <string> log: "点设备画面里的控件，动作在这里结算";
+
+    /** 动作回调：设备画面的控件与控制条上的键都走这一条（与固件的 action 同名同参）。 */
+    callback action(string, int);
+    /** 确认键：转发给设备画面里的焦点分发（实机上圆圈键 / 回车也是这一步）。 */
+    callback activate-focused();
+    /** 焦点步进（实机上是上下键）：到底再按回到另一端，与固件侧 step_focus 的循环一致。 */
+    callback focus-step(int);
+
+    /** 呼吸灯相位（0..1）：固件按 50 ms 一步喂，预览自己算。 */
+    property <float> breath: breath-wave(root.tick);
+    property <int> spinner-phase: mod(root.tick / 4, 8);
+    /** OTA 阶段：0 无、1 进行中、2 已完成。 */
+    property <int> ota-phase: root.ota-percent <= 0 ? 0 : (root.ota-percent >= 100 ? 2 : 1);
+
+    function breath-wave(t: int) -> float {
+        return mod(t, 24) <= 12 ? mod(t, 24) / 12.0 : (24 - mod(t, 24)) / 12.0;
+    }
+
+    function battery-line(percent: int) -> string {
+        return percent + "% · " + (3.30 + percent * 0.01) + "V";
+    }
+
+    /** 手柄家族档位 → 底栏标签用的短名（与 ui/src/components.slint 的取档一致）。 */
+    function family-label(index: int) -> string {
+        return index == 1 ? "PS" : (index == 2 ? "XBOX" : (index == 3 ? "NS" : (index == 4 ? "STEAM" : "PAD")));
+    }
+
+    // 50 ms 一步：转圈与呼吸灯的相位靠它推进（实机上同一条节拍在 host.rs 里）。
+    Timer {
+        interval: 50ms;
+        running: true;
+        triggered => { root.tick = mod(root.tick + 1, 6000); }
+    }
+    // 重启 / 关机等待：预览里不停机，等一会儿把遮罩收掉。
+    Timer {
+        interval: 1500ms;
+        running: root.rebooting || root.powering-off;
+        triggered => {
+            root.rebooting = false;
+            root.powering-off = false;
+            root.log = "遮罩收起（预览不会真的重启 / 关机）";
+        }
+    }
+    // 调试页注入的高亮：实机亮 150 ms，预览放慢到 900 ms 才看得清。
+    Timer {
+        interval: 900ms;
+        running: root.debug-flash >= 0;
+        triggered => { root.debug-flash = -1; }
+    }
+
+    // ---- 设备画面：240 × 280，与面板 1:1 ----
+    device := AppContent {
+        x: 0px;
+        y: 0px;
+        page: root.page;
+        page-count: root.page-count;
+        focus-index: root.focus-index;
+        pad-active: root.pad-active;
+        pad-mode: root.pad-active;
+        backlight: root.backlight;
+        battery-percent: root.battery-percent;
+        pairing: root.pairing;
+        notice: root.notice;
+        spinner-phase: root.spinner-phase;
+        usb-role: root.usb-role;
+        pc-link: root.pc-link;
+        pad-attached: root.pad-attached;
+        pad-family: root.pad-family;
+        player-led: root.player-led;
+        pad-ui-mode: root.pad-active;
+        breath: root.breath;
+        ota-phase: root.ota-phase;
+        ota-percent: root.ota-percent;
+        selected-colorway: root.selected-colorway;
+        controller-address: "F4:4E:FD:11:22:33";
+        ds-touchpad-plus-minus: root.ds-touchpad-plus-minus;
+        ds-capture-key: root.ds-capture-key;
+        firmware-version: "v0.0.0-preview";
+        heap-text: "128 / 360 KB";
+        psram-text: "2.1 / 8 MB";
+        battery-text: battery-line(root.battery-percent);
+        debug-flash: root.debug-flash;
+        dialog: root.dialog;
+        dialog-focus: root.dialog-focus;
+        powering-off: root.powering-off;
+        rebooting: root.rebooting;
+        action(name, value) => { root.action(name, value); }
+    }
+    // 确认键走设备画面自己的焦点分发（按页分发的那套逻辑写在 AppContent 里），预览不重写它。
+    activate-focused => { device.activate-focused(); }
+
+    // 焦点在 0..focus-count-1 之间循环：行数由设备画面按当前页给出，两端相接。
+    focus-step(delta) => {
+        if (device.focus-count <= 0) {
+            root.focus-index = -1;
+            root.log = "这一页没有可聚焦项";
+            return;
+        }
+        if (root.focus-index < 0) {
+            root.focus-index = delta > 0 ? 0 : device.focus-count - 1;
+        } else {
+            root.focus-index = mod(root.focus-index + delta + device.focus-count, device.focus-count);
+        }
+        root.log = "焦点 " + root.focus-index + " / " + device.focus-count;
+    }
+
+    function step-battery(delta: int) {
+        root.battery-percent = max(0, min(100, root.battery-percent + delta));
+        root.log = "电量 = " + root.battery-percent + "%";
+    }
+
+    // ---- 动作结算：与 firmware/main/slint_host.c 的 ui_action 同一套名字与语义 ----
+    action(name, value) => {
+        root.log = name + "(" + value + ")";
+        if (name == "next-page") {
+            root.page = mod(root.page + 1, root.page-count);
+        } else if (name == "prev-page") {
+            root.page = mod(root.page + root.page-count - 1, root.page-count);
+        } else if (name == "brightness-up") {
+            root.backlight = min(100, root.backlight + 20);
+            root.log = "背光 = " + root.backlight + "%";
+        } else if (name == "brightness-down") {
+            root.backlight = max(20, root.backlight - 20);
+            root.log = "背光 = " + root.backlight + "%";
+        } else if (name == "colorway") {
+            root.selected-colorway = value;
+            root.log = "配色 = " + value;
+        } else if (name == "connect") {
+            root.notice = 2;
+            root.pairing = 2;
+            root.log = "开广播（30 秒窗口）";
+        } else if (name == "disconnect") {
+            root.notice = root.pairing == 4 || root.pairing == 5 ? 3 : 4;
+            root.pairing = 1;
+            root.log = "收窗口并断开";
+        } else if (name == "pair") {
+            root.notice = 1;
+            root.pairing = 4;
+            root.log = "配新主机";
+        } else if (name == "host-click") {
+            if (root.pairing == 0 || root.pairing == 1) {
+                root.notice = 2;
+                root.pairing = 2;
+                root.log = "底栏主机格点击 → 开广播";
+            }
+        } else if (name == "ask-reboot") {
+            root.dialog = 1;
+            root.dialog-focus = 0;
+        } else if (name == "ask-power-off") {
+            root.dialog = 2;
+            root.dialog-focus = 0;
+        } else if (name == "ask-usb-host") {
+            root.dialog = 3;
+            root.dialog-focus = 0;
+        } else if (name == "dialog-cancel") {
+            root.dialog = 0;
+            root.log = "弹窗关掉";
+        } else if (name == "reboot") {
+            root.dialog = 0;
+            root.rebooting = true;
+            root.log = "重启等待画面（预览不停机）";
+        } else if (name == "power-off") {
+            root.dialog = 0;
+            root.powering-off = true;
+            root.log = "关机等待画面（预览不停机）";
+        } else if (name == "usb-host") {
+            root.dialog = 0;
+            root.usb-role = 1;
+            root.log = "USB 角色 = 手柄（PC 的串口会消失）";
+        } else if (name == "usb-device") {
+            root.usb-role = 0;
+            /* 固件从手柄切回串口时会问一次要不要重启（见 slint_host.c 的 ui_poll）。 */
+            root.dialog = 4;
+            root.log = "USB 角色 = 串口（问一次要不要重启）";
+        } else if (name == "ds-touchpad") {
+            root.ds-touchpad-plus-minus = !root.ds-touchpad-plus-minus;
+            root.log = "触摸板加减键 = " + (root.ds-touchpad-plus-minus ? "开" : "关");
+        } else if (name == "ds-capture") {
+            root.ds-capture-key = !root.ds-capture-key;
+            root.log = "截图键 = " + (root.ds-capture-key ? "开" : "关");
+        } else if (name == "debug-key") {
+            root.debug-flash = value;
+            root.log = "调试页注入 = " + value;
+        } else if (name == "page") {
+            root.page = value;
+        }
+    }
+
+    // ---- 控制条：不属于设备画面，只服务于预览 ----
+    Rectangle {
+        y: 280px;
+        width: 240px;
+        height: 290px;
+        background: Theme.surface-container-low;
+        border-width: 1px;
+        border-color: Theme.outline-variant;
+
+        Text {
+            x: 8px;
+            y: 8px;
+            width: 224px;
+            height: 14px;
+            text: "预览控制（不属于设备画面）";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            color: Theme.on-surface-variant;
+            horizontal-alignment: center;
+        }
+
+        // 第一行：翻页与手柄操控窗口
+        Key {
+            x: 6px;
+            y: 28px;
+            label: "‹ 上页";
+            clicked => { root.action("prev-page", 0); }
+        }
+        Key {
+            x: 84px;
+            y: 28px;
+            label: "下页 ›";
+            clicked => { root.action("next-page", 0); }
+        }
+        Key {
+            x: 162px;
+            y: 28px;
+            label: "手柄操控";
+            active: root.pad-active;
+            clicked => {
+                root.pad-active = !root.pad-active;
+                root.focus-index = root.pad-active ? 0 : -1;
+                root.log = "手柄操控 = " + (root.pad-active ? "开" : "关");
+            }
+        }
+
+        // 第二行：焦点与确认键
+        Key {
+            x: 6px;
+            y: 58px;
+            label: "焦点 −";
+            clicked => { root.focus-step(-1); }
+        }
+        Key {
+            x: 84px;
+            y: 58px;
+            label: "焦点 ＋";
+            clicked => { root.focus-step(1); }
+        }
+        Key {
+            x: 162px;
+            y: 58px;
+            label: "确认键";
+            clicked => { root.activate-focused(); }
+        }
+
+        // 第三行：配对、USB 角色与手柄接入
+        Key {
+            x: 6px;
+            y: 88px;
+            label: "配对 +1";
+            clicked => {
+                root.pairing = mod(root.pairing + 1, 6);
+                root.notice = 0;
+                root.log = "配对状态 = " + root.pairing;
+            }
+        }
+        Key {
+            x: 84px;
+            y: 88px;
+            label: root.usb-role == 0 ? "USB 串口" : "USB 手柄";
+            active: root.usb-role == 1;
+            clicked => { root.action(root.usb-role == 0 ? "usb-host" : "usb-device", 0); }
+        }
+        Key {
+            x: 162px;
+            y: 88px;
+            label: root.pad-attached ? "已插手柄" : "未插手柄";
+            active: !root.pad-attached;
+            clicked => {
+                root.pad-attached = !root.pad-attached;
+                root.log = "手柄接入 = " + (root.pad-attached ? "已插" : "未插");
+            }
+        }
+
+        // 第四行：三种确认弹窗
+        Key {
+            x: 6px;
+            y: 118px;
+            label: "重启确认";
+            clicked => { root.action("ask-reboot", 0); }
+        }
+        Key {
+            x: 84px;
+            y: 118px;
+            label: "关机确认";
+            clicked => { root.action("ask-power-off", 0); }
+        }
+        Key {
+            x: 162px;
+            y: 118px;
+            label: "切手柄";
+            clicked => { root.action("ask-usb-host", 0); }
+        }
+
+        // 第五行：电量与 OTA 进度
+        Key {
+            x: 6px;
+            y: 148px;
+            label: "电量 −";
+            clicked => { root.step-battery(-10); }
+        }
+        Key {
+            x: 84px;
+            y: 148px;
+            label: "电量 ＋";
+            clicked => { root.step-battery(10); }
+        }
+        Key {
+            x: 162px;
+            y: 148px;
+            label: "OTA +10%";
+            clicked => {
+                root.ota-percent = root.ota-percent >= 100 ? 0 : root.ota-percent + 10;
+                root.log = "OTA 进度 = " + root.ota-percent + "%";
+            }
+        }
+
+        // 第六行：清弹窗、命令提示与手柄家族
+        Key {
+            x: 6px;
+            y: 178px;
+            label: "清弹窗";
+            clicked => { root.action("dialog-cancel", 0); }
+        }
+        Key {
+            x: 84px;
+            y: 178px;
+            label: "通知 +1";
+            clicked => {
+                root.notice = mod(root.notice + 1, 5);
+                root.log = "命令提示 = " + root.notice;
+            }
+        }
+        Key {
+            x: 162px;
+            y: 178px;
+            label: "家族 " + family-label(root.pad-family);
+            clicked => {
+                root.pad-family = mod(root.pad-family + 1, 5);
+                root.log = "手柄家族 = " + family-label(root.pad-family);
+            }
+        }
+
+        // 第七行：PC 连接、玩家灯与调试页注入高亮
+        Key {
+            x: 6px;
+            y: 208px;
+            label: root.pc-link ? "PC 已连" : "PC 未连";
+            active: root.pc-link;
+            clicked => {
+                root.pc-link = !root.pc-link;
+                root.log = "PC 连接 = " + (root.pc-link ? "已连" : "未连");
+            }
+        }
+        Key {
+            x: 84px;
+            y: 208px;
+            label: "灯 " + root.player-led;
+            clicked => {
+                root.player-led = mod(root.player-led + 1, 16);
+                root.log = "玩家灯 = " + root.player-led;
+            }
+        }
+        Key {
+            x: 162px;
+            y: 208px;
+            label: "注入 +1";
+            clicked => {
+                root.debug-flash = mod(root.debug-flash + 2, 4);
+                root.log = "调试页注入高亮 = " + root.debug-flash;
+            }
+        }
+
+        // 当前读数与最近一次动作
+        Text {
+            x: 6px;
+            y: 238px;
+            width: 228px;
+            height: 14px;
+            text: "弹窗 " + root.dialog + " · 焦点 " + root.focus-index + " · 配对 " + root.pairing
+                + " · 灯 " + root.player-led;
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            color: Theme.on-surface-variant;
+        }
+        Text {
+            x: 6px;
+            y: 256px;
+            width: 228px;
+            height: 28px;
+            text: root.log;
+            wrap: word-wrap;
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            color: Theme.on-surface;
+        }
+    }
+}

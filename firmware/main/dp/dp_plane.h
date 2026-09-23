@@ -11,7 +11,7 @@ extern "C" {
 
 /**
  * 控制器数据面：启动 BLE host 任务与数据面任务。数据面固定 5ms 周期做
- * 输入源采样 -> 规范化 -> NS2 编码 -> BLE 通知，高频路径不经过 PocketJS turn 与 JSON bridge。
+ * 输入源采样 -> 规范化 -> NS2 编码 -> BLE 通知，高频路径不经过界面每帧轮询与 JSON bridge。
  */
 
 esp_err_t dp_plane_start(void);

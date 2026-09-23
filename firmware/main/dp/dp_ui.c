@@ -9,7 +9,7 @@
 
 static const char *TAG = "remapad_dp_ui";
 
-/** 运行时状态：dp_task 写、PocketJS owner task 与 CLI 读，临界区保护。 */
+/** 运行时状态：dp_task 写、界面任务与 CLI 读，临界区保护。 */
 static portMUX_TYPE s_ui_mux = portMUX_INITIALIZER_UNLOCKED;
 static dp_ui_state_t s_ui_state;
 static uint32_t s_ui_buttons;

@@ -4,7 +4,7 @@
 
 Remapad 是一个面向 **微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）** 的嵌入式控制器与 UI 系统，板卡规格见 [hardware.md](hardware.md)。
 最终产品从 USB 接收输入，将其转换为 NS2 手柄报告，再通过 Bluetooth LE 对外提供手柄服务，同时在本机屏幕上显示连接、配对和设备状态。
-UI 使用 Vue Vapor + Tailwind，运行时使用 PocketJS 官方 ESP-IDF host 组件；
+UI 使用 Slint（Rust）：界面在构建期编进固件，运行期用 Slint 的软件渲染器画到面板；
 控制器协议、广播、GATT 和配对范围记录在 [controller-switch2.md](controller-switch2.md)。
 
 ## 要解决的核心痛点
@@ -14,25 +14,25 @@ UI 使用 Vue Vapor + Tailwind，运行时使用 PocketJS 官方 ESP-IDF host �
 - **缺乏声明式响应式状态绑定**：C 语言手写事件与状态同步代码繁琐且易产生内存泄漏与野指针崩溃，界面复杂后维护成本急剧上升。
 - **WebView 方案资源过重**：ESP32-S3 仅有 512KB 片内 SRAM 与 8MB 片外 PSRAM，根本无法承载完整的 Chromium/WebKit 内核或包含 DOM 树的通用浏览器运行时。
 
-Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技术路径，从根本上解决上述痛点。
+Remapad 采用**“零脚本运行时、构建期烘焙、PC 预览热重载”**的技术路径，从根本上解决上述痛点。
 
-在控制器数据面，项目还需要解决 USB 输入设备格式不统一、NS2 报告编码复杂、BLE 广播/连接状态多，以及配对凭证持久化等问题。该数据面与 PocketJS UI runtime 解耦：
+在控制器数据面，项目还需要解决 USB 输入设备格式不统一、NS2 报告编码复杂、BLE 广播/连接状态多，以及配对凭证持久化等问题。该数据面与屏幕 UI 解耦：
 高频输入和报告转发由 ESP-IDF 原生任务处理，UI 只观察状态并发送低频控制命令。
 
 ## 目标用户群体
 
 - **物联网与智能硬件工程师**：需要为 ESP32-S3 智能硬件快速构建现代美观、高帧率 UI 的开发人员。
 - **极客与创客群体**：希望制作便携桌面副屏、电子挂件、客制化小键盘或手持游戏/工具终端的开发者。
-- **熟悉现代前端的技术人员**：希望使用习惯的 Vue/JSX 与 Tailwind 语法开发单片机应用，而无需深究底层硬件时序与寄存器的工程师。
+- **熟悉声明式 UI 的技术人员**：希望用 Slint 这类声明式语法写界面、由 Rust 承载逻辑，而无需深究底层硬件时序与寄存器的工程师。
 - **需要 USB 转无线手柄网关的开发者**：希望将 USB 输入设备转换为 NS2 兼容的 BLE 手柄，并通过屏幕管理连接与配对状态。
 
 ## 核心目标与成功指标
 
-1. **零刷机实时热重载**：在 PC 浏览器中通过 WebAssembly 提供与真机像素级一致的 30 FPS 实时仿真，保存代码后亚秒级刷新，UI 调试无需依赖硬件板卡。
-   帧率取值同真机，见 [ADR 0037](adr/0037-ui-tick-rate-30hz.md)。
-2. **现代化的组件与样式体系**：支持 Vue Vapor 的 `ref` / `watchEffect` 响应式系统，全面支持 Tailwind 工具类，消除繁琐内联样式配置。
-3. **固件构建链路清晰可复现**：前端通过官方 PocketJS CLI 和 ESP32-S3 host profile 生成 `.pocket`，ESP-IDF 通过官方组件嵌入该包；
-   16 MB Flash / 8 MB Octal PSRAM 内存配置和 240×280 视口由设备 profile 统一描述。
+1. **零刷机实时热重载**：在 PC 上用 slint-viewer 打开同一份 `.slint` 源码，窗口按面板尺寸 240 × 280 打开，保存代码后亚秒级刷新，界面排版调试无需依赖硬件板卡。
+   真机刷新节拍见 [ADR 0052](adr/0052-ui-tick-rate-back-to-60hz.md)。
+2. **声明式组件与主题体系**：界面用属性绑定与回调描述状态，颜色与字号收在 `theme.slint` 的语义 token 里，页面只引用不写死取值。
+3. **固件构建链路清晰可复现**：`ui/src/*.slint` 由 slint-build 在构建期编成 Rust 代码，再由 ESP-IDF 组件交叉编译成静态库整段链进应用，
+   全程只有 Cargo 与 ESP-IDF 两套工具；16 MB Flash / 8 MB Octal PSRAM 内存配置与 240×280 视口写在固件配置与界面源码里。
 4. **USB 到 NS2 BLE 的可靠转发**：稳定接收 USB HID/原始报告，规范化输入状态，生成 NS2 手柄报告，完成 BLE 广播、连接、通知、配对和重连；
    协议细节以 [controller-switch2.md](controller-switch2.md) 为设计依据并以实机验证为准。
 5. **极致轻量与高帧率**：在无硬件 2D 加速器（PPA）的 ESP32-S3 上，通过编译期静态光栅化实现高帧率流畅运行。
@@ -41,12 +41,12 @@ Remapad 采用**“零 DOM、构建期光栅化、PC 仿真热重载”**的技�
 
 为保持系统的轻量、专注与高确定性，Remapad 明确设立以下边界：
 - **非通用 Web/移动端框架**：Remapad 专为小分辨率（如 240×280、320×240 等）嵌入式屏幕设计，不追求对 PC/手机通用复杂网页的大规模 DOM 与富文本排版支持。
-- **不承载浏览器引擎**：运行时完全没有 HTML DOM 树、CSS 解析器或 JavaScript JIT 编译器，所有样式和字体均在编译阶段固化。
+- **不承载脚本引擎**：设备上没有任何 JavaScript 运行时，界面在编译期变成 Rust 代码与字形位图，样式、字体与资源都在编译阶段固化。
 - **不替代嵌入式底层驱动**：Remapad 专注于 UI 视图与交互层，底层传感器采样、网络通信（Wi-Fi/BLE）与总线协议由 ESP-IDF 原生 C 模块负责。
-- **不把控制器转发塞进 UI runtime**：USB 报告、NS2 编码、BLE GATT/广播和配对状态机属于产品数据面，不通过 PocketJS 的每帧 UI 接口承载。
+- **不把控制器转发塞进 UI 线程**：USB 报告、NS2 编码、BLE GATT/广播和配对状态机属于产品数据面，不通过屏幕的每帧状态轮询承载。
 
 ## 核心设计原则
 
 - **事实单一源 (Single Source of Truth)**：界面数据流始终由声明式响应式状态（Reactive State）驱动。
-- **构建期计算优先 (Bake at Build-Time)**：凡能在 PC 构建期完成的工作（Tailwind 样式编译、TrueType 矢量字体图集烘焙、SVG 光栅化），绝不推迟到微控制器运行时消耗算力。
-- **软硬件双向一致性 (Deterministic Parity)**：PC 端 WebAssembly 仿真器与 ESP32-S3 真机采用完全相同的渲染核心逻辑与字模度量规范，所见即所得。
+- **构建期计算优先 (Bake at Build-Time)**：凡能在 PC 构建期完成的工作（Slint 编译、字形位图烘焙、SVG 光栅化），绝不推迟到微控制器运行时消耗算力。
+- **软硬件双向一致性 (Deterministic Parity)**：PC 预览与 ESP32-S3 真机打开同一份 `.slint`、用同一套字体与字号表，宿主用例断言的就是真机上屏的画面。

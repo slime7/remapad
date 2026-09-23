@@ -32,6 +32,10 @@ void ota_session_notify_ui_ready(void);
 /** 会话状态短名（串口 CLI status 用）：idle / receiving / verifying / rebooting / failed。 */
 const char *ota_session_state_name(void);
 
+/** 当前升级阶段与已收百分比（UI 底栏进度条用）：
+ *  phase 取 0 idle、1 receiving、2 verifying、3 rebooting、4 failed，与界面属性同值。 */
+void ota_session_progress(int *phase, int *percent);
+
 /** 运行镜像的版本号（与 UI 系统页、OTA 应答同一来源）。 */
 const char *ota_session_running_version(void);
 

@@ -4,25 +4,22 @@
 #include <stdint.h>
 
 #include "esp_err.h"
-#include "pocketjs/guest.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * 产品控制面桥接：PocketJS UI（guest）与固件原生侧的低频命令/事件通道。
- * guest 经 __nativeBridge.postMessage 入队，owner task 每帧出队分发并回发应答，入队出队都在 owner task 上、无锁。
+ * 产品控制面桥接：屏幕 UI 与固件原生侧的低频命令/事件通道。
+ * UI 命令入队后由 owner task 出队分发并回发应答，入队出队都在 owner task 上、无锁；
+ * Slint 界面按 50 ms 轮询状态，事件只记日志（原先经 guest eval 回发）。
  * USB 高频输入、NS2 编码与 BLE 数据面不经过此通道（见 docs/ARCHITECTURE.md）。
  */
 
 /** 初始化桥接内部状态；在 owner task 启动前调用一次。 */
 esp_err_t js_bridge_init(void);
 
-/** guest 创建后绑定事件回发通道；绑定前事件只记日志。 */
-void js_bridge_attach(pocketjs_guest_t *guest);
-
-/** native surface 回调：把 guest 发来的命令 JSON 入队（owner task 上下文）。 */
+/** 把界面发来的命令 JSON 入队（owner task 上下文）。 */
 esp_err_t js_bridge_enqueue(const char *cmd_json);
 
 /** 外部任务（PWR 按键 / 串口 CLI）提交命令 JSON：拷入队列，由 owner task
@@ -33,7 +30,7 @@ esp_err_t js_bridge_submit_command(const char *cmd_json);
  *  UI 的连接按钮按同一规则在两侧各自推导，两条入口走同一条命令路径。 */
 void js_bridge_connect_key(void);
 
-/** 外部任务向 UI 广播事件 JSON：经队列由 owner task 回发给 guest。 */
+/** 外部任务广播事件 JSON：经队列由 owner task 记录（Slint 界面按状态轮询取值）。 */
 void js_bridge_post_event(const char *event_json);
 
 /** owner task 每帧调用：驱动配对状态机定时流转并处理命令队列。 */

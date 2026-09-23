@@ -1,0 +1,738 @@
+// 四叶草轮播的七个页面（外加 dev 构建的调试页）。
+// 页根坐标系是整张 256 × 256 卡片：卡面原点在屏幕 (-8, -24)，角钮圆心与背景瓣外弧同心，
+// 中央内容框是 (50, 54) 起的 156 × 148 区域。焦点序号由固件侧写入，-1 表示无焦点。
+
+import { Theme } from "theme.slint";
+import { DragArea, Icon, IconBox, Switch } from "components.slint";
+// 转圈用的盲文点阵：素材字体里只有这一份覆盖 U+28xx。
+import "../assets/fonts/seguisym.ttf";
+
+/** 角钮：64 圆形，常规底色 secondary-container，破坏性动作用 error 语义色。 */
+component CornerButton inherits Rectangle {
+    in property <bool> danger: false;
+    in property <bool> focused: false;
+    in property <bool> interactive: true;
+    callback pressed();
+
+    width: 64px;
+    height: 64px;
+    border-radius: 32px;
+    background: !interactive
+        ? (danger ? Theme.error-container : Theme.secondary-container)
+        : (touch.pressed
+            ? (danger ? Theme.error-container-active : Theme.secondary-container-active)
+            : (danger ? Theme.error-container : Theme.secondary-container));
+    border-width: focused ? 2px : 0px;
+    border-color: Theme.focus-ring;
+
+    touch := DragArea {
+        activated => { if (root.interactive) { root.pressed(); } }
+    }
+}
+
+/** 亮度调节页：左侧竖直滑槽 + 中央档位 + 右上加/右下减两颗角钮。 */
+export component BrightnessPage inherits Rectangle {
+    in property <int> backlight: 40;
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    callback step-up();
+    callback step-down();
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    property <int> step: max(1, min(5, round(backlight / 20)));
+    property <length> fill-height: max(16px, min(100px, backlight * 1px)) * 1.12;
+
+    // 滑槽：左列瓣心的竖向轨道，填充高度由 backlight 推出
+    track := Rectangle {
+        x: 70px;
+        y: 68px;
+        width: 24px;
+        height: 120px;
+        border-radius: 12px;
+        background: Theme.on-primary-container;
+        clip: true;
+
+        fill := Rectangle {
+            x: 4px;
+            y: parent.height - 4px - self.height;
+            width: parent.width - 8px;
+            height: min(parent.height - 8px, root.fill-height);
+            border-radius: 8px;
+            background: #ffffff;
+        }
+    }
+
+    // 档位数字：卡片正中
+    Text {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        text: "\{root.step}";
+        font-family: "Noto Sans SC";
+        font-size: Theme.text-2xl;
+        font-weight: 700;
+        color: Theme.on-primary-container;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    plus := CornerButton {
+        x: 142px;
+        y: 50px;
+        focused: root.focus-index == 0;
+        interactive: root.interactive;
+        pressed => { root.step-up(); }
+        Text {
+            text: "+";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-2xl;
+            font-weight: 700;
+            color: Theme.on-secondary-container;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    minus := CornerButton {
+        x: 142px;
+        y: 142px;
+        focused: root.focus-index == 1;
+        interactive: root.interactive;
+        pressed => { root.step-down(); }
+        Text {
+            text: "−";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-2xl;
+            font-weight: 700;
+            color: Theme.on-secondary-container;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+/** 手柄设置页：身份信息 + 2 × 2 配色圆钮（42 色块 + 选中指示环）。 */
+export component ControllerPage inherits Rectangle {
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    in property <string> address: "--";
+    /** 当前配色是否命中某一款：由固件侧按 4 个通道值算出，取值 0-3，-1 为无命中。 */
+    in property <int> selected: 0;
+    callback select(int);
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    VerticalLayout {
+        x: 50px;
+        y: 54px;
+        width: 156px;
+        height: 148px;
+        alignment: center;
+        padding: 4px;
+        spacing: 6px;
+
+        VerticalLayout {
+            alignment: start;
+            spacing: 1px;
+            Text {
+                text: "SN: HEJ71001123456";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-primary-container;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "MAC: \{root.address}";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-primary-container;
+                horizontal-alignment: center;
+            }
+        }
+
+        VerticalLayout {
+            alignment: start;
+            spacing: 6px;
+
+            Rectangle { height: 2px; }
+
+            for row in 2: HorizontalLayout {
+                alignment: center;
+                spacing: 16px;
+
+                for col in 2: swatch := Rectangle {
+                    property <int> index: row * 2 + col;
+                    width: 42px;
+                    height: 42px;
+                    border-radius: 21px;
+                    background: index == 0 ? #232323 : (index == 1 ? #3a4045 : (index == 2 ? #b9bec4 : #1e3b2a));
+                    border-width: root.focus-index == self.index ? 2px : 0px;
+                    border-color: Theme.focus-ring;
+
+                    Rectangle {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: 36px;
+                        height: 36px;
+                        border-radius: 18px;
+                        background: parent.background;
+                        border-width: root.selected == parent.index ? 2px : 0px;
+                        border-color: (parent.index == 2) ? #000000 : #ffffff;
+                    }
+
+                    touch := DragArea {
+                        activated => { if (root.interactive) { root.select(parent.index); } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 配对页：状态提示 + 右下主钮（连接/停止/断开）+ 左下配对钮。 */
+export component PairingPage inherits Rectangle {
+    /** 配对状态：0 idle 1 paired 2 advertising 3 scanning 4 pairing 5 connected */
+    in property <int> pairing: 0;
+    /** 命令应答提示（0 = 无），取值与固件侧的下发一致。 */
+    in property <int> notice: 0;
+    /** 广播提示的旋转相位（0-7），由固件侧按 200 ms 步进写入。 */
+    in property <int> spinner-phase: 0;
+    /** 转圈用的盲文点阵字形（8 帧）：每帧一枚单点，逐帧绕着字框转一圈。 */
+    property <[string]> spinner-chars: ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"];
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    callback connect-key();
+    callback stop();
+    callback pair();
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    property <bool> broadcasting: pairing == 2 || pairing == 3;
+    property <bool> link-up: pairing == 4 || pairing == 5;
+    property <bool> busy: broadcasting || link-up;
+
+    VerticalLayout {
+        x: 0px;
+        y: 64px;
+        width: 256px;
+        height: 40px;
+        spacing: 2px;
+        alignment: start;
+
+        status-row := HorizontalLayout {
+            height: 18px;
+            alignment: center;
+            spacing: 4px;
+            /* 广播提示只在扫描/广播/配对中出现；用 if 而不是 visible，
+             * 隐藏元素在布局里仍占位，会让状态文字整体偏右。
+             * 转圈是盲文点阵字形逐帧轮换（U+2801/U+2802/U+2804/U+2840/U+2880/U+2820/U+2810/U+2808），不是图片：
+             * 字形落在字号槽位里，烘出来的位图正好是上屏尺寸。 */
+            if root.broadcasting || root.pairing == 4: Rectangle {
+                width: 12px;
+                height: 18px;
+                /* 盲文点阵在字框里比文字中线低 2px：上移让转圈中心落在状态行的中线上。 */
+                spinner-glyph := Text {
+                    x: 0px;
+                    y: -2px;
+                    width: 12px;
+                    height: 18px;
+                    text: root.spinner-chars[Math.mod(root.spinner-phase, 8)];
+                    font-family: "Segoe UI Symbol";
+                    font-size: Theme.text-xs;
+                    color: Theme.on-primary-container;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            pairing-text := Text {
+                text: pairing-label;
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-primary-container;
+                vertical-alignment: center;
+            }
+        }
+        if root.notice != 0: Text {
+            text: notice-label;
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            color: Theme.on-primary-container;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    main-btn := CornerButton {
+        x: 142px;
+        y: 142px;
+        danger: root.busy;
+        focused: root.focus-index == 0;
+        interactive: root.interactive;
+        pressed => { if (root.busy) { root.stop(); } else { root.connect-key(); } }
+        Text {
+            text: root.link-up ? "断开" : (root.broadcasting ? "停止" : "连接");
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            color: root.busy ? Theme.on-error-container : Theme.on-secondary-container;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    pair-btn := CornerButton {
+        x: 50px;
+        y: 142px;
+        focused: root.focus-index == 1;
+        interactive: root.interactive;
+        pressed => { root.pair(); }
+        Text {
+            text: "配对";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            color: Theme.on-secondary-container;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    property <string> pairing-label: pairing == 3
+        ? "扫描中…"
+        : (pairing == 2 ? "连接中…" : (pairing == 4 ? "配对中…" : (pairing == 1 ? "已配对" : (pairing == 5 ? "已连接" : "未配对"))));
+    property <string> notice-label: notice == 1
+        ? "广播中，等待主机连接"
+        : (notice == 2
+            ? "已打开连接，等待主机连回来"
+            : (notice == 3
+                ? "已断开连接"
+                : (notice == 4 ? "已停止广播" : (notice == 5 ? "已解除配对" : "连接命令未生效"))));
+}
+
+/** 电源页：左上重启、右下关机（error 语义色），标签两行。 */
+export component PowerPage inherits Rectangle {
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    callback ask-reboot();
+    callback ask-power-off();
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    reboot-btn := CornerButton {
+        x: 50px;
+        y: 50px;
+        focused: root.focus-index == 0;
+        interactive: root.interactive;
+        pressed => { root.ask-reboot(); }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: "重启";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-secondary-container;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "设备";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-secondary-container;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    off-btn := CornerButton {
+        x: 142px;
+        y: 142px;
+        danger: true;
+        focused: root.focus-index == 1;
+        interactive: root.interactive;
+        pressed => { root.ask-power-off(); }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: "设备";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-error-container;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "关机";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-error-container;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}
+
+/** USB 模式页：串口 / 手柄两张选项卡。 */
+export component UsbModePage inherits Rectangle {
+    /** 0 = 串口（device），1 = 手柄（host）。 */
+    in property <int> usb-role: 0;
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    callback select-device();
+    callback ask-host();
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    VerticalLayout {
+        x: 50px;
+        y: 54px;
+        width: 156px;
+        height: 148px;
+        alignment: center;
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 8px;
+
+        Text {
+            text: "USB 模式";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            color: Theme.on-primary-container;
+            horizontal-alignment: center;
+        }
+
+        device-card := Rectangle {
+            height: 52px;
+            border-radius: 12px;
+            background: root.usb-role == 0
+                ? (device-touch.pressed ? Theme.on-primary-fixed-variant : Theme.on-primary-container)
+                : (device-touch.pressed ? Theme.primary-container : Theme.on-background);
+            border-width: root.focus-index == 0 ? 2px : 0px;
+            border-color: Theme.focus-ring;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                alignment: center;
+                spacing: 8px;
+                IconBox {
+                    glyph: "\u{e30c}";
+                    size: Theme.text-2xl;
+                    tint: root.usb-role == 0 ? Theme.primary-container : Theme.on-primary-fixed-variant;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "串口";
+                        font-family: "Noto Sans SC";
+                        font-size: Theme.text-sm;
+                        font-weight: 700;
+                        color: root.usb-role == 0 ? Theme.primary-container : Theme.on-primary-container;
+                    }
+                    Text {
+                        text: "PC 桥接与烧录";
+                        font-family: "Noto Sans SC";
+                        font-size: Theme.text-xs;
+                        color: root.usb-role == 0 ? Theme.primary-container : Theme.on-primary-container;
+                    }
+                }
+            }
+            device-touch := DragArea {
+                activated => { if (root.interactive && root.usb-role != 0) { root.select-device(); } }
+            }
+        }
+
+        host-card := Rectangle {
+            height: 52px;
+            border-radius: 12px;
+            background: root.usb-role == 1
+                ? (host-touch.pressed ? Theme.on-primary-fixed-variant : Theme.on-primary-container)
+                : (host-touch.pressed ? Theme.primary-container : Theme.on-background);
+            border-width: root.focus-index == 1 ? 2px : 0px;
+            border-color: Theme.focus-ring;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                alignment: center;
+                spacing: 8px;
+                IconBox {
+                    glyph: "\u{e338}";
+                    size: Theme.text-2xl;
+                    tint: root.usb-role == 1 ? Theme.primary-container : Theme.on-primary-fixed-variant;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "手柄";
+                        font-family: "Noto Sans SC";
+                        font-size: Theme.text-sm;
+                        font-weight: 700;
+                        color: root.usb-role == 1 ? Theme.primary-container : Theme.on-primary-container;
+                    }
+                    Text {
+                        text: "直插手柄输入";
+                        font-family: "Noto Sans SC";
+                        font-size: Theme.text-xs;
+                        color: root.usb-role == 1 ? Theme.primary-container : Theme.on-primary-container;
+                    }
+                }
+            }
+            host-touch := DragArea {
+                activated => { if (root.interactive && root.usb-role != 1) { root.ask-host(); } }
+            }
+        }
+    }
+}
+
+/** DS4、DS5 设置页：两行「选项名 + 开关」。 */
+export component DsSettingsPage inherits Rectangle {
+    in property <bool> touchpad-plus-minus: false;
+    in property <bool> capture-key: true;
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    callback toggle-touchpad();
+    callback toggle-capture();
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    VerticalLayout {
+        x: 50px;
+        y: 54px;
+        width: 156px;
+        height: 148px;
+        alignment: center;
+        padding: 8px;
+        spacing: 10px;
+
+        Text {
+            text: "DS4、DS5 设置";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            color: Theme.on-primary-container;
+            horizontal-alignment: center;
+        }
+
+        HorizontalLayout {
+            alignment: space-between;
+            padding-left: 4px;
+            padding-right: 4px;
+            Text {
+                text: "触摸板加减";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-primary-container;
+                vertical-alignment: center;
+            }
+            Switch {
+                on: root.touchpad-plus-minus;
+                focused: root.focus-index == 0;
+                toggled => { if (root.interactive) { root.toggle-touchpad(); } }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: space-between;
+            padding-left: 4px;
+            padding-right: 4px;
+            Text {
+                text: "截图键";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-primary-container;
+                vertical-alignment: center;
+            }
+            Switch {
+                on: root.capture-key;
+                focused: root.focus-index == 1;
+                toggled => { if (root.interactive) { root.toggle-capture(); } }
+            }
+        }
+    }
+}
+
+/** 系统信息页：固件版本、堆内存、PSRAM、电池四行。 */
+export component SystemInfoPage inherits Rectangle {
+    in property <string> firmware-version: "-";
+    in property <string> heap-text: "- / - KB";
+    in property <string> psram-text: "- / - MB";
+    in property <string> battery-text: "-";
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    VerticalLayout {
+        x: 50px;
+        y: 54px;
+        width: 156px;
+        height: 148px;
+        alignment: center;
+        padding: 8px;
+        spacing: 6px;
+
+        Text {
+            text: "设备信息";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            color: Theme.on-primary-container;
+            horizontal-alignment: center;
+        }
+        VerticalLayout {
+            alignment: start;
+            spacing: 4px;
+            padding-left: 4px;
+            padding-right: 4px;
+            Text {
+                text: "固件: \{root.firmware-version}";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                font-weight: 700;
+                color: Theme.on-primary-container;
+            }
+            Text {
+                text: "堆内存: \{root.heap-text}";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-primary-container;
+            }
+            Text {
+                text: "PSRAM: \{root.psram-text}";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-primary-container;
+            }
+            battery-line := Text {
+                text: "电池: \{root.battery-text}";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-primary-container;
+            }
+        }
+    }
+}
+
+/** 调试页（仅 dev 构建）：按键注入与手柄控屏开关。 */
+export component DebugPage inherits Rectangle {
+    in property <int> pairing: 0;
+    in property <bool> pad-ui-mode: false;
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    /** 注入成功的短亮反馈：-1 无，0/1/2 对应 A / HOME / 控屏。 */
+    in property <int> flash: -1;
+    callback inject(int);
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    VerticalLayout {
+        x: 50px;
+        y: 54px;
+        width: 156px;
+        height: 148px;
+        alignment: center;
+        padding: 8px;
+        spacing: 8px;
+
+        Text {
+            text: "调试指令";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            color: Theme.on-primary-container;
+            horizontal-alignment: center;
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            spacing: 8px;
+            a-btn := Rectangle {
+                width: 52px;
+                height: 32px;
+                border-radius: 10px;
+                background: root.flash == 0
+                    ? Theme.primary-container
+                    : (a-touch.pressed ? Theme.surface-bright : Theme.surface-container-highest);
+                border-width: root.focus-index == 0 ? 2px : 0px;
+                border-color: Theme.focus-ring;
+                Text {
+                    text: "A键";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    font-weight: 700;
+                    color: root.flash == 0 ? Theme.on-primary-container : Theme.on-surface;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                a-touch := DragArea { activated => { if (root.interactive) { root.inject(0); } } }
+            }
+            home-btn := Rectangle {
+                width: 52px;
+                height: 32px;
+                border-radius: 10px;
+                background: root.flash == 1
+                    ? Theme.primary-container
+                    : (home-touch.pressed ? Theme.surface-bright : Theme.surface-container-highest);
+                border-width: root.focus-index == 1 ? 2px : 0px;
+                border-color: Theme.focus-ring;
+                Text {
+                    text: root.pairing == 5 ? "HOME" : "唤醒";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    font-weight: 700;
+                    color: root.flash == 1 ? Theme.on-primary-container : Theme.on-surface;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                home-touch := DragArea { activated => { if (root.interactive) { root.inject(1); } } }
+            }
+        }
+
+        /* 定宽的按钮在竖向布局里默认靠左，得自己套一层居中行才对得上设计稿。 */
+        HorizontalLayout {
+            alignment: center;
+            ui-btn := Rectangle {
+                width: 110px;
+                height: 32px;
+                border-radius: 10px;
+                background: root.flash == 2
+                    ? Theme.primary-container
+                    : (ui-touch.pressed ? Theme.surface-bright : Theme.surface-container-highest);
+                border-width: root.focus-index == 2 ? 2px : 0px;
+                border-color: Theme.focus-ring;
+                Text {
+                    text: root.pad-ui-mode ? "退出控屏" : "手柄控屏";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    font-weight: 700;
+                    color: root.flash == 2 ? Theme.on-primary-container : Theme.on-surface;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                ui-touch := DragArea { activated => { if (root.interactive) { root.inject(2); } } }
+            }
+        }
+    }
+}

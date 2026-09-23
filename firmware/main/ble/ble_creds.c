@@ -54,7 +54,7 @@ static struct {
 static SemaphoreHandle_t s_lock;
 static QueueHandle_t s_commit_queue;
 
-/** NVS 写任务：PocketJS owner task 的栈在 PSRAM，而 flash 写入期间缓存被
+/** NVS 写任务：界面任务的栈在 PSRAM，而 flash 写入期间缓存被
  * 禁用，此时访问 PSRAM（含任务自身的栈）会触发 cache 异常重启——「停止
  * 配对即重启」的根因。所有凭证落盘因此收敛到这个内部 RAM 栈的任务执行，
  * 调用方只更新内存表并投递快照，任何任务上下文都不会再写 flash。 */

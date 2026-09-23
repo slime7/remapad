@@ -1,4 +1,4 @@
-# PocketJS ESP-IDF components require ESP-IDF >= 6.0 and < 6.2.
+# 固件与屏幕 UI 组件要求 ESP-IDF >= 6.0 且 < 6.2。
 CONFIG_IDF_TARGET="esp32s3"
 
 # Product hardware: ESP32-S3R8 (8MB embedded Octal PSRAM) with 16MB flash.
@@ -15,7 +15,7 @@ CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
 # 回退到升级前的镜像。串口 CLI 的 rollback 命令也依赖这个状态。
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
-# 8MB Octal PSRAM is used by the PocketJS guest and UI framebuffer.
+# 8MB Octal PSRAM 供界面渲染缓冲与堆使用。
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_80M=y
@@ -23,7 +23,7 @@ CONFIG_SPIRAM_MEMTEST=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_BOOT_INIT=y
 
-# Match the official PocketJS ESP-IDF examples for the application task.
+# 应用任务与 tick：界面每帧的调度按 1000 Hz 节拍走。
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_FREERTOS_HZ=1000
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
@@ -32,9 +32,7 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
 # 与行命令输入共用 COM 口；日志走非阻塞 vfs，未连接时丢弃不阻塞任务。
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
-# The PocketJS UI runs an interpreted Vue Vapor bundle plus the software RGB565
-# renderer on one core, so the SoC runs at its rated 240 MHz instead of the
-# 160 MHz default.
+# 屏幕 UI 的软件渲染与数据面共用 CPU，SoC 跑满额定 240 MHz（默认 160 MHz）。
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 
 # Board touch panel is a CST816T; the espressif CST816S driver's chip ID read

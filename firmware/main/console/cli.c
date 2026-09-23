@@ -32,7 +32,7 @@
 #include "ota_session.h"
 #include "pad_device.h"
 #include "pad_state.h"
-#include "pocketjs_host.h"
+#include "slint_host.h"
 #include "target.h"
 #include "usb_transport.h"
 #include "usb_input.h"
@@ -62,7 +62,6 @@ static void cli_help(void)
     cli_print("  link                per-identity BLE link status");
     cli_print("  shot                capture the real screen to the PC (PNG on the PC side)");
     cli_print("  trace [frames]      per-frame damage plan + row-band cost (default 30)");
-    cli_print("  drawlist            dump the next frame's draw list as hex words");
     cli_print("  backlight [0-100]   set + persist backlight (no arg = current)");
     cli_print("  screen [on|off]     screen power (no arg = current)");
     cli_print("  beep [ms]           buzzer hint tone (default 120)");
@@ -653,8 +652,8 @@ static void cli_motion(const char *arg)
 }
 
 /**
- * 实机截图：请求交给 PocketJS owner task 在下一帧把整幅画面重渲染一遍，
- * 像素经桥接图像帧回传；PC 侧（pc/remapadctl.py 的 shot）落地成 PNG。
+ * 实机截图：请求交给 Slint owner task 在下一轮状态轮询里把当前帧缓冲回传，
+ * 像素经桥接图像帧发出；PC 侧（pc/remapadctl.py 的 shot）落地成 PNG。
  * 这里只置标志，不等回传，回复 ok 表示请求已入队。
  */
 static void cli_shot(void)
@@ -663,7 +662,7 @@ static void cli_shot(void)
     cli_print("ok shot queued (PC side saves the PNG)");
 }
 
-/** 逐帧 damage 追踪：观察窗口内每帧一行计划、每条行带一行矩形与耗时。 */
+/** 逐帧渲染追踪：观察窗口内每帧一行渲染耗时、提交耗时与 damage 像素数。 */
 static void cli_trace(const char *arg)
 {
     unsigned frames = 0U;
@@ -671,23 +670,16 @@ static void cli_trace(const char *arg)
         char *end = NULL;
         const unsigned long parsed = strtoul(arg, &end, 10);
         if (end == arg || *end != '\0' || parsed == 0UL || parsed > 600UL) {
-            cli_print("err usage: trace [frames] (1-600, default 30)");
+        cli_print("err usage: trace [frames] (1-600, default 60)");
             return;
         }
         frames = (unsigned)parsed;
     }
     remapad_ui_request_trace(frames);
     char line[64];
-    snprintf(line, sizeof(line), "ok damage trace queued (%u frames)",
+    snprintf(line, sizeof(line), "ok frame trace queued (%u frames)",
              frames == 0U ? REMAPAD_UI_TRACE_FRAMES_DEFAULT : frames);
     cli_print(line);
-}
-
-/** draw list 转储：下一帧把绘制指令按原样打出来，供 PC 侧离线解码。 */
-static void cli_drawlist(void)
-{
-    remapad_ui_request_draw_list();
-    cli_print("ok drawlist dump queued (one frame, ~tens of KB on the console)");
 }
 
 /**
@@ -1306,8 +1298,6 @@ static void cli_dispatch(char *line)
         cli_shot();
     } else if (strcmp(line, "trace") == 0) {
         cli_trace(arg);
-    } else if (strcmp(line, "drawlist") == 0) {
-        cli_drawlist();
     } else if (strcmp(line, "headset") == 0) {
         cli_headset(arg);
     } else if (strcmp(line, "pad") == 0) {

@@ -2,92 +2,75 @@
 
 Remapad 的目标平台是微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8，16 MB Flash + 8 MB Octal PSRAM，板载 240 × 280 ST7789V2 触摸屏）；
 板卡事实见 [hardware.md](hardware.md)。本设备是 USB 到 NS2 BLE 的手柄网关，同时提供本机状态 UI：
-架构由 PocketJS UI 工程、PocketJS 官方 ESP-IDF host 和产品控制器数据面组成。
-PocketJS 的包格式、host profile 校验、QuickJS guest、UI binding 和 RGB565 renderer 均使用官方实现。
-
-PSP 仅用于理解 PocketJS 的官方 host 示例；本项目不使用 PSP target、PSP 工具链或 PSP 后端。
+架构由屏幕 UI 工程（Slint，Rust）与产品控制器数据面（ESP-IDF 原生 C）组成。
+界面在构建期由 slint-build 编译成 Rust 代码、按用到的字符烘成字形位图，再交叉编译成静态库链进固件；
+运行期用 Slint 的软件渲染器画到面板，界面状态由固件写入、动作经回调交回（选型见 [ADR 0054](adr/0054-screen-ui-slint-rust.md)）。
+设备上没有 JavaScript 运行时，仓库里也没有 Node.js / Bun：脚本一律是 Python。
 
 ## 架构原则与不变量
 
-1. **host profile 是设备事实源**：
-   `firmware/pocket.host.json` 统一描述 ESP32-S3 的 host ABI、tick、物理/逻辑视口、presentation、raster density 和实际提供的 capability。
-2. **不维护私有包格式**：`.pocket`、PAK、plan、profile hash 和 variant admission 全部交给 PocketJS 官方 CLI 与 `pocketjs_package`。
-3. **构建期完成资源处理**：Tailwind 子集、字体 atlas、图片和 JavaScript bundle 由官方编译器在主机侧生成，固件不解析 CSS 或矢量字体。
-4. **固件拥有硬件边界**：PocketJS 运行时不假设某个屏幕控制器、GPIO 或输入总线。固件负责采样输入、创建显示 DMA 缓冲区、提交 RGB565 strip 和调度设备任务。
-5. **渲染采用事务模型**：`prepare` 后逐个渲染 damage region；面板传输全部成功后 `commit`，出现错误时 `abort`。
-6. **控制器数据面与 UI 解耦**：USB 接收、输入规范化、NS2 报告编码、BLE 广播/GATT 和配对状态机运行在 ESP-IDF 原生任务/队列中，不通过 PocketJS 每帧 UI 接口传输高频报告。
+1. **视口在两处对齐**：240 × 280 既写在 `ui/src/app.slint` 的根窗口上，也写在平台层的 `VIEW_WIDTH` / `VIEW_HEIGHT` 上，
+   两处必须一致，否则画面会被裁掉或留白。动画推进按 16 ms 一档（与 60 Hz 对齐）。
+2. **界面事实源是 `.slint` 源码**：视口、页表、焦点环与全部文案都写在 `ui/src/` 里，固件侧只提供状态快照与动作分发。
+3. **构建期完成资源处理**：Slint 编译、字形位图烘焙（按界面里出现过的字符自动子集）与 SVG 光栅化都在 PC 侧完成，固件不解析字体文件与矢量图。
+4. **固件拥有硬件边界**：平台层不假设屏幕控制器、GPIO 或触摸器件，面板提交与触点采样由固件经 `remapad_slint_hooks_t` 传入。
+5. **渲染只画变化区域**：Slint 给出本帧的 damage 矩形，平台把每条矩形折成 48 行行带逐条提交；行带交给面板驱动做字节序转换与 DMA。
+6. **控制器数据面与 UI 解耦**：USB 接收、输入规范化、NS2 报告编码、BLE 广播/GATT 和配对状态机运行在 ESP-IDF 原生任务/队列中，界面只经状态快照与动作回调交互，快照里不含高频报告。
    协议范围见 [controller-switch2.md](controller-switch2.md)。
 
 ## 系统组成
 
 ```mermaid
 flowchart LR
-    subgraph UI[UI 工程 ui/]
-        Manifest[pocket.json]
-        Source[Vue Vapor JSX]
-        Profile[firmware/pocket.host.json]
-        Source --> Compiler[官方 PocketJS CLI]
-        Manifest --> Compiler
-        Profile --> Compiler
-        Compiler --> JS[remapad-ui.js]
-        Compiler --> PAK[remapad-ui.pak]
-        Compiler --> Pocket[remapad-ui.pocket]
+    subgraph Ui[屏幕 UI 工程 ui/]
+        Source["src/*.slint<br/>根组件 / 页面 / 控件 / 主题"]
+        Assets["assets/：字体与底图 SVG"]
     end
 
-    subgraph Build[ESP-IDF 构建]
-        CMake[firmware/main/CMakeLists.txt]
-        Embed[pocketjs_embed_package]
-        Compile[pocketjs_compile_app]
-        Generated[build/pocketjs/remapad/ 临时嵌入源]
-        CMake --> Embed
-        CMake --> Compile
-        Embed --> Generated
-        Compile --> Generated
+    subgraph Rust[Rust 界面组件 firmware/components/slint_ui]
+        BuildScript["build.rs：slint-build 编译 + 字号表烘字形"]
+        Host["host.rs：状态写入 / 动作分发 / 手柄焦点"]
+        Platform["platform.rs：软件渲染平台 + 行带提交"]
+        Abi["abi.rs / boundary.rs：C ABI 边界与日志"]
+        Host --> Platform
+        Platform --> Abi
     end
 
-    Pocket --> Embed
-    Manifest --> Compile
-    Profile --> Embed
-    Profile --> Compile
-
-    subgraph Runtime[firmware/main]
-        Package[pocketjs_package]
-        Guest[pocketjs_guest / QuickJS]
-        Core[pocketjs_ui_core]
-        Binding[pocketjs_ui_qjs]
-        OwnerTask[remapad-pjs owner task]
-        Renderer[pocketjs_render_rgb565]
-        Package --> Guest
-        Guest --> Binding
-        Core --> Binding
-        Binding --> OwnerTask
-        OwnerTask --> Renderer
+    subgraph Firmware[firmware/main]
+        FwHost["slint_host.c：owner task、状态聚合与动作下发"]
+        Bridge["bridge/：控制面命令队列"]
+        Splash["boot_splash.c：UI 就绪前的启动画面"]
+        Panel["drivers/panel.c：RGB565 行带 → SPI EDMA"]
+        FwHost --> Bridge
+        FwHost --> Splash
     end
 
-    Generated --> Package
-    Renderer --> Strip[RGB565 damage strip]
-    Strip --> DisplayBSP[panel_transfer：esp_lcd SPI EDMA]
+    Source --> BuildScript
+    Assets --> BuildScript
+    BuildScript --> Cargo["cargo --target xtensa-esp32s3-none-elf"]
+    Cargo --> Lib["libslint_ui.a"]
+    Lib --> Link["ESP-IDF 链接进应用"]
+    Abi -->|"hooks：transfer / touch_sample"| FwHost
+    Platform -->|"damage 行带"| Panel
 
     Input["PC 桥接 / USB host 输入"] --> Recv["input/ 接收段"]
     Recv --> Pad["pad/ 处理段：家族表 + 私有格式"]
     Pad --> Encoder["target/ 转换段：NS2 报告编码"]
     Encoder --> BLE["BLE 广播 / GATT / 配对"]
     Recv --> State["连接与配对状态"]
-    State -.低频状态.-> UI
+    State -.每 50 ms 状态快照.-> FwHost
 ```
 
 ### 技术选型与职责
 
 | 层次 | 官方或项目组件 | 职责 |
 | :--- | :--- | :--- |
-| UI | PocketJS Vue Vapor | 声明式组件、响应式状态和嵌入式 UI 图元 |
-| 资源编译 | PocketJS 官方 CLI | 解析 manifest、编译 JSX、生成 PAK 和 `.pocket` |
-| 设备契约 | `pocket.host.json` | 设备视口、刷新节拍、presentation 和 capability |
-| 包接入 | `pocketjs_package` | 借用包字节、选择并校验目标 variant |
-| JavaScript | `pocketjs_guest` | 在 ESP-IDF 上创建 QuickJS guest 和执行应用代码 |
-| UI binding | `pocketjs_ui_core`、`pocketjs_ui_qjs` | 保留 UI 节点、加载资源并暴露 `globalThis.ui` |
-| 调度 | 产品 owner task | `remapad-pjs` 固定 tick 任务，承载 guest 生命周期与每帧 UI turn；官方 `pocketjs_runner` 保留在 `firmware/components/` 但当前未接入 |
-| 渲染 | `pocketjs_render_rgb565` | 软件 RGB565 renderer、damage plan 和事务提交 |
+| UI | Slint（`.slint`） | 声明式组件、属性绑定与回调；颜色与字号收在 `theme.slint` 的语义 token 里 |
+| 界面编译 | `slint-build`（`ui/build.rs`、组件 `build.rs`） | 把 `.slint` 编成 Rust 代码，按字号表烘字形位图、光栅化 SVG |
+| 平台层 | `firmware/components/slint_ui/src/platform.rs` | 软件渲染器、整帧 PSRAM 缓冲、damage 折行带并提交；单线程前提（`unsafe-single-threaded`） |
+| 宿主层 | `firmware/components/slint_ui/src/host.rs` | 把状态快照写进界面属性，把界面动作与手柄按键翻译成回调 |
+| C ABI | `firmware/components/slint_ui/include/slint_ui.h` | 状态快照、动作回调、面板与触摸 hooks、统计与截图入口 |
+| 调度 | 产品 owner task | `remapad-slint`（64 KB 内部 RAM 栈）承载面板/触摸/背光初始化、Slint 事件循环与每 50 ms 状态聚合 |
 | 控制器数据面 | ESP-IDF USB/BLE/GATT/FreeRTOS | USB 输入接收、输入规范化、NS2 报告编码、BLE 广播/GATT/配对和状态持久化；协议见 [controller-switch2.md](controller-switch2.md) |
 | 升级 | `pc/remapadctl.py --upgrade` + `main/ota/` | 经桥接帧推送整包应用镜像，写非运行分区、`esp_ota_end` 校验后切启动分区并重启；回滚健康门槛见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md) |
 | 硬件 | 产品 BSP + ESP-IDF | 输入采样、面板初始化、DMA 传输、电源和其他外设 |
@@ -97,22 +80,23 @@ flowchart LR
 ```mermaid
 flowchart TB
     Root["remapad/"]
-    Root --> RootFiles["AGENTS.md / package.json / pnpm-workspace.yaml"]
-    Root --> Scripts["scripts/：create_adr.py / pocketjs.mjs（官方工具链与触摸预览入口）/ preview-server.mjs"]
-    Root --> Patches["patches/：上游 PocketJS 对账记录与发布说明"]
+    Root --> RootFiles["AGENTS.md / .editorconfig / .gitignore"]
+    Root --> Scripts["scripts/：create_adr.py / firmware-test.py / setup-rust-toolchain.py / ui-preview.py"]
     Root --> PC["pc/：PC 侧工具 remapadctl（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）与图形入口 remapadgui"]
     Root --> Docs["docs/：VISION / ARCHITECTURE / ABSTRACTIONS / GETTING-STARTED / controller-switch2 / controller-ps / hardware / adr/"]
-    Root --> UI["ui/：PocketJS 前端工作区"]
+    Root --> UI["ui/：屏幕 UI 工作区（Slint 源码与宿主用例）"]
     Root --> Firmware["firmware/：ESP-IDF 固件工作区"]
 
-    UI --> UiFiles["package.json / pocket.json / jsconfig.json"]
-    UI --> UiSrc["src/：index.tsx / App.tsx / 入口同级图片资源 / bridge/（控制面协议）"]
-    UI --> UiPreview["preview/：触摸屏预览页"]
+    UI --> UiSrc["src/：app.slint / pages.slint / components.slint / theme.slint"]
+    UI --> UiAssets["assets/：字体（正文 / 图标 / 转圈）与底图 SVG"]
+    UI --> UiTests["tests/：宿主用例（测试后端 + 软件渲染器）"]
+    UI --> UiPreview["preview.slint：PC 交互预览（设备画面 + 控制条）"]
+    UI --> UiBuild["Cargo.toml / build.rs：宿主编译口径"]
 
-    Firmware --> FwRoot["CMakeLists.txt / pocket.host.json / partitions.csv / sdkconfig.defaults"]
-    Firmware --> FwComponents["components/：固定在本仓库的官方 PocketJS ESP-IDF 组件与 S3 原生归档"]
+    Firmware --> FwRoot["CMakeLists.txt / partitions.csv / sdkconfig.defaults"]
+    Firmware --> FwComponents["components/slint_ui：Rust 界面组件、平台层与 C ABI"]
     Firmware --> FwMain["main/"]
-    FwMain --> MainEntry["main.c / pocketjs_host.c / boot_splash.c / render_accel.c"]
+    FwMain --> MainEntry["main.c / slint_host.c / boot_splash.c"]
     FwMain --> MainBridge["bridge/：控制面命令与事件"]
     FwMain --> MainConfig["config/：NVS 用户设置持久化"]
     FwMain --> MainConsole["console/：串口 CLI"]
@@ -125,102 +109,101 @@ flowchart TB
     FwMain --> MainOta["ota/：升级会话（分区回写与回滚门槛）"]
 ```
 
-仓库是自包含的：`firmware/components/` 固定了六个官方 ESP-IDF 组件及 ESP32-S3 原生归档，
-前端通过官方 `@pocketjs/framework` 与 `@pocketjs/cli` npm 依赖获得编译器与浏览器运行时；
-上游 PocketJS checkout 只作为升级对照参考，不是构建依赖。设备屏幕是触摸屏，因此预览使用项目自己的触摸页 `ui/preview/`，而不使用官方 playground 的 PSP 按键界面。
-`scripts/pocketjs.mjs` 负责定位 compiler 与 Web 主机、转发参数并回收产物，实际检查、编译、打包、预览和原生归档生成都由官方脚本执行。仓库不再包含手写 PCKT 打包器或 `app_pocket.h`。
-`ui/src/bridge/` 与 `firmware/main/bridge/` 是控制面（UI 命令/事件）接口，已接入编译并连到真实 BLE 会话与屏幕 BSP；
+仓库是自包含的：界面源码与字体在 `ui/`，Rust 组件在 `firmware/components/slint_ui/`，
+界面依赖取自 crates.io 并由两份 `Cargo.lock` 锁定（组件与宿主包各一份），构建不需要任何上游 checkout。
+开发机上预览界面用 `uv run python scripts/ui-preview.py`：`ui/preview.slint` 把设备画面（同一棵 `AppContent`，240 × 280）
+与控制条放进一个窗口，动作在预览里按固件语义结算，改完存盘即刷新；界面行为的断言在 `ui/tests/` 的宿主用例里（见 [TESTING.md](TESTING.md)）。
+`firmware/main/bridge/` 是控制面（UI 命令/事件）接口，屏幕动作经它连到真实 BLE 会话与屏幕驱动；
 数据面按 `input/`、`pad/`、`target/` 三段划分（见 [ADR 0021](adr/0021-input-path-three-stage-layering.md)）。
 USB host 直插由 `usb/` 提供接收传输与运行时角色切换，取舍见 [ADR 0027](adr/0027-runtime-usb-role-switch.md)；
 切回串口时显式交还内部 PHY、失败时由界面询问重启，见 [ADR 0053](adr/0053-usb-serial-phy-handback-on-role-switch.md)。
 反馈方向由 `pad/feedback.c` 按布局行编码成设备输出报告，经 OUT 端点或桥接帧投递。
 
-UI 的首帧预算由设备端建树成本决定：实测每个原生节点约 50 ms（240×280，成本在 Vue Vapor 的逐节点挂载，不在宿主 op 或样式解析）。
-`ui/src/App.tsx` 因此在首次渲染里一次挂完八个页面，首屏只在全部建树完成后提交，等待期由固件启动画面覆盖；把建树摊到首帧之后会让首帧后仍有数秒的阻塞帧（切页与滚动都在这段时间里卡住）。
-切页只翻转各页根节点的 `hidden`，App 没有页面容器层也没有待挂队列，新增页面直接写在 JSX 里（见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
+界面的首帧是整屏重画：Slint 建好窗口后的第一帧要把整棵控件树画满 240 × 280，提交完才把屏幕交给 Slint。
+等待期由固件启动画面覆盖（`boot_splash`），首帧提交后 `boot_splash_end` 释放画面缓冲。
+八个页面在 `ui/src/app.slint` 里全部常驻，切页只改 `page` 属性、各页按属性翻自己的 `visible`，
+因此切页没有建树成本，也没有待挂队列，新增页面直接写在 `.slint` 的页表里（见 [ADR 0016](adr/0016-mount-all-pages-before-first-frame.md)）。
 
 ## 构建链路
 
-### UI 包
+### 界面编译
 
 ```mermaid
 flowchart LR
-    Source["ui/src + ui/pocket.json + firmware/pocket.host.json"]
-    Build["官方 pocket build --host-profile"]
-    JS["remapad-ui.js"]
-    Pak["remapad-ui.pak"]
-    Pocket["remapad-ui.pocket"]
+    Source["ui/src/*.slint"]
+    Assets["ui/assets/：字体 + 底图 SVG"]
+    SlintBuild["build.rs：slint-build 编译"]
+    Code["生成的 Rust 代码<br/>（含字形位图与光栅化底图）"]
+    Cargo["cargo +esp --target xtensa-esp32s3-none-elf -Zbuild-std=core,alloc"]
+    Lib["libslint_ui.a"]
 
-    Source --> Build
-    Build --> JS
-    Build --> Pak
-    Build --> Pocket
+    Source --> SlintBuild
+    Assets --> SlintBuild
+    SlintBuild --> Code
+    Code --> Cargo
+    Cargo --> Lib
 ```
 
-应用清单声明应用自身需要的 capability 和视口；host profile 声明设备真实提供的能力。
-官方 resolver 会检查二者是否兼容，并将 profile hash、host ABI、tick、视口、density 和 presentation 写入构建计划及包 variant。
+字号表（12 / 14 / 16 / 24）与字体在宿主包 `ui/build.rs` 与组件 `build.rs` 里各写一份，两处口径必须一致，
+否则界面只会退回最近的一档位图。字形按界面里出现过的字符自动子集烘焙，字体文件本身不进固件；
+运行期才拼出来的字符串（如固件格式化的电量文本）靠 `ui/src/app.slint` 里的字符集锚点串钉住码点。
 
-### ESP-IDF 包接入
+### ESP-IDF 组件接入
 
-`firmware/main/CMakeLists.txt` 保留官方示例的两种模式：
+`firmware/components/slint_ui/CMakeLists.txt` 用一条 custom command 跑 cargo，把界面与平台层编成静态库：
 
-1. `ui/dist/remapad-ui.pocket` 存在时，调用 `pocketjs_embed_package`。包通过生成的 `.c`/`.S` 文件嵌入固件，生成文件只位于 `firmware/build/`。
-2. 没有预构建包时，调用 `pocketjs_compile_app`。
-   它让官方 CMake helper 调用 `pocket build --host-profile`，并把依赖文件、plan 和包写入 ESP-IDF build 目录。
+- 命令在 `firmware/build/esp-idf/slint_ui/cargo/` 下产出 `libslint_ui.a`，构建参数只从 CMake 传：`REMAPAD_FREERTOS_HZ`（平台等待换算）、
+  `REMAPAD_RELEASE`（是否带调试页）、`REMAPAD_SLINT_FONT` 与 `REMAPAD_SLINT_RUST_TOOLCHAIN`（工具链名，默认 `esp`）。
+- `file(GLOB_RECURSE ... CONFIGURE_DEPENDS)` 跟踪 `ui/src/*.slint` 与 `ui/assets/*.svg`，改界面直接重编即可；
+  组件的 C 源码只有 `src/rust_heap.c`（alloc 的内存出口）。
+- 静态库作为 imported target 链给组件，并用 `-Wl,--undefined` 保住 `remapad_slint_ui_start`、`remapad_slint_ui_loop`、`remapad_slint_heap_alloc` 三个入口。
 
-组件与 S3 原生归档随仓库一起固定，ESP-IDF 从 `firmware/components/` 直接发现它们；升级时对照上游 PocketJS 更新该目录，并用 `pnpm run native` 重新生成归档。
-团队的可复现构建入口是先运行 `pnpm run build` 再运行 `idf.py build`。这样 ESP-IDF 构建阶段只消费已生成的包，不需要在 CMake 中重复实现编译器逻辑。
+`idf.py build` 是唯一构建入口：界面编译、静态库与链接都在它里面完成。
+xtensa 工具链缺失或名字不对时配置阶段就停下并打印修复命令（换机步骤见 [ui/README.md](../ui/README.md)）。
 
 ## 固件运行时生命周期
 
 ```mermaid
 flowchart TB
-    Boot["上电：启动画面点亮背光并显示阶段进度"] --> Owner["创建 remapad-pjs owner task（栈在 PSRAM）"]
-    Owner --> Mount["同一任务内创建 package / guest / ui_core / binding 并 mount"]
-    Mount --> Eval["eval bundle"]
-    Eval --> Turn["每帧：处理 bridge 队列 → guest eval → pocketjs_ui_turn"]
-    Turn --> Gc["按 PSRAM 压力触发 JS GC"]
-    Gc --> Turn
-    Turn --> Submit["渲染条带 → panel_transfer_async 提交"]
+    Boot["上电：main.c 创建 remapad-slint owner task"] --> Drv["面板 / 触摸 / 背光初始化（失败只记日志）"]
+    Drv --> Splash["boot_splash：自绘启动画面并点亮背光"]
+    Splash --> Start["remapad_slint_ui_start：建平台与窗口、接状态与动作回调"]
+    Start --> First["首帧：整屏渲染并折行带提交"]
+    First --> Ready["boot_splash_end 交屏；第二轮回调向 OTA 门槛报 UI 就绪"]
+    Ready --> Loop["事件循环：推进定时器与动画 → 采样触摸 → 按需重绘 → 让出 CPU"]
+    Loop --> Loop
 ```
 
-`firmware/main/pocketjs_host.c` 按官方 smoke 示例组织资源生命周期，但把整套流程放在产品自己的 `remapad-pjs` owner task 上运行：
+`firmware/main/slint_host.c` 里只有一条 `remapad-slint` owner task（64 KB 栈，内部 RAM，钉在 CPU1），
+面板、触摸、背光、启动画面、Slint 事件循环与状态聚合都在它上面跑：
 
-面板、触摸与背光初始化成功后，owner task 先用 `boot_splash_begin` 自绘一帧启动画面（几何标记 + 阶段进度条）并点亮背光，再按下面的顺序加载 UI；
-每个启动阶段经 `boot_splash_progress` 推进一次进度，首帧提交成功后 `boot_splash_end` 释放画面缓冲。
-显示与背光从此归 PocketJS 渲染路径所有（选型与代价见 [ADR 0012](adr/0012-firmware-boot-splash-before-ui.md)）。
+1. 初始化面板、触摸与背光：任一项失败只记日志，不阻断启动（面板失败时画面仍渲染进 PSRAM）。
+2. 用 `boot_splash_begin` 自绘一帧启动画面并点亮背光，之后每个启动阶段推进一次进度
+   （选型与代价见 [ADR 0012](adr/0012-firmware-boot-splash-before-ui.md)）。
+3. 调 `remapad_slint_ui_start`：平台分配整帧缓冲（240 × 280 × 2 字节，进 PSRAM）与行带缓冲
+   （240 × 48 × 2 字节，内部 RAM 且 DMA 可达），建立 240 × 280 窗口，接好状态快照与动作回调。
+4. 建 `App`、写首轮状态、渲染首帧并整屏提交（首帧是全屏重画），随后 `boot_splash_end` 交屏。
+5. 进入事件循环：推进定时器与动画 → 采样触点 → `draw_if_needed` 渲染并按 damage 提交 → 让出 CPU
+   （有动画时按 16 ms 一档推进，最长等 100 ms，避免动画状态把循环拉成自旋而饿死空闲任务）。
 
-1. 使用生成的包字节调用 `pocketjs_package_open`。
-2. 使用生成的 host contract 调用 `pocketjs_package_select`，完成目标和 ABI 校验。
-3. 用官方默认值创建 guest，设置 4 MB JavaScript heap、256 KB 栈预算，并优先使用 PSRAM。
-4. 从 package contract 创建 `pocketjs_ui_core`。
-5. 创建 `pocketjs_ui_qjs`，feed PAK，mount `globalThis.ui`/`globalThis.__pak`，再 eval JavaScript bundle。
-6. 创建 RGB565 renderer 和 render target，并分配一个可复用的 PSRAM strip scratch buffer。
-7. 进入固定 tick 循环：`sample_input` 提供输入，`pocketjs_ui_turn` 执行一次 UI turn，再完成 prepare、render strip、commit/abort。
+界面状态由一条 50 ms 的 Slint `Timer` 驱动：它先把 `ui_poll` 给的快照写进界面属性，再从快照里取手柄按键位做焦点移动与确认，
+最后顺带把控制面命令队列服务一轮（桥接命令与串口 CLI 的请求都由这里落地）。
+触摸采样由 `drivers/touch.c` 完成（CST816T 连续点模式，单点）；息屏期间平台整段跳过采样，避免误触看不见的控件。
 
-当前 `sample_input` 由 `drivers/touch.c` 采样 CST816T 填入官方 `pocketjs_ui_touch_t` 触点（单点，id 恒为 0）。
-每个成功渲染的 strip 在事务内经 `drivers/panel.c` 的 `panel_transfer` 提交到 ST7789V2，全部 region 传输成功后才 `commit`。面板或触摸初始化失败时不阻断启动：
-面板失败退回纯渲染 bring-up（帧仍渲染进 PSRAM 后丢弃）并跳过启动画面，触摸失败则每帧零触点。触摸事实已声明进 `firmware/pocket.host.json` 的 `input.touch`。
+### 为什么只有一条任务
 
-### 为什么由产品 task 承载 guest 生命周期
+Slint 在这里按单线程前提编译（`unsafe-single-threaded`）：窗口、平台与界面状态都不是线程安全的，只在 UI 任务上访问。
+跨任务的东西因此只有三类，且都不经过界面：
 
-QuickJS 的栈守卫判据是 `rt->stack_limit = rt->stack_top - rt->stack_size`，其中 `stack_top` 取自**创建 runtime 的那个任务**；
-`JS_UpdateStackTop` 在官方组件和本仓库中都没有被调用。这意味着栈量的是「创建 guest 的任务」的栈，而不是「执行 turn 的任务」的栈。
+- **状态**：每 50 ms 一轮快照，取值要么是原子量、要么是单调量（背光、电量、配对、USB 角色、OTA 进度、内存余量）。
+- **动作**：界面把动作名与参数交给回调，固件侧转成桥接命令排进队列，由同一个任务在下一轮执行。
+- **请求与统计**：帧缓冲地址、trace 剩余帧数、截图与内存请求都是原子量，命令行任务置位、UI 任务读取。
 
-官方 `pocketjs_guest` 默认把 `stack_limit` 设为 256 KB。Vue Vapor 应用的 mount 是深层递归：
-每嵌套一层 UI 大约走 15 个 JS 帧，依实测每帧约消耗 1 KB 的 C 栈，示例界面 mount 需要 60 KB 以上。
-如果承载任务栈小于这个预算，守卫永远不会触发，递归会写穿任务栈并破坏相邻的堆元数据，表现为位置漂移的崩溃（堆锁卡死、链表指针损坏、`LoadProhibited`）。
-
-因此本工程让 `remapad-pjs` owner task 用 PSRAM 栈（288 KB）承载创建、mount、eval 和逐帧 turn，并把 `stack_limit` 收敛到 256 KB 的官方默认值。两条约束必须同时成立：
-任务栈要大于 `stack_limit`，且不能把 turn 挪到另一个任务上执行。
-
-官方 `pocketjs_runner` 是可选组件，保留在 `firmware/components/` 内但当前未接入。
-它的 `pocketjs_runner_config_t` 只能指定栈的**大小**，任务栈始终由 IDF 从内部 RAM 分配，而内部 RAM 拿不出 mount 所需的连续空间；这也是改用产品 task 的原因。
-若将来要把 UI turn 集成进已有任务，必须同时保证该任务的栈来自 PSRAM 且满足上述预算，并保留相同的渲染事务边界。
+帧缓冲地址用 `Acquire/Release` 原子量交接（截图通路在 UI 任务之外读它），平台未就绪时读到空指针。
 
 ## 产品控制器数据面
 
-最终功能链路独立于 PocketJS UI runtime：
+最终功能链路独立于屏幕 UI：
 
 ```mermaid
 flowchart LR
@@ -247,8 +230,8 @@ flowchart LR
     Feedback -.-> Bridge
 ```
 
-该数据面由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，高频报告不经过 UI bridge，也不经过每帧 `pocketjs_ui_turn`；
-PocketJS UI 只读取低频连接/电量/配对状态，并通过 `ui/src/bridge/` 与 `firmware/main/bridge/` 的控制面发出配对、背光等命令。
+该数据面由 ESP-IDF 原生任务、队列和 BLE/USB 驱动实现，高频报告既不进控制面命令队列，也不进每 50 ms 的状态快照；
+屏幕只读低频的连接/电量/配对状态，并通过 `firmware/main/bridge/` 的控制面发出配对、背光与 USB 角色等命令。
 三段划分、私有格式字段与反馈编码的展开见 [ABSTRACTIONS.md](ABSTRACTIONS.md) 的「输入通路：接收 / 处理 / 转换」。
 
 ### USB 角色切换
@@ -271,7 +254,7 @@ device 角色下「PC 接没接」直接取 USB-Serial/JTAG 的 SOF 接入状态
 
 ## OTA 升级通路
 
-现场升级整包应用镜像（固件 + 内嵌 `.pocket`）走唯一 Type-C 的 USB-Serial/JTAG，通道与固件日志、串口 CLI、桥接输入帧同一条字节流，**不切 USB mux**。
+现场升级整包应用镜像（界面已编在应用里）走唯一 Type-C 的 USB-Serial/JTAG，通道与固件日志、串口 CLI、桥接输入帧同一条字节流，**不切 USB mux**。
 因此升级期间设备照常作为手柄工作，NVS 设置与 BLE 配对凭证不受影响（选型与取舍见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)）。
 
 ```mermaid
@@ -306,7 +289,7 @@ flowchart LR
 - **内存约束**：升级任务由 `xTaskCreate` 创建（栈在内部 RAM），帧队列与 4 KB 聚合缓冲同样固定在内部 RAM——flash 写入的禁缓存窗口内不能访问 PSRAM。
   另外，非 DRAM 缓冲会让 IDF 退化成 32 字节一次的栈拷贝。
 - **回滚保护**：开启 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` 后新镜像以「待验证」启动。
-  UI 首帧提交成功且开机满 30 秒才调用 `esp_ota_mark_app_valid_cancel_rollback()`；未过门槛就重启会回退到升级前的镜像。
+  界面就绪（状态轮询的第二轮，意味着首帧已经上屏）且开机满 30 秒才调用 `esp_ota_mark_app_valid_cancel_rollback()`；未过门槛就重启会回退到升级前的镜像。
   待验证窗口内 `esp_ota_begin` 返回 `ESP_ERR_OTA_ROLLBACK_INVALID_STATE`，设备据此回 BUSY。
 - **观测**：
   串口 CLI 的 `version`（版本 / 分区 / 待验证状态）与 `status`（`fw=` 与 `ota=` 字段）、UI 系统页的固件信息行共用同一个版本字符串——它来自构建时的 `git describe`。
@@ -316,58 +299,46 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    Turn["每帧 pocketjs_ui_turn"] --> Plan["prepare：算出 damage plan"]
-    Plan --> Strip["逐行带 render_strip（240 × 条高，RGB565）"]
-    Strip --> Submit["panel_transfer_async：只入队并交回完成序号"]
-    Submit --> Wait["轮到该 strip 槽时 panel_wait_seq 等上一笔传输"]
-    Wait --> Commit["全部传输成功 → commit；出错 → abort"]
+    Loop["事件循环每轮"] --> Need{"有 damage？"}
+    Need -->|否| Idle["按最近的唤醒时刻让出 CPU"]
+    Need -->|是| Render["软件渲染器画进整帧 PSRAM 缓冲"]
+    Render --> Bands["每条 damage 矩形按 48 行折成行带"]
+    Bands --> Copy["拷进内部 RAM 的行带缓冲"]
+    Copy --> Transfer["panel_transfer：字节序转换 + SPI EDMA，阻塞到完成"]
 ```
 
-- JavaScript guest 和资源优先使用 8 MB Octal PSRAM。
-- `remapad-pjs` owner task 的栈（288 KB）同样分配在 PSRAM，因为 mount 需要的连续 C 栈空间超出内部 RAM 的可用容量。主任务栈保持 32 KB，只负责启动 owner task。
-  内部 RAM 因此留给 DMA 缓冲和协议栈，启动后可用量约 360 KB。
-- CPU 运行在 240 MHz。UI 每帧把解释执行的 Vue Vapor bundle 加软件 RGB565 渲染跑在一个核上，默认的 160 MHz 会把整个周期吃满并饿死空闲任务。
-- 渲染输出走 32 行高的条带：三条 240 × 32 的 strip 缓冲（共 45 kB）优先分配内部 RAM，`render_strip` 每次接收 full-width × 条高的容量与一条行带矩形；
-  行带比视口窄时按行压缩成紧凑布局（x = 0 的窗口同样要压缩，否则整体错行），字节序交换由面板传输统一负责。
-  提交走 `panel_transfer_async`（只入队并交回完成序号），调用方在轮到某个 strip 槽时用 `panel_wait_seq` 等该槽上一笔传输结束，渲染因此可与 DMA 重叠。
-- 显示通路按 60 Hz tick 做预算（tickHz 写进 host profile，节奏演变见 [ADR 0037](adr/0037-ui-tick-rate-30hz.md) 与 [ADR 0052](adr/0052-ui-tick-rate-back-to-60hz.md)），
-  实测瓶颈在 CPU 侧的软件 RGB565 光栅化而不是面板传输：整屏 6.72 万像素重绘一次约 1.7 µs/像素，
-  内容与卡片底图重叠处约 2–3 µs/像素，底部状态栏一带最便宜（约 0.7 µs/像素）。
-  因此 damage 按 32 行行带切分，行带在同一帧内按绝对行序自上而下渲染并提交，不切字段；
-  一条行带渲染的 x 范围取落在它上面的全部 region 的并集，纵向按整条行带渲染，越出 region 的像素照画。
-  静止帧实测 turn 约 11.9 ms（16.7 ms 预算里约 71%），其中 render_frame 约 2.2 ms、damage 为 0；
-  重绘帧的价格因此完全由重画范围与绘制指令数决定。
-  完整测量与隔行方案被否决的理由见 [ADR 0017](adr/0017-display-path-and-scroll-frame-budget.md)。
-  面板 SPI2 时钟取上限 80 MHz 的理由见 [ADR 0018](adr/0018-panel-spi2-clock-80mhz.md)。
+- **两级缓冲**：整帧缓冲 240 × 280 × 2 字节（约 134 KB）放 PSRAM；行带缓冲 240 × 48 × 2 字节（约 23 KB）放内部 RAM，
+  因为面板传输要连续且 DMA 可达的内存。行带取 48 行是拿一次 SPI 事务的固定开销（约 1 ms）换来的：行带越高，一次刷新的总耗时越低。
+- **栈与核**：UI owner task 的 64 KB 栈放内部 RAM（渲染路径要在它上面跑），任务钉在 CPU1，渲染不与射频抢核；
+  CPU 跑满额定 240 MHz（`CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240`）。
+- **节拍不是固定 tick**：事件循环按最近的定时器与动画唤醒，有动画时按 16 ms 一档推进（对应 60 Hz 观感）；
+  界面动画由 Slint 按时间自己推进，固件侧的 50 ms 轮询只管状态快照与手柄按键。
+- **提交逐条同步**：每条 damage 矩形按 48 行切分、逐条拷进行带缓冲，经 `panel_transfer` 同步提交到 ST7789V2，
+  字节序转换与 DMA 等待都在面板驱动里；传输失败只记一行警告，帧继续画。
 - 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，SPI2 取上限 80 MHz；
   选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)。
 - 面板初始化在 IDF 内置序列（SLPOUT/MADCTL/COLMOD/RAMCTRL）之外补发厂商的电源、VCOM 与 gamma 表，
   取值来自微雪为同一块板自带的 Arduino 库（`firmware/main/drivers/panel.c` 的 `s_panel_vendor_tuning`）。
-- ESP32-S3 没有本项目所需的 P4 PPA；`firmware/main/render_accel.c` 用本机整数实现接管渲染器的填充、A8 掩码混合与 PSM5650 直拷回调（与官方 P4 适配层同一套 ABI）。
-  其余仍走 `pocketjs_render_rgb565` 的软件路径；卡片底图按不透明 PSM5650 烘制，因此走直拷回调（见 [ADR 0051](adr/0051-opaque-565-card-artwork.md)）。
+- ESP32-S3 没有 P4 那类 PPA，Slint 在这台设备上走纯软件渲染（整数运算）；底图在构建期光栅化成位图，
+  运行期只做拷贝与混合，卡片区域的每像素成本因此与纯色填充接近。
 
-### 重画范围：框架计划与本机差分
+### 重画范围与代价
 
 ```mermaid
 flowchart LR
-    Turn["每帧 pocketjs_ui_turn"] --> Prepare["prepare：框架逐 op 对齐给出 damage plan"]
-    Prepare --> Full{"整屏重画？"}
-    Full -->|否| Bands["region 折成行带，逐条渲染提交"]
-    Full -->|是| Comparable{"上一帧副本可比、且不是截图帧？"}
-    Comparable -->|否| Bands
-    Comparable -->|是| Diff["render_damage：本机 draw list 差分"]
-    Diff --> Smaller{"算出更小的变化区域？"}
-    Smaller -->|是| Bands
-    Smaller -->|否| Bands
+    Prop["属性写入（状态 / 触摸 / 动画）"] --> Invalidate["标记相关元素失效"]
+    Invalidate --> Damage["本帧 damage = 失效元素的包围盒"]
+    Damage --> Render["只渲染这些矩形"]
+    Render --> Keep["缓冲里其余像素保持上一帧"]
 ```
 
-- 框架的 damage 是 op 级、逐 op 对齐的比较：op 数量或顺序一变（切页、焦点环移动、弹窗开关、列表项增删），它不再比对、直接给整屏计划。
-- 固件在框架给整屏计划时，用 `firmware/main/render_damage.c` 对上一帧与本帧的 draw list 做本机差分，换出真实变化区域；
-  接管条件、失败回退与上一帧副本的容量约定见 [ADR 0049](adr/0049-firmware-draw-list-damage-diff.md) 与 `firmware/main/render_damage.h` 写下的契约。
-- 实机读数（240 × 280 @1x、60 Hz，取串口 `trace` 命令）：一次切页从基线固件的 4 帧整屏重画（每帧约 110–120 ms，合计约 0.48 s）
-  降到一帧内容框重画（约 3.4 万行带像素、约 72 ms）加两帧箭头提示（各约 8 ms）；
-  手柄设置页的 draw list 从 3621 字、其中 817 条逐行覆盖矩形，降到 645 字、78 条 op。
-- 重绘价格同样取决于界面写法，规则见 [ADR 0050](adr/0050-repaint-friendly-screen-rules.md)：圆角加边框的元素必须带底色，切页瞬时完成、方向提示交给行进侧的翻页箭头。
+- damage 由 Slint 自己算：属性一变，相关元素失效，本帧只重画这些元素的包围盒，没碰到的像素保留在缓冲里
+  （窗口按 `RepaintBufferType::ReusedBuffer` 复用上一帧）。切页这类结构变化不会退化成整屏重画，也不需要固件侧差分。
+- 一帧的重绘价格 ≈ damage 像素数 × 每像素成本：纯色填充最便宜，带抗锯齿边缘的底图与文字更贵。
+  想量就用串口 `trace [frames]`，它逐帧打印渲染耗时、提交耗时、damage 像素数与矩形条数；
+  平台还把 5 秒窗口的累计值交给周期日志（`remapad_slint_ui_take_stats`）。
+- 代价规则是改界面的硬约束，见 [ADR 0050](adr/0050-repaint-friendly-screen-rules.md)：
+  圆角加边框的元素要同时给底色、翻页只在行进侧滑入 16px（90 ms，每帧重画内容框，时长别再拉长）并让同侧箭头弹一下。
 
 ## Flash 分区
 
@@ -377,12 +348,12 @@ flowchart LR
 | :--- | :--- | :--- | :--- | :--- |
 | `nvs` | data/nvs | `0x9000` | 24 KB | 设置项、BLE 配对密钥 |
 | `phy_init` | data/phy | `0xf000` | 4 KB | 射频校准 |
-| `ota_0` | app/ota_0 | `0x10000` | 4 MB | 主应用分区，固件及内置 `.pocket`（继承原 factory 偏移） |
+| `ota_0` | app/ota_0 | `0x10000` | 4 MB | 主应用分区：固件与界面（继承原 factory 偏移） |
 | `ota_1` | app/ota_1 | `0x410000` | 4 MB | OTA 目标分区：`pc/remapadctl.py --upgrade` 推送的镜像先写这里，校验通过后切为启动分区 |
 | `otadata` | data/ota | `0x810000` | 8 KB | OTA 启动选择数据 |
 | `storage` | data/spiffs | `0x812000` | 约 7.9 MB | 通用数据存储区，将来挂 littlefs |
 
-包是固件的一部分，不再通过 SPIFFS 运行时加载。若后续包或固件超过 4 MB，应先重新评估分区布局，再修改 `partitions.csv`。布局受 ADR 0009 约束：
+界面与固件同在一个镜像里，不从 SPIFFS 运行时加载。若固件接近 4 MB，应先重新评估分区布局，再修改 `partitions.csv`。布局受 ADR 0009 约束：
 新增分区只允许在尾部追加，禁止移动 `nvs`/`phy_init` 偏移，以免升级固件时擦除用户 NVS 数据与配对凭证。
 
 两个应用分区在 OTA 升级里互为备份：升级写的是当前未运行的那个，校验通过才写 `otadata` 切过去（见上文「OTA 升级通路」）。
@@ -391,11 +362,11 @@ flowchart LR
 
 ## 相关决策与官方资料
 
-- [ADR 0001：采用 PocketJS 与 Vue Vapor 驱动 ESP32-S3 屏幕 UI](adr/0001-use-pocketjs-vue-vapor-for-esp32s3-ui.md)
-- [ADR 0002：旧 bridge/自定义打包方案（已被取代）](adr/0002-adopt-hardware-bridge-and-packaging-architecture.md)
-- [ADR 0003：采用官方 PocketJS ESP-IDF host 构建链路](adr/0003-use-official-esp-idf-host.md)
+- [ADR 0054：屏幕 UI 改用 Slint + Rust，固件不再挂 JS 运行时](adr/0054-screen-ui-slint-rust.md)
+- [ADR 0007：面板与触摸 BSP 取值](adr/0007-esp-lcd-panel-touch-bsp.md)
+- [ADR 0012：UI 就绪前的启动画面](adr/0012-firmware-boot-splash-before-ui.md)
+- [ADR 0018：面板 SPI2 时钟取 80 MHz](adr/0018-panel-spi2-clock-80mhz.md)
 - [ADR 0022：OTA 升级复用桥接帧（USB-Serial/JTAG 双分区回写）与回滚健康门槛](adr/0022-ota-over-bridge-frames-with-rollback.md)
 - [Switch 2 手柄通信协议与数据交互技术规范](controller-switch2.md)
 - [PS 家族手柄数据规范（DualShock 3 / DualShock 4 / DualSense）](controller-ps.md)
-- [PocketJS ESP-IDF 官方指南](https://pocketjs.dev/docs/esp-idf/)
-- [PocketJS ESP-IDF 官方 README](https://github.com/pocket-stack/pocketjs/blob/main/hosts/esp-idf/README.md)
+- [Slint 官方文档](https://slint.dev/docs)

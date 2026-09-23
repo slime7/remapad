@@ -1,0 +1,53 @@
+// Remapad 屏幕主题：Material Design 3 深色配色的语义 token，颜色只在取值于此。
+// 页面按语义引用；底色与卡片底图绑在一起，改 background 要同步烘底图（见 ADR 0051）。
+
+export global Theme {
+    // 主色系
+    out property <color> primary: #7e9fd4;
+    out property <color> primary-dim: #5476a8;
+    out property <color> on-primary: #002043;
+    out property <color> primary-container: #a6c8ff;
+    out property <color> on-primary-container: #1b416f;
+    out property <color> on-primary-fixed-variant: #264a79;
+
+    // 次色系（四叶草角钮）
+    out property <color> secondary-container: #152a1f;
+    out property <color> on-secondary-container: #92a99a;
+    out property <color> secondary-container-active: #1d3a2b;
+
+    // 三级色系（底栏）
+    out property <color> tertiary: #4eb079;
+    out property <color> tertiary-dim: #1a8552;
+    out property <color> on-tertiary: #002613;
+    out property <color> on-tertiary-container: #006239;
+
+    // 错误色系
+    out property <color> error: #ff716c;
+    out property <color> error-container: #8a1a1e;
+    out property <color> error-container-active: #a02a2e;
+    out property <color> on-error: #490006;
+    out property <color> on-error-container: #ff9993;
+
+    // 表面系
+    out property <color> background: #060e1b;
+    out property <color> on-background: #d9e6ff;
+    out property <color> surface-bright: #192d48;
+    out property <color> surface-container-low: #091423;
+    out property <color> surface-container: #0d1a2c;
+    out property <color> surface-container-high: #112035;
+    out property <color> surface-container-highest: #15263e;
+    out property <color> on-surface: #d9e6ff;
+    out property <color> on-surface-variant: #9bacca;
+    out property <color> outline: #667692;
+    out property <color> outline-variant: #384962;
+    out property <color> scrim: #000000b3;
+    out property <color> focus-ring: #ffffff;
+
+    // 字号槽位：12 起步逐档加 2，只有 12/14/16/24 会烘字形位图（见 ui/README.md）。
+    out property <length> text-xs: 12px;
+    out property <length> text-sm: 14px;
+    out property <length> text-base: 16px;
+    out property <length> text-lg: 18px;
+    out property <length> text-xl: 20px;
+    out property <length> text-2xl: 24px;
+}

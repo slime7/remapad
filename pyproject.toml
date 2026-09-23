@@ -1,0 +1,11 @@
+# 仓库脚本的 Python 工程：预览、固件主机端测试、工具链安装与 ADR 新建都在这里跑。
+# 只用标准库，因此没有运行期依赖；版本约束与锁定文件由 uv 管理（uv run python scripts/<名字>.py）。
+[project]
+name = "remapad-scripts"
+version = "0.1.0"
+description = "Remapad 仓库脚本（界面预览、固件主机端测试、Rust 工具链安装与 ADR 新建）"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.uv]
+package = false

@@ -28,8 +28,6 @@
 #include "usb_input.h"
 #include "usb_role.h"
 
-#include "pocketjs/guest.h"
-
 static const char *TAG = "remapad_bridge";
 
 #define REMAPAD_CHIP_NAME "ESP32-S3"
@@ -49,8 +47,7 @@ static const char *TAG = "remapad_bridge";
 #define REMAPAD_POWER_OFF_VERIFY_US (1500 * 1000LL)
 
 /** 外部命令/事件槽：PWR 按键与串口 CLI 等非 owner task 上下文的入口。
- * guest eval 只允许在 owner task 上执行（QuickJS 栈守卫约束），外部任务
- * 只把字符串拷进队列，js_bridge_service 每帧在 owner task 上取出处理。 */
+ * 外部任务只把字符串拷进队列，js_bridge_service 在 owner task 上取出处理。 */
 #define REMAPAD_EXT_MSG_LEN 160
 #define REMAPAD_EXT_QUEUE_LEN 4
 
@@ -63,7 +60,6 @@ typedef struct {
 } bridge_cmd_slot_t;
 
 static struct {
-    pocketjs_guest_t *guest;
     bridge_cmd_slot_t queue[REMAPAD_BRIDGE_QUEUE_LEN];
     size_t queue_head;
     size_t queue_len;
@@ -104,11 +100,6 @@ esp_err_t js_bridge_init(void)
     return ESP_OK;
 }
 
-void js_bridge_attach(pocketjs_guest_t *guest)
-{
-    s_bridge.guest = guest;
-}
-
 esp_err_t js_bridge_enqueue(const char *cmd_json)
 {
     if (cmd_json == NULL) {
@@ -129,24 +120,10 @@ esp_err_t js_bridge_enqueue(const char *cmd_json)
     return ESP_OK;
 }
 
-/** 通过 eval 调用 guest 的 __onNativeBridgeMessage；JSON 必须是合法 JS 表达式。 */
+/** 事件只记日志：Slint 界面不接事件通道，状态由 owner task 轮询取得。 */
 static void post_event_json(const char *event_json)
 {
-    if (s_bridge.guest == NULL) {
-        ESP_LOGI(TAG, "event (no guest): %s", event_json);
-        return;
-    }
-    char eval_buf[REMAPAD_EVENT_MAX + 48];
-    const int n = snprintf(eval_buf, sizeof(eval_buf),
-                           "__onNativeBridgeMessage&&__onNativeBridgeMessage(%s)", event_json);
-    if (n < 0 || (size_t)n >= sizeof(eval_buf)) {
-        ESP_LOGW(TAG, "event too long, dropped");
-        return;
-    }
-    const esp_err_t err = pocketjs_guest_eval(s_bridge.guest, eval_buf, (size_t)n, "bridge_evt");
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "event eval failed: %s", esp_err_to_name(err));
-    }
+    ESP_LOGD(TAG, "event: %s", event_json);
 }
 
 /* 命令 JSON 由 UI 侧 driver 的 JSON.stringify 生成、字段固定，这里按

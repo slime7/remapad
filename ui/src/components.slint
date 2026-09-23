@@ -1,0 +1,559 @@
+// 可复用界面部件：图标、开关、焦点环、确认对话框、底部状态栏。
+// 焦点环一律画在控件自身（border-width 取 2px 时用 theme.slint 的 focus-ring）；
+// 手柄操控模式的焦点序号由固件侧写入。
+
+import { Theme } from "theme.slint";
+// 图标字形直接用素材里的 Material Symbols：烘制按「界面用到的字符」自动子集。
+import "../assets/fonts/MaterialIcons-Regular.ttf";
+
+/** 屏幕拖动状态：由 DragArea 写入，App 侧据此做跟手平移与切页判定。 */
+export global Drag {
+    /** 是否按住。 */
+    in-out property <bool> active: false;
+    /** 按下点到当前点的水平位移（向右为正）。 */
+    in-out property <length> offset: 0;
+    /** 单次移动跨过这个步长即认为在甩动。 */
+    out property <length> flick-step: 16px;
+    /** 抖动下限：位移不超过它才算点击。 */
+    out property <length> tap-slop: 8px;
+    /** 本次按下是否已越过抖动下限（越过就不再算点击）。 */
+    in-out property <bool> moved: false;
+    /** 甩动方向：-1 向左、1 向右、0 未甩动。 */
+    in-out property <int> flick-direction: 0;
+
+    property <length> start-x: 0;
+    property <length> last-x: 0;
+
+    /** 按下：记起点，清掉上一次的判定结果。 */
+    public function begin(x: length) {
+        if (active) {
+            return;
+        }
+        active = true;
+        start-x = x;
+        last-x = x;
+        offset = 0;
+        moved = false;
+        flick-direction = 0;
+    }
+
+    /** 移动：累计位移，单步跨过 flick-step 时记下甩动方向。 */
+    public function move(x: length) {
+        if (!active) {
+            return;
+        }
+        offset = x - start-x;
+        moved = moved || max(offset, -offset) >= tap-slop;
+        if (max(x - last-x, last-x - x) >= flick-step) {
+            flick-direction = x > last-x ? 1 : -1;
+        }
+        last-x = x;
+    }
+
+    /** 抬手：补齐抖动判定；切页或回弹由 App 看着 active 收尾。 */
+    public function end() {
+        if (!active) {
+            return;
+        }
+        active = false;
+        moved = moved || max(offset, -offset) >= tap-slop;
+    }
+}
+
+/** 可拖动触摸区：按下与移动同步给 Drag，越过抖动下限后不再触发点击。 */
+export component DragArea inherits TouchArea {
+    /** 未发生拖动时的点击回调。 */
+    callback activated();
+
+    changed pressed => {
+        if (self.pressed) {
+            Drag.begin(self.mouse-x);
+        } else {
+            Drag.end();
+        }
+    }
+    moved => {
+        Drag.move(self.mouse-x);
+    }
+    clicked => {
+        if (!Drag.moved) {
+            root.activated();
+        }
+    }
+}
+
+/** 单色图标：Material Symbols 字形，颜色用 tint 覆盖。
+ *
+ * 走字形而不是 SVG：SVG 在构建期按文件的固有尺寸（24px）光栅化，缩到 16px 上屏要插值，
+ * 笔画会糊；字形位图按字号烘，正好是上屏尺寸。字号只取烘过的档位（12/14/16/24，
+ * 见 firmware/components/slint_ui/build.rs 的 FONT_SIZES），别的字号会退回最近的一档。 */
+export component Icon inherits Text {
+    in property <string> glyph;
+    in property <length> size: Theme.text-base;
+    in property <color> tint: Theme.on-surface;
+
+    width: self.size;
+    height: self.size;
+    font-family: "Material Symbols Outlined";
+    font-size: self.size;
+    color: self.tint;
+    text: self.glyph;
+    horizontal-alignment: center;
+    vertical-alignment: center;
+}
+
+/** MD3 开关：40 × 40 命中区，36 × 20 轨道与 14 滑块画在命中区里居中。 */
+export component Switch inherits Rectangle {
+    in property <bool> on: false;
+    in property <bool> focused: false;
+    callback toggled();
+
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    background: touch.pressed
+        ? (on ? #264a79 : #7d8ca6)
+        : (focused ? transparent : transparent);
+    border-width: focused ? 2px : 0px;
+    border-color: Theme.focus-ring;
+
+    track := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 36px;
+        height: 20px;
+        border-radius: 10px;
+        background: on ? Theme.on-primary-container : Theme.outline;
+
+        thumb := Rectangle {
+            x: on ? (parent.width - self.width - 3px) : 3px;
+            y: (parent.height - self.height) / 2;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            background: on ? Theme.primary-container : Theme.on-surface;
+        }
+    }
+
+    touch := DragArea {
+        activated => { root.toggled(); }
+    }
+}
+
+/** 确认对话框：204 宽圆角盒 + 标题 + 两行说明 + 取消/确认两钮。 */
+export component ConfirmDialog inherits Rectangle {
+    in property <string> title;
+    in property <string> line1;
+    in property <string> line2;
+    in property <string> confirm-label;
+    /** 确认钮语义：破坏性动作用 error 色，可逆设置类动作用 primary 色。 */
+    in property <bool> primary-tone: false;
+    /** 焦点序号：0 = 取消，1 = 确认。 */
+    in property <int> focus-index: -1;
+    callback cancel();
+    callback confirm();
+
+    width: 240px;
+    height: 280px;
+    background: Theme.scrim;
+
+    box := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 204px;
+        height: content.preferred-height + 24px;
+        border-radius: 16px;
+        background: Theme.surface-container-high;
+
+        content := VerticalLayout {
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            height: parent.height - 24px;
+            spacing: 0px;
+            alignment: start;
+
+            Text {
+                text: root.title;
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-base;
+                font-weight: 700;
+                color: Theme.on-surface;
+                horizontal-alignment: center;
+            }
+            Rectangle { height: 4px; }
+            Text {
+                text: root.line1;
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-surface-variant;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.line2;
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-surface-variant;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            Rectangle { height: 12px; }
+            Rectangle {
+                height: 40px;
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 8px;
+
+                    cancel-btn := Rectangle {
+                        width: 84px;
+                        height: 40px;
+                        border-radius: 12px;
+                        background: cancel-touch.pressed ? Theme.surface-bright : Theme.surface-container-highest;
+                        border-width: root.focus-index == 0 ? 2px : 0px;
+                        border-color: Theme.focus-ring;
+                        Text {
+                            text: "取消";
+                            font-family: "Noto Sans SC";
+                            font-size: Theme.text-sm;
+                            color: Theme.on-surface;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        cancel-touch := TouchArea { clicked => { root.cancel(); } }
+                    }
+
+                    confirm-btn := Rectangle {
+                        width: 84px;
+                        height: 40px;
+                        border-radius: 12px;
+                        background: root.primary-tone
+                            ? (confirm-touch.pressed ? Theme.primary : Theme.primary-container)
+                            : (confirm-touch.pressed ? Theme.error-container-active : Theme.error-container);
+                        border-width: root.focus-index == 1 ? 2px : 0px;
+                        border-color: Theme.focus-ring;
+                        Text {
+                            text: root.confirm-label;
+                            font-family: "Noto Sans SC";
+                            font-size: Theme.text-sm;
+                            font-weight: 700;
+                            color: root.primary-tone ? Theme.on-primary-container : Theme.on-error-container;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        confirm-touch := TouchArea { clicked => { root.confirm(); } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 底栏状态格里的图标行：图标在本格内水平居中（布局里的定宽子元素默认靠格左）；
+ *  行高比图标多 11px（图标上下各留 5.5px），图标墨迹才落在设计图量出的底栏内 y 18..30。 */
+component CellIcon inherits Rectangle {
+    in property <string> glyph;
+    in property <color> tint: Theme.on-tertiary;
+    in property <length> size: 16px;
+
+    height: self.size + 11px;
+    Icon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: root.size;
+        tint: root.tint;
+        glyph: root.glyph;
+    }
+}
+
+/** 横向行里的图标盒：定宽、纵向铺满行高，图标在盒内居中。
+ *  Slint 布局把定尺寸子元素摆在交叉轴起点，图标得自己居中才与同一行的文字对齐。 */
+export component IconBox inherits Rectangle {
+    in property <string> glyph;
+    in property <color> tint: Theme.on-tertiary;
+    in property <length> size: 20px;
+
+    width: self.size;
+    Icon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        size: root.size;
+        tint: root.tint;
+        glyph: root.glyph;
+    }
+}
+
+/** 微型玩家指示灯一行（单格 8 × 8，间距 3）：整行在本格内水平居中；
+ *  行高取标签文字的高度，中格的图标才会与左右两格落在同一条中线上。 */
+export component PlayerLeds inherits Rectangle {
+    in property <int> mask: 0;
+
+    height: 15px;
+    leds := HorizontalLayout {
+        x: 0px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width;
+        height: 8px;
+        spacing: 3px;
+        alignment: center;
+        for index in 4: Rectangle {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            background: led-on(root.mask, led-bit(index)) ? Theme.primary-container : Theme.on-tertiary;
+        }
+    }
+    pure function led-bit(index: int) -> int {
+        return index == 0 ? 1 : (index == 1 ? 2 : (index == 2 ? 4 : 8));
+    }
+    pure function led-on(mask: int, bit: int) -> bool {
+        return Math.mod(mask / bit, 2) == 1;
+    }
+}
+
+/** 底部状态栏（224 × 64）：三态优先级为 OTA 进度、手柄操控提示、三等分状态。 */
+export component BottomBar inherits Rectangle {
+    in property <int> usb-role: 0;
+    in property <bool> pc-link: false;
+    in property <bool> pad-attached: false;
+    in property <int> pad-family: 0;
+    in property <int> pairing: 0;
+    in property <int> player-led: 0;
+    in property <int> battery-percent: 0;
+    in property <int> ota-phase: 0;
+    in property <int> ota-percent: 0;
+    in property <bool> pad-ui-mode: false;
+    /** 广播中主机图标的呼吸相位（0.25-1.0），由固件侧按帧写入。 */
+    in property <float> breath: 1;
+    callback host-clicked();
+
+    /** 电量字形：Material Symbols 的 battery_android_0..6 七档加满格，共八个字形；
+     *  每 15% 一档，100% 给满格。 */
+    pure function battery-glyph(percent: int) -> string {
+        return percent >= 100 ? "\u{f304}" : battery-stage-glyph(min(6, max(0, percent / 15)));
+    }
+
+    pure function battery-stage-glyph(stage: int) -> string {
+        if (stage <= 0) {
+            return "\u{f30d}";
+        }
+        if (stage == 1) {
+            return "\u{f30c}";
+        }
+        if (stage == 2) {
+            return "\u{f30b}";
+        }
+        if (stage == 3) {
+            return "\u{f30a}";
+        }
+        if (stage == 4) {
+            return "\u{f309}";
+        }
+        if (stage == 5) {
+            return "\u{f308}";
+        }
+        return "\u{f307}";
+    }
+
+    x: 8px;
+    y: 208px;
+    width: 224px;
+    height: 64px;
+    clip: true;
+
+    dock := Image {
+        x: -16px;
+        y: 0px;
+        width: 256px;
+        height: 64px;
+        source: @image-url("../assets/dock.svg");
+    }
+
+    // 优先级 1：OTA 接收进度
+    if root.ota-phase == 1: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        VerticalLayout {
+            alignment: center;
+            spacing: 6px;
+            Text {
+                text: "OTA 接收中: \{root.ota-percent}%";
+                font-family: "Noto Sans SC";
+                font-size: Theme.text-xs;
+                color: Theme.on-tertiary;
+                horizontal-alignment: center;
+            }
+            Rectangle {
+                height: 8px;
+                ota-track := Rectangle {
+                    x: (parent.width - self.width) / 2;
+                    y: 0px;
+                    width: 192px;
+                    height: parent.height;
+                    border-radius: 4px;
+                    background: #00261359;
+                    ota-fill := Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: min(parent.width, parent.width * root.ota-percent / 100);
+                        height: parent.height;
+                        border-radius: 4px;
+                        background: Theme.on-tertiary;
+                    }
+                }
+            }
+        }
+    }
+
+    // 优先级 2：手柄操控屏幕提示。图标走 IconBox：行高由文字撑开，
+    // 图标得自己竖直居中才与同一行的文字齐平（布局把定尺寸子元素摆在行首）。
+    if root.ota-phase != 1 && root.pad-ui-mode: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 2px;
+                IconBox { glyph: "\u{eecb}"; size: Theme.text-sm; }
+                IconBox { glyph: "\u{eeca}"; size: Theme.text-sm; }
+                IconBox { glyph: "\u{eede}"; size: Theme.text-sm; }
+                IconBox { glyph: "\u{eedb}"; size: Theme.text-sm; }
+                Text {
+                    text: "翻页";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    color: Theme.on-tertiary;
+                    vertical-alignment: center;
+                }
+                Rectangle { width: 8px; }
+                IconBox { glyph: "\u{eec9}"; size: Theme.text-sm; }
+                IconBox { glyph: "\u{eecc}"; size: Theme.text-sm; }
+                Text {
+                    text: "选择";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    color: Theme.on-tertiary;
+                    vertical-alignment: center;
+                }
+            }
+            HorizontalLayout {
+                alignment: center;
+                spacing: 2px;
+                IconBox { glyph: "\u{eece}"; size: Theme.text-sm; }
+                Text {
+                    text: "确认";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    color: Theme.on-tertiary;
+                    vertical-alignment: center;
+                }
+                Rectangle { width: 8px; }
+                Text {
+                    text: "长按";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    color: Theme.on-tertiary;
+                    vertical-alignment: center;
+                }
+                IconBox { glyph: "\u{eed0}"; size: Theme.text-sm; }
+                Text {
+                    text: "退出";
+                    font-family: "Noto Sans SC";
+                    font-size: Theme.text-xs;
+                    color: Theme.on-tertiary;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    // 优先级 3：三等分状态（左 USB 模式 / 中主机连接 / 右电量）。
+    // 设计稿把三格按整屏 240 均分（格心 40 / 120 / 200），底栏元素比整屏窄 8px，
+    // 所以这一行向左右各外扩 8px 再等分：格宽 80 取整，格内落点都在整数像素上。
+    if root.ota-phase != 1 && !root.pad-ui-mode: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        Rectangle {
+            x: -8px;
+            y: 0px;
+            width: parent.width + 16px;
+            height: parent.height;
+            HorizontalLayout {
+                alignment: center;
+
+                mode-cell := Rectangle {
+                    width: parent.width / 3;
+                    height: parent.height;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 1px;
+                        mode-icon := CellIcon {
+                            tint: mode-ready ? Theme.on-tertiary : Theme.on-tertiary-container;
+                            glyph: root.usb-role == 1
+                                ? (root.pad-attached ? "\u{e338}" : "\u{e500}")
+                                : (root.pc-link ? "\u{e30c}" : "\u{e99d}");
+                        }
+                        mode-text := Text {
+                            text: mode-label;
+                            font-family: "Noto Sans SC";
+                            font-size: Theme.text-xs;
+                            color: Theme.on-tertiary;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                host-cell := Rectangle {
+                    width: parent.width / 3;
+                    height: parent.height;
+                    border-radius: 8px;
+                    background: host-touch.pressed ? Theme.tertiary-dim : transparent;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 1px;
+                        host-icon := CellIcon {
+                            glyph: "\u{e701}";
+                            opacity: root.breath;
+                            tint: host-connected ? Theme.on-tertiary : Theme.on-tertiary-container;
+                        }
+                        host-leds := PlayerLeds { mask: root.player-led; }
+                    }
+                    host-touch := TouchArea { clicked => { root.host-clicked(); } }
+                }
+
+                battery-cell := Rectangle {
+                    width: parent.width / 3;
+                    height: parent.height;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 1px;
+                        /* 电池是横向字形（battery_android 一族，设计稿的形态）：
+                         * 0..6 七档填充加满格共八个字形，15% 以下整体转成错误色。 */
+                        battery-icon := CellIcon {
+                            glyph: battery-glyph(root.battery-percent);
+                            tint: root.battery-percent <= 15 ? Theme.on-error : Theme.on-tertiary;
+                        }
+                        battery-text := Text {
+                            text: "\{root.battery-percent}%";
+                            font-family: "Noto Sans SC";
+                            font-size: Theme.text-xs;
+                            color: Theme.on-tertiary;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    property <bool> mode-ready: root.usb-role == 1 ? root.pad-attached : root.pc-link;
+    property <bool> host-connected: root.pairing == 5;
+    property <string> mode-label: root.usb-role == 1
+        ? (root.pad-attached ? pad-family-label : "未连接")
+        : (root.pc-link ? "PC" : "未连接");
+    property <string> pad-family-label: root.pad-family == 1
+        ? "PS"
+        : (root.pad-family == 2 ? "XBOX" : (root.pad-family == 3 ? "NS" : (root.pad-family == 4 ? "STEAM" : "PAD")));
+}

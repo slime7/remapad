@@ -3,8 +3,8 @@
 Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统：
 接收 USB 手柄输入，转换为 NS2 控制器报告，并通过 BLE 对外提供手柄服务，同时在板载屏幕上呈现运行状态与交互 UI。
 
-屏幕 UI 基于 PocketJS 框架与 Vue 3 Vapor 语法；
-固件运行于 ESP-IDF，通过官方 ESP-IDF host 组件驱动屏幕显示，并在原生任务与队列中承载控制器数据面。
+屏幕 UI 是 Slint（Rust）：界面在构建期编译进固件，运行期用软件渲染器画到面板；
+固件运行于 ESP-IDF，在原生任务与队列中承载控制器数据面。
 
 本项目仅为娱乐用途，实现类似功能不需要 ESP32 带有屏幕。
 
@@ -42,28 +42,25 @@ Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控�
 
 ```mermaid
 flowchart LR
-    UI[ui/：Vue Vapor JSX] --> CLI[PocketJS CLI]
-    Profile[firmware/pocket.host.json] --> CLI
-    CLI --> Artifacts[remapad-ui.pocket]
-    Artifacts --> CMake[ESP-IDF CMake]
-    CMake --> Embed[pocketjs_embed_package]
-    Embed --> Host[pocketjs_host.c]
-    Host --> Guest[PocketJS 运行时]
-    Guest --> Renderer[RGB565 渲染器]
+    UI[ui/：Slint .slint] --> Compile[slint-build 构建期编译]
+    Compile --> Lib[libslint_ui.a]
+    Lib --> CMake[ESP-IDF CMake]
+    CMake --> Renderer[Slint 软件渲染器]
     Renderer --> BSP[屏幕与触摸驱动]
     USB[USB 输入] --> DataPlane[控制器数据面]
     DataPlane --> NS2[NS2 报告编码]
     NS2 --> BLE[BLE 手柄服务]
     DataPlane -.状态同步.-> Bridge[Bridge 控制面]
-    Bridge -.状态反馈.-> Guest
+    Bridge -.状态轮询.-> Host[firmware/main/slint_host.c]
+    Host -.界面状态与动作.-> Renderer
 ```
 
 系统核心分工与边界：
 
-- 前端工作区（`ui/`）负责视图层、交互样式与静态资源，由 PocketJS 编译器在构建期光栅化为资源包。
-- 固件工作区（`firmware/`）承载 PocketJS 宿主运行时与原生数据面：
+- 屏幕 UI 工作区（`ui/`）是 Slint 源码与宿主用例：`.slint` 在构建期编成 Rust 静态库链进固件，界面行为由宿主用例断言。
+- 固件工作区（`firmware/`）承载原生数据面：
   高频控制器接收、规范化、协议编码及 BLE 广播/GATT 状态机均在 ESP-IDF 原生任务中运行；
-  Bridge 控制面仅用于传递低频设备状态和交互指令。
+  Bridge 控制面仅用于传递低频设备状态和交互指令，屏幕状态由 `firmware/main/slint_host.c` 每轮写进界面。
 - 主机协议细节见 [Switch 2 手柄协议规范 (docs/controller-switch2.md)](docs/controller-switch2.md)；
   输入设备数据见 [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)。
 
@@ -71,46 +68,43 @@ flowchart LR
 
 ```text
 remapad/
-├── ui/                          # 前端工作区：Vue Vapor JSX 界面、样式与预览
-│   ├── src/                     # UI 源码（页面、组件、状态与 Bridge 契约）
-│   ├── preview/                 # 触摸预览服务页面（浏览器触控模拟）
-│   └── pocket.json              # PocketJS 应用清单
+├── ui/                          # 屏幕 UI 工作区：Slint 源码、底图与宿主用例
+│   ├── src/                     # 界面源码（根组件、页面、复用控件与主题）
+│   ├── assets/                  # 字体与底图（卡片、底栏）
+│   └── tests/                   # 宿主用例：注入状态后按元素几何与像素断言
 ├── firmware/                    # 固件工作区：ESP-IDF 嵌入式工程
-│   ├── main/                    # 固件业务源码（PocketJS 宿主、控制器数据面、驱动等）
-│   ├── components/              # 随仓库固定的官方 ESP-IDF 组件与 S3 原生归档
-│   ├── pocket.host.json         # 宿主设备契约（视口、时钟与硬件能力配置）
+│   ├── main/                    # 固件业务源码（界面状态装配、控制器数据面、驱动等）
+│   ├── components/              # 随仓库固定的组件（slint_ui：Slint 界面与 Rust 平台层）
 │   ├── sdkconfig.defaults       # 芯片架构、CPU 频率、Flash/PSRAM 预设
 │   └── partitions.csv           # 双应用 OTA 与存储分区表
 ├── pc/                          # PC 侧辅助工具（USB 桥接、命令行控制台、实机截图、OTA）
-├── scripts/                     # 构建调度、触摸预览与测试辅助脚本
-├── patches/                     # 上游 PocketJS 组件对账与补丁记录
+├── scripts/                     # 环境准备、界面预览与测试脚本（Python）
 └── docs/                        # 项目设计、技术抽象与开发文档
 ```
 
 ## 开发快速上手
 
-环境要求：Node.js 18+、pnpm、Bun、ESP-IDF（>=6.0,<6.2）、Python 3.10+ 与 uv。
+环境要求：ESP-IDF（>=6.0,<6.2）、Python 3.10+ 与 uv、Rust（宿主 stable + Xtensa 工具链，见 [ui/README.md](ui/README.md)）。
 
-### 1. 前端 UI 开发与预览
+### 1. 屏幕 UI（Slint）
 
 ```powershell
-# 安装依赖
-pnpm install
+# PC 交互预览：设备画面 240 × 280 + 控制条，动作在预览里结算，存盘即刷新（脚本经 uv 跑）
+uv run python scripts/ui-preview.py
 
-# 契约检查与编译
-pnpm run check
-pnpm run compile
+# 界面行为的宿主用例：在开发机上跑真实 .slint 产物
+cargo test --locked --manifest-path ui/Cargo.toml
 
-# 启动本地触摸预览（访问 http://127.0.0.1:8130）
-pnpm run dev
+# 改完 ui/src 下的 .slint，编固件时一起编译进应用（首次构建需要 xtensa Rust 工具链）
+cd firmware ; idf.py build
 ```
+
+界面改完要在真机上验收时用 OTA 推送（见下面的固件编译与烧录、以及 [pc/README.md](pc/README.md)）。
+工具链安装与换机步骤见 [ui/README.md](ui/README.md)。
 
 ### 2. 固件编译与烧录
 
 ```powershell
-# 打包前端应用为 .pocket 镜像
-pnpm run build
-
 # 进入固件目录并构建
 cd firmware
 idf.py set-target esp32s3

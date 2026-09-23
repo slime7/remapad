@@ -1,0 +1,457 @@
+// Remapad 屏幕界面主体：四叶草卡片轮播 + 底部状态栏 + 确认弹窗。
+// 页面槽位顺序：亮度 / 手柄 / 配对 / 电源 / USB 模式 / DS 设置 / 系统信息，
+// dev 构建在末位追加调试页；切页时卡片从行进侧滑入，方向提示交给同侧的翻页箭头弹一下。
+// 所有状态由固件侧写入，动作经 action 回调交回固件。
+// 主体是 AppContent（设备与 PC 预览共用同一棵树），设备侧入口 App 只把它包进 240 × 280 窗口。
+
+import { Theme } from "theme.slint";
+import { BottomBar, ConfirmDialog, Drag, DragArea, Icon } from "components.slint";
+import { BrightnessPage, ControllerPage, DebugPage, DsSettingsPage, PairingPage, PowerPage, SystemInfoPage, UsbModePage } from "pages.slint";
+
+export component AppContent inherits Rectangle {
+    width: 240px;
+    height: 280px;
+    background: Theme.background;
+
+    // ---- 界面状态（固件侧写入）----
+    in-out property <int> page: 0;
+    in-out property <int> page-count: 7;
+    in-out property <int> focus-index: -1;
+    /** 手柄操控窗口：操控模式或最近 4 秒内有按键时为真，焦点环只在此时可见。 */
+    in-out property <bool> pad-active: false;
+    in-out property <bool> pad-mode: false;
+    in-out property <int> backlight: 40;
+    in-out property <int> battery-percent: 0;
+    in-out property <int> pairing: 0;
+    in-out property <int> notice: 0;
+    in-out property <int> spinner-phase: 0;
+    in-out property <int> usb-role: 0;
+    in-out property <bool> pc-link: false;
+    in-out property <bool> pad-attached: false;
+    in-out property <int> pad-family: 0;
+    in-out property <int> player-led: 0;
+    in-out property <bool> pad-ui-mode: false;
+    in-out property <float> breath: 1;
+    in-out property <int> ota-phase: 0;
+    in-out property <int> ota-percent: 0;
+    in-out property <int> selected-colorway: 0;
+    in-out property <string> controller-address: "--";
+    in-out property <bool> ds-touchpad-plus-minus: false;
+    in-out property <bool> ds-capture-key: true;
+    in-out property <string> firmware-version: "-";
+    in-out property <string> heap-text: "- / - KB";
+    in-out property <string> psram-text: "- / - MB";
+    in-out property <string> battery-text: "-";
+    in-out property <int> debug-flash: -1;
+    /** 弹窗：0 无 1 重启确认 2 关机确认 3 切手柄确认 4 切回串口后重启询问 */
+    in-out property <int> dialog: 0;
+    in-out property <int> dialog-focus: 0;
+    in-out property <bool> powering-off: false;
+    in-out property <bool> rebooting: false;
+
+    // ---- 交回固件的动作 ----
+    /** name 动作名、value 参数；固件侧按名分发（见 firmware 侧 slint_host.cpp）。 */
+    callback action(string, int);
+
+    /** 焦点项确认：由固件侧在手柄圆圈键 / 回车按下时调用。 */
+    callback activate-focused();
+
+    out property <int> focus-count: focus-count-for(page);
+    property <bool> dialog-open: dialog != 0;
+
+    // 翻页提示：方向侧的箭头往外弹 6px 再收回，卡片从行进侧偏 16px 滑入静止位置。
+    // 滑入要先瞬移到位再归零，因此时长也当成属性：赋值起点时用 0ms，归零时给真实时长。
+    property <length> left-cue: 0px;
+    property <length> right-cue: 0px;
+    animate left-cue { duration: 90ms; easing: ease-out; }
+    animate right-cue { duration: 90ms; easing: ease-out; }
+    property <length> page-slide: 0px;
+    property <duration> slide-ms: 0ms;
+    animate page-slide { duration: root.slide-ms; easing: ease-out; }
+    property <int> prev-page: 0;
+    changed page => {
+        if (root.page != root.prev-page) {
+            root.slide-ms = 0ms;
+            if (root.page > root.prev-page) {
+                root.right-cue = 6px;
+                root.page-slide = 16px;
+            } else {
+                root.left-cue = -6px;
+                root.page-slide = -16px;
+            }
+            root.prev-page = root.page;
+            cue-timer.running = true;
+            slide-timer.running = true;
+        }
+    }
+    cue-timer := Timer {
+        interval: 90ms;
+        running: false;
+        triggered => {
+            root.left-cue = 0px;
+            root.right-cue = 0px;
+            cue-timer.running = false;
+        }
+    }
+    // 下一拍把位移归零：这一拍给出时长，滑入才真的走动画。
+    slide-timer := Timer {
+        interval: 16ms;
+        running: false;
+        triggered => {
+            root.slide-ms = 90ms;
+            root.page-slide = 0px;
+            slide-timer.running = false;
+        }
+    }
+
+    // 构建期字符集锚点：设备信息页的电池行由固件拼好再回发（数字 / % / · / V 之类），
+    // 只出现在运行时字符串里的码点不会被烘成字形位图，上屏就是一个空洞（见 ui/README.md）。
+    Text {
+        text: "0123456789abcdefABCDEF%·V.- /:KMBs";
+        visible: false;
+        font-family: "Noto Sans SC";
+        font-size: Theme.text-xs;
+    }
+
+    function focus-count-for(slot: int) -> int {
+        if (slot == 1) {
+            return 4;
+        }
+        if (slot == 6) {
+            return 0;
+        }
+        if (slot == 7) {
+            return 3;
+        }
+        return 2;
+    }
+
+    // 拖动预览：跟手平移当前内容，位移封顶 ±24；抬手后按位移阈值或甩动方向切页，
+    // 未越阈值时由 content-x 的隐式动画回弹。控件上的按下也照样跟手——控件的
+    // 触摸区是 DragArea，与空白处的拖动层走同一条 Drag 通路。
+    property <length> content-x: Drag.active ? max(-24px, min(24px, Drag.offset * 0.5)) : 0px;
+    animate content-x { duration: 70ms; easing: ease-out; }
+
+    /** 拖动是否按住（跟随 Drag.active）：抬手时在这里判定切页或回弹。 */
+    property <bool> dragging: Drag.active;
+    changed dragging => {
+        if (self.dragging || root.dialog-open) {
+            return;
+        }
+        if (Drag.flick-direction != 0 && max(Drag.offset, -Drag.offset) >= 12px) {
+            if (Drag.flick-direction < 0) {
+                root.action("next-page", 0);
+            } else {
+                root.action("prev-page", 0);
+            }
+        } else if (Drag.offset <= -40px) {
+            root.action("next-page", 0);
+        } else if (Drag.offset >= 40px) {
+            root.action("prev-page", 0);
+        }
+    }
+
+    page-area := Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 240px;
+        height: 200px;
+        clip: true;
+        background: transparent;
+
+        // 拖动层：压在卡面之下，空白处的按下由它接；控件自身的触摸区优先，
+        // 控件上的拖动经 DragArea 汇入同一条 Drag 通路。
+        gesture := DragArea {
+            width: parent.width;
+            height: parent.height;
+        }
+
+        // 四叶草卡面：不透明底色由窗口背景给出，卡片只画四个花瓣的轮廓。
+        card := Rectangle {
+            x: -8px + content-x + page-slide;
+            y: -24px;
+            width: 256px;
+            height: 256px;
+            background: transparent;
+
+            petal := Image {
+                width: 256px;
+                height: 256px;
+                source: @image-url("../assets/main.svg");
+            }
+
+            BrightnessPage {
+                visible: root.page == 0;
+                backlight: root.backlight;
+                focus-index: root.pad-active && root.page == 0 ? root.focus-index : -1;
+                interactive: root.page == 0 && !root.dialog-open;
+                step-up => { root.action("brightness-up", 0); }
+                step-down => { root.action("brightness-down", 0); }
+            }
+            ControllerPage {
+                visible: root.page == 1;
+                address: root.controller-address;
+                selected: root.selected-colorway;
+                focus-index: root.pad-active && root.page == 1 ? root.focus-index : -1;
+                interactive: root.page == 1 && !root.dialog-open;
+                select(index) => { root.action("colorway", index); }
+            }
+            PairingPage {
+                visible: root.page == 2;
+                pairing: root.pairing;
+                notice: root.notice;
+                spinner-phase: root.spinner-phase;
+                focus-index: root.pad-active && root.page == 2 ? root.focus-index : -1;
+                interactive: root.page == 2 && !root.dialog-open;
+                connect-key => { root.action("connect", 0); }
+                stop => { root.action("disconnect", 0); }
+                pair => { root.action("pair", 0); }
+            }
+            PowerPage {
+                visible: root.page == 3;
+                focus-index: root.pad-active && root.page == 3 ? root.focus-index : -1;
+                interactive: root.page == 3 && !root.dialog-open;
+                ask-reboot => { root.action("ask-reboot", 0); }
+                ask-power-off => { root.action("ask-power-off", 0); }
+            }
+            UsbModePage {
+                visible: root.page == 4;
+                usb-role: root.usb-role;
+                focus-index: root.pad-active && root.page == 4 ? root.focus-index : -1;
+                interactive: root.page == 4 && !root.dialog-open;
+                select-device => { root.action("usb-device", 0); }
+                ask-host => { root.action("ask-usb-host", 0); }
+            }
+            DsSettingsPage {
+                visible: root.page == 5;
+                touchpad-plus-minus: root.ds-touchpad-plus-minus;
+                capture-key: root.ds-capture-key;
+                focus-index: root.pad-active && root.page == 5 ? root.focus-index : -1;
+                interactive: root.page == 5 && !root.dialog-open;
+                toggle-touchpad => { root.action("ds-touchpad", 0); }
+                toggle-capture => { root.action("ds-capture", 0); }
+            }
+            SystemInfoPage {
+                visible: root.page == 6;
+                firmware-version: root.firmware-version;
+                heap-text: root.heap-text;
+                psram-text: root.psram-text;
+                battery-text: root.battery-text;
+            }
+            debug-page := DebugPage {
+                visible: root.page == 7;
+                pairing: root.pairing;
+                pad-ui-mode: root.pad-ui-mode;
+                flash: root.debug-flash;
+                focus-index: root.pad-active && root.page == 7 ? root.focus-index : -1;
+                interactive: root.page == 7 && !root.dialog-open;
+                inject(index) => { root.action("debug-key", index); }
+            }
+        }
+
+    }
+
+    // 翻页箭头：落在四叶草左右凹陷的深色区，触摸点按切页，不进手柄焦点环。
+    left-arrow := Rectangle {
+        x: 2px + root.left-cue;
+        y: 88px;
+        width: 32px;
+        height: 32px;
+        background: transparent;
+        Icon {
+            glyph: "\u{e5cb}";
+            size: Theme.text-base;
+            tint: Theme.on-surface-variant;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+        DragArea { activated => { root.action("prev-page", 0); } }
+    }
+    right-arrow := Rectangle {
+        x: 206px + root.right-cue;
+        y: 88px;
+        width: 32px;
+        height: 32px;
+        background: transparent;
+        Icon {
+            glyph: "\u{e5cc}";
+            size: Theme.text-base;
+            tint: Theme.on-surface-variant;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+        DragArea { activated => { root.action("next-page", 0); } }
+    }
+
+    bar := BottomBar {
+        usb-role: root.usb-role;
+        pc-link: root.pc-link;
+        pad-attached: root.pad-attached;
+        pad-family: root.pad-family;
+        pairing: root.pairing;
+        player-led: root.player-led;
+        battery-percent: root.battery-percent;
+        ota-phase: root.ota-phase;
+        ota-percent: root.ota-percent;
+        pad-ui-mode: root.pad-ui-mode;
+        breath: root.breath;
+        host-clicked => { root.action("host-click", 0); }
+    }
+
+    // ---- 弹窗 ----
+    if root.dialog == 1: ConfirmDialog {
+        title: "重启设备";
+        line1: "是否立即重启 Remapad 设备？";
+        line2: "未保存的即时调试状态将丢失。";
+        confirm-label: "重启";
+        focus-index: root.pad-active ? root.dialog-focus : -1;
+        cancel => { root.action("dialog-cancel", 0); }
+        confirm => { root.action("reboot", 0); }
+    }
+    if root.dialog == 2: ConfirmDialog {
+        title: "设备关机";
+        line1: "是否立即关闭 Remapad 设备？";
+        line2: "USB 供电时电源锁存仍将保持。";
+        confirm-label: "关机";
+        focus-index: root.pad-active ? root.dialog-focus : -1;
+        cancel => { root.action("dialog-cancel", 0); }
+        confirm => { root.action("power-off", 0); }
+    }
+    if root.dialog == 3: ConfirmDialog {
+        title: "切换到手柄模式";
+        line1: "PC 的串口会消失";
+        line2: "只能在本屏幕切回或重启设备";
+        confirm-label: "切换";
+        primary-tone: true;
+        focus-index: root.pad-active ? root.dialog-focus : -1;
+        cancel => { root.action("dialog-cancel", 0); }
+        confirm => { root.action("usb-host", 0); }
+    }
+    if root.dialog == 4: ConfirmDialog {
+        title: "已切回串口";
+        line1: "是否立即重启设备？";
+        line2: "重启后 PC 的串口一定回来";
+        confirm-label: "立即重启";
+        focus-index: root.pad-active ? root.dialog-focus : -1;
+        cancel => { root.action("dialog-cancel", 0); }
+        confirm => { root.action("reboot", 0); }
+    }
+
+    // ---- 全屏遮罩：关机与重启等待 ----
+    if root.powering-off: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #000000;
+        Text {
+            text: "关机中…";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-sm;
+            font-weight: 700;
+            color: Theme.on-surface;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: parent.width;
+            height: parent.height;
+        }
+    }
+    if root.rebooting: Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #000000;
+        Text {
+            text: "重启中…";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-sm;
+            font-weight: 700;
+            color: Theme.on-surface;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: parent.width;
+            height: parent.height;
+        }
+    }
+
+    // 焦点项确认：按页分发到对应控件（手柄圆圈键与回车都走这里）。
+    activate-focused => {
+        if (root.dialog-open) {
+            if (root.dialog-focus == 0) {
+                root.action("dialog-cancel", 0);
+            } else {
+                root.action(root.dialog == 1 ? "reboot" : (root.dialog == 2 ? "power-off" : (root.dialog == 3 ? "usb-host" : "reboot")), 0);
+            }
+        } else if (root.page == 0) {
+            root.action(root.focus-index == 1 ? "brightness-down" : "brightness-up", 0);
+        } else if (root.page == 1) {
+            root.action("colorway", root.focus-index);
+        } else if (root.page == 2) {
+            if (root.focus-index == 1) {
+                root.action("pair", 0);
+            } else if (root.pairing == 2 || root.pairing == 3 || root.pairing == 4 || root.pairing == 5) {
+                root.action("disconnect", 0);
+            } else {
+                root.action("connect", 0);
+            }
+        } else if (root.page == 3) {
+            root.action(root.focus-index == 1 ? "ask-power-off" : "ask-reboot", 0);
+        } else if (root.page == 4) {
+            root.action(root.focus-index == 1 ? "ask-usb-host" : "usb-device", 0);
+        } else if (root.page == 5) {
+            root.action(root.focus-index == 1 ? "ds-capture" : "ds-touchpad", 0);
+        } else if (root.page == 7) {
+            root.action("debug-key", root.focus-index);
+        }
+    }
+}
+
+// 设备侧入口：固件建的窗口就是它，尺寸与面板一致。
+// 属性是直接通到 AppContent 的双向绑定，固件写进来的取值与界面里的状态是同一份。
+export component App inherits Window {
+    width: 240px;
+    height: 280px;
+    background: Theme.background;
+
+    in-out property <int> page <=> content.page;
+    in-out property <int> page-count <=> content.page-count;
+    in-out property <int> focus-index <=> content.focus-index;
+    in-out property <bool> pad-active <=> content.pad-active;
+    in-out property <bool> pad-mode <=> content.pad-mode;
+    in-out property <int> backlight <=> content.backlight;
+    in-out property <int> battery-percent <=> content.battery-percent;
+    in-out property <int> pairing <=> content.pairing;
+    in-out property <int> notice <=> content.notice;
+    in-out property <int> spinner-phase <=> content.spinner-phase;
+    in-out property <int> usb-role <=> content.usb-role;
+    in-out property <bool> pc-link <=> content.pc-link;
+    in-out property <bool> pad-attached <=> content.pad-attached;
+    in-out property <int> pad-family <=> content.pad-family;
+    in-out property <int> player-led <=> content.player-led;
+    in-out property <bool> pad-ui-mode <=> content.pad-ui-mode;
+    in-out property <float> breath <=> content.breath;
+    in-out property <int> ota-phase <=> content.ota-phase;
+    in-out property <int> ota-percent <=> content.ota-percent;
+    in-out property <int> selected-colorway <=> content.selected-colorway;
+    in-out property <string> controller-address <=> content.controller-address;
+    in-out property <bool> ds-touchpad-plus-minus <=> content.ds-touchpad-plus-minus;
+    in-out property <bool> ds-capture-key <=> content.ds-capture-key;
+    in-out property <string> firmware-version <=> content.firmware-version;
+    in-out property <string> heap-text <=> content.heap-text;
+    in-out property <string> psram-text <=> content.psram-text;
+    in-out property <string> battery-text <=> content.battery-text;
+    in-out property <int> debug-flash <=> content.debug-flash;
+    in-out property <int> dialog <=> content.dialog;
+    in-out property <int> dialog-focus <=> content.dialog-focus;
+    in-out property <bool> powering-off <=> content.powering-off;
+    in-out property <bool> rebooting <=> content.rebooting;
+
+    out property <int> focus-count: content.focus-count;
+
+    callback action(string, int);
+    callback activate-focused();
+
+    // 主体的动作照原样交给窗口（固件侧接的就是这个回调）；
+    // 确认键反过来调主体的实现：焦点的按页分发写在 AppContent 里，这里不另外赋值。
+    content := AppContent {
+        action(name, value) => { root.action(name, value); }
+    }
+    activate-focused => { content.activate-focused(); }
+}
