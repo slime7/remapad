@@ -28,7 +28,10 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 PocketJS 屏幕 UI。
 4. [新手开发与上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)：环境搭建、常用命令与调试排错。
 5. [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：既定架构决策与选型取舍。
 6. [Switch 2 手柄协议规范 (docs/controller-switch2.md)](docs/controller-switch2.md)：广播、GATT、HID 报告、配对、指令集、出厂块与 NFC。
-7. [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置。
+7. [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置；
+   其余输入设备的规范是同目录下的 [controller-xbox.md](docs/controller-xbox.md)（Xbox 蓝牙报告与精英背键）、
+   [controller-xinput.md](docs/controller-xinput.md)（XInput 形态的 Xbox 360 报文）与
+   [controller-ns1.md](docs/controller-ns1.md)（Switch 一代的报文体与震动编码）。
 8. [目标硬件参考 (docs/hardware.md)](docs/hardware.md)：SoC/存储、屏幕与触摸器件、外设地址、GPIO 分配与板级注意事项。
 9. [测试策略与回归规则 (docs/TESTING.md)](docs/TESTING.md)：测试运行方式、断言分层与「先写用例再修 bug」规则。
 
@@ -171,7 +174,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 PocketJS 屏幕 UI。
 | 产品定位、服务受众、非目标边界变动 | [docs/VISION.md](docs/VISION.md) |
 | 跨层数据协议、核心图元、宏常量与状态模型变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | 主机协议（广播/GATT/HID 报告/指令集/出厂块/NFC）变动 | [docs/controller-switch2.md](docs/controller-switch2.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
-| 输入设备的字段偏移、输出报告、触觉通路或手柄行为设置变动 | [docs/controller-ps.md](docs/controller-ps.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
+| 输入设备的字段偏移、输出报告、触觉通路或手柄行为设置变动 | [docs/controller-ps.md](docs/controller-ps.md), [docs/controller-xbox.md](docs/controller-xbox.md), [docs/controller-xinput.md](docs/controller-xinput.md), [docs/controller-ns1.md](docs/controller-ns1.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md) |
 | 输入通路（桥接帧协议、私有格式、家族表、目标编码）变动 | [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [pc/README.md](pc/README.md) |
 | 显示通路的条带划分/整幅刷新取值、重画范围与动效代价、滚动帧预算或面板时钟变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/adr/0017](docs/adr/0017-display-path-and-scroll-frame-budget.md), [docs/adr/0018](docs/adr/0018-panel-spi2-clock-80mhz.md), [docs/adr/0049](docs/adr/0049-firmware-draw-list-damage-diff.md), [docs/adr/0050](docs/adr/0050-repaint-friendly-screen-rules.md), [docs/adr/0051](docs/adr/0051-opaque-565-card-artwork.md), [docs/adr/0052](docs/adr/0052-ui-tick-rate-back-to-60hz.md) |
 | OTA 升级通路、桥接帧类型或载荷布局变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), [pc/README.md](pc/README.md), [docs/adr/0022](docs/adr/0022-ota-over-bridge-frames-with-rollback.md) |

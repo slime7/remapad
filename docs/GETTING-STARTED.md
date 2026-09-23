@@ -395,7 +395,7 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 - 回到串口有三条路：模式页切回「串口」、UART0 上敲 `mode device`、复位。
   切回时固件把内部 PHY 显式交还 USB-Serial/JTAG，COM 口随之回来；这一步失败时只有复位能恢复，
   界面因此在切回后询问是否立刻重启（取舍见 [ADR 0053](adr/0053-usb-serial-phy-handback-on-role-switch.md)）。
-- 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 Xbox 有线布局并打兜底标记。
+- 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 XInput 形态布局并打兜底标记。
 - 供电：host 模式要给插入的手柄供 VBUS 5V，V2.1 原理图确认板上无升压输出，需从 TP1 外部注入 5V（见 [hardware.md](hardware.md)）；手柄能否枚举仍需实机验证。
 
 ## 常见问题

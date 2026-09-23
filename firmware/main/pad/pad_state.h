@@ -141,7 +141,7 @@ enum {
     PAD_CAP_MIC = 1u << 4,
     PAD_CAP_BATTERY = 1u << 5,
     PAD_CAP_RUMBLE = 1u << 6,
-    /** 型号未识别，按 Xbox 布局兜底解析（结果仍可用，但字段可能错位）。 */
+    /** 型号未识别，按 XInput 形态兜底解析（结果仍可用，但字段可能错位）。 */
     PAD_CAP_FALLBACK_LAYOUT = 1u << 7,
 };
 

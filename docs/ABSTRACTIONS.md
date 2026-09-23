@@ -177,10 +177,12 @@ flowchart TB
   后续源叠加按键，调试注入最后叠加；合成只拷这些主源字段（`copy_primary_fields`），新增字段要一并加进去。
   目标侧 `target_send_pad()` 按注册的 `pad_target_t` 编码（现役 `target/ns2/`）。
 - 反馈方向的完整链路：主机事件 → `pad_feedback_t` 持续帧 → `pad/feedback.c` 按设备布局行编码成输出报告
-  （DS4 / DualSense / Xbox / DS3 / NS1 各一行，NS2 手柄原样吃主机的 LRA 参数包）。
+  （DS4 / DualSense / Xbox 蓝牙 / XInput / DS3 / NS1 各一行，NS2 手柄原样吃主机的 LRA 参数包）。
   震动流是音频式连续包络（低频给冲击、高频给纹理），每颗马达按布局行的 `rumble_band` 跟带、振幅按 `rumble_max` 缩放；
   「在震」判据是 LRA 状态字使能位且归一强度高过载波电平，零幅度保活包与查找手柄页的载波包都不算在震。
   主机振幅是 NS2 LRA 的线性档位，送给 ERM 马达时经 `pad_rumble_perceived` 感知重映射（音色表、CLI 注入与 HD 的 PCM 波形不过表——音圈没有 ERM 死区）。
+  NS1 的行不走单字节强度：`out.rumble_style` 声明成波形编码后，每侧 4 字节直接吃主机的 LRA 波形
+  （两带的频率与振幅各自编码，协议没给频率时按该带缺省频率补足，见 [controller-ns1.md](controller-ns1.md)）。
   采样是主机点播的声音（主机只发采样 ID，节奏与音色由 `pad/feedback.c` 的采样音色表给出）：输入设备有线接入时驱动板载蜂鸣器，
   声明 HD 触觉的设备按布局行 `hd` 规则把 NS 波形重整成振荡器声部，其余设备丢弃。
   写回按编码后的报告字节变化才发，同代透传的参数包原样在编码字节里；
@@ -196,7 +198,7 @@ flowchart TB
   `usb/usb_input.c` 把 IN 报告组成 `pad_report_t` 交给同一份家族表并把反馈写回 OUT 端点；
   声明音频触觉能力的设备（DualSense）另由 `usb/usb_audio.c` 认领 UAC1 音频流 OUT 接口，持续向等时端点送板上合成的 4ch PCM（频道 3/4 音圈、1/2 小喇叭）；
   纯逻辑的描述符解析与 PCM 合成在 `usb_audio_parse.c` / `haptic_synth.c`（主机端可测）。
-- 运动数据：布局行描述取样位置、样本数与轴映射（NS1 一次三份取最新一份），解析进 `pad_motion_t`；
+- 运动数据：布局行描述取样位置、样本数、样本内字段顺序（NS1 的 6 轴样本是加速在前）与轴映射（NS1 一次三份取最新一份），解析进 `pad_motion_t`；
   0x05 报文的 IMU 字段按 [controller-switch2.md](controller-switch2.md) 的偏移填真值，0x09 的 40 字节运动块结构未公开，
   因此只提供 CLI `motion 3` 的实验填充档。
 - USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
@@ -310,12 +312,15 @@ classDiagram
 - 按键位按位置固定、键名沿用 PS（`PAD_BTN_TRIANGLE` 上、`PAD_BTN_CIRCLE` 右、`PAD_BTN_CROSS` 下、`PAD_BTN_SQUARE` 左）：
   Xbox 与 Nintendo 的 A/B/X/Y 标签位置不同，用 PS 名可以避免「A 到底指哪个键」的混淆，家族表把各家的物理键填进对应位置；背键与静音键（目标侧作 C 键）用扩展位占位。
 - 四轴与双扳机统一为 0-4095 整数、摇杆中位 2048，Y 轴统一成「上为正」，8% 死区在解析段套用并把剩余行程重新铺满；扳机保持模拟量，是否数字化由目标决定。
-- `caps` 标注这一帧里哪些字段真的来自设备（运动、触摸板、模拟扳机、背键、麦克风、电池、震动）；型号未识别时回落 Xbox 布局并置 `PAD_CAP_FALLBACK_LAYOUT`，结果仍可用但字段可能错位。
+- `caps` 标注这一帧里哪些字段真的来自设备（运动、触摸板、模拟扳机、背键、麦克风、电池、震动）；型号未识别时按 XInput 形态兜底并置 `PAD_CAP_FALLBACK_LAYOUT`，结果仍可用但字段可能错位。
 - 触摸板按左右半区建模：一帧最多两个触点（DS4 与 DualSense 都是每点 4 字节——触点字节 bit7 为 0 表示有触点，其余三字节是 12 位 X 与 12 位 Y），
   按归一后的 X 分到 `touch[PAD_TOUCH_LEFT]` / `touch[PAD_TOUCH_RIGHT]`，同一半区保留先出现的那一路，归一值夹进 0-4095。
 - 目标只消费自己 `caps` 范围内的字段：不在集合里的部分（IMU、触摸板、麦克风）不映射，能力集合变化时提示一次，不逐帧刷日志。
 - 桥接帧与 CLI 文本共用一根 USB-Serial/JTAG：接收侧校验 CRC、失步时只丢一个字节继续扫描，非帧字节原样交回命令行解析，因此桥接跑着的时候串口 CLI 照常可用。
 - 布局行现在分三组描述：输入字段（既有）、运动字段（`motion`）与输出（反馈）报告（`out`），外加设备自带的报告语言与期望身份（`native_lang` / `native_identity`）；
+  输入字段里除偏移与按键位图，还声明报告长度范围（同一 Report ID 下按报文长度分行的形态，如精英手柄 2 的三份报文）、
+  背键字节与位映射（含「背键已交给手柄内部配置档」的判定字节）、数字扳机位（NS 的 ZL / ZR 只有位）、
+  帽子的编号方式（PS 系 0 起算、Xbox 蓝牙 1 起算）与摇杆 / 扳机的宽度形态（单字节、16 位有符号、16 位无符号、12 位打包、10 位扳机）；
   同代透传的判定与状态字节重写见 [ADR 0026](adr/0026-same-generation-input-passthrough.md)。
   `out` 里的 `frame` 标出报告的收尾方式：PS 系的蓝牙形态要在末 4 字节补 CRC32（种子字节 0xA2 参与计算，见 `pad/feedback.c`），缺它的报告手柄整份都不接受（实机表现：写回成功、毫无反应）；
   `led_mask_map` 把主机玩家灯掩码落到设备自己的灯位模式（DualSense 的五颗灯是固定模式，1P 只有中灯、2P 中灯加外灯，不能直写主机掩码）；
@@ -324,13 +329,19 @@ classDiagram
   `presets` 还承担手柄喇叭的路由：音频控制的输出路径位段要显式置成手柄喇叭（0x30）、前级 +6dB，
   并带上对应的更新使能位与音量档——不路由时内置喇叭处在未路由状态，发声段送进去全被丢掉（实机：0x36 触觉可达而喇叭无声）；
   `hd` 是 HD 触觉波形映射规则（承载采样率/峰值、两带频率落地范围与缺省、采样强震与发声频率、
-  振幅增益 `gain_num/gain_den`——主机游戏内档位很小，DS5 两行按实机 A/B 取 4 倍，增益在写 FEEDBACK 帧之前落地；
+ 振幅增益 `gain_num/gain_den`——主机游戏内档位很小，DS5 两行按实机 A/B 取 4 倍，增益在写 FEEDBACK 帧之前落地；
   `ops = 0` 表示无 HD 通路）——
   NS 的震动是波形描述，映射在布局内完成（[ADR 0046](adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)）。
+  `rumble_style` 选震动编码方式（单字节强度或 NS1 的每侧 4 字节波形），`no_report_id` 声明报告不带
+  Report ID（XInput 形态的报文首字节就是自己的类型字节）。
   DualSense 的灯条不参与反馈：玩家号只上四颗白灯，灯条颜色留给 PC 侧管理——写条会连帧重写玩家色并带「淡出」设置，一震就变色、平时淡回默认白（实机撤出）；
   若真要在蓝牙上写灯条，设置与颜色必须同一帧（主机的连接动画会一直盖着灯），这条实机结论留档备用。
-- 未登记的 VID/PID 仍回落 Xbox 有线布局并置 `PAD_CAP_FALLBACK_LAYOUT`；
-  Nintendo 家族（VID `0x057E`）按系列文件 `pad/layouts/ns.c` 登记，NS2 的 0x05 / 0x09 报文体与 NS1 的 0x30 / 0x3F 各占一行，偏移同样先取自公开资料、待实机回填。
+- 未登记的 VID/PID 仍回落 XInput 形态并置 `PAD_CAP_FALLBACK_LAYOUT`；
+  厂商 VID 分不开布局的第三方手柄（XInput 形态，各家 VID 不同）由布局模块的型号表定家族，
+  型号表只列公开实现里登记为这份报文的型号，不按 VID 一把抓——同一厂商的另一种模式往往是另一个 PID、另一份报文。
+  Xbox 家族（VID `0x045E`）与 XInput 形态各占一个文件，Xbox 按蓝牙报告的三份报文长度与精英手柄 2 的 PID 分行；
+  Nintendo 家族（VID `0x057E`）按系列文件 `pad/layouts/ns.c` 登记，NS2 的 0x05 / 0x09 报文体与 NS1 的
+  两代报文（0x30 标准报文 / 0x3F 简单报文，按键与摇杆偏移互不相同）分别登记。
 
 帧类型（固件侧定义在 `firmware/main/input/input_frame.h`，PC 端在 `pc/link.py` 镜像一份）：
 
@@ -403,7 +414,7 @@ sequenceDiagram
 | `PAD_BTN_SHARE`（分享类） | 分享键（Series 手柄） | 触摸板按下 | `NS2_BTN_CAPTURE`（截图） |
 | `PAD_BTN_MUTE`（静音） | 无 | DualSense 静音键 | `NS2_BTN_C`（C 键） |
 | `PAD_BTN_DPAD_*` | 十字键 | 十字键（帽子开关展开） | `NS2_BTN_DPAD_*` |
-| `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键 / 背键 | DualSense Edge 背键（L4 / R4） | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
+| `PAD_BTN_L4` / `PAD_BTN_L5` / `PAD_BTN_R4` / `PAD_BTN_R5` | 侧键、精英手柄 2 的背键 P1-P4 | DualSense Edge 背键（L4 / R4） | `NS2_BTN_GL` / `NS2_BTN_GR`（同侧合并） |
 | `PAD_TRIGGER_L2` / `PAD_TRIGGER_R2` 模拟量 ≥ 2048（50%） | LT / RT | L2 / R2 | `NS2_BTN_ZL` / `NS2_BTN_ZR` |
 | `PAD_AXIS_LX` / `LY` / `RX` / `RY`（0-4095，中位 2048） | 左右摇杆（有符号 16 位） | 左右摇杆（单字节） | 12 位打包的摇杆字段 |
 
@@ -418,9 +429,13 @@ DS4 / DS5 的触摸板按下可以改成加减键（「DS4、DS5 设置」页与
 键位在按下那一刻定一次、按住期间不变，改写由 `pad/ds_behavior.c` 在数据面每拍完成。
 
 家族表按系列拆在 `firmware/main/pad/layouts/` 下，契约与注册表是 `pad/layout.h` / `pad/layout.c`
-（取舍见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)）。表按（家族、Report ID、连接方式、PID）定位偏移：
+（取舍见 [ADR 0025](adr/0025-pad-layout-modules-per-series.md)）。表按（家族、Report ID、连接方式、PID、报告长度）定位偏移，
+家族先按 VID 判定、厂商 VID 分不开的按模块的型号表判定，长度限定的行排在通用的行前面：
 PS 系的 DS3、DS4 与 DualSense 有线都报 0x01，同一个 Report ID 下按 PID 分行；
-各行偏移的取值与核对状态列在 [controller-ps.md](controller-ps.md) 的「核对状态」，Steam 原生布局整族走 Xbox 兜底并在能力位里标记。
+Xbox 蓝牙的四轴、扳机与按键偏移对所有长度一致，只有精英手柄 2 的背键位按长度分三行。
+各族偏移的取值与核对状态列在 [controller-ps.md](controller-ps.md)、[controller-xbox.md](controller-xbox.md)、
+[controller-xinput.md](controller-xinput.md) 与 [controller-ns1.md](controller-ns1.md) 的「核对状态」，
+Steam 原生布局整族走兜底并在能力位里标记。
 
 手柄组合键 L1+R1+L3+R3 按住 300 ms 会捕获输入、转为屏幕操控（[ADR 0028](adr/0028-pad-combo-captures-screen.md)）：
 判定在私有格式层完成（`firmware/main/dp/dp_ui.c`），家族表只需要把 L1/R1/L3/R3 映射到 `PAD_BTN_L1/R1/L3/R3`，既有与将来的布局都自动可用。

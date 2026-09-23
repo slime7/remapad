@@ -290,7 +290,7 @@ pad_family_t pad_layout_family_from_ids(uint16_t vid, uint16_t pid);
 const pad_layout_t *pad_layout_find_by_ids(uint16_t vid, uint16_t pid, pad_conn_t conn,
                                            pad_family_t *family);
 
-/** 未识别型号的兜底布局：按 Xbox 有线解析，能力位由调用方标记。 */
+/** 未识别型号的兜底布局：按 XInput 形态（Xbox 360 报文）解析，能力位由调用方标记。 */
 const pad_layout_t *pad_layout_fallback(void);
 
 #ifdef __cplusplus

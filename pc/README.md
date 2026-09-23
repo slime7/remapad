@@ -353,8 +353,9 @@ uv run python -m unittest discover -s tests -t . -v
   主机经 `0x002C` 下发的耳机音频流只做日志留痕：传输协议公开资料有限，无法落实转发。
 - 转发的是原始报告，PC 侧不改写报告内容：按键含义由设备按输入设备的家族布局解释。
 - 拔线或退出程序时发送 `DETACH` 帧，设备侧状态回到静置，不会留下卡住的按键。
-- 反馈写回依赖固件里的输出报告描述（DS4 / DualSense / Xbox / DS3 / NS1 各一行）：描述与核对状态见
-  [../docs/controller-ps.md](../docs/controller-ps.md)；写回没效果时先看该系列布局行的 `out` 描述。
+- 反馈写回依赖固件里的输出报告描述（DS4 / DualSense / Xbox 蓝牙 / XInput / DS3 / NS1 各一行）：
+  描述与核对状态见 [../docs/controller-ps.md](../docs/controller-ps.md) 与其余 `docs/controller-*.md`；
+  写回没效果时先看该系列布局行的 `out` 描述。
 - 手柄同时按住 L1+R1+L3+R3（约 300 ms）会被设备捕获成屏幕操控模式：设备先补一帧全松开、其后续发中性帧（玩家的按键不再上行），之后方向键移动屏幕焦点、圆圈键等价于点按屏幕。
   再按一次同样的组合退出（[ADR 0028](../docs/adr/0028-pad-combo-captures-screen.md)）。桥接程序不感知这个状态，转发照旧；
   不想要这个行为就别按这个组合，串口 `ui on` / `ui off` 可以直接置位验证。
