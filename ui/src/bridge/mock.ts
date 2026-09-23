@@ -339,15 +339,6 @@ export function mockHandleCmd(cmd: DeviceCmd, reply: (msg: DeviceMsg) => void): 
       reply({ t: 'debugKeySet', id, key: cmd.key });
       break;
 
-    case 'calibrateSensors':
-      reply({
-        t: 'error',
-        id,
-        code: 'NOT_IMPLEMENTED',
-        message: 'Sensors are not wired yet',
-      });
-      break;
-
     case 'powerOff':
       reply({ t: 'powerOffAck', id });
       // 浏览器里没有电源通路，按设备插着 USB 时的行为回报：锁存被旁路，

@@ -101,7 +101,6 @@ export type DeviceCmd =
   | { t: 'unpair'; id: number }
   | { t: 'triggerRumble'; id: number; frequencyHz: number; amplitude: number; durationMs: number }
   | { t: 'debugKey'; id: number; key: DebugKey }
-  | { t: 'calibrateSensors'; id: number }
   | { t: 'powerOff'; id: number }
   | { t: 'reboot'; id: number };
 

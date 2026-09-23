@@ -25,7 +25,6 @@ Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控�
 - [x] HD 震动同步
 - [ ] 麦克风与扬声器传输（公开资料有限，暂无法落实）
 - [ ] 刷 amiibo（读卡收尾公开资料有限，暂无法落实）
-- [ ] 按键自定义映射
 
 ## 硬件规格
 
@@ -143,4 +142,4 @@ uv run python remapadgui.py
 - [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置
 - [目标硬件技术参考 (docs/hardware.md)](docs/hardware.md)：芯片引脚、外设与电气特性
 - [测试策略与回归规则 (docs/TESTING.md)](docs/TESTING.md)：自动化测试与用例规范
-- [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：历史架构决策与选型取舍
+- [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：历史架构决策与选型取舍，不得修改历史记录文件

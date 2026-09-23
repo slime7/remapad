@@ -375,12 +375,12 @@ flowchart LR
 
 | 分区 | 类型 | 偏移 | 大小 | 用途 |
 | :--- | :--- | :--- | :--- | :--- |
-| `nvs` | data/nvs | `0x9000` | 24 KB | 设置项（亮度、连发/改建、手柄颜色）、BLE 配对密钥 |
+| `nvs` | data/nvs | `0x9000` | 24 KB | 设置项、BLE 配对密钥 |
 | `phy_init` | data/phy | `0xf000` | 4 KB | 射频校准 |
 | `ota_0` | app/ota_0 | `0x10000` | 4 MB | 主应用分区，固件及内置 `.pocket`（继承原 factory 偏移） |
 | `ota_1` | app/ota_1 | `0x410000` | 4 MB | OTA 目标分区：`pc/remapadctl.py --upgrade` 推送的镜像先写这里，校验通过后切为启动分区 |
 | `otadata` | data/ota | `0x810000` | 8 KB | OTA 启动选择数据 |
-| `storage` | data/spiffs | `0x812000` | 约 7.9 MB | 通用数据存储区（首个用途：用户上传的 amiibo/NTAG215），将来挂 littlefs |
+| `storage` | data/spiffs | `0x812000` | 约 7.9 MB | 通用数据存储区，将来挂 littlefs |
 
 包是固件的一部分，不再通过 SPIFFS 运行时加载。若后续包或固件超过 4 MB，应先重新评估分区布局，再修改 `partitions.csv`。布局受 ADR 0009 约束：
 新增分区只允许在尾部追加，禁止移动 `nvs`/`phy_init` 偏移，以免升级固件时擦除用户 NVS 数据与配对凭证。
