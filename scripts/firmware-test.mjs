@@ -23,6 +23,7 @@ const FIRMWARE_SOURCES = [
   'firmware/main/pad/pad_state.c',
   'firmware/main/pad/layout.c',
   'firmware/main/pad/layouts/xbox.c',
+  'firmware/main/pad/layouts/xinput.c',
   'firmware/main/pad/layouts/ds3.c',
   'firmware/main/pad/layouts/ds4.c',
   'firmware/main/pad/layouts/ds5.c',

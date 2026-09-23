@@ -40,6 +40,12 @@ static uint16_t norm_i16(int16_t value)
     return (uint16_t)((int32_t)PAD_AXIS_CENTER + scaled);
 }
 
+/** 无符号 16 位摇杆（中心 0x8000）：整体量程线性压到 0-4095。 */
+static uint16_t norm_u16(uint16_t value)
+{
+    return (uint16_t)(((uint32_t)value * PAD_AXIS_MAX + 32767u) / 65535u);
+}
+
 /** 12 位紧凑打包（NS2 的摇杆形态）解出 X 与 Y，量程本身就是 0-4095。 */
 static uint16_t unpack_u12_x(const uint8_t *packed)
 {
@@ -75,9 +81,17 @@ static uint16_t apply_stick_deadzone(uint16_t value)
     return (uint16_t)(center + delta);
 }
 
-/** 方向键帽子开关（0 上、顺时针，8 及以上为松开）展开成四个方向位。 */
-static uint32_t hat_buttons(uint8_t hat)
+/** 方向键帽子开关展开成四个方向位；编号方式（pad_hat_style_t）由布局行给出。 */
+static uint32_t hat_buttons(uint8_t raw, uint8_t style)
 {
+    uint8_t hat = raw & 0x0Fu;
+    if (style == PAD_HAT_1UP) {
+        /* Xbox 蓝牙报告的帽子字节：1 为上，0 为松开。 */
+        if (hat == 0) {
+            return 0;
+        }
+        hat = (uint8_t)(hat - 1u);
+    }
     switch (hat & 0x0Fu) {
     case 0:
         return PAD_BTN_DPAD_UP;
@@ -113,7 +127,8 @@ pad_family_t pad_family_from_ids(uint16_t vid, uint16_t pid)
     case 0x057E:
         return PAD_FAMILY_NS; /* Nintendo：真手柄与伪装成 NS 布局的第三方手柄 */
     default:
-        return PAD_FAMILY_UNKNOWN;
+        /* 厂商 VID 分不开布局的第三方手柄（XInput 形态）按型号表判定。 */
+        return pad_layout_family_from_ids(vid, pid);
     }
 }
 
@@ -148,7 +163,22 @@ static void parse_buttons(const pad_report_t *report, const pad_layout_t *layout
         }
     }
     if (range_ok(report, layout->hat_off, 1)) {
-        buttons |= hat_buttons(report->data[layout->hat_off]);
+        buttons |= hat_buttons(report->data[layout->hat_off], layout->hat_style);
+    }
+    /* 背键（精英手柄的 P1-P4）：手柄内部配置档接管了背键时（判定字节非零）
+     * 位域里是配置档映射的结果，不再当作背键采信。 */
+    if (layout->back_off != PAD_OFF_NONE && layout->back_off != 0 &&
+        layout->back_map != NULL &&
+        range_ok(report, layout->back_off, 1) &&
+        !(layout->back_mode_off != PAD_OFF_NONE &&
+          range_ok(report, layout->back_mode_off, 1) &&
+          report->data[layout->back_mode_off] != 0)) {
+        const uint8_t bits = report->data[layout->back_off];
+        for (uint8_t bit = 0; bit < 8u; bit++) {
+            if (((bits >> bit) & 0x01u) != 0) {
+                buttons |= layout->back_map[bit];
+            }
+        }
     }
     state->buttons = buttons;
 }
@@ -177,6 +207,11 @@ static void parse_axes(const pad_report_t *report, const pad_layout_t *layout,
                 if (range_ok(report, off, 2)) {
                     raw[axis] = norm_i16(read_i16(report, off));
                 }
+            } else if (layout->stick_style == PAD_STICK_U16) {
+                if (range_ok(report, off, 2)) {
+                    raw[axis] = norm_u16((uint16_t)((uint16_t)report->data[off] |
+                                                     ((uint16_t)report->data[off + 1] << 8)));
+                }
             } else if (range_ok(report, off, 1)) {
                 raw[axis] = norm_u8(report->data[off]);
             }
@@ -191,8 +226,31 @@ static void parse_axes(const pad_report_t *report, const pad_layout_t *layout,
         state->axis[axis] = apply_stick_deadzone(value);
     }
     for (size_t i = 0; i < PAD_TRIGGER_COUNT; i++) {
-        if (range_ok(report, layout->trigger_off[i], 1)) {
-            state->trigger[i] = norm_u8(report->data[layout->trigger_off[i]]);
+        const uint8_t off = layout->trigger_off[i];
+        if (layout->trigger_style == PAD_TRIGGER_U10) {
+            /* Xbox 蓝牙报告：16 位小端承载 0-1023 的 10 位值。 */
+            if (range_ok(report, off, 2)) {
+                uint32_t value = (uint32_t)((uint16_t)report->data[off] |
+                                            ((uint16_t)report->data[off + 1] << 8));
+                if (value > 1023u) {
+                    value = 1023u;
+                }
+                state->trigger[i] = (uint16_t)((value * PAD_AXIS_MAX + 511u) / 1023u);
+            }
+        } else if (range_ok(report, off, 1)) {
+            state->trigger[i] = norm_u8(report->data[off]);
+        }
+    }
+    /* 数字扳机（NS 的 ZL / ZR）：只有位，命中即按满量程填，目标侧按 50% 阈值
+     *  数字化后仍是按下。偏移 0 是报告 ID 字节，与 PAD_OFF_NONE 一样按没有这一路处理。 */
+    for (size_t i = 0; i < PAD_TRIGGER_COUNT; i++) {
+        const uint8_t off = layout->trigger_btn_off[i];
+        const uint8_t bit = layout->trigger_btn_bit[i];
+        if (off == PAD_OFF_NONE || off == 0 || bit >= 8u || !range_ok(report, off, 1)) {
+            continue;
+        }
+        if (((report->data[off] >> bit) & 0x01u) != 0) {
+            state->trigger[i] = PAD_AXIS_MAX;
         }
     }
 }
@@ -228,12 +286,15 @@ static void parse_motion(const pad_report_t *report, const pad_layout_t *layout,
     }
     /* 一次带多份样本的型号（NS1 三份）取最后一份，它是最新的采样。 */
     const uint8_t base = (uint8_t)(layout->motion_off + (uint8_t)(samples - 1) * stride);
-    int16_t gyro[3];
-    int16_t accel[3];
+    /* 样本内的字段顺序：默认陀螺在前、加速在后，Switch 一代的 6 轴样本反过来。 */
+    int16_t head[3];
+    int16_t tail[3];
     for (size_t i = 0; i < 3; i++) {
-        gyro[i] = read_i16(report, (uint8_t)(base + i * 2u));
-        accel[i] = read_i16(report, (uint8_t)(base + 6u + i * 2u));
+        head[i] = read_i16(report, (uint8_t)(base + i * 2u));
+        tail[i] = read_i16(report, (uint8_t)(base + 6u + i * 2u));
     }
+    const int16_t *gyro = layout->motion.accel_first ? tail : head;
+    const int16_t *accel = layout->motion.accel_first ? head : tail;
     /* invert_mask 的 bit0-2 对应陀螺 X/Y/Z，bit3-5 对应加速 X/Y/Z。 */
     map_axis(state->motion.gyro, gyro, layout->motion.gyro_src,
              (uint8_t)(layout->motion.invert_mask & 0x07u));
@@ -301,6 +362,13 @@ static void parse_battery(const pad_report_t *report, const pad_layout_t *layout
         const uint8_t level = (uint8_t)((raw >> 2) & 0x0Fu);
         state->battery_percent = level >= 9u ? 100u : (uint8_t)(level * 100u / 9u);
         state->charging = (raw & 0x02u) != 0;
+        return;
+    }
+    if (layout->battery_style == PAD_BATTERY_NS1) {
+        /* Switch 一代：高四位是档位（8 即满、9 是满电后的缓升档）、bit0 充电中。 */
+        const uint8_t level = (uint8_t)((raw >> 4) & 0x0Fu);
+        state->battery_percent = level >= 8u ? 100u : (uint8_t)(level * 100u / 8u);
+        state->charging = (raw & 0x01u) != 0;
         return;
     }
     /* PS 报告的电量字节：低四位是 0-10 档，bit4 表示充电中。 */

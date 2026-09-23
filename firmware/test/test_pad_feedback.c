@@ -922,22 +922,140 @@ static void haptic_stop_sample_silences_motors(void)
     CHECK_EQ(out[5], 0x00);
 }
 
-static void ns1_rumble_uses_band_template(void)
+/**
+ * NS1 的震动直接吃主机的 LRA 波形：每侧 4 字节里高频与低频各有自己的频率码与
+ * 振幅码（频率码 = log2(f/10)×32，振幅码 100 是公开资料的安全档上限）。
+ * 左摇杆侧给满幅 160Hz 低频与 320Hz 高频：高频字段 = (0xA0-0x60)×4 = 0x0100、
+ * 振幅码 100 → 高频振幅 0xC8；低频字段 = 0x80-0x40 = 0x40、振幅码 100 → 0x40+50。
+ */
+static void ns1_rumble_encodes_host_waveform(void)
 {
     pad_feedback_t feedback = feedback_default();
     feedback.rumble_on[PAD_TRIGGER_L2] = true;
-    feedback.rumble_strength[PAD_TRIGGER_L2] = 255;
+    feedback.rumble_key_count[PAD_TRIGGER_L2] = 1;
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].lf_freq = 160;
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].lf_amp = 1023;
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].hf_freq = 320;
+    feedback.rumble_keys[PAD_TRIGGER_L2][0].hf_amp = 1020;
 
     uint8_t out[PAD_OUTPUT_MAX];
     const size_t len = pad_feedback_encode(PAD_CONN_USB, 0x057E, 0x2009, &feedback, out,
                                            sizeof(out));
     CHECK_EQ(len, 9);
     CHECK_EQ(out[0], 0x10); /* 报告 ID */
-    CHECK_EQ(out[1], 0x00); /* 低频段固定头 */
+    CHECK_EQ(out[1], 0x00); /* 左侧：高频频率低位 */
+    CHECK_EQ(out[2], 0xC9); /* 高频频率高位 0x01 + 高频振幅 0xC8 */
+    CHECK_EQ(out[3], 0x40); /* 低频频率 0x80-0x40 */
+    CHECK_EQ(out[4], 0x72); /* 低频振幅 0x40 + 50（安全档上限） */
+    CHECK_EQ(out[5], 0x00); /* 右侧没震：整块是静置形态 */
+    CHECK_EQ(out[6], 0x01);
+    CHECK_EQ(out[7], 0x40);
+    CHECK_EQ(out[8], 0x40);
+}
+
+/** 频率是主机随波形下发的：换一段频率，四个字节里的频率字段跟着换。 */
+static void ns1_rumble_follows_host_frequency(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_R2] = true;
+    feedback.rumble_key_count[PAD_TRIGGER_R2] = 3;
+    /* 三个时序子帧：取每带最强的那一帧（这里第三帧最强）。 */
+    feedback.rumble_keys[PAD_TRIGGER_R2][0].lf_freq = 80;
+    feedback.rumble_keys[PAD_TRIGGER_R2][0].lf_amp = 100;
+    feedback.rumble_keys[PAD_TRIGGER_R2][2].lf_freq = 320;
+    feedback.rumble_keys[PAD_TRIGGER_R2][2].lf_amp = 900;
+    feedback.rumble_keys[PAD_TRIGGER_R2][2].hf_freq = 1252;
+    feedback.rumble_keys[PAD_TRIGGER_R2][2].hf_amp = 1020;
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x057E, 0x2009, &feedback, out, sizeof(out)),
+             9);
+    /* 右块从第 5 字节起：高频 1252Hz → 码 0xDE、字段 0x01F8；低频 320Hz → 码 0xA0、字段 0x60。
+     * 振幅码跟着归一振幅走：高频满幅 100 → 0xC8，低频 900/1023 → 94 → 0x40+47。 */
+    CHECK_EQ(out[5], 0xF8);
+    CHECK_EQ(out[6], 0x01 + 0xC8);
+    CHECK_EQ(out[7], 0x60);
+    CHECK_EQ(out[8], 0x6F);
+    /* 左块没震，仍是静置形态。 */
+    CHECK_EQ(out[1], 0x00);
     CHECK_EQ(out[2], 0x01);
-    CHECK_EQ(out[3], 0x40); /* 高频段满量程 */
-    CHECK_EQ(out[4], 0x40); /* 左马达振幅：按 0x40 满量程缩放 */
-    CHECK_EQ(out[8], 0x00); /* 右马达未震 */
+    CHECK_EQ(out[3], 0x40);
+    CHECK_EQ(out[4], 0x40);
+}
+
+/**
+ * 协议没给频率时按该带缺省频率补足（低频 160Hz、高频 320Hz），只有强度的事件
+ * （采样强震段折进马达、CLI 注入）照样能驱动：振幅从两带强度换算。
+ */
+static void ns1_rumble_fills_missing_frequency(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 255;
+    feedback.rumble_hf_strength[PAD_TRIGGER_L2] = 128;
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x057E, 0x2009, &feedback, out, sizeof(out)),
+             9);
+    /* 频率用缺省：高频 320Hz（字段 0x0100）、低频 160Hz（字段 0x40）。 */
+    CHECK_EQ(out[1], 0x00);
+    CHECK_EQ(out[2], 0x01 + 0x88); /* 高频振幅码 68 → 0x88 */
+    CHECK_EQ(out[3], 0x40);
+    CHECK_EQ(out[4], 0x72);        /* 低频振幅码 100 */
+
+    /* 没有震动时整份报告是静置形态，手柄不会停在上一段震动上。 */
+    pad_feedback_t idle = feedback_default();
+    CHECK_EQ(pad_feedback_encode(PAD_CONN_USB, 0x057E, 0x2009, &idle, out, sizeof(out)), 9);
+    const uint8_t neutral[8] = {0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40};
+    CHECK_BYTES(out + 1, neutral, 8);
+}
+
+/** XInput 形态的写回报文不带 Report ID：8 字节里的首字节就是报文自己的类型字节，
+ *  字段偏移从首字节起算（左大马达跟低频、右小马达跟高频）。 */
+static void xinput_writeback_has_no_report_id(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 255;
+    feedback.rumble_on[PAD_TRIGGER_R2] = true;
+    feedback.rumble_hf_strength[PAD_TRIGGER_R2] = 128;
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    const size_t len = pad_feedback_encode(PAD_CONN_USB, 0x046D, 0xC21F, &feedback, out,
+                                           sizeof(out));
+    CHECK_EQ(len, 8);
+    CHECK_EQ(out[0], 0x00); /* 报文类型字节 */
+    CHECK_EQ(out[1], 0x08);
+    CHECK_EQ(out[2], 0x00);
+    CHECK_EQ(out[3], 0xFF); /* 左大马达 */
+    CHECK_EQ(out[4], 0x80); /* 右小马达 */
+    CHECK_EQ(out[5], 0x00);
+    CHECK_EQ(out[6], 0x00);
+    CHECK_EQ(out[7], 0x00);
+}
+
+/** Xbox 蓝牙的写回报告 0x03：使能掩码 + 两路扳机马达 + 两路主马达 + 时长／延迟／循环数。 */
+static void xbox_bt_writeback_uses_report_03(void)
+{
+    pad_feedback_t feedback = feedback_default();
+    feedback.rumble_on[PAD_TRIGGER_L2] = true;
+    feedback.rumble_strength[PAD_TRIGGER_L2] = 255;
+    feedback.rumble_on[PAD_TRIGGER_R2] = true;
+    feedback.rumble_hf_strength[PAD_TRIGGER_R2] = 128;
+
+    uint8_t out[PAD_OUTPUT_MAX];
+    const size_t len = pad_feedback_encode(PAD_CONN_BT, 0x045E, 0x0B13, &feedback, out,
+                                           sizeof(out));
+    CHECK_EQ(len, 9);
+    CHECK_EQ(out[0], 0x03);
+    CHECK_EQ(out[1], 0x0F);
+    CHECK_EQ(out[2], 0x00); /* 扳机马达不驱动 */
+    CHECK_EQ(out[3], 0x00);
+    CHECK_EQ(out[4], 0xFF); /* 低频 → 左主马达 */
+    CHECK_EQ(out[5], 0x80); /* 高频 → 右主马达 */
+    CHECK_EQ(out[6], 0xFF);
+    CHECK_EQ(out[7], 0x00);
+    CHECK_EQ(out[8], 0x01);
 }
 
 static void unknown_device_has_no_feedback_channel(void)
@@ -1148,7 +1266,13 @@ HOST_TEST_SUITE(suite_pad_feedback, "pad_feedback",
                 {"主机震动振幅按感知曲线重映射", host_rumble_amp_is_remapped_perceptually},
                 {"采样提示音不驱动马达（蜂鸣器与丢弃负责发声）",
                  haptic_sample_never_drives_motors},
-                {"NS1 的震动按固定头加振幅写入", ns1_rumble_uses_band_template},
+                {"NS1 的震动按主机波形写入（每侧两带各有频率与振幅）",
+                 ns1_rumble_encodes_host_waveform},
+                {"NS1 的震动跟着主机下发的频带走", ns1_rumble_follows_host_frequency},
+                {"NS1 的震动在协议没给频率时按缺省频率补足",
+                 ns1_rumble_fills_missing_frequency},
+                {"XInput 的写回报文不带 Report ID", xinput_writeback_has_no_report_id},
+                {"Xbox 蓝牙的写回走报告 0x03", xbox_bt_writeback_uses_report_03},
                 {"未识别设备没有反馈通道", unknown_device_has_no_feedback_channel},
                 {"等价反馈帧按写回语义判定（原始参数包不算变化）",
                  equal_frames_follow_writeback_semantics},

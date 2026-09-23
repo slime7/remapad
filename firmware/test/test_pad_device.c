@@ -9,77 +9,185 @@
 #include "pad_device.h"
 #include "pad_state.h"
 
-static pad_report_t xbox_report(void)
+/** Xbox 蓝牙报告 0x01：四轴 16 位无符号（中心 0x8000）、扳机 10 位、帽子 1 起算。 */
+static pad_report_t xbox_bt_report(uint16_t pid, uint8_t len)
 {
     pad_report_t report;
     memset(&report, 0, sizeof(report));
     report.family = PAD_FAMILY_XBOX;
-    report.conn = PAD_CONN_USB;
+    report.conn = PAD_CONN_BT;
     report.vid = 0x045E;
-    report.pid = 0x028E;
-    report.report_id = 0x00;
-    report.len = 20;
-    report.data[1] = 0x00;
-    report.data[2] = 0x00;
-    /* 摇杆中位：有符号 16 位全 0。 */
+    report.pid = pid;
+    report.report_id = 0x01;
+    report.len = len;
+    report.data[0] = 0x01;
+    /* 四轴中位：无符号 16 位中心 0x8000。 */
+    for (size_t i = 0; i < 4; i++) {
+        report.data[2 + i * 2] = 0x80;
+    }
     return report;
 }
 
-static void xbox_face_buttons_map_by_position(void)
+/** XInput 形态报告（Xbox 360 报文）：首两字节 00 14、按键两字节、四轴 16 位小端。 */
+static pad_report_t xinput_report(uint16_t vid, uint16_t pid)
 {
-    pad_report_t report = xbox_report();
-    /* 物理 A 在下（byte1 bit4）、物理 B 在右（byte1 bit5）。 */
-    report.data[2] = 0x10;
+    pad_report_t report;
+    memset(&report, 0, sizeof(report));
+    report.family = PAD_FAMILY_UNKNOWN;
+    report.conn = PAD_CONN_USB;
+    report.vid = vid;
+    report.pid = pid;
+    report.report_id = 0x00;
+    report.len = 20;
+    report.data[1] = 0x14;
+    return report;
+}
+
+static void xbox_bt_face_buttons_map_by_position(void)
+{
+    pad_report_t report = xbox_bt_report(0x0B13, 17);
+    /* 物理 A 在下（第一字节 bit0）、物理 B 在右（bit1）。 */
+    report.data[14] = 0x01;
     pad_state_t state;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.family, PAD_FAMILY_XBOX);
     CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CROSS);
     CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
 
-    report.data[2] = 0x20;
+    report.data[14] = 0x02;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CIRCLE);
 
     /* 物理 X 在左 → □ 位、物理 Y 在上 → △ 位。 */
-    report.data[2] = 0x40;
+    report.data[14] = 0x08;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_SQUARE);
-    report.data[2] = 0x80;
+    report.data[14] = 0x10;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_TRIANGLE);
-}
 
-static void xbox_dpad_shoulders_and_sticks(void)
-{
-    pad_report_t report = xbox_report();
-    report.data[1] = 0x03; /* 方向键上 + 下 */
-    report.data[2] = 0x03; /* LB + RB */
-    /* 左摇杆推满右：+32767；右摇杆推满下：-32768（XInput 的 Y 轴正为上）。 */
-    report.data[5] = 0xFF;
-    report.data[6] = 0x7F;
-    report.data[11] = 0x00;
-    report.data[12] = 0x80;
-    pad_state_t state;
+    /* 第二字节是功能键、第三字节 bit0 是分享键。 */
+    report.data[14] = 0x00;
+    report.data[15] = 0x1C; /* 西瓜键 + Menu + View */
+    report.data[16] = 0x01;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.buttons,
-             (uint32_t)(PAD_BTN_DPAD_UP | PAD_BTN_DPAD_DOWN | PAD_BTN_L1 | PAD_BTN_R1));
-    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_MAX);
-    CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_MIN);
-    CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_CENTER);
+             (uint32_t)(PAD_BTN_HOME | PAD_BTN_OPT | PAD_BTN_TOUCHPAD | PAD_BTN_SHARE));
+}
 
-    /* 左摇杆推满上：正满量程。 */
-    report.data[7] = 0xFF;
-    report.data[8] = 0x7F;
+static void xbox_bt_hat_triggers_and_sticks(void)
+{
+    pad_report_t report = xbox_bt_report(0x0B13, 17);
+    pad_state_t state;
+    /* 帽子是 1 起算的编号：1 向上、5 向下、0 松开。 */
+    report.data[13] = 1;
     pad_state_from_report(&report, &state);
-    CHECK_EQ(state.axis[PAD_AXIS_LY], PAD_AXIS_MAX);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_DPAD_UP);
+    report.data[13] = 5;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_DPAD_DOWN);
+    report.data[13] = 0;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.buttons, 0u);
 
-    /* 扳机保持模拟量：LT 全按、RT 半按。 */
-    report.data[3] = 0xFF;
-    report.data[4] = 0x80;
+    /* 左摇杆推满左、右摇杆推满下（设备 Y 轴向下为正 → 私有格式向上为负）。 */
+    report.data[1] = 0x00;
+    report.data[2] = 0x00;
+    report.data[7] = 0xFF;
+    report.data[8] = 0xFF;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_MIN);
+    CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_MIN);
+    CHECK_EQ(state.axis[PAD_AXIS_RX], PAD_AXIS_CENTER);
+
+    /* 扳机是 10 位值：LT 全按、RT 半按。 */
+    report.data[9] = 0xFF;
+    report.data[10] = 0x03;
+    report.data[11] = 0x00;
+    report.data[12] = 0x02;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
     CHECK(state.trigger[PAD_TRIGGER_R2] > 2000);
     CHECK(state.trigger[PAD_TRIGGER_R2] < 2100);
+}
+
+static void xbox_elite_paddles_follow_report_length(void)
+{
+    /* 精英手柄 2 的三份蓝牙报文：背键位与配置档判定字节的位置各不相同。 */
+    const struct {
+        uint8_t len;
+        uint8_t back_off;
+        uint8_t mode_off;
+    } forms[] = {{55, 33, 35}, {39, 17, 19}, {20, 19, 17}};
+    for (size_t i = 0; i < sizeof(forms) / sizeof(forms[0]); i++) {
+        pad_report_t report = xbox_bt_report(0x0B22, forms[i].len);
+        report.data[forms[i].back_off] = 0x05; /* P1 与 P3 */
+        pad_state_t state;
+        pad_state_from_report(&report, &state);
+        CHECK_EQ(state.caps & PAD_CAP_BACK_BUTTONS, PAD_CAP_BACK_BUTTONS);
+        CHECK_EQ(state.buttons, (uint32_t)(PAD_BTN_L4 | PAD_BTN_L5));
+
+        /* 手柄内部配置档接管了背键：位域不再当作背键。 */
+        report.data[forms[i].mode_off] = 0x01;
+        pad_state_from_report(&report, &state);
+        CHECK_EQ(state.buttons, 0u);
+    }
+
+    /* 非精英型号即使报文长度相同也不带背键能力位。 */
+    pad_report_t report = xbox_bt_report(0x0B13, 20);
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.caps & PAD_CAP_BACK_BUTTONS, 0);
+    CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
+}
+
+static void xbox_one_s_short_report_picks_its_row(void)
+{
+    /* 4.x 固件的 16 字节报文只有两个按键字节，没有分享键那一字节。 */
+    pad_report_t report = xbox_bt_report(0x02E0, 16);
+    report.data[14] = 0x01;
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
+    CHECK_EQ(state.buttons, (uint32_t)PAD_BTN_CROSS);
+}
+
+static void xinput_report_maps_buttons_sticks_and_triggers(void)
+{
+    /* 第三方 XInput 手柄：VID 不是 Microsoft，家族靠型号表判定。 */
+    pad_report_t report = xinput_report(0x046D, 0xC21F);
+    report.data[2] = 0x03; /* 方向键上 + 下 */
+    report.data[3] = 0x03; /* LB + RB */
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.family, PAD_FAMILY_XBOX);
+    CHECK_EQ(state.caps & PAD_CAP_FALLBACK_LAYOUT, 0);
+    CHECK_EQ(state.buttons,
+             (uint32_t)(PAD_BTN_DPAD_UP | PAD_BTN_DPAD_DOWN | PAD_BTN_L1 | PAD_BTN_R1));
+
+    /* 左摇杆推满右、右摇杆推满下（设备 Y 轴向下为正）。 */
+    report.data[6] = 0xFF;
+    report.data[7] = 0x7F;
+    report.data[12] = 0xFF; /* 设备 Y 轴向下为正：正满量程才是推满下 */
+    report.data[13] = 0x7F;
+    /* 扳机是单字节：LT 全按、RT 半按。 */
+    report.data[4] = 0xFF;
+    report.data[5] = 0x80;
+    pad_state_from_report(&report, &state);
+    CHECK_EQ(state.axis[PAD_AXIS_LX], PAD_AXIS_MAX);
+    CHECK_EQ(state.axis[PAD_AXIS_RY], PAD_AXIS_MIN);
+    CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
+    CHECK(state.trigger[PAD_TRIGGER_R2] > 2000);
+    CHECK(state.trigger[PAD_TRIGGER_R2] < 2100);
+}
+
+static void xinput_pads_resolve_family_by_model_table(void)
+{
+    /* 型号表里登记过的第三方手柄：厂商 VID 也能定成 Xbox 家族。 */
+    CHECK_EQ(pad_family_from_ids(0x046D, 0xC21F), PAD_FAMILY_XBOX);
+    CHECK_EQ(pad_family_from_ids(0x2DC8, 0x3106), PAD_FAMILY_XBOX);
+    /* 同厂商未登记的型号仍按未识别处理：切到别的模式时布局与报文都不同。 */
+    CHECK_EQ(pad_family_from_ids(0x046D, 0xC216), PAD_FAMILY_UNKNOWN);
 }
 
 static void ps_report_parses_hat_face_buttons_and_battery(void)
@@ -174,11 +282,8 @@ static void stick_deadzone_and_y_direction(void)
 
 static void unknown_model_falls_back_to_xbox_layout(void)
 {
-    pad_report_t report = xbox_report();
-    report.family = PAD_FAMILY_UNKNOWN;
-    report.vid = 0x1234;
-    report.pid = 0x5678;
-    report.data[2] = 0x10;
+    pad_report_t report = xinput_report(0x1234, 0x5678);
+    report.data[3] = 0x10; /* 兜底是 XInput 形态：物理 A 在第二字节 bit4 */
     pad_state_t state;
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.family, PAD_FAMILY_UNKNOWN);
@@ -787,9 +892,18 @@ static void ps_touch_halves_split_by_position(void)
 }
 
 HOST_TEST_SUITE(suite_pad_device, "pad_device",
-                {"Xbox 面键按位置映射（物理 A 下 → ✕、物理 B 右 → ○）",
-                 xbox_face_buttons_map_by_position},
-                {"Xbox 方向键、肩键与摇杆量程", xbox_dpad_shoulders_and_sticks},
+                {"Xbox 蓝牙面键按位置映射（物理 A 下 → ✕、物理 B 右 → ○）",
+                 xbox_bt_face_buttons_map_by_position},
+                {"Xbox 蓝牙帽子字节、10 位扳机与 16 位摇杆量程",
+                 xbox_bt_hat_triggers_and_sticks},
+                {"精英手柄 2 背键按报文长度取位（P1-P4 → L4/R4/L5/R5），配置档接手时不采信",
+                 xbox_elite_paddles_follow_report_length},
+                {"老版 Xbox One S 的 16 字节报文命中自己那一行",
+                 xbox_one_s_short_report_picks_its_row},
+                {"XInput 形态报文解析按键、摇杆与扳机（第三方厂商 VID）",
+                 xinput_report_maps_buttons_sticks_and_triggers},
+                {"XInput 手柄按型号表定家族，未登记的型号仍按未识别",
+                 xinput_pads_resolve_family_by_model_table},
                 {"PS 报告：帽子开关、面键、电量、触摸板与静音键",
                  ps_report_parses_hat_face_buttons_and_battery},
                 {"摇杆死区与 Y 轴方向", stick_deadzone_and_y_direction},

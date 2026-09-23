@@ -19,12 +19,29 @@ typedef enum {
     PAD_STICK_U8 = 0, /**< 单字节，中心 0x80（PS、Steam 原生报告）。 */
     PAD_STICK_I16,    /**< 有符号 16 位小端，中心 0（Xbox）。 */
     PAD_STICK_U12,    /**< 12 位紧凑打包三字节（NS2 的 0x05 / 0x09 报文体）。 */
+    PAD_STICK_U16,    /**< 无符号 16 位小端，中心 0x8000（Xbox 蓝牙、NS1 的 0x3F 报文）。 */
 } pad_stick_style_t;
+
+/** 扳机字段的宽度与刻度。 */
+typedef enum {
+    PAD_TRIGGER_U8 = 0, /**< 单字节 0-255（PS、XInput 与 NS1）。 */
+    PAD_TRIGGER_U10,    /**< 16 位小端承载的 10 位值 0-1023（Xbox 蓝牙报告）。 */
+} pad_trigger_style_t;
+
+/** 方向键帽子开关的编号方式。 */
+typedef enum {
+    /** 0 为上、顺时针，8 及以上为松开（HID 常见形态，PS 系用这个）。 */
+    PAD_HAT_0UP = 0,
+    /** 1 为上、顺时针，0 为松开（Xbox 蓝牙报告的帽子字节）。 */
+    PAD_HAT_1UP,
+} pad_hat_style_t;
 
 /** 电量字节风格。 */
 typedef enum {
     PAD_BATTERY_PS = 0, /**< 低四位是 0-10 档、bit4 表示充电中（DS3 / DS4 / DualSense）。 */
     PAD_BATTERY_NS2,    /**< bit0 外部供电、bit1 充电中、bits2-5 电量等级 0-9。 */
+    /** Switch 一代：高四位 0-9 档（8 即满、9 是满电后的缓升档）、bit0 充电中。 */
+    PAD_BATTERY_NS1,
 } pad_battery_style_t;
 
 /** 耳机（3.5mm）状态字节的解读方式；零值表示该行没有这个字段。 */
@@ -53,6 +70,15 @@ typedef enum {
     /** PS 蓝牙形态：末 4 字节是 CRC32（种子字节 0xA2，小端），缺它时手柄不执行报告。 */
     PAD_OUT_FRAME_PS_BT,
 } pad_out_frame_t;
+
+/** 震动编码方式。 */
+typedef enum {
+    /** 每颗马达一个强度字节，按 rumble_max 缩放（PS、Xbox、XInput 都走这条）。 */
+    PAD_RUMBLE_SCALAR = 0,
+    /** Switch 一代：每侧 4 字节，高频与低频各带频率与振幅，直接吃主机的
+     *  LRA 波形（频率与振幅各自编码，见 docs/controller-ns1.md）。 */
+    PAD_RUMBLE_NS1_WAVE,
+} pad_rumble_style_t;
 
 /**
  * HD 触觉波形映射规则（布局行声明，映射在布局内完成）：NS 的震动是波形描述
@@ -104,6 +130,8 @@ typedef struct {
 typedef struct {
     uint8_t samples; /**< 一次报告里的样本数；0 按 1 处理。 */
     uint8_t stride;  /**< 相邻样本的字节步长；0 按 12 处理。 */
+    /** 样本前 6 字节是加速度（Switch 一代的 6 轴样本：加速在前、陀螺在后）。 */
+    bool accel_first;
     uint8_t gyro_src[3];
     uint8_t accel_src[3];
     uint8_t invert_mask;
@@ -120,6 +148,9 @@ typedef struct {
 typedef struct {
     uint8_t report_id;
     uint8_t len; /**< 输出报告总长度（含 Report ID 字节）。 */
+    /** 报告不带 Report ID 字节（XInput / Xbox 360 形态）：len 只数报文体，
+     *  字段偏移从报文体首字节起算，编码结果原样写 OUT 端点。 */
+    bool no_report_id;
     uint8_t presets[PAD_OUT_PRESET_MAX][2];
     /** 音频触觉让位期间的预置字节（与 presets 同格式；首槽偏移为 0 表示未声明，回落 presets）。
      *  音频接手时写回的报告只该带玩家灯，位段语义见 docs/controller-ps.md。 */
@@ -128,6 +159,9 @@ typedef struct {
     uint8_t rumble_max[PAD_TRIGGER_COUNT];
     /** 每颗马达跟的频带（pad_rumble_band_t）；未填按低频。 */
     uint8_t rumble_band[PAD_TRIGGER_COUNT];
+    /** 震动编码方式（pad_rumble_style_t）；PAD_RUMBLE_NS1_WAVE 时 rumble_off
+     *  是每侧 4 字节块的块首，rumble_max 与 rumble_band 不参与（振幅自带刻度）。 */
+    uint8_t rumble_style;
     uint8_t led_mask_off;
     uint8_t led_rgb_off;
     uint8_t led_style; /**< pad_led_style_t。 */
@@ -144,11 +178,13 @@ typedef struct {
 } pad_output_layout_t;
 
 /**
- * 家族布局表的一行：按（家族, Report ID, 连接方式, PID）定位字段偏移，偏移一律从报告
- * 首字节起算（含 Report ID）。同一组合下多个型号报同一 Report ID 时按 PID 分行，
- * 布局相同的多个 PID 写在同一行，pids 为空表示该组合共用这行；报告未带 PID 时取最先匹配的行。
+ * 家族布局表的一行：按（家族, Report ID, 连接方式, PID, 报告长度）定位字段偏移，
+ * 偏移一律从报告首字节起算（含 Report ID）。同一组合下多个型号报同一 Report ID 时按
+ * PID 分行，布局相同的多个 PID 写在同一行，pids 为空表示该组合共用这行；
+ * 报告未带 PID 时取最先匹配的行，因此限定长度的行排在通用的行前面。
  * 各系列的行放在 pad/layouts/ 下，一族一个文件，加一个系列再加一行登记。
- * 字段偏移的来源与核对状态见 docs/controller-ps.md。
+ * 字段偏移的来源与核对状态见 docs/controller-xbox.md / controller-xinput.md /
+ * controller-ns1.md / controller-ps.md。
  */
 typedef struct {
     pad_family_t family;
@@ -157,11 +193,27 @@ typedef struct {
     uint8_t report_id;
     /** 该行适用的 PID，0 结尾；首元素为 0 表示不按型号过滤。 */
     uint16_t pids[4];
+    /** 报告长度过滤（含 Report ID 字节）：两个都为 0 表示不限长度；同一 Report ID
+     *  下按报文长度分行的形态（精英背键位随报文长度变）靠它区分。 */
+    uint8_t len_min;
+    uint8_t len_max;
     uint8_t buttons_off;
     uint8_t buttons_bytes;
-    /** 方向键帽子开关偏移；0xFF 表示方向键在按键位图里。 */
+    /** 背键（精英手柄的 P1-P4、Edge 背键一类）：字节偏移 + 按位索引的位映射
+     *  （最多 8 位），PAD_OFF_NONE 表示该行没有背键；back_mode_off 指向
+     *  「背键已交给手柄内部配置档」的判定字节，它非零时背键位不采信。 */
+    uint8_t back_off;
+    uint8_t back_mode_off;
+    const uint32_t *back_map;
+    /** 方向键帽子开关偏移与编号方式（pad_hat_style_t）；0xFF 表示方向键在按键位图里。 */
     uint8_t hat_off;
+    uint8_t hat_style;
     uint8_t trigger_off[PAD_TRIGGER_COUNT];
+    uint8_t trigger_style; /**< pad_trigger_style_t。 */
+    /** 数字扳机（NS 的 ZL / ZR 只有位）：每路触发器给位所在的字节偏移与位号，
+     *  偏移为 PAD_OFF_NONE 或 0（报告 ID 字节）表示没有这一位；命中时按满量程填。 */
+    uint8_t trigger_btn_off[PAD_TRIGGER_COUNT];
+    uint8_t trigger_btn_bit[PAD_TRIGGER_COUNT];
     uint8_t stick_off[PAD_AXIS_COUNT];
     /** 第一个触点的起始偏移（PAD_OFF_NONE 表示该行没有触摸数据）：每点 4 字节，
      *  首字节 bit7 为 0 表示有触点（低 7 位是触点 ID），其余三字节是 12 位 X 与 12 位 Y；
@@ -191,16 +243,26 @@ typedef struct {
     uint8_t native_identity;
 } pad_layout_t;
 
-/** 布局模块：一个手柄系列的全部布局行（一族一个文件，见 pad/layouts/）。 */
+/** 家族识别表项：该型号（VID:PID）归入模块的家族；pid 为 0 表示该 VID 下所有
+ *  型号都归本家族，用于厂商 VID 分不开布局的第三方手柄（XInput 形态的第三方手柄）。 */
+typedef struct {
+    uint16_t vid;
+    uint16_t pid;
+} pad_id_t;
+
+/** 布局模块：一个手柄系列的全部布局行与家族识别表（一族一个文件，见 pad/layouts/）。 */
 typedef struct {
     const char *name;
     const pad_layout_t *rows;
     size_t row_count;
+    /** 型号表：报告里的 VID:PID 命中即归入本模块的家族；未登记型号仍按 VID 判定。 */
+    const pad_id_t *ids;
+    size_t id_count;
 } pad_layout_module_t;
 
-/** Xbox 家族的按键位（bit0-3 方向键、bit4 Menu、bit5 View、bit6/7 摇杆按下、
+/** Xbox 与 XInput 形态共用的按键位（bit0-3 方向键、bit4 Menu、bit5 View、bit6/7 摇杆按下、
  *  bit8/9 肩键、bit10 西瓜键、bit11 分享键、bit12-15 面键）。未识别型号的兜底
- *  布局也用它，因此定义在 layout.c 与 layouts/xbox.c 共用。 */
+ *  布局也用它，因此定义在 layout.c 与 layouts/xbox.c / layouts/xinput.c 共用。 */
 extern const uint32_t pad_xbox_btn_map[16];
 
 /** PS 家族（DS4 与 DualSense）共用的按键位序：方向键帽子开关在低四位、面键在高四位，
@@ -209,10 +271,16 @@ extern const uint32_t pad_ps_btn_map[24];
 
 /**
  * 按报告的设备标识找布局行：家族取报告里的值，为空时按 VID/PID 判定；家族、
- * Report ID、连接方式、PID 任一不符就换下一行。找不到返回 NULL，由调用方决定
+ * Report ID、连接方式、PID、报告长度任一不符就换下一行。找不到返回 NULL，由调用方决定
  * 是否套用兜底布局。family 输出实际使用的家族（可能由 VID/PID 补出）。
  */
 const pad_layout_t *pad_layout_find(const pad_report_t *report, pad_family_t *family);
+
+/**
+ * 按型号定家族：厂商 VID 不足以判定家族的第三方手柄（例如各家厂商的 XInput
+ * 形态手柄）走各模块的型号表，命中返回模块的家族；没有命中返回 PAD_FAMILY_UNKNOWN。
+ */
+pad_family_t pad_layout_family_from_ids(uint16_t vid, uint16_t pid);
 
 /**
  * 反馈方向查表：主机反馈到达时手上只有设备标识（没有报告帧），这里按
