@@ -61,7 +61,8 @@ static const pad_layout_t s_rows[] = {
          * Y 轴设备侧向下为正。方向键、Start/Back 与摇杆按下都在按键位图里。
          * 无线接收器形态是同一段报文体加 4 字节前缀，未登记，留待实机核对。 */
         .family = PAD_FAMILY_XBOX,
-        .conn = PAD_CONN_USB,
+        /* 蓝牙形态的第三方手柄（8BitDo 一类）也报同一份报文，因此两种连接共用这一行。 */
+        .conn = PAD_CONN_UNKNOWN,
         .report_id = 0x00,
         .len_min = 20,
         .len_max = 20,
@@ -100,4 +101,3 @@ const pad_layout_module_t pad_layout_module_xinput = {
     .ids = s_ids,
     .id_count = sizeof(s_ids) / sizeof(s_ids[0]),
 };
-
