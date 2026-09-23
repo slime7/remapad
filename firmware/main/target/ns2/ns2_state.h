@@ -96,8 +96,9 @@ typedef struct {
     uint8_t headset_state;
     /** 运动块填充方式（ns2_motion_mode_t）。 */
     uint8_t motion_mode;
-    /** 运动数据：输入设备带 IMU（PAD_CAP_MOTION）时才有效。板卡本身没有
-     *  IMU，0x05 的 IMU 字段与 0x09 的实验运动块都取自这里。 */
+    /** 运动数据：输入设备带 IMU（PAD_CAP_MOTION）时才有效，三轴取私有格式的统一刻度
+     *  （pad_state.h）。0x05 的 IMU 字段与 0x09 的实验运动块都取自这里；目标侧的实际
+     *  量程还没有公开依据，因此不做二次换算，等资料齐全后再补映射。 */
     bool motion_valid;
     int16_t gyro[3];
     int16_t accel[3];

@@ -123,9 +123,10 @@ typedef struct {
 } pad_hd_render_t;
 
 /**
- * 运动字段描述：给出取样位置、样本数与轴映射。gyro_src / accel_src 的第 i 项是
- * 私有三轴第 i 路取来源的第几路（PAD_OFF_NONE 表示缺失，三项全零 = 恒等映射）；
- * invert_mask 的 bit0-2 取反陀螺 XYZ、bit3-5 取反加速 XYZ。
+ * 运动字段描述：给出取样位置、样本数、轴映射与设备原始刻度。gyro_src / accel_src 的
+ * 第 i 项是私有三轴第 i 路取来源的第几路（PAD_OFF_NONE 表示缺失，三项全零 = 恒等映射）；
+ * invert_mask 的 bit0-2 取反陀螺 XYZ、bit3-5 取反加速 XYZ；原始刻度由 accel_per_g /
+ * gyro_per_dps_x1000 声明，解析段按它换算到 pad_state.h 的统一刻度。
  */
 typedef struct {
     uint8_t samples; /**< 一次报告里的样本数；0 按 1 处理。 */
@@ -135,6 +136,12 @@ typedef struct {
     uint8_t gyro_src[3];
     uint8_t accel_src[3];
     uint8_t invert_mask;
+    /** 设备原始刻度：加速计数每 g（DS4 / DualSense 为 8192）；等于统一刻度
+     *  （PAD_MOTION_ACCEL_PER_G）或 0 表示原值已是统一刻度、不做换算。 */
+    uint16_t accel_per_g;
+    /** 设备原始刻度：陀螺计数每 °/s 的一千倍（DS4 / DualSense 为 16000，即 16 计数每 °/s）；
+     *  等于统一刻度（PAD_MOTION_GYRO_PER_DPS_X1000）或 0 表示不换算。 */
+    uint16_t gyro_per_dps_x1000;
 } pad_motion_layout_t;
 
 /**

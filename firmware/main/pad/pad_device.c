@@ -273,6 +273,27 @@ static void map_axis(int16_t out[3], const int16_t src[3], const uint8_t map[3],
     }
 }
 
+/**
+ * 按设备原始刻度把一轴运动值换算到私有格式的统一刻度：canonical = value × canonical / device，
+ * 四舍五入到最近整数（远离零）并夹回 int16；device 为 0 或等于统一刻度时原值就是统一刻度。
+ */
+static int16_t scale_motion(int16_t value, uint16_t canonical, uint16_t device)
+{
+    if (device == 0 || device == canonical) {
+        return value;
+    }
+    int32_t scaled = (int32_t)value * (int32_t)canonical;
+    scaled += scaled >= 0 ? (int32_t)(device / 2) : -(int32_t)(device / 2);
+    scaled /= (int32_t)device;
+    if (scaled > INT16_MAX) {
+        return INT16_MAX;
+    }
+    if (scaled < INT16_MIN) {
+        return INT16_MIN;
+    }
+    return (int16_t)scaled;
+}
+
 static void parse_motion(const pad_report_t *report, const pad_layout_t *layout,
                          pad_state_t *state)
 {
@@ -300,6 +321,13 @@ static void parse_motion(const pad_report_t *report, const pad_layout_t *layout,
              (uint8_t)(layout->motion.invert_mask & 0x07u));
     map_axis(state->motion.accel, accel, layout->motion.accel_src,
              (uint8_t)((layout->motion.invert_mask >> 3) & 0x07u));
+    /* 换算到私有格式的统一刻度：布局行声明设备的原始刻度，NS 家族与统一刻度相同。 */
+    for (size_t i = 0; i < 3; i++) {
+        state->motion.gyro[i] = scale_motion(state->motion.gyro[i], PAD_MOTION_GYRO_PER_DPS_X1000,
+                                             layout->motion.gyro_per_dps_x1000);
+        state->motion.accel[i] = scale_motion(state->motion.accel[i], PAD_MOTION_ACCEL_PER_G,
+                                              layout->motion.accel_per_g);
+    }
     state->motion.present = true;
 }
 

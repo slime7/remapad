@@ -4,6 +4,8 @@
  * DualShock 4：有线报 0x01、蓝牙报 0x11（比有线多两个前导字节）。位序用 PS 家族
  * 共用的 pad_ps_btn_map：第一字节低四位是方向键帽子开关、高四位是面键，第二字节
  * 是肩键、Create/Options 与摇杆按下，第三字节是 PS、触摸板按下与静音键。
+ * 运动字段是 6 个 int16 小端（陀螺 XYZ + 加速 XYZ），原始刻度为加速 8192 计数/g、
+ * 陀螺 16 计数每 °/s（标称，来源与核对状态见 docs/controller-ps.md）。
  */
 static const pad_layout_t s_rows[] = {
     {
@@ -28,7 +30,7 @@ static const pad_layout_t s_rows[] = {
                 PAD_CAP_RUMBLE | PAD_CAP_BATTERY | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
-        .motion = {.samples = 1, .stride = 12},
+        .motion = {.samples = 1, .stride = 12, .accel_per_g = 8192, .gyro_per_dps_x1000 = 16000},
         /* 输出报告 0x05（32 字节）：b1 是 flags（震动 + 灯条颜色）、b4/b5 是两个马达强度、
          * b6-b8 是灯条 RGB；偏移取自公开实现。 */
         .out = {
@@ -64,7 +66,7 @@ static const pad_layout_t s_rows[] = {
                 PAD_CAP_RUMBLE | PAD_CAP_BATTERY | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
-        .motion = {.samples = 1, .stride = 12},
+        .motion = {.samples = 1, .stride = 12, .accel_per_g = 8192, .gyro_per_dps_x1000 = 16000},
         /* 蓝牙形态 0x11（78 字节）：b1 是 hw_control（0xC0 = HID + CRC32）、b2 是音频控制，
          * 公共段从 b3 起，末 4 字节是 CRC32。 */
         .out = {

@@ -167,6 +167,7 @@ static void ns1_pro_report_maps_buttons_sticks_and_motion(void)
     CHECK(state.charging);
     CHECK_EQ(state.caps & PAD_CAP_MOTION, PAD_CAP_MOTION);
     CHECK(state.motion.present);
+    /* 6 轴样本的刻度就是私有格式的统一刻度（NS 家族的标称值），解析按原值给出。 */
     CHECK_EQ(state.motion.gyro[0], 300);
     CHECK_EQ(state.motion.accel[0], -1);
     CHECK_EQ(state.motion.gyro[1], 0);

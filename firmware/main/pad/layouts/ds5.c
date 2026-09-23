@@ -2,6 +2,7 @@
 
 /** DualSense 与 DualSense Edge（0x0CE6 / 0x0DF2）：有线报 0x01、蓝牙报 0x31，位序与 DS4 相同；
  *  Edge 的背键在按键位图第三字节高两位，左右 Fn 键不映射（兼作配置档修饰键）。
+ *  运动字段的原始刻度与 DS4 相同（加速 8192 计数/g、陀螺 16 计数每 °/s，标称）。
  *  字段偏移的来源与核对状态见 docs/controller-ps.md。 */
 static const pad_layout_t s_rows[] = {
     {
@@ -26,7 +27,7 @@ static const pad_layout_t s_rows[] = {
                 PAD_CAP_RUMBLE | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
-        .motion = {.samples = 1, .stride = 12},
+        .motion = {.samples = 1, .stride = 12, .accel_per_g = 8192, .gyro_per_dps_x1000 = 16000},
         /* 输出报告 0x02（48 字节）：b1/b2 是两个 valid_flag，b3/b4 是右小马达与左大马达，
          * b6 是喇叭音量，b44 是玩家灯、b45-b47 是灯条 RGB。灯条不驱动（valid_flag1 只置玩家灯位，
          * 颜色留给 PC 侧管理），玩家号落四颗白灯；喇叭音量逐报钉在 PS5 缺省档 100。 */
@@ -80,7 +81,7 @@ static const pad_layout_t s_rows[] = {
                 PAD_CAP_RUMBLE | PAD_CAP_BATTERY | PAD_CAP_MIC,
         .invert_y = true,
         .btn_map = pad_ps_btn_map,
-        .motion = {.samples = 1, .stride = 12},
+        .motion = {.samples = 1, .stride = 12, .accel_per_g = 8192, .gyro_per_dps_x1000 = 16000},
         /* 蓝牙形态报告 0x31（78 字节）：b1 是序号/标签字节（seq_off 交给编码器递增）、
          * b2 是固定魔数 0x10、公共段从 b3 起，末 4 字节是 CRC32；b46 是玩家灯、
          * b47-b49 是灯条 RGB（同有线行不驱动）。 */

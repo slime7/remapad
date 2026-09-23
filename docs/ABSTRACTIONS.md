@@ -198,9 +198,12 @@ flowchart TB
   `usb/usb_input.c` 把 IN 报告组成 `pad_report_t` 交给同一份家族表并把反馈写回 OUT 端点；
   声明音频触觉能力的设备（DualSense）另由 `usb/usb_audio.c` 认领 UAC1 音频流 OUT 接口，持续向等时端点送板上合成的 4ch PCM（频道 3/4 音圈、1/2 小喇叭）；
   纯逻辑的描述符解析与 PCM 合成在 `usb_audio_parse.c` / `haptic_synth.c`（主机端可测）。
-- 运动数据：布局行描述取样位置、样本数、样本内字段顺序（NS1 的 6 轴样本是加速在前）与轴映射（NS1 一次三份取最新一份），解析进 `pad_motion_t`；
-  0x05 报文的 IMU 字段按 [controller-switch2.md](controller-switch2.md) 的偏移填真值，0x09 的 40 字节运动块结构未公开，
-  因此只提供 CLI `motion 3` 的实验填充档。
+- 运动数据：布局行描述取样位置、样本数、样本内字段顺序（NS1 的 6 轴样本是加速在前）、轴映射（NS1 一次三份取最新一份）
+  与设备原始刻度，解析进按统一刻度表示的 `pad_motion_t`（加速 4096 计数每 g、陀螺 14247 计数每 1000 °/s；
+  行里的 `accel_per_g` / `gyro_per_dps_x1000` 声明原始刻度，NS 家族与统一刻度相同，因此不声明换算）；
+  轴向取 NS 家族的约定，PS 家族的轴向与符号待实机核对（见 [controller-ps.md](controller-ps.md) 的核对状态）。
+- 0x05 报文的 IMU 字段按 [controller-switch2.md](controller-switch2.md) 的偏移填真值；0x09 的 40 字节运动块结构未公开，
+  目标的运动量程同样没有公开依据，因此只提供 CLI `motion 3` 的实验填充档，等公开资料齐全后再补输出侧映射。
 - USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
 
 数据面每拍的节奏收口在这一处：

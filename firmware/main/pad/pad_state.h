@@ -158,9 +158,19 @@ typedef struct {
     uint16_t raw_y;
 } pad_touch_t;
 
+/**
+ * 运动数据的统一刻度（私有格式内固定，与来源设备的原始刻度无关）：加速 4096 计数每 g、
+ * 陀螺 14247 计数每 1000 °/s（≈14.247 计数每 °/s）。两个取值取自 Linux 的 hid-nintendo
+ * 标称常量（Switch 一代 IMU 的刻度），未实机核对；布局行声明设备原始刻度，解析段换算。
+ */
+#define PAD_MOTION_ACCEL_PER_G 4096
+#define PAD_MOTION_GYRO_PER_DPS_X1000 14247
+
 typedef struct {
     bool present;
-    /** 原始角速度与加速度（量程随家族不同，本轮不做物理单位归一）。 */
+    /** 三轴角速度与加速度，按上面的统一刻度表示；轴向取 NS 家族的约定——按键面朝上
+     *  平放时 +Z 向上、+X 朝扳机、+Y 朝手柄左侧。PS 家族的轴向与符号待实机核对，
+     *  布局行暂时按恒等登记，见 docs/controller-ps.md 的核对状态。 */
     int16_t gyro[3];
     int16_t accel[3];
     uint32_t timestamp_us;

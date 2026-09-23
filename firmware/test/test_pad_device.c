@@ -490,14 +490,14 @@ static void dualsense_usb_parses_by_pid(void)
     CHECK_EQ(state.trigger[PAD_TRIGGER_L2], PAD_AXIS_MAX);
     CHECK_EQ(state.trigger[PAD_TRIGGER_R2], PAD_AXIS_MIN);
 
-    /* 运动字段在第 17 字节起：角速度 3 轴 + 加速度 3 轴，小端。 */
+    /* 运动字段在第 17 字节起：角速度 3 轴 + 加速度 3 轴，小端；原始刻度是 8192 计数/g，
+     * 解析后按私有格式的统一刻度（4096 计数/g）给出。 */
     report.data[24] = 0x00;
-    report.data[25] = 0x1F; /* 加速度第二轴约 1 g */
+    report.data[25] = 0x1F; /* 加速度第二轴原始 7936 ≈ 0.97 g */
     pad_state_from_report(&report, &state);
     CHECK_EQ(state.caps & PAD_CAP_MOTION, PAD_CAP_MOTION);
     CHECK(state.motion.present);
-    CHECK(state.motion.accel[1] > 7000);
-    CHECK(state.motion.accel[1] < 9000);
+    CHECK_EQ(state.motion.accel[1], 3968); /* 7936 × 4096 / 8192 */
 
     /* Edge 有线与 DualSense 共用一行。 */
     report = dualsense_usb_report();
@@ -612,15 +612,50 @@ static void dualsense_bt_sticks_triggers_and_motion(void)
     CHECK(state.trigger[PAD_TRIGGER_R2] > 2000);
     CHECK(state.trigger[PAD_TRIGGER_R2] < 2100);
 
-    /* 运动字段：静止帧里三轴角速度接近 0、加速度有一轴约 1 g，偏移对不上不会成立。 */
+    /* 运动字段（第 17 字节起）：静止帧里角速度只有个位数计数、加速第二轴约 1 g，
+     * 偏移对不上不会成立；换算到统一刻度后逐一钉住，括号里是成帧的原始值。 */
     CHECK_EQ(state.caps & PAD_CAP_MOTION, PAD_CAP_MOTION);
     CHECK(state.motion.present);
-    for (size_t i = 0; i < 3; i++) {
-        CHECK(state.motion.gyro[i] > -200);
-        CHECK(state.motion.gyro[i] < 200);
-    }
-    CHECK(state.motion.accel[1] > 7000);
-    CHECK(state.motion.accel[1] < 9000);
+    CHECK_EQ(state.motion.gyro[0], -3); /* 原始 -3（×14247/16000） */
+    CHECK_EQ(state.motion.gyro[1], -2); /* 原始 -2 */
+    CHECK_EQ(state.motion.gyro[2], 1);  /* 原始 1 */
+    CHECK_EQ(state.motion.accel[0], -70);  /* 原始 -139（÷2） */
+    CHECK_EQ(state.motion.accel[1], 4045); /* 原始 8089 ≈ 0.99 g */
+    CHECK_EQ(state.motion.accel[2], 596);  /* 原始 1191 */
+}
+
+/** 按小端把一轴原始值写进报告样本。 */
+static void set_i16(pad_report_t *report, uint8_t off, int16_t value)
+{
+    report->data[off] = (uint8_t)((uint16_t)value & 0xFF);
+    report->data[off + 1] = (uint8_t)((uint16_t)value >> 8);
+}
+
+/**
+ * PS 家族的运动原始刻度是加速 8192 计数/g、陀螺 16 计数每 °/s（标称），解析段换算到
+ * 私有格式的统一刻度（4096 计数/g、14247 计数每 1000 °/s）：1 g 与 1000 °/s 两个整数点
+ * 上的换算值可精确算出，用它钉住换算比与取整规则（四舍五入、远离零，结果夹回 int16）。
+ */
+static void ps_motion_scale_converts_to_unified_units(void)
+{
+    /* DualSense 有线：运动字段从第 16 字节起，陀螺 3 轴在前、加速 3 轴在后。 */
+    pad_report_t report = dualsense_usb_report();
+    set_i16(&report, 16, -1);    /* 陀螺 X：-0.06 °/s，取整后回到 -1 而不是 0 */
+    set_i16(&report, 18, 16000); /* 陀螺 Y：1000 °/s */
+    set_i16(&report, 20, 0);
+    set_i16(&report, 22, -8192); /* 加速 X：-1 g */
+    set_i16(&report, 24, 8192);  /* 加速 Y：1 g */
+    set_i16(&report, 26, 4096);  /* 加速 Z：0.5 g */
+
+    pad_state_t state;
+    pad_state_from_report(&report, &state);
+    CHECK(state.motion.present);
+    CHECK_EQ(state.motion.gyro[0], -1);
+    CHECK_EQ(state.motion.gyro[1], 14247);
+    CHECK_EQ(state.motion.gyro[2], 0);
+    CHECK_EQ(state.motion.accel[0], -4096);
+    CHECK_EQ(state.motion.accel[1], 4096);
+    CHECK_EQ(state.motion.accel[2], 2048);
 }
 
 static void dualsense_edge_back_buttons_map_to_gl_gr(void)
@@ -916,6 +951,8 @@ HOST_TEST_SUITE(suite_pad_device, "pad_device",
                  dualsense_bt_buttons_map_by_position},
                 {"DualSense 蓝牙摇杆、扳机与运动字段量程",
                  dualsense_bt_sticks_triggers_and_motion},
+                {"PS 家族的运动换算到统一刻度（8192 计数/g、16 计数每 °/s → 4096、14247）",
+                 ps_motion_scale_converts_to_unified_units},
                 {"DualSense Edge 背键能当 GL / GR 用",
                  dualsense_edge_back_buttons_map_to_gl_gr},
                 {"PS 的 SHARE/Create 与触摸板按位置归一（左小键 → 减号、触摸板 → 截图）",
