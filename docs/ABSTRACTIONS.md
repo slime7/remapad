@@ -112,7 +112,7 @@ flowchart TB
   `CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE` 放行亚规范间隔，NimBLE 主机侧按规范拒绝 itvl < 6 的请求。
 - 输入被主机采纳的门槛是 **0x0C/0x04（启用特性）**：未启用的链路即使 itvl=4 也不采纳输入，输入通知只在启用后发送，
   已订阅却迟迟不启用的会话由休眠看门狗断开重连（`ns2_adv_dormant_link()` 判定）。
-- `0x0E` 运动数据长度必须非零，按 40 字节零值占位（板卡无 IMU）。
+- `0x0E` 运动数据长度必须非零，按 40 字节零值占位。
 - 耳机状态（3.5 mm）由输入设备派生：`pad_state_t` 的 `headset_present` / `headset_mic` 经 NS2 目标的单一来源映射成
   `0x09` 偏移 `0x0D` 与 `0x05` 的耳机插入位，编码路径与同代透传路径共用；主机接受的档位与输入设备的字节偏移见
   [controller-switch2.md](controller-switch2.md) 与 [controller-ps.md](controller-ps.md)，
@@ -203,7 +203,7 @@ flowchart TB
   行里的 `accel_per_g` / `gyro_per_dps_x1000` 声明原始刻度，NS 家族与统一刻度相同，因此不声明换算）；
   轴向取 NS 家族的约定，PS 家族的轴向与符号待实机核对（见 [controller-ps.md](controller-ps.md) 的核对状态）。
 - 0x05 报文的 IMU 字段按 [controller-switch2.md](controller-switch2.md) 的偏移填真值；0x09 的 40 字节运动块结构未公开，
-  目标的运动量程同样没有公开依据，因此只提供 CLI `motion 3` 的实验填充档，等公开资料齐全后再补输出侧映射。
+  因此只提供 CLI `motion 3` 的实验填充档。
 - USB 高频输入不应经过 JSON bridge，也不应等待屏幕刷新或 JavaScript guest 执行。
 
 数据面每拍的节奏收口在这一处：

@@ -4,7 +4,7 @@
 
 /** 一块运动数据样本（来自 ndeadly/switch2_controller_research 的
  *  btle_procon2_motion_0x000E）：40 字节运动块 + 紧随其后的 8 字节尾段。
- *  板卡没有 IMU，用样本原值占位比全零更接近真实形态；块内两处 3 字节小端微秒
+ *  占位用样本原值比全零更接近真实形态；块内两处 3 字节小端微秒
  *  时间戳（运动块偏移 0x05 与 0x23）在发送时按上报节奏推进，其余字节保持原值。 */
 static const uint8_t s_motion_capture[40 + 8] = {
     0x06, 0x70, 0x95, 0x5B, 0x34, 0xB6, 0x94, 0x78, 0x00, 0x0D,

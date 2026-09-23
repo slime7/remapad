@@ -111,7 +111,7 @@ void ns2_output_set_rumble_enabled(bool enabled);
 /** 更新随报告上发的电池信息（电平 0-9、电压毫伏、充电与外部供电）。 */
 void ns2_output_set_battery(uint8_t level, uint16_t voltage_mv, bool charging, bool external);
 
-/** 0x09 运动块占位方式（ns2_motion_mode_t）：板卡无 IMU，用 CLI `motion`
+/** 0x09 运动块占位方式（ns2_motion_mode_t）：用 CLI `motion`
  *  在几种占位间切换，无需重新烧录。 */
 void ns2_output_set_motion_mode(uint8_t mode);
 

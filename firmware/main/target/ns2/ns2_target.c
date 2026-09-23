@@ -9,7 +9,7 @@
 
 static const char *TAG = "remapad_ns2tgt";
 
-/** NS2 目标支持的能力：震动可转发，运动数据与触摸板暂不在报文里。 */
+/** NS2 目标消费的能力：震动可转发。 */
 #define NS2_TARGET_CAPS (PAD_CAP_RUMBLE)
 
 /** 扳机数字化阈值：NS2 只有数字 ZL/ZR，模拟扳机过半即按下。 */
@@ -89,7 +89,7 @@ static void ns2_from_pad(const pad_state_t *pad, ns2_controller_state_t *out)
     out->external_power = s_facts.external_power;
     out->rumble_enabled = s_facts.rumble_enabled;
     out->nfc_state = s_facts.nfc_state;
-    /* 运动数据来自输入设备（板卡没有 IMU）：透传路径不经过这里。 */
+    /* 运动数据来自输入设备：透传路径不经过这里。 */
     out->motion_valid = pad->motion.present && (pad->caps & PAD_CAP_MOTION) != 0;
     for (size_t i = 0; i < 3; i++) {
         out->gyro[i] = pad->motion.gyro[i];
@@ -118,8 +118,7 @@ static void ns2_send_pad(const pad_state_t *pad)
     ns2_output_set_headset_derived(ns2_headset_state_from_pad(pad));
     ns2_output_send(&state);
 
-    /* 私有格式里有目标吃不下、本轮也不做映射的字段（IMU、触摸板、麦克风）。
-     * 只在能力集合变化时提示一次，避免每 5ms 刷日志。 */
+    /* 目标没有消费的能力位：只在集合变化时提示一次，避免每 5ms 刷日志。 */
     const uint32_t unsupported = pad->caps & ~NS2_TARGET_CAPS & ~PAD_CAP_FALLBACK_LAYOUT;
     if (unsupported != s_logged_unsupported) {
         s_logged_unsupported = unsupported;

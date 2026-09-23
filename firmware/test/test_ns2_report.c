@@ -51,7 +51,7 @@ static void idle_report_09(void)
     expected[0x09] = 0x08;
     expected[0x0A] = 0x80;
     expected[0x0B] = 0x30; /* 特性位：未开启触觉 */
-    expected[0x0E] = 0x28; /* 运动数据长度：板无 IMU，填 40 字节零值占位 */
+    expected[0x0E] = 0x28; /* 运动数据长度：填 40 字节零值占位 */
     CHECK_BYTES(out, expected, sizeof(expected));
 }
 
@@ -198,7 +198,7 @@ static void feature_flag_and_nfc(void)
 
 /** 主机开启 IMU 特性位（0x0C/0x04 掩码含 bit2）后，0x09 报文必须带上运动
  *  数据块的长度；长度为 0 的报文会被主机当作不完整输入而整体丢弃（表现为
- *  「已连接但按键无反应」）。板卡无 IMU，长度填 40、内容保持全零占位。 */
+ *  「已连接但按键无反应」）。长度填 40、内容保持全零占位。 */
 static void motion_block_is_zero_filled_placeholder(void)
 {
     uint8_t out[NS2_INPUT_09_LEN];

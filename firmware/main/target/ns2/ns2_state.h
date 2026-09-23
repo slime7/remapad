@@ -49,15 +49,14 @@ enum {
 /** Report 0x05 按键位图第 3 字节的耳机插入位（插入时置位）。 */
 #define NS2_05_BTN3_HEADSET 0x10
 
-/** 0x09 运动块填充方式。真机在特性位 bit2（IMU）开启后发 40 字节传感器
- *  数据；板卡没有 IMU，只能用占位。CLI `motion` 可在几种占位间切换，
- *  确认主机是否校验运动块内容。 */
+/** 0x09 运动块填充方式。真机在特性位 bit2（IMU）开启后发 40 字节传感器数据，
+ *  占位方式由 CLI `motion` 在几种之间切换，确认主机是否校验运动块内容。 */
 typedef enum {
     NS2_MOTION_ZERO = 0,  /**< 长度 0x28 + 全零块（默认） */
     NS2_MOTION_CAPTURE = 1, /**< 长度 0x28 + 样本块（时间戳按节奏推进） */
     NS2_MOTION_NONE = 2,  /**< 长度 0x00，不带运动数据 */
     /** 长度 0x28 + 输入设备的真实样本：按 NS1 的三份 12 字节样本风格排布。
-     *  0x09 运动块的内部结构没有公开资料，这一档只用于对照与后续
+     *  0x09 运动块的内部结构没有公开资料，这一档只用于对照，
      *  解码，默认不启用（串口 CLI 的 motion 3 打开）。 */
     NS2_MOTION_SENSOR = 3,
 } ns2_motion_mode_t;
@@ -97,8 +96,7 @@ typedef struct {
     /** 运动块填充方式（ns2_motion_mode_t）。 */
     uint8_t motion_mode;
     /** 运动数据：输入设备带 IMU（PAD_CAP_MOTION）时才有效，三轴取私有格式的统一刻度
-     *  （pad_state.h）。0x05 的 IMU 字段与 0x09 的实验运动块都取自这里；目标侧的实际
-     *  量程还没有公开依据，因此不做二次换算，等资料齐全后再补映射。 */
+     *  （pad_state.h）；0x05 的 IMU 字段与 0x09 的实验运动块都取自这里。 */
     bool motion_valid;
     int16_t gyro[3];
     int16_t accel[3];
