@@ -6,7 +6,7 @@ use remapad_ui as ui;
 /// 设备视图高度：控制条画在它下面，不属于设备画面。
 const DEVICE_HEIGHT: i32 = 280;
 
-/// 控制条翻页后，设备画面切到下一张卡片。
+/// 控制条翻页后，设备画面整页滑行到下一张卡片。
 #[test]
 fn 预览控制条翻页后设备画面切到下一张卡片() {
     let preview = ui::new_preview();
@@ -18,6 +18,8 @@ fn 预览控制条翻页后设备画面切到下一张卡片() {
     preview.invoke_action("next-page".into(), 0);
     assert_eq!(preview.get_page(), 1, "点下一页没有切页");
 
+    // 切页那一拍条带按一页步距反向瞬移补位，画面是连续的；整页滑行走完才换成下一张卡片。
+    ui::settle(&preview);
     let after = ui::frame(&preview);
     let mut changed = 0;
     for y in 0..DEVICE_HEIGHT {

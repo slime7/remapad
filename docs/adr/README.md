@@ -85,7 +85,7 @@
 | [0047](0047-ds-behavior-settings.md) | active | DS4/DS5 手柄行为两项设置（触摸板映射加减键默认关、截图键默认开）持久化在 NVS，数据面每拍按先触发半区改写触摸板按下的键位；触摸点改为 4 字节解析、按左右半区建模，四个 PS 布局行登记触摸偏移与量程 |
 | [0048](0048-pc-gui-settings-tab-mirrors-device-ui.md) | active | PC 图形界面新增「设置」页镜像设备 UI 的可改项（亮度与息屏、手柄配色、DS4/DS5 行为、电源，只读设备信息），读写走固件 CLI、控件值全取回读行（remapadctl.parse_device_reply）；调试动作不再放按钮，只在「命令」页填进输入框 |
 | [0049](0049-firmware-draw-list-damage-diff.md) | superseded | 结构变化帧的 damage 由固件侧 draw list 差分算出：框架报整屏重画时换成本机差分出的真实变化区域，失败一律退回框架计划；随 0054 换用 Slint 渲染器（damage 由 Slint 自己算）不再适用 |
-| [0050](0050-repaint-friendly-screen-rules.md) | active | 屏幕动效按重绘友好选：圆角加边框的元素必须带底色，只有拖动预览保留跟手平移；「切页瞬时完成、方向提示交给翻页箭头弹一下」已被翻页滑入 16px（90 ms，见 docs/ARCHITECTURE.md）取代 |
+| [0050](0050-repaint-friendly-screen-rules.md) | active | 屏幕动效按重绘友好选：圆角加边框的元素必须带底色，只有拖动预览保留跟手平移；「切页瞬时完成」与「方向提示交给箭头弹一下」两条已被 0058 的整页滑行取代 |
 | [0051](0051-opaque-565-card-artwork.md) | superseded | 卡片底图烘成不透明 PSM_5650（SVG 垫根容器色底 + 位图清单声明 565），走渲染器直拷路径；PSM_5650 与直拷回调随 0054 换用 Slint 渲染器不再适用 |
 | [0052](0052-ui-tick-rate-back-to-60hz.md) | active | UI 帧节奏恢复 60 Hz（tickHz 以 host profile 为准），CST816T 触摸改连续点模式；部分取代 0037 的 30 Hz 取值；tickHz 与 host profile 随 0054 作废，60 Hz 的取值改由平台层的动画推进节拍（16 ms 一档）承担 |
 | [0053](0053-usb-serial-phy-handback-on-role-switch.md) | active | host 切回串口时固件显式把内部 PHY 指回 USB-Serial/JTAG（进 host 前先放掉句柄），COM 口不必重启即可回来；交还失败时界面在切回后询问是否立刻重启，复位仍是保底恢复路径 |
@@ -93,6 +93,7 @@
 | [0055](0055-core-ui-split-optional-ui-build.md) | active | core 与屏幕 UI 分离：固件核心持 ui_service.h 契约（状态快照装配、动作分发、生命周期），界面组件与编译口径收进 ui/ 工作区、按 REMAPAD_UI 开关可选编入（OFF 纯 C 可编译、屏幕熄灭、设置走串口 CLI），控制面命令队列改由独立服务任务泵；延伸 0054 的构建边界 |
 | [0056](0056-ble-controller-off-power-save-cadence.md) | active | 完全静默（无连接、无广播窗口、不在配对流程）持续够久后关闭整个 BLE 栈（控制器断电，射频不再发热），连接键 / HOME / 配对新主机按起栈意图重新带起来；省电档（BLE 栈未运行）把数据面与界面节拍降到 12 fps 等效，屏幕不熄灭、不做空闲自动息屏 |
 | [0057](0057-single-uv-project-at-repo-root.md) | active | Python 依赖统一到仓库根一个 uv 工程：pc/ 的 hidapi / customtkinter / av / sounddevice 并入根 pyproject.toml，删除 pc/pyproject.toml 与 pc/uv.lock，命令一律写成 uv run python pc/<工具>.py，remapadctl 的默认镜像路径改按脚本位置解析；0040 里「依赖写进 pc/pyproject.toml」一句随本次调整作废 |
+| [0058](0058-clover-carousel-band-page-slide.md) | active | 上部分改成按一页步距平移的四叶草轮播带：底图烘成一个步距里的周期图平铺（仍是整幅不透明的拷贝路径），页面内容按槽位摆放，切页整条带滑行、静止时两侧各露一条邻页花瓣边；拖动跟手封顶在切页阈值、往回滑取消换页；部分取代 0050 的「切页瞬时完成」 |
 
 ## 创建 ADR 脚本用法
 

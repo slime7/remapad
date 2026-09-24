@@ -242,7 +242,7 @@ pub fn elapse(duration: std::time::Duration) {
     i_slint_backend_testing::mock_elapsed_time(duration);
 }
 
-/// 等动效走完：推进时钟并渲染几帧，让滑入、提示箭头这类瞬时位移回到静止位置。
+/// 等动效走完：推进时钟并渲染几帧，让整页滑行这类瞬时位移回到静止位置。
 /// 切页后要量几何或画面时先调它，量到的才是稳定状态。
 pub fn settle<C: ComponentHandle>(app: &C) {
     for _ in 0..6 {

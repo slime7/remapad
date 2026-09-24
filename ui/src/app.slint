@@ -1,11 +1,11 @@
-// Remapad 屏幕界面主体：四叶草卡片轮播 + 底部状态栏 + 确认弹窗。
+// Remapad 屏幕界面主体：四叶草轮播带 + 底部状态栏 + 确认弹窗。
 // 页面槽位顺序：亮度 / 手柄 / 配对 / 电源 / USB 模式 / DS 设置 / 系统信息，
-// dev 构建在末位追加调试页；切页时卡片从行进侧滑入，方向提示交给同侧的翻页箭头弹一下。
+// dev 构建在末位追加调试页；切页时整条带划过一整页，静止时两侧各露一条邻页花瓣边。
 // 所有状态由固件侧写入，动作经 action 回调交回固件。
 // 主体是 AppContent（设备与 PC 预览共用同一棵树），设备侧入口 App 只把它包进 240 × 280 窗口。
 
 import { Theme } from "theme.slint";
-import { BottomBar, ConfirmDialog, Drag, DragArea, Icon } from "components.slint";
+import { BottomBar, ConfirmDialog, Drag, DragArea } from "components.slint";
 import { BrightnessPage, ControllerPage, DebugPage, DsSettingsPage, PairingPage, PowerPage, SystemInfoPage, UsbModePage } from "pages.slint";
 
 export component AppContent inherits Rectangle {
@@ -58,51 +58,51 @@ export component AppContent inherits Rectangle {
 
     out property <int> focus-count: focus-count-for(page);
     property <bool> dialog-open: dialog != 0;
-    /** 页面焦点环的可见开关：操控窗口打开且没有弹窗时，焦点才画在页面上。 */
-    property <bool> page-focus: root.pad-active && !root.dialog-open;
+    /** 页面焦点环的可见开关：操控窗口打开、没有弹窗也没有在滑行时，焦点才画在页面上。 */
+    property <bool> page-focus: root.pad-active && !root.dialog-open && !root.sliding;
 
-    // 翻页提示：方向侧的箭头往外弹 6px 再收回，卡片从行进侧偏 16px 滑入静止位置。
-    // 滑入要先瞬移到位再归零，因此时长也当成属性：赋值起点时用 0ms，归零时给真实时长。
-    property <length> left-cue: 0px;
-    property <length> right-cue: 0px;
-    animate left-cue { duration: 90ms; easing: ease-out; }
-    animate right-cue { duration: 90ms; easing: ease-out; }
-    property <length> page-slide: 0px;
+    // 切页滑行：页码一换，各页就在槽位间整体换位；条带按一页步距反向瞬移补上这次换位，
+    // 画面因此保持连续，下一拍再带时长归零，观感就是整条轮播带划过一整页。
+    // 位移要先瞬移到位再归零，因此时长也当成属性：赋值起点时用 0ms，归零时给真实时长。
+    property <length> slide-x: 0px;
     property <duration> slide-ms: 0ms;
-    animate page-slide { duration: root.slide-ms; easing: ease-out; }
+    animate slide-x { duration: root.slide-ms; easing: ease-out; }
     property <int> prev-page: 0;
+    /** 滑行中：页面不收点按、焦点环收起，新的拖动也让位给滑行。 */
+    property <bool> sliding: false;
     changed page => {
-        if (root.page != root.prev-page) {
-            root.slide-ms = 0ms;
-            if (root.page > root.prev-page) {
-                root.right-cue = 6px;
-                root.page-slide = 16px;
-            } else {
-                root.left-cue = -6px;
-                root.page-slide = -16px;
-            }
-            root.prev-page = root.page;
-            cue-timer.running = true;
-            slide-timer.running = true;
+        if (root.page == root.prev-page) {
+            return;
         }
-    }
-    cue-timer := Timer {
-        interval: 90ms;
-        running: false;
-        triggered => {
-            root.left-cue = 0px;
-            root.right-cue = 0px;
-            cue-timer.running = false;
+        root.slide-ms = 0ms;
+        if (root.page == mod(root.prev-page + 1, root.page-count)) {
+            root.slide-x += 200px;
+        } else {
+            root.slide-x -= 200px;
         }
+        root.prev-page = root.page;
+        root.sliding = true;
+        rebound-timer.running = false;
+        slide-timer.running = true;
     }
-    // 下一拍把位移归零：这一拍给出时长，滑入才真的走动画。
+    // 下一拍把位移归零：这一拍给出时长，滑行才真的走动画。
     slide-timer := Timer {
         interval: 16ms;
         running: false;
         triggered => {
-            root.slide-ms = 90ms;
-            root.page-slide = 0px;
+            root.slide-ms = 150ms;
+            root.slide-x = 0px;
             slide-timer.running = false;
+            slide-end-timer.running = true;
+        }
+    }
+    // 滑行收尾：滑行时长加一档余量之后，页面重新收点按、焦点环也回来。
+    slide-end-timer := Timer {
+        interval: 200ms;
+        running: false;
+        triggered => {
+            root.sliding = false;
+            slide-end-timer.running = false;
         }
     }
 
@@ -128,29 +128,70 @@ export component AppContent inherits Rectangle {
         return 2;
     }
 
-    // 拖动预览：跟手平移当前内容，位移封顶 ±24；抬手后按位移阈值或甩动方向切页，
-    // 未越阈值时由 content-x 的隐式动画回弹。控件上的按下也照样跟手——控件的
-    // 触摸区是 DragArea，与空白处的拖动层走同一条 Drag 通路。
-    property <length> content-x: Drag.active ? max(-24px, min(24px, Drag.offset * 0.5)) : 0px;
-    animate content-x { duration: 70ms; easing: ease-out; }
+    // 拖动跟手：条带跟着手指平移，到切页阈值（40px）就定住不再走——阈值既是「松手就换页」的
+    // 判据，也是拖动预览的上限，按住时永远不会把整页拖出去。往回滑过抖动下限会取消已记下的
+    // 甩动，也就取消了这次换页。控件上的按下也照样跟手——控件的触摸区是 DragArea，
+    // 与空白处的拖动层走同一条 Drag 通路；滑行期间跟手让位。
+    // 抬手时这一路位移交给 slide-x 收尾：drag-x 是绑定，改值不带动画，回弹只能靠 slide-x 走。
+    property <length> drag-x: Drag.active && !root.sliding
+        ? max(-Drag.switch-travel, min(Drag.switch-travel, Drag.offset))
+        : 0px;
 
     /** 拖动是否按住（跟随 Drag.active）：抬手时在这里判定切页或回弹。 */
     property <bool> dragging: Drag.active;
     changed dragging => {
-        if (self.dragging || root.dialog-open) {
+        if (self.dragging || root.dialog-open || root.sliding) {
             return;
         }
+        /* 抬手：先按原样把这 40px 以内的位移交给 slide-x（drag-x 这一刻归零，画面不能跳），
+           再按甩动方向与位移阈值决定切页；不切页就由回弹定时器滑回零。 */
+        root.slide-ms = 0ms;
+        root.slide-x += max(-Drag.switch-travel, min(Drag.switch-travel, Drag.offset));
+        rebound-timer.running = true;
         if (Drag.flick-direction != 0 && max(Drag.offset, -Drag.offset) >= 12px) {
             if (Drag.flick-direction < 0) {
                 root.action("next-page", 0);
             } else {
                 root.action("prev-page", 0);
             }
-        } else if (Drag.offset <= -40px) {
+        } else if (Drag.offset <= -Drag.switch-travel) {
             root.action("next-page", 0);
-        } else if (Drag.offset >= 40px) {
+        } else if (Drag.offset >= Drag.switch-travel) {
             root.action("prev-page", 0);
         }
+    }
+    // 回弹：抬手不切页（或切页没落地）时，把交过来的位移滑回零。
+    rebound-timer := Timer {
+        interval: 16ms;
+        running: false;
+        triggered => {
+            root.slide-ms = 70ms;
+            root.slide-x = 0px;
+            rebound-timer.running = false;
+        }
+    }
+
+    /** 当前页的左右邻页槽号：滑行期间离开的那一页也在其中，它还要跟着条带走完这一段。 */
+    property <int> next-slot: mod(root.page + 1, root.page-count);
+    property <int> prev-slot: mod(root.page + root.page-count - 1, root.page-count);
+
+    /** 槽位偏移：当前页居中，左右邻页各偏一页，其余页挪出窗口之外（不参与绘制）。 */
+    function slot-x(slot: int) -> length {
+        if (slot == root.page) {
+            return 0px;
+        }
+        if (slot == root.next-slot) {
+            return 200px;
+        }
+        if (slot == root.prev-slot) {
+            return -200px;
+        }
+        return 1200px;
+    }
+
+    /** 页面内容只画在当前页与左右邻页三格上：静止时两侧露出的只是邻页的卡边。 */
+    function slot-visible(slot: int) -> bool {
+        return slot == root.page || slot == root.next-slot || slot == root.prev-slot;
     }
 
     page-area := Rectangle {
@@ -168,121 +209,98 @@ export component AppContent inherits Rectangle {
             height: parent.height;
         }
 
-        // 四叶草卡面：不透明底色由窗口背景给出，卡片只画四个花瓣的轮廓。
-        card := Rectangle {
-            x: -8px + content-x + page-slide;
+        // 四叶草轮播带：底图按一页步距平铺（那张图本身就是步距内的一个周期），页面内容按
+        // 槽位偏移摆在带上；整条带随拖动与切页平移，两侧邻页的花瓣边因此常驻屏幕两端。
+        band := Rectangle {
+            x: -8px + root.drag-x + root.slide-x;
             y: -24px;
             width: 256px;
             height: 256px;
             background: transparent;
 
-            petal := Image {
-                width: 256px;
-                height: 256px;
-                source: @image-url("../assets/main.svg");
-            }
+            // 底图铺满滑动范围内可能进窗口的四格：静止时可见的是 0 与 200 两格。
+            Image { x: -200px; y: 24px; width: 200px; height: 200px; source: @image-url("../assets/main.svg"); }
+            Image { x: 0px; y: 24px; width: 200px; height: 200px; source: @image-url("../assets/main.svg"); }
+            Image { x: 200px; y: 24px; width: 200px; height: 200px; source: @image-url("../assets/main.svg"); }
+            Image { x: 400px; y: 24px; width: 200px; height: 200px; source: @image-url("../assets/main.svg"); }
 
             BrightnessPage {
-                visible: root.page == 0;
+                x: root.slot-x(0);
+                visible: root.slot-visible(0);
                 backlight: root.backlight;
                 focus-index: root.page-focus && root.page == 0 ? root.focus-index : -1;
-                interactive: root.page == 0 && !root.dialog-open;
+                interactive: root.page == 0 && !root.dialog-open && !root.sliding;
                 step-up => { root.action("brightness-up", 0); }
                 step-down => { root.action("brightness-down", 0); }
             }
             ControllerPage {
-                visible: root.page == 1;
+                x: root.slot-x(1);
+                visible: root.slot-visible(1);
                 address: root.controller-address;
                 selected: root.selected-colorway;
                 focus-index: root.page-focus && root.page == 1 ? root.focus-index : -1;
-                interactive: root.page == 1 && !root.dialog-open;
+                interactive: root.page == 1 && !root.dialog-open && !root.sliding;
                 select(index) => { root.action("colorway", index); }
             }
             PairingPage {
-                visible: root.page == 2;
+                x: root.slot-x(2);
+                visible: root.slot-visible(2);
                 pairing: root.pairing;
                 notice: root.notice;
                 spinner-phase: root.spinner-phase;
                 focus-index: root.page-focus && root.page == 2 ? root.focus-index : -1;
-                interactive: root.page == 2 && !root.dialog-open;
+                interactive: root.page == 2 && !root.dialog-open && !root.sliding;
                 connect-key => { root.action("connect", 0); }
                 stop => { root.action("disconnect", 0); }
                 pair => { root.action("pair", 0); }
             }
             PowerPage {
-                visible: root.page == 3;
+                x: root.slot-x(3);
+                visible: root.slot-visible(3);
                 focus-index: root.page-focus && root.page == 3 ? root.focus-index : -1;
-                interactive: root.page == 3 && !root.dialog-open;
+                interactive: root.page == 3 && !root.dialog-open && !root.sliding;
                 ask-reboot => { root.action("ask-reboot", 0); }
                 ask-power-off => { root.action("ask-power-off", 0); }
             }
             UsbModePage {
-                visible: root.page == 4;
+                x: root.slot-x(4);
+                visible: root.slot-visible(4);
                 usb-role: root.usb-role;
                 focus-index: root.page-focus && root.page == 4 ? root.focus-index : -1;
-                interactive: root.page == 4 && !root.dialog-open;
+                interactive: root.page == 4 && !root.dialog-open && !root.sliding;
                 select-device => { root.action("usb-device", 0); }
                 ask-host => { root.action("ask-usb-host", 0); }
             }
             DsSettingsPage {
-                visible: root.page == 5;
+                x: root.slot-x(5);
+                visible: root.slot-visible(5);
                 touchpad-plus-minus: root.ds-touchpad-plus-minus;
                 capture-key: root.ds-capture-key;
                 focus-index: root.page-focus && root.page == 5 ? root.focus-index : -1;
-                interactive: root.page == 5 && !root.dialog-open;
+                interactive: root.page == 5 && !root.dialog-open && !root.sliding;
                 toggle-touchpad => { root.action("ds-touchpad", 0); }
                 toggle-capture => { root.action("ds-capture", 0); }
             }
             SystemInfoPage {
-                visible: root.page == 6;
+                x: root.slot-x(6);
+                visible: root.slot-visible(6);
                 firmware-version: root.firmware-version;
                 heap-text: root.heap-text;
                 psram-text: root.psram-text;
                 battery-text: root.battery-text;
             }
             debug-page := DebugPage {
-                visible: root.page == 7;
+                x: root.slot-x(7);
+                visible: root.slot-visible(7);
                 pairing: root.pairing;
                 pad-ui-mode: root.pad-ui-mode;
                 flash: root.debug-flash;
                 focus-index: root.page-focus && root.page == 7 ? root.focus-index : -1;
-                interactive: root.page == 7 && !root.dialog-open;
+                interactive: root.page == 7 && !root.dialog-open && !root.sliding;
                 inject(index) => { root.action("debug-key", index); }
             }
         }
 
-    }
-
-    // 翻页箭头：落在四叶草左右凹陷的深色区，触摸点按切页，不进手柄焦点环。
-    left-arrow := Rectangle {
-        x: 2px + root.left-cue;
-        y: 88px;
-        width: 32px;
-        height: 32px;
-        background: transparent;
-        Icon {
-            glyph: "\u{e5cb}";
-            size: Theme.text-base;
-            tint: Theme.on-surface-variant;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-        }
-        DragArea { activated => { root.action("prev-page", 0); } }
-    }
-    right-arrow := Rectangle {
-        x: 206px + root.right-cue;
-        y: 88px;
-        width: 32px;
-        height: 32px;
-        background: transparent;
-        Icon {
-            glyph: "\u{e5cc}";
-            size: Theme.text-base;
-            tint: Theme.on-surface-variant;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-        }
-        DragArea { activated => { root.action("next-page", 0); } }
     }
 
     bar := BottomBar {

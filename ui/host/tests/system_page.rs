@@ -13,6 +13,8 @@ fn 系统页电池行的中点分隔符画成小圆点() {
     let app = ui::new_app();
     app.set_page(6);
     app.set_battery_text(BATTERY_TEXT.into());
+    // 切页是整页滑行：量几何与取画面都要等滑行走完。
+    ui::settle(&app);
     let line = ui::rect(&app, "SystemInfoPage::battery-line");
     let frame = ui::frame(&app);
 

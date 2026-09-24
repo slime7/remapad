@@ -9,7 +9,7 @@ Rust 组件、工具链与日常命令见下面各节。
 
 | 路径 | 内容 |
 | :--- | :--- |
-| `src/app.slint` | 界面主体 `AppContent`（页表、四叶草轮播、拖动切页、确认弹窗与全屏遮罩）与设备侧入口窗口 `App` |
+| `src/app.slint` | 界面主体 `AppContent`（页表、四叶草轮播带、拖动切页、确认弹窗与全屏遮罩）与设备侧入口窗口 `App` |
 | `preview.slint` | PC 交互预览窗：设备画面 + 控制条，动作在预览里结算；只给预览用，不参与固件构建 |
 | `src/pages.slint` | 七个页面（亮度、手柄、配对、电源、USB 模式、DS 设置、系统信息）与调试页 |
 | `src/components.slint` | 复用控件：底栏、状态图标、确认弹窗、拖动层 |
@@ -20,7 +20,7 @@ Rust 组件、工具链与日常命令见下面各节。
 | `render-plan/` | 行带计划：damage 裁剪、行带切分与逐行拷贝，平台层与宿主用例跑同一份实现 |
 | `build-support/` | 界面编译口径单一来源：风格、字号表与字体路径，`host` 与 `slint_ui` 的 `build.rs` 共用 |
 | `assets/fonts/` | 正文字体（NotoSansSC）、图标字体（MaterialIcons）与转圈字体（seguisym） |
-| `assets/main.svg`、`assets/dock.svg` | 四叶草卡片底图与底栏底图 |
+| `assets/main.svg`、`assets/dock.svg` | 四叶草轮播带底图（一个卡片步距里的周期图，平铺出两侧露边的静止画面）与底栏底图 |
 
 界面文案必须写在 `.slint` 里：字形在构建期按字号烘成位图，固件经 bridge 回发的文本不会被烘焙，直接上屏是方框。
 
@@ -166,7 +166,6 @@ cd firmware ; idf.py -p COMx app-flash
 
   | 码点 | 字形 | 用在哪 |
   | :--- | :--- | :--- |
-  | U+E5CB / U+E5CC | chevron_left / chevron_right | 卡片左右两侧的翻页箭头 |
   | U+E30C / U+E99D | desktop_windows / desktop_access_disabled | 底栏 USB 模式格（PC 已连 / 未连） |
   | U+E338 / U+E500 | videogame_asset / videogame_asset_off | 底栏 USB 模式格（手柄已插 / 未插）、模式页手柄卡片 |
   | U+E701 | missing_controller | 底栏主机连接格 |
@@ -176,7 +175,11 @@ cd firmware ; idf.py -p COMx app-flash
   | U+EECE / U+EED0 | gamepad_circle_right / _down | 底栏手柄提示行的「确认 / 退出」 |
   | U+2801 / U+2802 / U+2804 / U+2840 / U+2880 / U+2820 / U+2810 / U+2808 | 盲文点阵八帧 | 配对页状态行的转圈 |
   不要退回 `@image-url("x.svg")`：SVG 按固有尺寸在构建期光栅化，缩到显示尺寸上屏会糊。
-- 焦点环可见窗口、切页与拖动的交互约定写在 `src/app.slint` 的注释里；重绘代价规则同样是改界面时的硬约束。
+- 焦点环可见窗口、切页与拖动的交互约定写在 `src/app.slint` 的注释里；重绘代价规则同样是改界面时的硬约束：
+  拖动跟手封顶在切页阈值上，切页是整页滑行，两者都每帧重画整个内容框。
+- 翻页的触摸入口只有滑动（页面两端不再画翻页箭头，两侧露出的卡边就是提示），手柄走方向键左右与肩键。
+- 卡片步距是底图、槽位偏移与页面摆放共用的一个数：`assets/main.svg` 画的就是这个步距里的一个周期，
+  改步距要同时改它、`src/app.slint` 的 `slot-x` 与 `ui/host/tests/` 里的断言。
   弹窗打开时焦点环只在弹窗的按钮上：页面按 `page-focus`（操控窗口打开且没有弹窗）决定要不要画环。
 - 平台层按单线程前提实现（Slint 的 `unsafe-single-threaded`）：界面状态与动作只在 UI 任务上访问，
   固件侧要用状态轮询与原子标记交接，不能从别的任务直接调进来。

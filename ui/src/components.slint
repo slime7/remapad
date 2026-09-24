@@ -16,9 +16,11 @@ export global Drag {
     out property <length> flick-step: 16px;
     /** 抖动下限：位移不超过它才算点击。 */
     out property <length> tap-slop: 8px;
+    /** 切页阈值：拖动到此定住，松手即换页；往回滑过抖动下限则取消这次换页。 */
+    out property <length> switch-travel: 40px;
     /** 本次按下是否已越过抖动下限（越过就不再算点击）。 */
     in-out property <bool> moved: false;
-    /** 甩动方向：-1 向左、1 向右、0 未甩动。 */
+    /** 甩动方向：-1 向左、1 向右、0 未甩动或已被往回滑取消。 */
     in-out property <int> flick-direction: 0;
 
     property <length> start-x: 0;
@@ -37,15 +39,20 @@ export global Drag {
         flick-direction = 0;
     }
 
-    /** 移动：累计位移，单步跨过 flick-step 时记下甩动方向。 */
+    /** 移动：累计位移，单步跨过 flick-step 时记下甩动方向；
+     *  往回滑（朝起点方向收回，还没越过起点）就取消已记下的甩动，也就取消了这次换页。 */
     public function move(x: length) {
         if (!active) {
             return;
         }
         offset = x - start-x;
         moved = moved || max(offset, -offset) >= tap-slop;
-        if (max(x - last-x, last-x - x) >= flick-step) {
-            flick-direction = x > last-x ? 1 : -1;
+        if (max(x - last-x, last-x - x) >= tap-slop) {
+            if ((x > last-x) != (offset > 0px)) {
+                flick-direction = 0;
+            } else if (max(x - last-x, last-x - x) >= flick-step) {
+                flick-direction = x > last-x ? 1 : -1;
+            }
         }
         last-x = x;
     }
