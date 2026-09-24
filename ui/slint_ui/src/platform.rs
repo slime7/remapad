@@ -29,8 +29,12 @@ pub const VIEW_HEIGHT: usize = 280;
 const BAND_ROWS: usize = 48;
 /// 动画推进节拍：Slint 内部动画最多按这个间隔推进（与 60 Hz 的 UI 节拍一致）。
 const ANIMATION_PACE_MS: u32 = 16;
+/// 省电档（BLE 关闭）的动画推进节拍：与状态轮询同为 12 fps 等效。
+const ANIMATION_PACE_POWER_SAVE_MS: u32 = 83;
 /// 等待上限：定时器链为空时也周期性回到循环，保证触摸与重绘仍有执行机会。
 const MAX_WAIT_MS: u32 = 100;
+/// 省电档的等待上限：与省电档节拍一致，省电期间不再按 100 ms 唤醒。
+const MAX_WAIT_POWER_SAVE_MS: u32 = 83;
 const FRAME_PIXELS: usize = VIEW_WIDTH * VIEW_HEIGHT;
 const BAND_PIXELS: usize = VIEW_WIDTH * BAND_ROWS;
 /// 切分行带用的视口（与整帧缓冲、窗口尺寸同一份取值）。
@@ -51,6 +55,8 @@ pub const UI_DEV: bool = build_config::UI_DEV;
 static FRAME_PTR: AtomicUsize = AtomicUsize::new(0);
 /// 息屏期间整段跳过触摸采样（画面不可见，触点只会误触看不见的控件）。
 static TOUCH_ENABLED: AtomicBool = AtomicBool::new(true);
+/// 省电档（BLE 关闭）：事件循环按 12 fps 等效节拍唤醒与推进动画。
+static POWER_SAVE: AtomicBool = AtomicBool::new(false);
 /// trace 命令的剩余帧数：命令行任务可以随时置位。
 static TRACE_FRAMES: AtomicU32 = AtomicU32::new(0);
 
@@ -237,13 +243,16 @@ impl EspPlatform {
             });
 
             /* 动画期间按固定节拍推进：不设上限的话动画状态会把事件循环拉成自旋，
-             * 每帧还要走一遍整棵控件树的渲染，实测能饿死 IDLE 任务并触发看门狗。 */
-            let mut wait_ms = MAX_WAIT_MS;
+             * 每帧还要走一遍整棵控件树的渲染，实测能饿死 IDLE 任务并触发看门狗。
+             * 省电档（BLE 关闭）把两档间隔一起降到 12 fps 等效。 */
+            let power_save = POWER_SAVE.load(Ordering::Relaxed);
+            let mut wait_ms = if power_save { MAX_WAIT_POWER_SAVE_MS } else { MAX_WAIT_MS };
             if let Some(until) = slint::platform::duration_until_next_timer_update() {
                 wait_ms = wait_ms.min(until.as_millis() as u32);
             }
             if self.window.has_active_animations() {
-                wait_ms = wait_ms.min(ANIMATION_PACE_MS);
+                let pace = if power_save { ANIMATION_PACE_POWER_SAVE_MS } else { ANIMATION_PACE_MS };
+                wait_ms = wait_ms.min(pace);
             }
             boundary::delay_ms(wait_ms);
         }
@@ -286,6 +295,11 @@ fn alloc_pixels(count: usize) -> Option<&'static mut [Rgb565Pixel]> {
 /// 息屏/亮屏开关：关闭时平台整段跳过触摸采样。
 pub fn set_touch_enabled(enabled: bool) {
     TOUCH_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+/// 省电档开关：BLE 关闭时事件循环按 12 fps 等效节拍唤醒。
+pub fn set_power_save(enabled: bool) {
+    POWER_SAVE.store(enabled, Ordering::Relaxed);
 }
 
 /// 读取并清零一个统计窗口的逐帧数据。

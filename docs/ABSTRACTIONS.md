@@ -16,7 +16,7 @@ NS2 协议内容见 [controller-switch2.md](controller-switch2.md)，PS 家族�
 | **Damage region** | 一帧中需要重新光栅化的矩形（界面框架按失效元素算），平台再把它折成行带。 |
 | **行带（band）** | 一次面板提交的单位：damage 矩形按 48 行切分出来的横向条带。 |
 | **平台层 / 宿主层** | `ui/slint_ui` 的 `platform.rs`（渲染、行带提交、触摸采样）与 `host.rs`（状态写入、动作分发、手柄焦点）。 |
-| **状态快照 / 动作回调** | core 与界面之间的两条通路（契约在固件核心的 `ui_service.h`）：`remapad_ui_state_t` 每 50 ms 进界面一次，动作按名字出界面。 |
+| **状态快照 / 动作回调** | core 与界面之间的两条通路（契约在固件核心的 `ui_service.h`）：`remapad_ui_state_t` 每 50 ms 进界面一次（省电档 83 ms），动作按名字出界面。 |
 | **C ABI 边界** | Rust 与 C 之间唯一的一层（`abi.rs`、`boundary.rs` 与 `include/slint_ui.h`）；Rust 侧业务零 unsafe，只有这一层留口并逐处注明原因。 |
 | **UI 提供者** | `ui_service.h` 生命周期入口的实现方：带 UI 构建是 `ui/slint_ui` 组件（Rust），无 UI 构建是 `main/ui/ui_stub.c` 空实现；固件核心对界面框架零依赖。 |
 | **硬件驱动层** | `firmware/main/drivers/`：面板、触摸、背光、按键、蜂鸣器与电池，屏幕平台只经 hooks 调它。 |
@@ -99,8 +99,9 @@ flowchart TB
 - 广播状态位（厂商数据偏移 0x0B）是主机唯一的唤醒判据：`ns2_adv_payload()` 按信号组装参数成型三种形态，
   发现广播不带主机地址、状态 0x00，回连与唤醒广播携带最近一次会话记录到的对端地址（无记录时回退到最近一条非全零凭证）、状态 0x00 与 0x81；
   窗口经 `ns2_adv_window_open` 按「窗口时长 + 前置唤醒突发」打开，形态决策是
-  `ns2_adv_choose_mode(paired, pairing_requested, window, now)` 纯函数，窗口到期未连接就彻底停发广播并关闭 BLE，
-  等用户再按连接键。
+  `ns2_adv_choose_mode(paired, pairing_requested, window, now)` 纯函数，窗口到期未连接就彻底停发广播。
+  完全静默（无连接、无窗口、不在配对流程，判据 `ns2_adv_stack_idle()`）持续够久即关闭整个 BLE 栈：控制器关闭并反初始化，射频与 modem 断电；
+  连接键、HOME 与配对新主机在栈关着时只登记起栈意图，由控制面服务任务把栈带起来、在同步回调里结算，用户不必按第二次。
 - 连接间隔由主机下发（常为 4 单位即 5 ms），固件只观测不主动请求：ESP32-S3 由
   `CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE` 放行亚规范间隔，NimBLE 主机侧按规范拒绝 itvl < 6 的请求。
 - 输入被主机采纳的门槛是 **0x0C/0x04（启用特性）**：未启用的链路即使 itvl=4 也不采纳输入，输入通知只在启用后发送，
@@ -201,8 +202,8 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    Sample["dp_task 每 5 ms 采样一次输入源"] --> Send{"到第 3 拍（15 ms）？"}
-    Send -->|"是"| Report["target_send_pad → BLE 输入通知（DP_SEND_DIV=3，无运行时档位）"]
+    Sample["dp_task 采样一次输入源（正常 5 ms，省电档 83 ms）"] --> Send{"到第几拍？（正常每 3 拍 15 ms，省电档每拍）"}
+    Send -->|"是"| Report["target_send_pad → BLE 输入通知（分频由 dp_report_divisor 算，无运行时档位）"]
     Send -->|"否"| Sample
     Host["主机反馈事件（震动 / 玩家灯 / 触觉采样）"] --> Merge["叠加进 pad_feedback_t 持续帧"]
     Tone["采样音色的段状态（幅度段 + 段音高，按 5 ms tick 变化）"] --> Deliver
@@ -213,6 +214,10 @@ flowchart LR
 
 投递条件：主机事件带哪些字段就覆盖哪些字段（震动与玩家灯是持续状态，回落到默认值会把刚点亮的玩家灯写灭）；
 触觉采样只在带它的事件里更新、0x00 是停止，段边界不能只跟主机事件走——那会把采样音色的段量化到 64ms 的栅格，数据面再以 300ms 超时自灭兜底。
+
+节拍与分频收在 `dp/dp_power.c` 一处（纯逻辑，主机端用例在 `firmware/test/test_dp_power.c`）：
+BLE 栈关闭即省电档，数据面采样与上报、界面状态轮询与动画推进一起降到 12 fps 等效（83 ms）；
+此时没有可上报的链路，慢下来的只是调试注入与手柄驱动的屏幕操控。
 
 ## 输入通路：接收 / 处理 / 转换
 

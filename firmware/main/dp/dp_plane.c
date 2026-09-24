@@ -18,6 +18,7 @@
 #include "ble_session.h"
 #include "buzzer.h"
 #include "dp_capture.h"
+#include "dp_power.h"
 #include "dp_source.h"
 #include "dp_ui.h"
 #include "ds_behavior.h"
@@ -32,8 +33,6 @@
 
 static const char *TAG = "remapad_dp";
 
-#define DP_TICK_MS 5
-
 /** 采集播放的自灭时限：主机正常会用 0x00 采样收掉提示音，但忘了发或丢包时
  *  不能把蜂鸣钉在响声上；主机以十几 Hz 重发采样时节奏自然续上。 */
 #define DP_HAPTIC_HOLD_US 300000LL
@@ -41,11 +40,8 @@ static const char *TAG = "remapad_dp";
 /** 单拍最多发几条采集帧：突发时余下的留在环里，别把一拍时间全交给串口。 */
 #define DP_CAPTURE_DRAIN_MAX 8
 
-/** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告，写死不提供运行时档位。 */
+/** 目标上报节奏：正常档 5 ms 采样、每 15 ms 发一份报告，写死不提供运行时档位。 */
 #define DP_REPORT_INTERVAL_MS 15u
-
-/** 上报分频：每 DP_TICK_MS 一次采样，够这个数就发一份报告。 */
-#define DP_SEND_DIV (DP_REPORT_INTERVAL_MS / DP_TICK_MS)
 
 /** 按键变化日志的最小间隔：调试注入与桥接输入都在这一条里可见，
  *  限频后连点也不会刷屏。 */
@@ -405,9 +401,12 @@ static void dp_task(void *param)
     size_t usb_out_sent_len = 0;
     bool usb_out_valid = false;
 
-    ESP_LOGI(TAG, "data plane task running, tick=%dms, target=%s", DP_TICK_MS,
-             target_name());
+    ESP_LOGI(TAG, "data plane task running, tick=%ums (power save %ums), target=%s",
+             (unsigned)DP_TICK_MS, (unsigned)DP_POWER_SAVE_TICK_MS, target_name());
     for (;;) {
+        /* 节拍随档位走：BLE 栈关闭（未连接也未广播）时降到 12 fps 等效，
+         * 采样、上报与屏幕操控一起慢下来。 */
+        const uint32_t tick_ms = dp_tick_ms(dp_power_save_active(ble_controller_running()));
         dp_source_sample(&pad);
         /* DS4 / DS5 手柄行为（「DS4、DS5 设置」页两项开关）：触摸板按下的
          *  键位在这一拍定一次（左半减号 / 右半加号 / 截图），下游的目标编码
@@ -627,7 +626,7 @@ static void dp_task(void *param)
             }
             last_buttons = pad.buttons;
         }
-        const dp_ui_event_t ui_event = dp_ui_frame(pad.buttons, DP_TICK_MS);
+        const dp_ui_event_t ui_event = dp_ui_frame(pad.buttons, tick_ms);
         /* 捕获期间不上行玩家输入：组合键一按下就切换（不必等翻转），退出模式
          * 后若组合键还按着也保持到松开为止（见 dp_ui.h）。 */
         const bool paused = dp_ui_captured(pad.buttons) || dp_ui_active();
@@ -644,7 +643,7 @@ static void dp_task(void *param)
             ESP_LOGI(TAG, "pad captures the screen: dpad moves focus, circle confirms");
         }
         refresh_target_facts(&pad);
-        if (++send_div >= DP_SEND_DIV) {
+        if (++send_div >= dp_report_divisor(tick_ms, DP_REPORT_INTERVAL_MS)) {
             send_div = 0;
             if (paused) {
                 /* 捕获期间续发中性帧：主机按「稳定不跳号的上报流」判断链路
@@ -655,7 +654,7 @@ static void dp_task(void *param)
             }
         }
         /* vTaskDelayUntil 内部自行推进 wake；再手动累加会把实际周期翻倍。 */
-        vTaskDelayUntil(&wake, pdMS_TO_TICKS(DP_TICK_MS));
+        vTaskDelayUntil(&wake, pdMS_TO_TICKS(tick_ms));
     }
 }
 

@@ -20,6 +20,7 @@ void host_test_set_ns2_identity(bool valid);
 void host_test_set_usb_input(bool attached, uint16_t vid, uint16_t pid);
 void host_test_set_usb_role_host(bool host);
 void host_test_set_pc_link(bool active, bool pc_connected);
+void host_test_set_ble_stack_running(bool running);
 void host_test_set_ota_progress(int phase, int percent);
 size_t host_test_ota_ui_ready_count(void);
 void host_test_ota_ui_ready_reset(void);
@@ -44,6 +45,7 @@ static void begin_case(void)
     host_test_set_usb_input(false, 0, 0);
     host_test_set_usb_role_host(false);
     host_test_set_pc_link(false, false);
+    host_test_set_ble_stack_running(true);
     host_test_set_ota_progress(0, 0);
     memset(&s_state, 0, sizeof(s_state));
 }
@@ -275,6 +277,20 @@ static void identity_mac_shows_display_order(void)
     CHECK(strcmp(s_state.controller_address, "33:22:11:35:E6:9C") == 0);
 }
 
+/** 省电档跟着 BLE 栈的开关走：栈在跑（连接或广播）按正常节拍，栈关着
+ *  （未连接也未广播）界面切到 12 fps 等效节拍。 */
+static void power_save_follows_ble_stack(void)
+{
+    begin_case();
+    host_test_set_ble_stack_running(true);
+    ui_service_fill_state(&s_state);
+    CHECK(!s_state.power_save);
+
+    host_test_set_ble_stack_running(false);
+    ui_service_fill_state(&s_state);
+    CHECK(s_state.power_save);
+}
+
 static void ui_ready_notified_from_second_poll(void)
 {
     begin_case();
@@ -300,4 +316,5 @@ HOST_TEST_SUITE(suite_ui_service, "ui_service 屏幕 UI 契约",
                 { "配对状态流转清掉命令提示", pairing_transition_clears_notice },
                 { "状态快照装配逐字段对上读数", fill_state_maps_device_snapshot },
                 { "蓝牙地址按显示序展示", identity_mac_shows_display_order },
+                { "省电档跟着 BLE 栈开关走", power_save_follows_ble_stack },
                 { "UI 就绪从第二轮轮询起上报", ui_ready_notified_from_second_poll })

@@ -1,7 +1,7 @@
 /**
  * ui_service 的状态源与控制面替身：电池、背光、NS2 会话、USB 输入/角色、
- * PC 链路、OTA 进度、js_bridge 与控制台出口。只参与编译接线，host_test_set_*
- * 控制读数，host_test_js_bridge_* 捕获提交的命令与亮度。
+ * PC 链路、OTA 进度、BLE 栈开关、js_bridge 与控制台出口。只参与编译接线，
+ * host_test_set_* 控制读数，host_test_js_bridge_* 捕获提交的命令与亮度。
  */
 #include <stddef.h>
 #include <stdio.h>
@@ -35,6 +35,7 @@ static struct {
     bool usb_host;
     bool link_active;
     bool link_pc;
+    bool ble_running;
     int ota_phase;
     int ota_percent;
     size_t ota_ui_ready;
@@ -93,6 +94,11 @@ void host_test_set_pc_link(bool active, bool pc_connected)
 {
     s_stub.link_active = active;
     s_stub.link_pc = pc_connected;
+}
+
+void host_test_set_ble_stack_running(bool running)
+{
+    s_stub.ble_running = running;
 }
 
 void host_test_set_ota_progress(int phase, int percent)
@@ -231,6 +237,11 @@ bool input_link_active(void)
 bool input_link_pc_connected(void)
 {
     return s_stub.link_pc;
+}
+
+bool ble_controller_running(void)
+{
+    return s_stub.ble_running;
 }
 
 void ota_session_progress(int *phase, int *percent)

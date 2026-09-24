@@ -66,6 +66,7 @@ set(remapad_srcs
     "dp/dp_capture.c"
     "dp/dp_source.c"
     "dp/dp_ui.c"
+    "dp/dp_power.c"
     "usb/usb_input.c"
     "usb/usb_role.c"
     "usb/usb_transport.c"

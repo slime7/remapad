@@ -87,6 +87,8 @@ pub struct UiState {
     pub rebooting: bool,
     /// 息屏时触摸整段跳过（画面不可见，触点只会误触看不见的控件）。
     pub screen_on: bool,
+    /// 省电档（BLE 关闭）：界面按 12 fps 等效节拍轮询与推进动画。
+    pub power_save: bool,
 }
 
 /// 逐帧渲染统计：面板提交耗时与渲染耗时分开记。
@@ -121,6 +123,7 @@ const _: () = {
     assert!(core::mem::offset_of!(UiState, powering_off) == 84);
     assert!(core::mem::offset_of!(UiState, rebooting) == 85);
     assert!(core::mem::offset_of!(UiState, screen_on) == 86);
+    assert!(core::mem::offset_of!(UiState, power_save) == 87);
     assert!(core::mem::size_of::<Stats>() == 40);
     assert!(core::mem::align_of::<Stats>() == 8);
     assert!(core::mem::offset_of!(Stats, window_render_us) == 8);

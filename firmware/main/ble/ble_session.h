@@ -15,6 +15,8 @@ extern "C" {
  * BLE 手柄会话：广播策略、连接初始化时序与指令分发（协议见 docs/controller-switch2.md）。
  * 传输细节由 ble_controller 承载；设备对外只有一台 Pro Controller 2（单身份、单报告格式、单条会话）。
  * 广播只由用户动作打开：上电与断连静默，连接键开连接窗口、HOME 开唤醒窗口，窗口到期或主机连上即关闭。
+ * 完全静默（无连接、无窗口、不在配对流程）时整个 BLE 栈关闭（控制器断电，射频不再发热），
+ * 连接键 / HOME / 配对新主机再把栈带起来。
  */
 
 /** host 同步完成（栈就绪）：记录自身 MAC，不启动广播（等用户按连接键）。 */
@@ -100,6 +102,13 @@ bool ns2_session_advertising(void);
  *  唤醒广播重连（握把/顺序页连上来的会话不采用输入报文）。配对流程进行时
  *  忽略。 */
 void ns2_session_wake_request(void);
+
+/** 完全静默判据（没有连接、没有广播窗口、不在配对流程）：BLE 栈可以关掉省电。 */
+bool ns2_session_stack_idle(void);
+
+/** 省电服务（控制面服务任务每轮调用）：有待结算的起栈意图就把栈带起来，
+ *  完全静默就把栈关掉——静默期间控制器断电，射频不再发热。 */
+void ns2_session_ble_service(void);
 
 /** 广播窗口内形态的来源（对账开关）。 */
 typedef enum {

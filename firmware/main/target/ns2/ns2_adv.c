@@ -67,6 +67,11 @@ bool ns2_adv_host_registered(bool addr_matched, bool pair_handshake_done,
     return addr_matched || pair_handshake_done || features_enabled;
 }
 
+bool ns2_adv_stack_idle(bool connected, bool pairing, bool window_active)
+{
+    return !connected && !pairing && !window_active;
+}
+
 /** 地址是否可用：全零地址写进唤醒广播等于没带地址——主机既不会回连也不会被
  *  唤醒（NVS 里存在计数虚高、尾部记录全零的历史表）。 */
 static bool mac_usable(const uint8_t mac[6])

@@ -243,6 +243,11 @@ PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**�
 SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。
 软件关机走系统页「关机」按钮（bridge 的 `powerOff` 命令，串口对应 `poweroff`）：电池供电下释放锁存即断电，USB 供电下锁存被旁路、关不掉，固件重新锁存后界面提示「USB 供电下无法关机，请拔线后再试」。
 
+静默省电：设备完全静默（没有链路、没有广播窗口、不在配对流程）持续约 1 秒后关闭整个 BLE 栈——控制器断电、射频不再发热；
+同一时刻起数据面采样与上报、界面状态轮询与动画推进一起降到 12 fps 等效节拍（83 ms），屏幕照常显示、不自动熄灭。
+按连接键、未连接时按 HOME、发起配对新主机都会重新起栈并按对应意图广播，用户不必按第二次（起栈要付一次控制器初始化时间）。
+串口日志里对应 `ble stack idle: shutting the controller down` 与 `ble stack start on demand` 两行。
+
 用户设置（背光亮度、手柄四段配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。
 PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmware/main/input/`，PC 侧见 [pc/README.md](../pc/README.md)；
 手柄插在板卡上的 USB host 直插也已落地（`firmware/main/usb/`）。

@@ -19,6 +19,8 @@ use crate::App;
 
 /// 状态轮询间隔：呼吸与旋转提示按这个节拍推进。
 const POLL_MS: u64 = 50;
+/// 省电档（BLE 关闭）的状态轮询间隔：与平台节拍同为 12 fps 等效。
+const POLL_POWER_SAVE_MS: u64 = 83;
 /// 手柄按键后焦点环的可见窗口（微秒）。
 const PAD_IDLE_US: i64 = 4 * 1000 * 1000;
 /// 周期统计窗口：5 秒一行。
@@ -50,6 +52,7 @@ struct Glue {
     action: Option<ActionFn>,
     user: *mut c_void,
     timer: Timer,
+    poll_ms: Cell<u64>,
     last: Cell<UiState>,
     page: Cell<i32>,
     focus: Cell<i32>,
@@ -80,6 +83,7 @@ pub fn start(hooks: Hooks, poll: Option<PollFn>, action: Option<ActionFn>, user:
         action,
         user,
         timer: Timer::default(),
+        poll_ms: Cell::new(POLL_MS),
         last: Cell::new(UiState::default()),
         page: Cell::new(0),
         focus: Cell::new(-1),
@@ -188,6 +192,9 @@ fn apply_state(glue: &Glue, ui: &App, state: &UiState) {
     ui.set_powering_off(state.powering_off);
     ui.set_rebooting(state.rebooting);
     platform::set_touch_enabled(state.screen_on);
+    /* 省电档（BLE 关闭）：轮询与动画节拍一起降到 12 fps 等效。 */
+    platform::set_power_save(state.power_save);
+    set_poll_interval(glue, state.power_save);
 
     /* 主机图标呼吸：广播与扫描期间按 1.2 秒周期起伏，其余时间常亮。 */
     let searching = state.pairing == 2 || state.pairing == 3;
@@ -214,6 +221,16 @@ fn apply_state(glue: &Glue, ui: &App, state: &UiState) {
         glue.spin_step.set(0);
     }
     ui.set_spinner_phase(glue.spin_step.get());
+}
+
+/// 省电档切换轮询节拍：改周期不重建回调，切档不丢当前状态。
+fn set_poll_interval(glue: &Glue, power_save: bool) {
+    let period = if power_save { POLL_POWER_SAVE_MS } else { POLL_MS };
+    if glue.poll_ms.get() == period {
+        return;
+    }
+    glue.poll_ms.set(period);
+    glue.timer.set_interval(Duration::from_millis(period));
 }
 
 /// 手柄按键导航：边沿触发，左右（含 L1/R1）翻页、上下移焦点、圆圈确认、叉键取消弹窗。

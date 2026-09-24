@@ -78,7 +78,7 @@ flowchart LR
 | 宿主层 | `ui/slint_ui/src/host.rs` | 把状态快照写进界面属性，把界面动作与手柄按键翻译成回调 |
 | C ABI | `ui/slint_ui/include/slint_ui.h` | 状态快照、动作回调、面板与触摸 hooks、统计与截图入口 |
 | UI 契约 | `firmware/main/ui/ui_service.h` | core 侧状态快照装配、动作分发与提供者生命周期；实现按构建形态链接（组件或空实现） |
-| 调度 | 界面提供者任务 + 控制面服务任务 | `remapad-ui`（64 KB 内部 RAM 栈）承载面板/触摸/背光初始化与界面事件循环；`remapad-bridge` 每 50 ms 泵命令队列与配对状态机 |
+| 调度 | 界面提供者任务 + 控制面服务任务 | `remapad-ui`（64 KB 内部 RAM 栈）承载面板/触摸/背光初始化与界面事件循环；`remapad-bridge` 每 50 ms 泵命令队列与配对状态机，并按需起停 BLE 栈（静默省电） |
 | 控制器数据面 | ESP-IDF USB/BLE/GATT/FreeRTOS | USB 输入接收、输入规范化、NS2 报告编码、BLE 广播/GATT/配对和状态持久化；协议见 [controller-switch2.md](controller-switch2.md) |
 | 升级 | `pc/remapadctl.py --upgrade` + `main/ota/` | 经桥接帧推送整包应用镜像，写非运行分区、`esp_ota_end` 校验后切启动分区并重启|
 | 硬件 | 产品 BSP + ESP-IDF | 输入采样、面板初始化、DMA 传输、电源和其他外设 |
@@ -204,9 +204,10 @@ flowchart TB
    （240 × 48 × 2 字节，内部 RAM 且 DMA 可达），建立 240 × 280 窗口，接好状态快照与动作回调。
 4. 建 `App`、写首轮状态、渲染首帧并整屏提交（首帧是全屏重画），随后 `boot_splash_end` 交屏。
 5. 进入事件循环：推进定时器与动画 → 采样触点 → `draw_if_needed` 渲染并按 damage 提交 → 让出 CPU
-   （有动画时按 16 ms 一档推进，最长等 100 ms，避免动画状态把循环拉成自旋而饿死空闲任务）。
+   （有动画时按 16 ms 一档推进，最长等 100 ms，避免动画状态把循环拉成自旋而饿死空闲任务；
+   省电档——BLE 栈关闭——两档都取 83 ms，即 12 fps 等效）。
 
-状态快照由一条 50 ms 的界面 `Timer` 驱动：它先把 `ui_service_fill_state` 装配的快照写进界面属性，
+状态快照由一条 50 ms 的界面 `Timer` 驱动（省电档改周期到 83 ms，回调不重建）：它先把 `ui_service_fill_state` 装配的快照写进界面属性，
 再从快照里取手柄按键位做焦点移动与确认。快照装配与动作分发（`ui_service_handle_action`）都在固件核心的
 `main/ui/ui_service.c` 里，控制面命令队列由 `remapad-bridge` 服务任务每 50 ms 服务一轮
 （桥接命令与串口 CLI 的请求都由它落地，界面动作只是它的提交方之一）。
@@ -334,6 +335,8 @@ flowchart LR
   CPU 跑满额定 240 MHz（`CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240`）。
 - **节拍不是固定 tick**：事件循环按最近的定时器与动画唤醒，有动画时按 16 ms 一档推进（对应 60 Hz 观感）；
   界面动画由界面框架按时间自己推进，固件侧的 50 ms 轮询只管状态快照与手柄按键。
+  省电档（BLE 栈关闭，判据见 `dp/dp_power.c`）把轮询、动画推进与等待上限一起取 83 ms（12 fps 等效），
+  数据面采样与上报同档降到 83 ms——此时没有链路可上报，屏幕照常显示。
 - **提交逐条同步**：每条 damage 矩形按 48 行切分、逐条拷进行带缓冲，经 `panel_transfer` 同步提交到 ST7789V2，
   字节序转换与 DMA 等待都在面板驱动里；传输失败只记一行警告，帧继续画。
 - 真实面板方向与时序配置（`mirror(true,true)` + `invert_color` + `set_gap(0,20)`、背光 GPIO15）逐条对照微雪官方 ESP-IDF 示例，SPI2 取上限 80 MHz。

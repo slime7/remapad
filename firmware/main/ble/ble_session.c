@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
 #include "host/ble_store.h"
 #include "psa/crypto.h"
 
@@ -272,6 +273,84 @@ static ns2_adv_mode_t s_last_applied_adv_mode = NS2_ADV_OFF;
  *  做 A/B 对账，auto 时按窗口来源决策。 */
 static ns2_window_form_t s_window_form = NS2_WINDOW_FORM_AUTO;
 
+/** 起栈意图：栈关着时用户按下的键先记下来，由控制面服务任务起栈、
+ *  在同步回调里结算。 */
+typedef enum {
+    NS2_BLE_INTENT_NONE = 0,
+    NS2_BLE_INTENT_CONNECT,
+    NS2_BLE_INTENT_PAIRING,
+    NS2_BLE_INTENT_WAKE,
+} ns2_ble_intent_t;
+
+/** 栈状态：命令回调、同步回调与控制面服务任务之间交接。 */
+static portMUX_TYPE s_ble_mux = portMUX_INITIALIZER_UNLOCKED;
+static struct {
+    uint8_t intent; /**< ns2_ble_intent_t：待结算的起栈意图。 */
+    bool synced;    /**< 本轮同步回调已跑过：同步前的静默不算「可以关栈」。 */
+} s_ble;
+
+/** 记下起栈意图（任意任务上下文）。 */
+static void ble_intent_set(ns2_ble_intent_t intent)
+{
+    portENTER_CRITICAL(&s_ble_mux);
+    s_ble.intent = (uint8_t)intent;
+    portEXIT_CRITICAL(&s_ble_mux);
+}
+
+/** 取走起栈意图（同步回调结算用）。 */
+static ns2_ble_intent_t ble_intent_take(void)
+{
+    portENTER_CRITICAL(&s_ble_mux);
+    const ns2_ble_intent_t intent = (ns2_ble_intent_t)s_ble.intent;
+    s_ble.intent = (uint8_t)NS2_BLE_INTENT_NONE;
+    portEXIT_CRITICAL(&s_ble_mux);
+    return intent;
+}
+
+/** 是否有待结算的起栈意图。 */
+static bool ble_intent_pending(void)
+{
+    portENTER_CRITICAL(&s_ble_mux);
+    const bool pending = s_ble.intent != (uint8_t)NS2_BLE_INTENT_NONE;
+    portEXIT_CRITICAL(&s_ble_mux);
+    return pending;
+}
+
+/** 标记本轮同步已完成。 */
+static void ble_synced_set(bool synced)
+{
+    portENTER_CRITICAL(&s_ble_mux);
+    s_ble.synced = synced;
+    portEXIT_CRITICAL(&s_ble_mux);
+}
+
+/** 本轮同步是否已完成（服务任务据此避开「刚起来还没同步」的窗口）。 */
+static bool ble_synced_get(void)
+{
+    portENTER_CRITICAL(&s_ble_mux);
+    const bool synced = s_ble.synced;
+    portEXIT_CRITICAL(&s_ble_mux);
+    return synced;
+}
+
+/** 栈没起来时把用户意图记下来（控制面服务任务据此起栈）；返回是否已记账。 */
+static bool ble_stack_defer(ns2_ble_intent_t intent)
+{
+    if (ble_controller_running()) {
+        return false;
+    }
+    ESP_LOGI(TAG, "ble stack down: intent %u deferred", (unsigned)intent);
+    ble_intent_set(intent);
+    return true;
+}
+
+/** 静默持续时间门槛（微秒）：静默先记时、持续够久才关栈——刚被用户打开的
+ *  窗口不会在同一轮里被关掉（窗口与配对流程都跨任务写，单次读数不作数）。 */
+#define NS2_BLE_IDLE_GRACE_US (1000000LL)
+
+/** 静默起点（微秒，0 = 不在静默）：由 1 秒周期任务维护，控制面服务任务读。 */
+static int64_t s_idle_since_us;
+
 /** 对账开关形态的日志名。 */
 static const char *window_form_name(ns2_window_form_t form)
 {
@@ -354,6 +433,10 @@ static void adv_start_identity(size_t index, ns2_identity_t identity,
  *  当前形态每个身份只占一个实例（PDU 形态见 ble_controller）。 */
 static void apply_advertising(void)
 {
+    /* 栈关着（静默省电）时没有广播可设：起栈后由同步回调按意图重设。 */
+    if (!ble_controller_running()) {
+        return;
+    }
     ns2_identity_t ids[2];
     const size_t n = mode_identities(ids);
     for (size_t i = 0; i < n; i++) {
@@ -378,6 +461,9 @@ static void apply_advertising(void)
 
 void ns2_session_connect(void)
 {
+    if (ble_stack_defer(NS2_BLE_INTENT_CONNECT)) {
+        return;
+    }
     if (ble_controller_connected()) {
         ESP_LOGI(TAG, "connect ignored (link in use)");
         return;
@@ -423,6 +509,9 @@ bool ns2_session_advertising(void)
 
 void ns2_session_wake_request(void)
 {
+    if (ble_stack_defer(NS2_BLE_INTENT_WAKE)) {
+        return;
+    }
     if (s_ses.pairing_mode) {
         ESP_LOGI(TAG, "wake request ignored (pairing flow)");
         return;
@@ -448,9 +537,65 @@ void ns2_session_on_sync(const uint8_t own_mac[6])
     memcpy(s_ses.own_mac, own_mac, 6);
     ESP_LOGI(TAG, "host synced, own MAC %02x:%02x:%02x:%02x:%02x:%02x",
              own_mac[0], own_mac[1], own_mac[2], own_mac[3], own_mac[4], own_mac[5]);
-    /* 开机自动触发 30 秒信号搜索：类似手柄搜索模式，已配对则唤醒+回连，未配对则发发现广播，
-     * 超时未建立连接自动关闭 BLE 发射，彻底静默省电。 */
+    ble_synced_set(true);
+    /* 起栈意图按用户按下的那个键结算；开机没有意图，自动触发 30 秒信号搜索
+     * （类似手柄搜索模式，已配对则唤醒+回连，未配对则发发现广播），
+     * 超时未建立连接即关栈静默省电。 */
+    switch (ble_intent_take()) {
+    case NS2_BLE_INTENT_CONNECT:
+        ns2_session_connect();
+        return;
+    case NS2_BLE_INTENT_PAIRING:
+        ns2_session_start_pairing_mode();
+        return;
+    case NS2_BLE_INTENT_WAKE:
+        ns2_session_wake_request();
+        return;
+    default:
+        break;
+    }
     ns2_session_connect();
+}
+
+bool ns2_session_stack_idle(void)
+{
+    return ns2_adv_stack_idle(ble_controller_connected(), s_ses.pairing_mode,
+                              ns2_adv_window_active(&s_adv_win, esp_timer_get_time()));
+}
+
+void ns2_session_ble_service(void)
+{
+    if (!ble_controller_running()) {
+        if (!ble_intent_pending()) {
+            return;
+        }
+        ESP_LOGI(TAG, "ble stack start on demand");
+        const esp_err_t err = ble_controller_start();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "ble stack start failed: %s", esp_err_to_name(err));
+            ble_intent_set(NS2_BLE_INTENT_NONE);
+        }
+        return;
+    }
+    /* 意图结算完（同步回调跑过）之前不动栈：刚起来的栈在同步前也是「静默」的。 */
+    if (ble_intent_pending() || !ble_synced_get()) {
+        return;
+    }
+    if (!ns2_session_stack_idle()) {
+        return;
+    }
+    const int64_t now = esp_timer_get_time();
+    if (s_idle_since_us == 0 || now - s_idle_since_us < NS2_BLE_IDLE_GRACE_US) {
+        return;
+    }
+    ESP_LOGI(TAG, "ble stack idle: shutting the controller down (power save)");
+    const esp_err_t err = ble_controller_stop();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ble stack stop failed: %s", esp_err_to_name(err));
+        return;
+    }
+    s_idle_since_us = 0;
+    ble_synced_set(false);
 }
 
 /** 连接空闲超时（微秒）：主机连上后会立刻跑初始化序列（毫秒级到达），
@@ -1335,6 +1480,9 @@ bool ns2_session_rumble_enabled(void)
 
 void ns2_session_start_pairing_mode(void)
 {
+    if (ble_stack_defer(NS2_BLE_INTENT_PAIRING)) {
+        return;
+    }
     /* 配对新主机（相当于按住配对键）：先断开当前主机，再发标准发现广播
      * 等新主机搜索——目标是配一台新主机，不能带着旧主机的地址广播。
      * 设备只有一台 Pro，直接进发现广播。 */
@@ -1621,6 +1769,9 @@ void ns2_session_tick(void)
     }
 
     const int64_t now = esp_timer_get_time();
+
+    /* 静默计时：静默持续够久（NS2_BLE_IDLE_GRACE_US）才允许关栈省电。 */
+    s_idle_since_us = ns2_session_stack_idle() ? (s_idle_since_us != 0 ? s_idle_since_us : now) : 0;
 
     /* 广播窗口到期（连接窗口 / 唤醒窗口）：设备回到静默——不会一直发
      * 信号，想再连一次就再按一次连接键或 HOME。 */

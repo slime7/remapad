@@ -126,6 +126,11 @@ bool ns2_adv_dormant_link(bool subscribed, bool features_enabled);
 bool ns2_adv_host_registered(bool addr_matched, bool pair_handshake_done,
                              bool features_enabled);
 
+/** 关栈判据（纯逻辑，主机端用例钉住）：完全静默——没有连接、没有广播窗口、
+ *  不在配对流程——才允许关掉 BLE 控制器省电；窗口或配对流程进行中关栈会让
+ *  主机再也连不上。 */
+bool ns2_adv_stack_idle(bool connected, bool pairing, bool window_active);
+
 /** 生成 31 字节广播载荷：pid 为本机型号 ID（Pro Controller 2 = 0x2069），
  *  host_mac 为主机地址（NimBLE 存储序，即显示序反转，与配对线格式一致）。
  *  发现形态与静默忽略 host_mac 并把地址填零；回连/唤醒形态在 host_mac 为

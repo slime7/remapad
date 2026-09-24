@@ -17,8 +17,17 @@ extern "C" {
  * 设备对外只有一台 Pro Controller 2（单身份、单条链路），广播默认用 legacy PDU。
  */
 
-/** 初始化 NimBLE 并启动 host 任务；成功后栈在同步回调里触发发现广播。 */
+/** 起栈：初始化 NimBLE 并启动 host 任务（栈已在跑时直接返回）；
+ *  成功后栈在同步回调里触发发现广播。 */
 esp_err_t ble_controller_start(void);
+
+/** 关栈：停广播、停 host 事件循环、关闭并反初始化控制器（射频与 modem 断电）。
+ *  只能在非 NimBLE host 任务上调用——内部要等 host 任务退出，控制面服务任务即是；
+ *  关掉后 ble_controller_start 可以再次把栈带起来。 */
+esp_err_t ble_controller_stop(void);
+
+/** BLE 栈是否在跑（控制器已使能）：关栈期间所有 NimBLE 入口都不可调用。 */
+bool ble_controller_running(void);
 
 /** 是否处于 ACL 连接中（任一连接）。 */
 bool ble_controller_connected(void);

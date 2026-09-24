@@ -764,11 +764,15 @@ void js_bridge_service(void)
         s_bridge.queue_len--;
         handle_cmd(slot.data);
     }
+
+    /* 命令先结算再动 BLE 栈：刚开出的窗口不会被省电服务立刻收掉。 */
+    ns2_session_ble_service();
 }
 
 /** 控制面服务任务参数：与界面任务同核（CPU1），优先级低于界面渲染。 */
 #define REMAPAD_BRIDGE_TASK_NAME "remapad-bridge"
-#define REMAPAD_BRIDGE_TASK_STACK_BYTES (6U * 1024U)
+/** 栈给到 8 KB：BLE 栈的起停（nimble_port_init / stop）就在这条任务上跑。 */
+#define REMAPAD_BRIDGE_TASK_STACK_BYTES (8U * 1024U)
 #define REMAPAD_BRIDGE_TASK_PRIORITY 4
 #define REMAPAD_BRIDGE_TASK_CORE 1
 #define REMAPAD_BRIDGE_SERVICE_PERIOD_MS 50U

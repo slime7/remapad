@@ -278,6 +278,17 @@ static void home_key_fires_on_press_edge(void)
     CHECK(ns2_adv_home_key_step(&key, true));
 }
 
+/** 关栈判据：只有完全静默（没有连接、没有广播窗口、不在配对流程）才允许关掉
+ *  BLE 控制器省电——窗口或配对流程进行中关栈会让主机再也连不上。 */
+static void stack_idle_needs_full_silence(void)
+{
+    CHECK(ns2_adv_stack_idle(false, false, false));
+    CHECK(!ns2_adv_stack_idle(true, false, false));
+    CHECK(!ns2_adv_stack_idle(false, true, false));
+    CHECK(!ns2_adv_stack_idle(false, false, true));
+    CHECK(!ns2_adv_stack_idle(true, true, true));
+}
+
 HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"发现广播与样本一致", discovery_matches_capture},
                 {"回连广播不带唤醒标志", reconnect_keeps_normal_status},
@@ -292,4 +303,5 @@ HOST_TEST_SUITE(suite_ns2_adv, "ns2_adv",
                 {"窗口时长与唤醒突发随组装信号而定", window_lifetime_follows_signal},
                 {"HOME 按键按主机在线与否分流", home_key_follows_link_state},
                 {"按住 HOME 只触发一次唤醒", home_key_fires_on_press_edge},
+                {"完全静默才允许关 BLE 控制器", stack_idle_needs_full_silence},
                 {"厂商数据偏移与尾部标志", manufacturer_data_offsets});

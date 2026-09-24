@@ -155,6 +155,11 @@ static uint8_t s_adv_addr[ADV_INSTANCE_MAX][6];
 static bool s_adv_addr_valid[ADV_INSTANCE_MAX];
 static uint8_t s_own_public[6];
 
+/** 栈状态：控制器使能与 host 任务都在跑；关栈后 NimBLE 入口一律不再调用。 */
+static bool s_running;
+/** 周期空闲检查（1 s）：起栈时建一次，关栈不动它。 */
+static esp_timer_handle_t s_idle_timer;
+
 /** 广播 PDU 形态（对账开关，默认按实例默认）：见 ble_ctl_adv_pdu_form_t。 */
 static uint8_t s_adv_pdu_form;
 
@@ -705,7 +710,7 @@ static void adv_start_instance(uint8_t instance, int legacy_pdu, const uint8_t p
 void ble_controller_adv_start(uint8_t instance, uint8_t identity,
                               const uint8_t payload[31], const uint8_t addr[6])
 {
-    if (instance >= ADV_INSTANCE_MAX) {
+    if (!s_running || instance >= ADV_INSTANCE_MAX) {
         return;
     }
     /* 实例身份由会话层显式给出（只有 Pro，双实例同址）。addr 为 NULL 时
@@ -721,6 +726,9 @@ void ble_controller_adv_start(uint8_t instance, uint8_t identity,
 
 bool ble_controller_adv_running(uint8_t identity)
 {
+    if (!s_running) {
+        return false;
+    }
     for (size_t i = 0; i < ADV_INSTANCE_MAX; i++) {
         if (s_adv_identity[i] == identity && ble_gap_ext_adv_active((uint8_t)i)) {
             return true;
@@ -731,6 +739,9 @@ bool ble_controller_adv_running(uint8_t identity)
 
 void ble_controller_adv_stop(void)
 {
+    if (!s_running) {
+        return;
+    }
     for (uint8_t i = 0; i < ADV_INSTANCE_MAX; i++) {
         ble_gap_ext_adv_stop(i);
     }
@@ -738,6 +749,9 @@ void ble_controller_adv_stop(void)
 
 void ble_controller_adv_stop_identity(uint8_t identity)
 {
+    if (!s_running) {
+        return;
+    }
     stop_advertising_for(identity);
 }
 
@@ -859,6 +873,9 @@ static void host_idle_timer_cb(void *arg)
 
 void ble_controller_disconnect(uint8_t hci_reason)
 {
+    if (!s_running) {
+        return;
+    }
     for (size_t i = 0; i < BLE_CTL_CONN_MAX; i++) {
         if (s_conn[i].used) {
             const int rc = ble_gap_terminate(s_conn[i].conn_handle, hci_reason);
@@ -986,21 +1003,13 @@ static void host_task(void *param)
     nimble_port_freertos_deinit();
 }
 
-esp_err_t ble_controller_start(void)
+/** 起栈：控制器 + NimBLE host + GATT 表；失败时反初始化，留着的栈会让下一次
+ *  起栈失败。 */
+static esp_err_t stack_start(void)
 {
-    memset(&s_h, 0, sizeof(s_h));
-    memset(s_conn, 0, sizeof(s_conn));
-    memset(s_adv_identity, 0, sizeof(s_adv_identity));
-    memset(s_adv_addr, 0, sizeof(s_adv_addr));
-    memset(s_adv_addr_valid, 0, sizeof(s_adv_addr_valid));
-
-    /* NimBLE 对每条 ATT 通知都打一行 INFO（连接期间约 200 行/秒）：会把串口
-     * 日志淹掉、排查时看不到自己的事件，也会给上报循环增加格式化开销。
-     * 只留 WARN 及以上。 */
-    esp_log_level_set("NimBLE", ESP_LOG_WARN);
-
     const esp_err_t err = nimble_port_init();
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nimble_port_init failed: %s", esp_err_to_name(err));
         return err;
     }
     /* 主机流程含标准 SMP 配对（pair 不 bond，LTK 源头仍是 0x15 私有配对），
@@ -1022,22 +1031,76 @@ esp_err_t ble_controller_start(void)
     int rc = ble_gatts_count_cfg(gatt_services);
     if (rc != 0) {
         ESP_LOGE(TAG, "gatts count rc=%d", rc);
-        return ESP_FAIL;
+        goto fail;
     }
     rc = ble_gatts_add_svcs(gatt_services);
     if (rc != 0) {
         ESP_LOGE(TAG, "gatts add rc=%d", rc);
-        return ESP_FAIL;
+        goto fail;
     }
-    esp_timer_handle_t idle_timer = NULL;
-    const esp_timer_create_args_t idle_timer_args = {
-        .callback = host_idle_timer_cb,
-        .name = "ble_idle_chk",
-    };
-    if (esp_timer_create(&idle_timer_args, &idle_timer) == ESP_OK) {
-        esp_timer_start_periodic(idle_timer, 1000000LL);
+    /* 周期空闲检查：会话层据此收窗口、断休眠链路；栈起来多次只建一个定时器。 */
+    if (s_idle_timer == NULL) {
+        const esp_timer_create_args_t idle_timer_args = {
+            .callback = host_idle_timer_cb,
+            .name = "ble_idle_chk",
+        };
+        if (esp_timer_create(&idle_timer_args, &s_idle_timer) == ESP_OK) {
+            esp_timer_start_periodic(s_idle_timer, 1000000LL);
+        }
     }
     ble_store_config_init();
+    /* 先置栈状态再起 host 任务：同步回调就在那个任务上，回调里的广播要看到栈在跑。 */
+    s_running = true;
     nimble_port_freertos_init(host_task);
     return ESP_OK;
+
+fail:
+    (void)nimble_port_deinit();
+    return ESP_FAIL;
+}
+
+esp_err_t ble_controller_start(void)
+{
+    if (s_running) {
+        return ESP_OK;
+    }
+    memset(&s_h, 0, sizeof(s_h));
+    memset(s_conn, 0, sizeof(s_conn));
+    memset(s_adv_identity, 0, sizeof(s_adv_identity));
+    memset(s_adv_addr, 0, sizeof(s_adv_addr));
+    memset(s_adv_addr_valid, 0, sizeof(s_adv_addr_valid));
+
+    /* NimBLE 对每条 ATT 通知都打一行 INFO（连接期间约 200 行/秒）：会把串口
+     * 日志淹掉、排查时看不到自己的事件，也会给上报循环增加格式化开销。
+     * 只留 WARN 及以上。 */
+    esp_log_level_set("NimBLE", ESP_LOG_WARN);
+    return stack_start();
+}
+
+esp_err_t ble_controller_stop(void)
+{
+    if (!s_running) {
+        return ESP_OK;
+    }
+    /* 先收广播：关栈时不留还在发的实例，栈停稳后 NimBLE 入口不可再调。 */
+    ble_controller_adv_stop();
+    const int rc = nimble_port_stop();
+    if (rc != 0) {
+        ESP_LOGE(TAG, "nimble_port_stop rc=%d", rc);
+        return ESP_FAIL;
+    }
+    /* 这一行之后 host 任务自行退出（nimble_port_run 返回即删掉自己）。 */
+    s_running = false;
+    const esp_err_t err = nimble_port_deinit();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nimble_port_deinit failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "ble stack down: controller disabled (radio off)");
+    return ESP_OK;
+}
+
+bool ble_controller_running(void)
+{
+    return s_running;
 }

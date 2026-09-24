@@ -18,9 +18,11 @@
 #include "app_config.h"
 #include "backlight.h"
 #include "battery.h"
+#include "ble_controller.h"
 #include "ble_session.h"
 #include "bridge/js_bridge.h"
 #include "console_out.h"
+#include "dp_power.h"
 #include "dp_ui.h"
 #include "input_link.h"
 #include "ns2_identity.h"
@@ -210,6 +212,8 @@ void ui_service_fill_state(remapad_ui_state_t *state)
     state->powering_off = s_ui.powering_off;
     state->rebooting = s_ui.rebooting;
     state->screen_on = config->screen_on;
+    /* 省电档由 BLE 栈的开关决定：栈关着（未连接也未广播）就降节拍。 */
+    state->power_save = dp_power_save_active(ble_controller_running());
 
     /* 首帧之后的第二轮回调才算 UI 就绪：OTA 健康门槛要的是「画面已经上屏」。 */
     if (!s_ui.ui_ready_sent) {

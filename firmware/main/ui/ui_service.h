@@ -65,6 +65,8 @@ typedef struct {
     bool rebooting;
     /** 息屏时触摸整段跳过（画面不可见，触点只会误触看不见的控件）。 */
     bool screen_on;
+    /** 省电档（BLE 关闭）：界面按 12 fps 等效节拍轮询与推进动画。 */
+    bool power_save;
 } remapad_ui_state_t;
 
 /** trace 命令不带帧数时的追踪长度。 */
