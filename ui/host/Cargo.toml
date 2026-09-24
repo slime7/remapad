@@ -19,3 +19,7 @@ i-slint-backend-testing = { version = "1.18", features = ["renderer-software"] }
 
 [build-dependencies]
 build-support = { path = "../build-support" }
+
+[dev-dependencies]
+# 行带计划是平台层的真源码（ui/render-plan），这里按同一份实现断言切片与拷贝。
+render-plan = { path = "../render-plan" }

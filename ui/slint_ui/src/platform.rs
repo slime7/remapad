@@ -33,6 +33,9 @@ const ANIMATION_PACE_MS: u32 = 16;
 const MAX_WAIT_MS: u32 = 100;
 const FRAME_PIXELS: usize = VIEW_WIDTH * VIEW_HEIGHT;
 const BAND_PIXELS: usize = VIEW_WIDTH * BAND_ROWS;
+/// 切分行带用的视口（与整帧缓冲、窗口尺寸同一份取值）。
+const VIEWPORT: render_plan::Viewport =
+    render_plan::Viewport { width: VIEW_WIDTH, height: VIEW_HEIGHT };
 
 mod build_config {
     include!(concat!(env!("OUT_DIR"), "/remapad_slint_ui_config.rs"));
@@ -159,35 +162,30 @@ impl EspPlatform {
         }
     }
 
-    /// 把一条 damage 矩形折成行带逐条提交。
+    /// 把一条 damage 矩形折成行带逐条提交（切分与拷贝在 render-plan，见 ui/render-plan）。
     fn flush_region(&self, region: &PhysicalRegion) {
         let mut band = self.band.borrow_mut();
         let frame = self.frame.borrow();
         for (origin, size) in region.iter() {
-            let x0 = origin.x.max(0) as usize;
-            let y0 = origin.y.max(0) as usize;
-            let width = size.width as usize;
-            let height = size.height as usize;
-            let mut line = 0;
-            while line < height {
-                let rows = (height - line).min(BAND_ROWS);
-                for band_line in 0..rows {
-                    let source = (y0 + line + band_line) * VIEW_WIDTH + x0;
-                    band[band_line * width..band_line * width + width]
-                        .copy_from_slice(&frame[source..source + width]);
-                }
+            let damage = render_plan::Damage {
+                x: origin.x,
+                y: origin.y,
+                width: size.width,
+                height: size.height,
+            };
+            for line in render_plan::bands(damage, VIEWPORT, BAND_ROWS) {
+                let pixels = render_plan::copy_band(&frame[..], &mut band[..], VIEW_WIDTH, line);
                 let result = boundary::panel_transfer(
                     &self.hooks,
-                    &mut band[..width * rows],
-                    x0 as i32,
-                    (y0 + line) as i32,
-                    width as i32,
-                    rows as i32,
+                    &mut band[..pixels],
+                    line.x as i32,
+                    line.y as i32,
+                    line.width as i32,
+                    line.rows as i32,
                 );
                 if result != abi::ESP_OK {
                     log_warn!(c"slint_platform", "band transfer failed: {}", result);
                 }
-                line += rows;
             }
         }
     }

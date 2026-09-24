@@ -21,6 +21,8 @@ slint = { version = "1.18", default-features = false, features = [
     "libm",
 ] }
 libm = "0.2"
+# 行带计划与宿主用例共用一份实现（见 ui/render-plan 与 ui/host/tests/bands.rs）。
+render-plan = { path = "../render-plan" }
 
 [build-dependencies]
 build-support = { path = "../build-support" }

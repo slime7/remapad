@@ -58,6 +58,8 @@ export component AppContent inherits Rectangle {
 
     out property <int> focus-count: focus-count-for(page);
     property <bool> dialog-open: dialog != 0;
+    /** 页面焦点环的可见开关：操控窗口打开且没有弹窗时，焦点才画在页面上。 */
+    property <bool> page-focus: root.pad-active && !root.dialog-open;
 
     // 翻页提示：方向侧的箭头往外弹 6px 再收回，卡片从行进侧偏 16px 滑入静止位置。
     // 滑入要先瞬移到位再归零，因此时长也当成属性：赋值起点时用 0ms，归零时给真实时长。
@@ -183,7 +185,7 @@ export component AppContent inherits Rectangle {
             BrightnessPage {
                 visible: root.page == 0;
                 backlight: root.backlight;
-                focus-index: root.pad-active && root.page == 0 ? root.focus-index : -1;
+                focus-index: root.page-focus && root.page == 0 ? root.focus-index : -1;
                 interactive: root.page == 0 && !root.dialog-open;
                 step-up => { root.action("brightness-up", 0); }
                 step-down => { root.action("brightness-down", 0); }
@@ -192,7 +194,7 @@ export component AppContent inherits Rectangle {
                 visible: root.page == 1;
                 address: root.controller-address;
                 selected: root.selected-colorway;
-                focus-index: root.pad-active && root.page == 1 ? root.focus-index : -1;
+                focus-index: root.page-focus && root.page == 1 ? root.focus-index : -1;
                 interactive: root.page == 1 && !root.dialog-open;
                 select(index) => { root.action("colorway", index); }
             }
@@ -201,7 +203,7 @@ export component AppContent inherits Rectangle {
                 pairing: root.pairing;
                 notice: root.notice;
                 spinner-phase: root.spinner-phase;
-                focus-index: root.pad-active && root.page == 2 ? root.focus-index : -1;
+                focus-index: root.page-focus && root.page == 2 ? root.focus-index : -1;
                 interactive: root.page == 2 && !root.dialog-open;
                 connect-key => { root.action("connect", 0); }
                 stop => { root.action("disconnect", 0); }
@@ -209,7 +211,7 @@ export component AppContent inherits Rectangle {
             }
             PowerPage {
                 visible: root.page == 3;
-                focus-index: root.pad-active && root.page == 3 ? root.focus-index : -1;
+                focus-index: root.page-focus && root.page == 3 ? root.focus-index : -1;
                 interactive: root.page == 3 && !root.dialog-open;
                 ask-reboot => { root.action("ask-reboot", 0); }
                 ask-power-off => { root.action("ask-power-off", 0); }
@@ -217,7 +219,7 @@ export component AppContent inherits Rectangle {
             UsbModePage {
                 visible: root.page == 4;
                 usb-role: root.usb-role;
-                focus-index: root.pad-active && root.page == 4 ? root.focus-index : -1;
+                focus-index: root.page-focus && root.page == 4 ? root.focus-index : -1;
                 interactive: root.page == 4 && !root.dialog-open;
                 select-device => { root.action("usb-device", 0); }
                 ask-host => { root.action("ask-usb-host", 0); }
@@ -226,7 +228,7 @@ export component AppContent inherits Rectangle {
                 visible: root.page == 5;
                 touchpad-plus-minus: root.ds-touchpad-plus-minus;
                 capture-key: root.ds-capture-key;
-                focus-index: root.pad-active && root.page == 5 ? root.focus-index : -1;
+                focus-index: root.page-focus && root.page == 5 ? root.focus-index : -1;
                 interactive: root.page == 5 && !root.dialog-open;
                 toggle-touchpad => { root.action("ds-touchpad", 0); }
                 toggle-capture => { root.action("ds-capture", 0); }
@@ -243,7 +245,7 @@ export component AppContent inherits Rectangle {
                 pairing: root.pairing;
                 pad-ui-mode: root.pad-ui-mode;
                 flash: root.debug-flash;
-                focus-index: root.pad-active && root.page == 7 ? root.focus-index : -1;
+                focus-index: root.page-focus && root.page == 7 ? root.focus-index : -1;
                 interactive: root.page == 7 && !root.dialog-open;
                 inject(index) => { root.action("debug-key", index); }
             }

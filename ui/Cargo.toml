@@ -1,10 +1,11 @@
-# 屏幕 UI 工作区:界面源码(ui/src、ui/assets)与三份 Rust 包共用一份 Cargo.lock。
+# 屏幕 UI 工作区:界面源码(ui/src、ui/assets)与四份 Rust 包共用一份 Cargo.lock。
 # host 是宿主侧用例包(stable 工具链),slint_ui 是交叉编译进固件的静态库(目录名同时是
-# ESP-IDF 组件名,由 idf.py build 触发),build-support 是两份 build.rs 共用的编译口径。
+# ESP-IDF 组件名,由 idf.py build 触发),render-plan 是平台层与宿主用例共用的行带计划,
+# build-support 是两份 build.rs 共用的编译口径。
 
 [workspace]
 resolver = "2"
-members = ["host", "slint_ui", "build-support"]
+members = ["host", "slint_ui", "render-plan", "build-support"]
 # 日常命令(cargo test / build 不带 -p)只落在 host:slint_ui 是 no_std 固件包,
 # 测试目标链 std 会与它的 panic handler 冲突;它只由 ui/slint_ui/CMakeLists.txt 显式构建。
 default-members = ["host"]

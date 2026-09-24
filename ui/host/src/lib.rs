@@ -1,6 +1,6 @@
 //! 宿主侧界面包：把 src/ 下的 .slint 编成 Rust，并给 #[test] 用例提供后端初始化、
 //! 元素几何与画面量测工具（软件渲染器渲染到内存缓冲，与设备上的面板同一套渲染通路）。
-//! 只在开发机上编译；固件里的同一份界面由同工作区的 fw 包交叉编译。
+//! 只在开发机上编译；固件里的同一份界面由同工作区的 slint_ui 包交叉编译。
 
 use std::collections::HashMap;
 
@@ -17,14 +17,15 @@ mod preview {
 pub use preview::PreviewApp;
 
 pub use i_slint_backend_testing::{ElementHandle, ElementQuery};
-pub use slint::{ComponentHandle, PhysicalSize, Rgba8Pixel, SharedPixelBuffer};
+pub use slint::platform::{PointerEventButton, WindowEvent};
+pub use slint::{ComponentHandle, LogicalPosition, PhysicalSize, Rgba8Pixel, SharedPixelBuffer};
 
 /// 面板尺寸（逻辑像素）：与硬件视口一致。
 pub const SCREEN_WIDTH: u32 = 240;
 pub const SCREEN_HEIGHT: u32 = 280;
-/// 预览窗尺寸：设备画面（240 × 280）加下方控制条。
+/// 预览窗尺寸：设备画面（240 × 280）加下方控制条（与 ui/preview.slint 的窗口同高）。
 pub const PREVIEW_WIDTH: u32 = 240;
-pub const PREVIEW_HEIGHT: u32 = 520;
+pub const PREVIEW_HEIGHT: u32 = 570;
 
 /// 区域内算作墨迹的判据：与底色每通道的差都超过这个值。
 const INK_TOLERANCE: u8 = 32;
@@ -248,6 +249,33 @@ pub fn settle<C: ComponentHandle>(app: &C) {
         elapse(std::time::Duration::from_millis(50));
         let _ = app.window().take_snapshot();
     }
+}
+
+/// 按下触点（逻辑像素，原点在窗口左上角）：拖动与点按都从这一步开始。
+pub fn press<C: ComponentHandle>(app: &C, x: f32, y: f32) {
+    app.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(x, y),
+        button: PointerEventButton::Left,
+    });
+}
+
+/// 按住期间移动触点：跟手位移与甩动判定都由界面侧按按下点自己算。
+pub fn move_to<C: ComponentHandle>(app: &C, x: f32, y: f32) {
+    app.window().dispatch_event(WindowEvent::PointerMoved { position: LogicalPosition::new(x, y) });
+}
+
+/// 抬手（位置传按下点就是一次点按的收尾）。
+pub fn release<C: ComponentHandle>(app: &C, x: f32, y: f32) {
+    app.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(x, y),
+        button: PointerEventButton::Left,
+    });
+}
+
+/// 点按：同一个点上按下再抬手，控件的 activated 在这一对事件上出现。
+pub fn tap<C: ComponentHandle>(app: &C, x: f32, y: f32) {
+    press(app, x, y);
+    release(app, x, y);
 }
 
 fn close(a: [u8; 3], b: [u8; 3], tol: u8) -> bool {

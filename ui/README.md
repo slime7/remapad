@@ -1,9 +1,9 @@
 # ui：屏幕界面（Slint）
 
 本目录是屏幕 UI 的 Slint 工作区：界面源码在 `src/` 与 `assets/`，固件把 `slint_ui/` 里的 Rust 组件编进镜像，
-同一份源码也由 `host/` 的宿主用例包编译验证；三份 Rust 包共用根 `Cargo.toml` 的一份 `Cargo.lock`。
+同一份源码也由 `host/` 的宿主用例包编译验证；四份 Rust 包共用根 `Cargo.toml` 的一份 `Cargo.lock`。
 
-Rust 组件、工具链与日常命令见下面各节；用 Rust 重写这套界面时记下的工具链坑与结论已并入本节与 [docs/adr/](../docs/adr/)。
+Rust 组件、工具链与日常命令见下面各节。
 
 ## 目录
 
@@ -17,6 +17,7 @@ Rust 组件、工具链与日常命令见下面各节；用 Rust 重写这套界
 | `host/` | 宿主用例包：编译界面并给用例提供元素几何与画面量测工具 |
 | `host/tests/*.rs` | 宿主用例：注入界面状态、按元素几何与像素断言屏幕行为（含预览窗自己的用例），见 [docs/TESTING.md](../docs/TESTING.md) |
 | `slint_ui/` | 固件 Rust 界面组件（ESP-IDF 组件，目录名即组件名）：平台层、宿主层、C ABI、装配层 `ui_host.c`、启动画面 `boot_splash.c` 与 `rust_heap.c` |
+| `render-plan/` | 行带计划：damage 裁剪、行带切分与逐行拷贝，平台层与宿主用例跑同一份实现 |
 | `build-support/` | 界面编译口径单一来源：风格、字号表与字体路径，`host` 与 `slint_ui` 的 `build.rs` 共用 |
 | `assets/fonts/` | 正文字体（NotoSansSC）、图标字体（MaterialIcons）与转圈字体（seguisym） |
 | `assets/main.svg`、`assets/dock.svg` | 四叶草卡片底图与底栏底图 |
@@ -123,7 +124,7 @@ rustc +esp --target xtensa-esp32s3-none-elf --print cfg
 
 | 变量 | 默认值 | 作用 |
 | :--- | :--- | :--- |
-| `REMAPAD_UI` | `ON` | 是否编入屏幕 UI；OFF 时纯 C 构建固件（不需要 Rust 工具链，屏幕熄灭、设置走串口 CLI，见 [ADR 0055](../docs/adr/0055-core-ui-split-optional-ui-build.md)） |
+| `REMAPAD_UI` | `ON` | 是否编入屏幕 UI；OFF 时纯 C 构建固件（不需要 Rust 工具链，屏幕熄灭、设置走串口 CLI） |
 | `REMAPAD_SLINT_RUST_TOOLCHAIN` | `esp` | 构建时调用 `cargo +<名字>`；工具链换了名字，或本机留了多套 esp 工具链时改它 |
 | `REMAPAD_SLINT_FONT` | `ui/assets/fonts/NotoSansSC-Regular.otf` | 构建期烘字形用的字体文件 |
 
@@ -176,5 +177,6 @@ cd firmware ; idf.py -p COMx app-flash
   | U+2801 / U+2802 / U+2804 / U+2840 / U+2880 / U+2820 / U+2810 / U+2808 | 盲文点阵八帧 | 配对页状态行的转圈 |
   不要退回 `@image-url("x.svg")`：SVG 按固有尺寸在构建期光栅化，缩到显示尺寸上屏会糊。
 - 焦点环可见窗口、切页与拖动的交互约定写在 `src/app.slint` 的注释里；重绘代价规则同样是改界面时的硬约束。
+  弹窗打开时焦点环只在弹窗的按钮上：页面按 `page-focus`（操控窗口打开且没有弹窗）决定要不要画环。
 - 平台层按单线程前提实现（Slint 的 `unsafe-single-threaded`）：界面状态与动作只在 UI 任务上访问，
   固件侧要用状态轮询与原子标记交接，不能从别的任务直接调进来。

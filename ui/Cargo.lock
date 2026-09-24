@@ -3176,8 +3176,13 @@ version = "0.1.0"
 dependencies = [
  "build-support",
  "i-slint-backend-testing",
+ "render-plan",
  "slint",
 ]
+
+[[package]]
+name = "render-plan"
+version = "0.1.0"
 
 [[package]]
 name = "renderdoc-sys"
@@ -3546,6 +3551,7 @@ version = "0.1.0"
 dependencies = [
  "build-support",
  "libm",
+ "render-plan",
  "slint",
 ]
 
