@@ -23,6 +23,10 @@ void dp_ui_state_reset(dp_ui_state_t *state)
     state->captured = false;
     state->held_ms = 0;
     state->fired = false;
+    state->cross_down = false;
+    state->cross_armed = false;
+    state->cross_held_ms = 0;
+    state->exit_wait_release = false;
 }
 
 bool dp_ui_captured(uint32_t pad_buttons)
@@ -71,28 +75,53 @@ dp_ui_event_t dp_ui_update(dp_ui_state_t *state, uint32_t pad_buttons, uint32_t 
     if (state == NULL) {
         return DP_UI_EVENT_NONE;
     }
+    /* 叉键按下沿：只有模式里按下的那一次按住算长按（进模式前就按着的不算），
+     * 松开清掉本次按住的账。 */
+    const bool cross = (pad_buttons & PAD_BTN_CROSS) != 0;
+    if (!cross) {
+        state->cross_down = false;
+        state->cross_armed = false;
+        state->cross_held_ms = 0;
+        state->exit_wait_release = false;
+    } else if (!state->cross_down) {
+        state->cross_down = true;
+        state->cross_armed = state->active;
+        state->cross_held_ms = 0;
+    }
+
     if (!dp_ui_captured(pad_buttons)) {
         /* 组合键没全按住：本次计时作废，松开后才允许下一次翻转。 */
         state->captured = false;
         state->held_ms = 0;
         state->fired = false;
-        return DP_UI_EVENT_NONE;
+    } else if (!state->fired) {
+        if (!state->captured) {
+            /* 按下沿：重新开始计时。 */
+            state->captured = true;
+            state->held_ms = 0;
+        }
+        state->held_ms += dt_ms;
+        if (state->held_ms >= DP_UI_COMBO_HOLD_MS) {
+            state->fired = true;
+            state->active = !state->active;
+            /* 模式翻了面：这一次叉键按住跟着作废，免得刚进模式就被它关掉。 */
+            state->cross_armed = false;
+            state->cross_held_ms = 0;
+            return state->active ? DP_UI_EVENT_ENTERED : DP_UI_EVENT_EXITED;
+        }
     }
-    if (!state->captured) {
-        /* 按下沿：重新开始计时。 */
-        state->captured = true;
-        state->held_ms = 0;
+
+    /* 叉键长按退出：一次按住只退一次，退出后等它松开。 */
+    if (state->active && state->cross_armed) {
+        state->cross_held_ms += dt_ms;
+        if (state->cross_held_ms >= DP_UI_COMBO_HOLD_MS) {
+            state->active = false;
+            state->cross_armed = false;
+            state->exit_wait_release = true;
+            return DP_UI_EVENT_EXITED;
+        }
     }
-    if (state->fired) {
-        return DP_UI_EVENT_NONE;
-    }
-    state->held_ms += dt_ms;
-    if (state->held_ms < DP_UI_COMBO_HOLD_MS) {
-        return DP_UI_EVENT_NONE;
-    }
-    state->fired = true;
-    state->active = !state->active;
-    return state->active ? DP_UI_EVENT_ENTERED : DP_UI_EVENT_EXITED;
+    return DP_UI_EVENT_NONE;
 }
 
 dp_ui_event_t dp_ui_frame(uint32_t pad_buttons, uint32_t dt_ms)
@@ -120,6 +149,17 @@ bool dp_ui_active(void)
     return active;
 }
 
+bool dp_ui_muted(uint32_t pad_buttons)
+{
+    bool muted;
+    portENTER_CRITICAL(&s_ui_mux);
+    /* 叉键长按退出后它还按着：这时候放行会把这一次按住整段漏给主机，
+     * 等到松开再恢复放行。 */
+    muted = s_ui_state.active || s_ui_state.exit_wait_release || dp_ui_captured(pad_buttons);
+    portEXIT_CRITICAL(&s_ui_mux);
+    return muted;
+}
+
 uint32_t dp_ui_buttons(void)
 {
     uint32_t buttons;
@@ -135,6 +175,10 @@ bool dp_ui_set_active(bool on)
     portENTER_CRITICAL(&s_ui_mux);
     if (s_ui_state.active != on) {
         s_ui_state.active = on;
+        /* 手动开关跟组合键翻转同一个规矩：这一次叉键按住作废，
+         * 免得模式翻面后拿上一次按住的余量把它关掉。 */
+        s_ui_state.cross_armed = false;
+        s_ui_state.cross_held_ms = 0;
         if (!on) {
             s_ui_buttons = 0;
         }

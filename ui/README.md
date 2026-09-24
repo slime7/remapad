@@ -78,7 +78,7 @@ uv run python scripts/ui-preview.py --screenshot agent-temp/ui.png # 渲染一�
 设备画面就是 240 × 280 个物理像素（控制条画在它下面）。想放大看细节就自己设 `SLINT_SCALE_FACTOR`。
 
 预览里的电池、内存、版本号与蓝牙地址都是模拟值：预览验的是界面与动作结算，不验固件行为；
-固件行为要么在宿主用例里断言，要么在实机上验（串口 `key ui` / `ui on|off` 进出手柄操控窗口）。
+固件行为要么在宿主用例里断言，要么在实机上验（串口 `key ui` / `key b` / `ui on|off` 进出手柄操控窗口）。
 新增控件时把动作名写成固件 `ui_action` 里的那个，并在 `preview.slint` 的动作结算里补一条分支。
 
 ## 前置环境：Xtensa Rust 工具链

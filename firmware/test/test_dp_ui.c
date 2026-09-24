@@ -1,5 +1,5 @@
 /**
- * 手柄操控 UI 的组合键判定与按键映射（dp_ui.c）主机端用例：
+ * 手柄操控 UI 的组合键判定、叉键长按退出与按键映射（dp_ui.c）主机端用例：
  * 按下沿、保持时长、松开后再触发与按键位对齐。
  */
 #include "host_test.h"
@@ -13,18 +13,30 @@ static dp_ui_event_t tick(dp_ui_state_t *state, uint32_t buttons)
     return dp_ui_update(state, buttons, 5);
 }
 
-/** 按住组合键并推进到刚好越过保持阈值，返回期间发生的那次翻转。 */
-static dp_ui_event_t hold_combo(dp_ui_state_t *state)
+/** 按住给定按键组合并推进到刚好越过保持阈值，返回期间发生的那次翻转。 */
+static dp_ui_event_t hold_buttons(dp_ui_state_t *state, uint32_t buttons)
 {
     dp_ui_event_t toggle = DP_UI_EVENT_NONE;
     const uint32_t ticks = DP_UI_COMBO_HOLD_MS / 5U + 1U;
     for (uint32_t i = 0; i < ticks; i++) {
-        const dp_ui_event_t event = tick(state, DP_UI_COMBO_MASK);
+        const dp_ui_event_t event = tick(state, buttons);
         if (event != DP_UI_EVENT_NONE) {
             toggle = event;
         }
     }
     return toggle;
+}
+
+/** 按住组合键并推进到刚好越过保持阈值，返回期间发生的那次翻转。 */
+static dp_ui_event_t hold_combo(dp_ui_state_t *state)
+{
+    return hold_buttons(state, DP_UI_COMBO_MASK);
+}
+
+/** 按住叉键并推进到刚好越过保持阈值，返回期间发生的那次退出。 */
+static dp_ui_event_t hold_cross(dp_ui_state_t *state)
+{
+    return hold_buttons(state, PAD_BTN_CROSS);
 }
 
 static void combo_needs_all_four_buttons(void)
@@ -87,6 +99,66 @@ static void hold_toggles_once_until_released(void)
     /* 松开后再按同样的时长：退出模式。 */
     CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
     CHECK_EQ(hold_combo(&state), DP_UI_EVENT_EXITED);
+    CHECK(!state.active);
+}
+
+static void cross_hold_exits_only_in_mode(void)
+{
+    dp_ui_state_t state;
+    dp_ui_state_reset(&state);
+    /* 模式外长按叉键不翻转：正常游戏里按住 ✕ 是常用动作。 */
+    CHECK_EQ(hold_cross(&state), DP_UI_EVENT_NONE);
+    CHECK(!state.active);
+    CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
+
+    /* 模式里长按叉键：退出，且等这次按住松开（松开前输入继续挡下来）。 */
+    CHECK_EQ(hold_combo(&state), DP_UI_EVENT_ENTERED);
+    CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
+    CHECK_EQ(hold_cross(&state), DP_UI_EVENT_EXITED);
+    CHECK(!state.active);
+    CHECK(state.exit_wait_release);
+    CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
+    CHECK(!state.exit_wait_release);
+}
+
+static void cross_short_press_does_not_exit(void)
+{
+    dp_ui_state_t state;
+    dp_ui_state_reset(&state);
+    CHECK_EQ(hold_combo(&state), DP_UI_EVENT_ENTERED);
+    CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
+
+    /* 阈值以内按下再松开：模式还在，也不残留计时。 */
+    for (uint32_t i = 0; i + 1 < DP_UI_COMBO_HOLD_MS / 5U; i++) {
+        CHECK_EQ(tick(&state, PAD_BTN_CROSS), DP_UI_EVENT_NONE);
+    }
+    CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
+    CHECK(state.active);
+    CHECK_EQ(state.cross_held_ms, 0);
+
+    /* 松开重按：走完整的保持时长才退出。 */
+    CHECK_EQ(tick(&state, PAD_BTN_CROSS), DP_UI_EVENT_NONE);
+    CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
+    CHECK_EQ(hold_cross(&state), DP_UI_EVENT_EXITED);
+    CHECK(!state.active);
+}
+
+static void cross_hold_before_entry_is_ignored(void)
+{
+    dp_ui_state_t state;
+    dp_ui_state_reset(&state);
+    /* 叉键先按着，再补上组合键进模式：这一次按住不算长按，模式不会被立刻关掉。 */
+    CHECK_EQ(tick(&state, PAD_BTN_CROSS), DP_UI_EVENT_NONE);
+    CHECK_EQ(hold_buttons(&state, DP_UI_COMBO_MASK | PAD_BTN_CROSS), DP_UI_EVENT_ENTERED);
+    CHECK(state.active);
+    for (uint32_t i = 0; i < 100; i++) {
+        CHECK_EQ(tick(&state, PAD_BTN_CROSS), DP_UI_EVENT_NONE);
+    }
+    CHECK(state.active);
+
+    /* 松开再长按：正常退出。 */
+    CHECK_EQ(tick(&state, 0), DP_UI_EVENT_NONE);
+    CHECK_EQ(hold_cross(&state), DP_UI_EVENT_EXITED);
     CHECK(!state.active);
 }
 
@@ -162,12 +234,79 @@ static void runtime_publishes_buttons_only_in_mode(void)
     CHECK_EQ(dp_ui_buttons(), 0U);
 }
 
+static void runtime_mutes_input_until_cross_released(void)
+{
+    /* 叉键长按退出：触发的这次按住没松开之前输入继续挡下来——放行会把这整段
+     * 按住漏给主机；松开即恢复放行。 */
+    dp_ui_set_active(false);
+    dp_ui_frame(0, 5);
+    CHECK(!dp_ui_muted(0));
+
+    CHECK(dp_ui_set_active(true));
+    dp_ui_frame(PAD_BTN_CROSS, DP_UI_COMBO_HOLD_MS);
+    CHECK(!dp_ui_active());
+    CHECK(dp_ui_muted(PAD_BTN_CROSS));
+    dp_ui_frame(0, 5);
+    CHECK(!dp_ui_muted(0));
+
+    /* 模式外的普通叉键按住一点也不挡：正常游戏的输入照旧上行。 */
+    dp_ui_frame(PAD_BTN_CROSS, 5);
+    CHECK(!dp_ui_muted(PAD_BTN_CROSS));
+    dp_ui_frame(0, 5);
+}
+
+static void runtime_mutes_combo_hold_and_mode(void)
+{
+    /* 组合键一按下（还没到翻转阈值）就该挡下来；模式里一直挡着，退出即放行。 */
+    dp_ui_set_active(false);
+    dp_ui_frame(0, 5);
+    CHECK(!dp_ui_muted(0));
+    CHECK(dp_ui_muted(DP_UI_COMBO_MASK));
+
+    dp_ui_frame(DP_UI_COMBO_MASK, DP_UI_COMBO_HOLD_MS);
+    CHECK(dp_ui_active());
+    CHECK(dp_ui_muted(0));
+    dp_ui_frame(0, 5);
+    CHECK(dp_ui_active());
+    CHECK(dp_ui_muted(0));
+
+    dp_ui_frame(DP_UI_COMBO_MASK, DP_UI_COMBO_HOLD_MS);
+    CHECK(!dp_ui_active());
+    CHECK(dp_ui_muted(DP_UI_COMBO_MASK));
+    dp_ui_frame(0, 5);
+    CHECK(!dp_ui_muted(0));
+}
+
+static void runtime_manual_switch_clears_cross_hold(void)
+{
+    /* 直接开关（串口 ui on|off、调试页面板按钮）跟组合键翻转同一个规矩：模式一
+     * 翻面，这一次叉键的按住作废，不会被上一次按住的余量带出一退出。 */
+    dp_ui_set_active(false);
+    CHECK(dp_ui_set_active(true));
+    dp_ui_frame(PAD_BTN_CROSS, DP_UI_COMBO_HOLD_MS - 5U);
+    CHECK(dp_ui_active());
+    CHECK(dp_ui_set_active(false));
+    CHECK(dp_ui_set_active(true));
+    for (uint32_t i = 0; i < 100; i++) {
+        dp_ui_frame(PAD_BTN_CROSS, 5);
+        CHECK(dp_ui_active());
+    }
+    dp_ui_set_active(false);
+    dp_ui_frame(0, 5);
+}
+
 HOST_TEST_SUITE(suite_dp_ui, "dp_ui 手柄操控 UI",
                 {"组合键必须四键齐按才算命中", combo_needs_all_four_buttons},
                 {"组合键短按不翻转，抖动不攒时间", short_press_does_not_toggle},
                 {"组合键按住翻转一次，松开后才能再翻转", hold_toggles_once_until_released},
+                {"叉键长按只在模式里退出，松开复位", cross_hold_exits_only_in_mode},
+                {"叉键短按不退出", cross_short_press_does_not_exit},
+                {"进模式前按着的叉键不算长按", cross_hold_before_entry_is_ignored},
                 {"只有十字键与圆圈键进 UI 按键位", map_covers_dpad_and_circle_only},
                 {"按住 L1 / R1 与按左 / 右等价", shoulder_buttons_act_as_left_right},
                 {"组合键与两肩键同按都不发方向", combo_hold_emits_no_direction},
                 {"模式里肩键发布左右按键位，退出即归零", runtime_publishes_shoulder_direction_in_mode},
-                {"模式外不发布 UI 按键，退出即归零", runtime_publishes_buttons_only_in_mode});
+                {"模式外不发布 UI 按键，退出即归零", runtime_publishes_buttons_only_in_mode},
+                {"叉键长按退出后挡住输入到松开为止", runtime_mutes_input_until_cross_released},
+                {"组合键按住与模式生效都挡输入", runtime_mutes_combo_hold_and_mode},
+                {"直接开关模式作废叉键的那一次按住", runtime_manual_switch_clears_cross_hold});

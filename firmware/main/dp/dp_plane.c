@@ -637,8 +637,8 @@ static void dp_task(void *param)
         }
         const dp_ui_event_t ui_event = dp_ui_frame(pad.buttons, tick_ms);
         /* 捕获期间不上行玩家输入：组合键一按下就切换（不必等翻转），退出模式
-         * 后若组合键还按着也保持到松开为止（见 dp_ui.h）。 */
-        const bool paused = dp_ui_captured(pad.buttons) || dp_ui_active();
+         * 后若进出用的那次按住还按着也保持到松开为止（见 dp_ui.h）。 */
+        const bool paused = dp_ui_muted(pad.buttons);
         if (paused != output_paused) {
             output_paused = paused;
             if (paused) {
