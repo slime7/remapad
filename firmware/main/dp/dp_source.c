@@ -22,6 +22,8 @@ static size_t s_source_count;
 static portMUX_TYPE s_inject_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint32_t s_inject_buttons;
 static volatile uint32_t s_inject_hold_ticks;
+/** 当前数据面节拍（毫秒，dp_task 写）：注入时长按它换算成拍数。 */
+static volatile uint32_t s_inject_tick_ms = DP_TICK_MS;
 /** 摇杆注入电平（LX, LY, RX, RY）：设定后持续生效，默认居中。 */
 static volatile uint16_t s_inject_stick[PAD_AXIS_COUNT] = {
     PAD_AXIS_CENTER, PAD_AXIS_CENTER, PAD_AXIS_CENTER, PAD_AXIS_CENTER,
@@ -150,17 +152,25 @@ void dp_source_sample(pad_state_t *state)
     }
 }
 
+void dp_source_set_tick_ms(uint32_t tick_ms)
+{
+    if (tick_ms > 0u) {
+        s_inject_tick_ms = tick_ms;
+    }
+}
+
 void dp_source_inject(uint32_t buttons_mask, uint32_t hold_ms)
 {
-    if (hold_ms < DP_TICK_MS) {
-        hold_ms = DP_TICK_MS;
+    const uint32_t tick_ms = s_inject_tick_ms;
+    if (hold_ms < tick_ms) {
+        hold_ms = tick_ms;
     }
     if (hold_ms > 60000) {
         hold_ms = 60000;
     }
     portENTER_CRITICAL(&s_inject_mux);
     s_inject_buttons |= buttons_mask;
-    s_inject_hold_ticks = hold_ms / DP_TICK_MS;
+    s_inject_hold_ticks = hold_ms / tick_ms;
     portEXIT_CRITICAL(&s_inject_mux);
     ESP_LOGI(TAG, "debug key inject: mask=0x%08lx hold=%lums",
              (unsigned long)buttons_mask, (unsigned long)hold_ms);

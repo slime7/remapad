@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "dp_source.h"
+#include "dp_power.h"
 #include "dp_ui.h"
 #include "pad_state.h"
 
@@ -278,10 +279,42 @@ static void debug_key_lookup(void)
     CHECK_EQ(mask, 0);
 }
 
+/** 注入的保持时长按当前数据面节拍换算：省电档（83 ms 一拍）下 250 ms 的注入
+ *  仍是约 250 ms（3 拍），不按 5 ms 一拍算成 50 拍——那样点一下会按住 4 秒多。 */
+static void debug_injection_follows_tick(void)
+{
+    pad_state_t state;
+
+    dp_source_set_tick_ms(DP_POWER_SAVE_TICK_MS);
+    dp_source_inject(PAD_BTN_MUTE, 250);
+    for (int i = 0; i < 3; i++) {
+        dp_source_sample(&state);
+        CHECK_EQ(state.buttons & PAD_BTN_MUTE, PAD_BTN_MUTE);
+    }
+    dp_source_sample(&state);
+    CHECK_EQ(state.buttons & PAD_BTN_MUTE, 0);
+
+    /* 比一拍短的 hold 抬到一拍：点一下也要看得见。 */
+    dp_source_inject(PAD_BTN_MUTE, 10);
+    dp_source_sample(&state);
+    CHECK_EQ(state.buttons & PAD_BTN_MUTE, PAD_BTN_MUTE);
+    dp_source_sample(&state);
+    CHECK_EQ(state.buttons & PAD_BTN_MUTE, 0);
+
+    /* 回到正常档：节拍改回 5 ms 后按 5 ms 换算（10 ms 保持 2 拍）。 */
+    dp_source_set_tick_ms(DP_TICK_MS);
+    dp_source_inject(PAD_BTN_MUTE, 10);
+    dp_source_sample(&state);
+    dp_source_sample(&state);
+    dp_source_sample(&state);
+    CHECK_EQ(state.buttons & PAD_BTN_MUTE, 0);
+}
+
 HOST_TEST_SUITE(suite_dp_source, "dp_source",
                 {"合成规则：主源拥有摇杆与设备字段，其余只叠按键", composition_rules},
                 {"注册上限与调试注入叠加", registration_limit},
                 {"调试注入按时长保持后自动释放", debug_injection_holds_then_releases},
+                {"调试注入的时长按当前节拍换算", debug_injection_follows_tick},
                 {"调试释放立即清空注入按键", debug_release_clears_injection},
                 {"摇杆注入：左右独立设定、钳制与回中", debug_stick_injection},
                 {"按键名表：命中、默认保持时长与未命中", debug_key_lookup});

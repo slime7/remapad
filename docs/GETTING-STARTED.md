@@ -246,7 +246,8 @@ SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁�
 静默省电：设备完全静默（没有链路、没有广播窗口、不在配对流程）持续约 1 秒后关闭整个 BLE 栈——控制器断电、射频不再发热；
 同一时刻起数据面采样与上报、界面状态轮询与动画推进一起降到 12 fps 等效节拍（83 ms），屏幕照常显示、不自动熄灭。
 按连接键、未连接时按 HOME、发起配对新主机都会重新起栈并按对应意图广播，用户不必按第二次（起栈要付一次控制器初始化时间）。
-串口日志里对应 `ble stack idle: shutting the controller down` 与 `ble stack start on demand` 两行。
+串口日志里对应 `ble stack idle: shutting the controller down` / `ble stack start on demand`（BLE 栈）与
+`cadence -> 83ms` / `cadence -> 5ms`（数据面节拍）两组行。
 
 用户设置（背光亮度、手柄四段配色、上报固件版本）持久化在 NVS（`firmware/main/config/app_config.c`），重启后恢复；息屏状态与 USB 连接模式不跨重启保留（USB 角色开机恒为串口）。
 PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmware/main/input/`，PC 侧见 [pc/README.md](../pc/README.md)；

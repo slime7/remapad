@@ -403,10 +403,19 @@ static void dp_task(void *param)
 
     ESP_LOGI(TAG, "data plane task running, tick=%ums (power save %ums), target=%s",
              (unsigned)DP_TICK_MS, (unsigned)DP_POWER_SAVE_TICK_MS, target_name());
+    bool last_power_save = dp_power_save_active(ble_controller_running());
+    dp_source_set_tick_ms(dp_tick_ms(last_power_save));
     for (;;) {
         /* 节拍随档位走：BLE 栈关闭（未连接也未广播）时降到 12 fps 等效，
          * 采样、上报与屏幕操控一起慢下来。 */
-        const uint32_t tick_ms = dp_tick_ms(dp_power_save_active(ble_controller_running()));
+        const bool power_save = dp_power_save_active(ble_controller_running());
+        const uint32_t tick_ms = dp_tick_ms(power_save);
+        if (power_save != last_power_save) {
+            last_power_save = power_save;
+            dp_source_set_tick_ms(tick_ms);
+            ESP_LOGI(TAG, "cadence -> %ums (%s)", (unsigned)tick_ms,
+                     power_save ? "power save: ble stack off" : "normal");
+        }
         dp_source_sample(&pad);
         /* DS4 / DS5 手柄行为（「DS4、DS5 设置」页两项开关）：触摸板按下的
          *  键位在这一拍定一次（左半减号 / 右半加号 / 截图），下游的目标编码

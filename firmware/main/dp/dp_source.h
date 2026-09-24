@@ -30,6 +30,10 @@ void dp_source_register(const dp_source_t *source);
 /** 合成所有已注册源 + 调试注入，输出当前周期的私有手柄状态。 */
 void dp_source_sample(pad_state_t *state);
 
+/** 当前数据面节拍（毫秒）：注入的保持时长按它换算成拍数，节拍切换后
+ *  （BLE 关闭时省电档 83 ms）一次注入的按住时长不走样。 */
+void dp_source_set_tick_ms(uint32_t tick_ms);
+
 /** 调试注入：叠加一次按键按下，保持 hold_ms 后自动释放。 */
 void dp_source_inject(uint32_t buttons_mask, uint32_t hold_ms);
 
