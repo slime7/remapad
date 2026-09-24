@@ -92,6 +92,7 @@
 | [0054](0054-screen-ui-slint-rust.md) | active | 屏幕 UI 改用 Slint + Rust：.slint 在构建期编译成 Rust 静态库链进固件、运行期走软件渲染器，业务逻辑零 unsafe（只在 C ABI 边界留口并在注释里写明原因），字形按界面用到的字符自动子集，界面用例改成宿主侧 #[test]；取代 0001 |
 | [0055](0055-core-ui-split-optional-ui-build.md) | active | core 与屏幕 UI 分离：固件核心持 ui_service.h 契约（状态快照装配、动作分发、生命周期），界面组件与编译口径收进 ui/ 工作区、按 REMAPAD_UI 开关可选编入（OFF 纯 C 可编译、屏幕熄灭、设置走串口 CLI），控制面命令队列改由独立服务任务泵；延伸 0054 的构建边界 |
 | [0056](0056-ble-controller-off-power-save-cadence.md) | active | 完全静默（无连接、无广播窗口、不在配对流程）持续够久后关闭整个 BLE 栈（控制器断电，射频不再发热），连接键 / HOME / 配对新主机按起栈意图重新带起来；省电档（BLE 栈未运行）把数据面与界面节拍降到 12 fps 等效，屏幕不熄灭、不做空闲自动息屏 |
+| [0057](0057-single-uv-project-at-repo-root.md) | active | Python 依赖统一到仓库根一个 uv 工程：pc/ 的 hidapi / customtkinter / av / sounddevice 并入根 pyproject.toml，删除 pc/pyproject.toml 与 pc/uv.lock，命令一律写成 uv run python pc/<工具>.py，remapadctl 的默认镜像路径改按脚本位置解析；0040 里「依赖写进 pc/pyproject.toml」一句随本次调整作废 |
 
 ## 创建 ADR 脚本用法
 

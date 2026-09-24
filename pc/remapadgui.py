@@ -12,8 +12,8 @@
 **升级**推固件镜像。设置页的控件值一律来自固件回读行（remapadctl.parse_device_reply），
 设备是唯一事实源，界面不自己记状态。
 
-用法（在 pc/ 目录执行，仅 Windows）：
-    uv run python remapadgui.py
+用法（在仓库根执行，仅 Windows）：
+    uv run python pc/remapadgui.py
 
 键盘：命令输入框回车发送，↑ / ↓ 取历史；其余操作都在按钮与下拉里。
 连接由用户手动发起：界面不做自动连接，也不写配置文件。
@@ -54,8 +54,8 @@ SCROLL_INTERVAL_MS = 250
 JOIN_TIMEOUT_S = 2.0
 #: 工具条里手柄摘要的显示上限：完整描述留给「会话」页的下拉（长名字会顶掉工具条）。
 PAD_SUMMARY_CHARS = 26
-#: 升级镜像默认路径：相对本文件解析，避免受启动目录影响。
-DEFAULT_IMAGE = str((Path(__file__).resolve().parent / remapadctl.DEFAULT_IMAGE).resolve())
+#: 升级镜像默认路径：与命令行共用同一份（按脚本位置解析，不受启动目录影响）。
+DEFAULT_IMAGE = remapadctl.DEFAULT_IMAGE
 
 #: 状态灯文案与颜色：未连接 / 正在开关 / 已连接 / 链路断开。
 STATE_STYLE = {

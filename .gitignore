@@ -14,7 +14,7 @@ __pycache__/
 *.pyc
 # pnpm 时代的遗留依赖目录（Node 已移除，本目录可以直接删掉）
 node_modules/
-# uv 为 pc/ 桥接程序建的虚拟环境（uv.lock 需要提交）
+# uv 建的虚拟环境：仓库根一份，覆盖 scripts/ 与 pc/ 的工具（uv.lock 需要提交）
 .venv/
 # remapadctl --shot 落地的实机截图（调试产物，不进仓库）
 pc/shots/

@@ -15,11 +15,11 @@
 
 回放中 Ctrl-C 随时干净退出（音频流与 HID 句柄都会收尾）。
 
-用法（pc/ 目录）：
-  uv run python tests/samples/pad_replay.py --list
-  uv run python tests/samples/pad_replay.py ns2-gameplay-rumble.capture
-  uv run python tests/samples/pad_replay.py ns2-search-page.capture --pad bt36 --speed 0.5
-  uv run python tests/samples/pad_replay.py ns2-search-page.capture --pad bt39
+用法（仓库根）：
+  uv run python pc/tests/samples/pad_replay.py --list
+  uv run python pc/tests/samples/pad_replay.py ns2-gameplay-rumble.capture
+  uv run python pc/tests/samples/pad_replay.py ns2-search-page.capture --pad bt36 --speed 0.5
+  uv run python pc/tests/samples/pad_replay.py ns2-search-page.capture --pad bt39
 """
 import argparse
 import re

@@ -1,12 +1,21 @@
-# 仓库脚本的 Python 工程：预览、固件主机端测试、工具链安装与 ADR 新建都在这里跑。
-# 只用标准库，因此没有运行期依赖；版本约束与锁定文件由 uv 管理（uv run python scripts/<名字>.py）。
+# 仓库的 Python 工程：scripts/ 下的脚本与 pc/ 下的 PC 侧工具共用这一份依赖与根目录 .venv。
+# 从仓库任意目录执行 uv run python <路径> 都落到同一个环境（锁文件是根目录 uv.lock）。
 [project]
-name = "remapad-scripts"
+name = "remapad-tools"
 version = "0.1.0"
-description = "Remapad 仓库脚本（界面预览、固件主机端测试、Rust 工具链安装与 ADR 新建）"
+description = "Remapad 仓库脚本与 PC 侧工具（界面预览、固件主机端测试、Rust 工具链安装、ADR 新建、remapadctl/remapadgui）"
 license = "MIT"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    # DS5 蓝牙触觉的 Opus 编码（pc/ds5_haptics.py）
+    "av>=14.0.0",
+    # 图形界面入口 pc/remapadgui.py
+    "customtkinter>=6.0.0",
+    # 读写手柄 HID 报告（pc/remapadctl.py 与 pc/tests/samples/pad_replay.py）
+    "hidapi>=0.14.0",
+    # 音频触觉回放与样本回放（pc/ds5_haptics.py）
+    "sounddevice>=0.4.6",
+]
 
 [tool.uv]
 package = false

@@ -15,11 +15,10 @@
 DualSense 的触觉/声音：
 
 ```powershell
-cd pc
-uv run python tests/samples/pad_replay.py --list
-uv run python tests/samples/pad_replay.py ns2-search-page.capture --pad usb   # HD 全保真（WASAPI 4ch）
-uv run python tests/samples/pad_replay.py ns2-gameplay-rumble.capture --pad bt --speed 2
-uv run python tests/samples/pad_replay.py ns2-gameplay-rumble.capture --pad bt32 --hd-gain 1
+uv run python pc/tests/samples/pad_replay.py --list
+uv run python pc/tests/samples/pad_replay.py ns2-search-page.capture --pad usb   # HD 全保真（WASAPI 4ch）
+uv run python pc/tests/samples/pad_replay.py ns2-gameplay-rumble.capture --pad bt --speed 2
+uv run python pc/tests/samples/pad_replay.py ns2-gameplay-rumble.capture --pad bt32 --hd-gain 1
 ```
 
 落点：`usb` = 直插 DS5 的音频触觉（HD 全保真）；`bt` = 蓝牙 0x31
@@ -72,6 +71,5 @@ PyAV/libopus 走 `bt36`，缺了退 `bt32`），两端都不可用才回落到 `
 （`cmd[0x14]`），在主机进游戏并触发震动的期间执行：
 
 ```powershell
-cd pc
-uv run python remapadctl.py -p COM12 --pad --capture tests/samples/ns2-host-output.capture --seconds 20
+uv run python pc/remapadctl.py -p COM12 --pad --capture pc/tests/samples/ns2-host-output.capture --seconds 20
 ```

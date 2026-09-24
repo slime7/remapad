@@ -142,7 +142,8 @@ APP_DESC_PROJECT_OFFSET = APP_DESC_OFFSET + 0x30
 APP_DESC_FIELD_LEN = 32
 EXPECTED_PROJECT = "remapad_firmware"
 PARTITION_MAX_BYTES = 4 * 1024 * 1024
-DEFAULT_IMAGE = "../firmware/build/remapad_firmware.bin"
+#: 默认镜像路径按本文件位置解析，因此从仓库任意目录运行都指向 firmware/build/remapad_firmware.bin。
+DEFAULT_IMAGE = str(Path(__file__).resolve().parent.parent / "firmware" / "build" / "remapad_firmware.bin")
 
 OTA_STATE_RECEIVING = 1
 OTA_STATE_DONE = 2
@@ -192,7 +193,7 @@ def load_hid():
     try:
         import hid  # type: ignore
     except ImportError as exc:
-        raise HidUnavailable("缺少 hidapi：在 pc/ 目录下执行 uv sync 后重试") from exc
+        raise HidUnavailable("缺少 hidapi：在仓库根执行 uv sync 后重试") from exc
     return hid
 
 

@@ -29,14 +29,14 @@ flowchart LR
 ## 依赖
 
 ```powershell
-cd pc
 uv sync
 ```
 
-依赖由 [uv](https://docs.astral.sh/uv/) 管理：版本要求写在 `pyproject.toml`，锁文件是
-`uv.lock`，环境建在 `pc/.venv`。第三方依赖是 `hidapi`（读手柄）与 `customtkinter`
-（图形界面，连带 darkdetect 与 packaging），Python 需要 3.10 或更高；uv 找不到合适的
-解释器时会自己下载一个。串口与端口枚举直接走 Win32 API 与注册表，不依赖 pyserial。
+依赖由 [uv](https://docs.astral.sh/uv/) 管理，与 `scripts/` 的脚本共用仓库根的那一份工程：
+版本要求写在根目录 `pyproject.toml`，锁文件是根目录 `uv.lock`，环境建在根目录 `.venv`。
+第三方依赖是 `hidapi`（读手柄）、`customtkinter`（图形界面，连带 darkdetect 与 packaging）、
+`av`（DS5 蓝牙触觉的 Opus 编码）与 `sounddevice`（音频触觉回放）；Python 需要 3.10 或更高，
+uv 找不到合适的解释器时会自己下载一个。串口与端口枚举直接走 Win32 API 与注册表，不依赖 pyserial。
 当前实现只支持 Windows。
 
 `uv run` 每次都会按锁文件把环境对齐，因此日常直接跑下面的命令即可；`uv sync` 只在想
@@ -44,24 +44,24 @@ uv sync
 
 ## 用法
 
-以下命令都在 `pc/` 目录里执行（`uv run` 会使用 `pc/.venv`）：
+以下命令在仓库根执行（`uv run` 用根目录 `.venv`；在 `pc/` 目录里去掉路径前缀同样能跑）：
 
 ```powershell
-uv run python remapadctl.py --list                    # 列出候选的手柄接口
-uv run python remapadctl.py --dump --seconds 10       # 采集 10 秒原始报告（核对布局用）
-uv run python remapadctl.py -p COM3                   # 桥接 + 交互命令行
-uv run python remapadctl.py -p COM3 --no-pad          # 只当串口命令行用，不转发手柄
-uv run python remapadctl.py -p COM3 status            # 执行一条设备命令后退出
-uv run python remapadctl.py -p COM3 --all             # 拉取设备全部观测数据后退出
-uv run python remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
-uv run python remapadctl.py -p COM3 --log --seconds 20
-uv run python remapadctl.py -p COM3 --log --reset --seconds 25
-uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30
-                                          # 抓 30 秒主机原始输出（布局转换前）后退出
-uv run python remapadctl.py -p COM3 --upgrade --wait
-uv run python remapadctl.py -p COM3 --amiibo Alm.bin   # 上传 amiibo 镜像后退出
-uv run python remapadctl.py -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --no-rumble
-uv run python remapadctl.py -p COM3 --logs            # 桥接的同时打印设备日志
+uv run python pc/remapadctl.py --list                    # 列出候选的手柄接口
+uv run python pc/remapadctl.py --dump --seconds 10       # 采集 10 秒原始报告（核对布局用）
+uv run python pc/remapadctl.py -p COM3                   # 桥接 + 交互命令行
+uv run python pc/remapadctl.py -p COM3 --no-pad          # 只当串口命令行用，不转发手柄
+uv run python pc/remapadctl.py -p COM3 status            # 执行一条设备命令后退出
+uv run python pc/remapadctl.py -p COM3 --all             # 拉取设备全部观测数据后退出
+uv run python pc/remapadctl.py -p COM3 --shot            # 实机截图存成 PNG
+uv run python pc/remapadctl.py -p COM3 --log --seconds 20
+uv run python pc/remapadctl.py -p COM3 --log --reset --seconds 25
+uv run python pc/remapadctl.py -p COM3 --capture host-raw.log --seconds 30
+                                             # 抓 30 秒主机原始输出（布局转换前）后退出
+uv run python pc/remapadctl.py -p COM3 --upgrade --wait
+uv run python pc/remapadctl.py -p COM3 --amiibo Alm.bin   # 上传 amiibo 镜像后退出
+uv run python pc/remapadctl.py -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --no-rumble
+uv run python pc/remapadctl.py -p COM3 --logs            # 桥接的同时打印设备日志
 ```
 
 `--all` 把设备的全部观测命令各发一遍（status / mem / version / link / pad / usb /
@@ -74,8 +74,7 @@ screen / relay / motion / ltk / rumble / lamp / haptic），数据全部由固�
 `remapadgui.py` 是同一套会话的图形入口，适合长时间挂着看日志、按固定动作做验收：
 
 ```powershell
-cd pc
-uv run python remapadgui.py
+uv run python pc/remapadgui.py
 ```
 
 - 顶部工具条：选串口（下拉列出注册表里的 COM 口，默认落在本机第一个口上，只选中不自动连接；
@@ -207,7 +206,7 @@ USB 手柄，按顺序选柄可能把它当桥接目标抓走——输入转发�
 
 换手柄或换系列时按同样步骤复核：
 
-1. 手柄插在 PC 上并连上，跑 `uv run python remapadctl.py --dump --seconds 45`；
+1. 手柄插在 PC 上并连上，跑 `uv run python pc/remapadctl.py --dump --seconds 45`；
 2. 期间把 3.5mm 耳机插 → 拔 → 插，每段约 8 秒；
 3. 找唯一跟着变化的字节，填进对应布局行的 `headset_off` 并置 `.headset_style = PAD_HEADSET_PS`；
 4. 重新编译烧录后，主机侧的耳机指示应跟着插拔变化（`headset auto`）。
@@ -268,8 +267,8 @@ PC 侧只把它交给 `hid.write()`，不参与任何映射（PS 系蓝牙形态
 `HOST_RAW` 是主机原文，供协议对账与问题定位。
 
 ```powershell
-uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad
-                                          # 抓 30 秒，手柄转发照常（实体手柄连着串口也能抓）
+uv run python pc/remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad
+                                             # 抓 30 秒，手柄转发照常（实体手柄连着串口也能抓）
 ```
 
 交互模式里 `:capture <路径>` 开始、`:capture off` 停止、`:capture` 看状态；
@@ -307,10 +306,10 @@ DualSense 连在 PC 上时音频接口由 PC 持有，触觉与喇叭改由 PC �
 ## 固件 OTA（--upgrade）
 
 ```powershell
-uv run python remapadctl.py --dry-run                     # 只校验镜像，不接设备
-uv run python remapadctl.py -p COM3 --upgrade             # 升级默认镜像 firmware/build/remapad_firmware.bin
-uv run python remapadctl.py -p COM3 --upgrade --wait      # 等设备重启回来并打印版本
-uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备日志
+uv run python pc/remapadctl.py --dry-run                     # 只校验镜像，不接设备
+uv run python pc/remapadctl.py -p COM3 --upgrade             # 升级默认镜像 firmware/build/remapad_firmware.bin
+uv run python pc/remapadctl.py -p COM3 --upgrade --wait      # 等设备重启回来并打印版本
+uv run python pc/remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备日志
 ```
 
 上传前先在本地校验镜像：首字节 `0xE9`、芯片标识 `0x0009`（ESP32-S3）、偏移 `0x20` 的应用
@@ -332,11 +331,10 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 不需要接设备：
 
 ```powershell
-cd pc
-uv run python -m unittest discover -s tests -t . -v
+uv run python -m unittest discover -s pc/tests -t pc -v
 ```
 
-仓库根的写法与这里一致（`cd pc ; uv run python -m unittest discover -s tests -t .`）。用例跑的是 `pc/` 下的真源码，不复制被测逻辑；
+在 `pc/` 目录里跑用 `uv run python -m unittest discover -s tests -t .`，结果相同。用例跑的是 `pc/` 下的真源码，不复制被测逻辑；
 范围与规则见 [TESTING.md](../docs/TESTING.md) 的「PC 侧主机端用例」。
 
 ## 已知限制

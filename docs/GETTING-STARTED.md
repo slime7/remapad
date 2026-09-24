@@ -13,7 +13,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0`（rustup 工具链名默认 `esp`） | 把 `ui/slint_ui` 交叉编译成 ESP32-S3 静态库；一键安装是 `uv run python scripts/setup-rust-toolchain.py` |
 | slint-viewer | 1.18.1 | PC 预览界面的工具（装法与版本口径见 [ui/README.md](../ui/README.md)） |
 | Python | 3.10 或更高（由 uv 准备；`idf.py` 另用 ESP-IDF 自带的解释器） | `scripts/*.py` 全部脚本与 `pc/` 下的工具 |
-| uv | 当前稳定版 | 所有 Python 入口都经它执行：`uv run python scripts/<名字>.py`（根目录 `pyproject.toml` + `uv.lock`）与 `cd pc ; uv run python remapadctl.py -p COMx`（`pc/pyproject.toml` + `pc/uv.lock`，依赖是 `hidapi` 与 `customtkinter`） |
+| uv | 当前稳定版 | 所有 Python 入口都经它执行：`uv run python scripts/<名字>.py` 与 `uv run python pc/remapadctl.py -p COMx` 共用仓库根的 `pyproject.toml` + `uv.lock`（依赖 `hidapi`、`customtkinter`、`av` 与 `sounddevice`，从仓库任意目录执行都落到根目录 `.venv`） |
 | ESP-IDF | `>=6.0,<6.2` | 本仓库已在 6.1 上验证 |
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
@@ -41,8 +41,8 @@ PC 预览工具的安装命令见 [ui/README.md](../ui/README.md)。
 换机步骤与 CMake 变量见 [ui/README.md](../ui/README.md)。
 界面依赖由 `ui/Cargo.lock` 锁定，首次构建从 crates.io 拉取，之后走本地缓存。
 
-仓库里的 Python 脚本都由 uv 托管：根目录 `pyproject.toml` + `uv.lock` 管 `scripts/`，`pc/` 自己一套（两份 `uv.lock` 都要入库）；
-装好 uv 后 `uv run python <路径>` 会自动准备解释器与依赖，不需要手动建虚拟环境（首次执行会在仓库根建 `.venv`）。
+仓库里的 Python 代码都由 uv 托管，工程只有一个：`pyproject.toml` + `uv.lock` 在仓库根，`scripts/` 的脚本与 `pc/` 的工具共用根目录 `.venv`；
+装好 uv 后 `uv run python <路径>` 会自动准备解释器与依赖，不需要手动建虚拟环境（首次执行会在仓库根建 `.venv`），从仓库任意目录执行都落到同一个环境。
 
 ### 2. 预览界面与跑宿主用例
 
@@ -158,7 +158,7 @@ esptool --chip esp32s3 -p COM3 write-flash 0x0 remapad-firmware-merged.bin
 ```powershell
 cargo test --locked --manifest-path ui/Cargo.toml   # 屏幕 UI：编译真实 .slint 产物，按元素几何与像素断言
 uv run python scripts/firmware-test.py              # 固件主机端：把纯逻辑模块编译成本机可执行文件并运行
-cd pc ; uv run python -m unittest discover -s tests -t .   # PC 侧：串口枚举、镜像校验、帧编解码与输出分流
+uv run python -m unittest discover -s pc/tests -t pc   # PC 侧：串口枚举、镜像校验、帧编解码与输出分流
 ```
 
 界面用例在开发机上跑真实 `.slint` 产物（同一套字体烘焙与软件渲染器）；
@@ -172,47 +172,46 @@ cd pc ; uv run python -m unittest discover -s tests -t .   # PC 侧：串口枚�
 
 固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。
 项目自带 [pc/remapadctl.py](../pc/remapadctl.py)（桥接转发、命令行、实机截图与 OTA 都在同一个进程里），串口与帧编解码实现在 [pc/link.py](../pc/link.py)。
-同一套会话还有图形入口 [pc/remapadgui.py](../pc/remapadgui.py)（`uv run python remapadgui.py`：选口连接、转发开关、日志、命令行、屏幕设置、截图与升级），
+同一套会话还有图形入口 [pc/remapadgui.py](../pc/remapadgui.py)（`uv run python pc/remapadgui.py`：选口连接、转发开关、日志、命令行、屏幕设置、截图与升级），
 界面与命令行不要同时连同一个口；调试动作（连接键、屏幕操控、状态回读）在「命令」页，界面上不放它们的按钮。
-依赖由 uv 管理（在 `pc/` 目录下执行，见 [pc/README.md](../pc/README.md)）：
+依赖由 uv 管理（仓库根的 `pyproject.toml` + `uv.lock`，从仓库任意目录都能跑，见 [pc/README.md](../pc/README.md)）：
 
 ```powershell
-cd pc
-uv run python remapadctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长/电池/版本/升级状态
-uv run python remapadctl.py -p COM3 key a           # 注入 A 键（键名见下方说明）
-uv run python remapadctl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
-uv run python remapadctl.py -p COM3 key release     # 立即释放注入的按键
-uv run python remapadctl.py -p COM3 ui on           # 手动进出屏幕操控模式（on / off，不带参数看状态）
-uv run python remapadctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
-uv run python remapadctl.py -p COM3 stick reset     # 两侧摇杆回中
-uv run python remapadctl.py -p COM3 link            # 链路快照：广播地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
-uv run python remapadctl.py -p COM3 headset auto    # 耳机状态字节：auto 按输入设备派生，也可钉住 0xNN 做主机侧 A/B
-uv run python remapadctl.py -p COM3 shot            # 请求一次实机截图（PC 侧拼齐后存 PNG）
-uv run python remapadctl.py -p COM3 trace 40        # 逐帧打印渲染耗时、提交耗时、damage 像素数与矩形条数（不带参数 60 帧）
-uv run python remapadctl.py -p COM3 fwver 2.0.0     # 改写上报给主机的手柄固件版本（0x10 查询与出厂块共用；不带参数看当前值）
-uv run python remapadctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
-uv run python remapadctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
-uv run python remapadctl.py -p COM3 backlight 60    # 背光并持久化
-uv run python remapadctl.py -p COM3 screen off      # 息屏（on 恢复）
-uv run python remapadctl.py -p COM3 mode host       # 切到 host：COM 口消失，日志与 CLI 改走 UART0
-uv run python remapadctl.py -p COM3 pad             # 识别到的手柄：来源、家族、型号、命中布局行、兜底与透传状态
-uv run python remapadctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
-uv run python remapadctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
-uv run python remapadctl.py -p COM3 connect         # 连接键：开连接窗口等主机连上来（未配对身份进配对流程）
-uv run python remapadctl.py -p COM3 pairing start   # 配新主机：断开当前主机后进发现广播，等新主机搜索配对（stop 停止广播并断链）
-uv run python remapadctl.py -p COM3 wake            # 开唤醒窗口：未连接时发 0x81 把休眠主机叫起来，已连接则断开让它重连
-uv run python remapadctl.py -p COM3 adv auto        # 广播窗口内的形态（auto 默认按窗口来源 / wake / reconnect），实机 A/B 对账用
-uv run python remapadctl.py -p COM3 ctrl            # 手柄配色（ctrl [body button accent grip]，四段 0xRRGGBB，持久化；无参回读）
-uv run python remapadctl.py -p COM3 advaddr         # 广播地址形态（auto / public / random，不落盘），分辨主机是否按地址形态过滤
-uv run python remapadctl.py -p COM3 advpdu          # 广播 PDU 形态（auto / legacy / extended，不落盘）
-uv run python remapadctl.py -p COM3 --amiibo Alm.bin # 上传 amiibo 镜像到设备 storage 分区槽位（540 或 572 字节 dump；amiibo list / select 0 选用）
-uv run python remapadctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
-uv run python remapadctl.py -p COM3 reboot          # 软重启回 COM 模式
-uv run python remapadctl.py -p COM3 --log --seconds 20         # 只读设备日志 20 秒
-uv run python remapadctl.py -p COM3 --log --reset --seconds 25  # 先复位再抓完整启动日志
-uv run python remapadctl.py -p COM3 --shot --out shots\ui.png   # 抓实机截图并指定输出路径
-uv run python remapadctl.py -p COM3 capture on        # 主机输出原始采集开（off 关）：震动/玩家灯/指令等主机输出经 0x12 帧回传
-uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad   # 抓 30 秒主机原始输出到文件（布局转换前），手柄转发照常
+uv run python pc/remapadctl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长/电池/版本/升级状态
+uv run python pc/remapadctl.py -p COM3 key a           # 注入 A 键（键名见下方说明）
+uv run python pc/remapadctl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
+uv run python pc/remapadctl.py -p COM3 key release     # 立即释放注入的按键
+uv run python pc/remapadctl.py -p COM3 ui on           # 手动进出屏幕操控模式（on / off，不带参数看状态）
+uv run python pc/remapadctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
+uv run python pc/remapadctl.py -p COM3 stick reset     # 两侧摇杆回中
+uv run python pc/remapadctl.py -p COM3 link            # 链路快照：广播地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
+uv run python pc/remapadctl.py -p COM3 headset auto    # 耳机状态字节：auto 按输入设备派生，也可钉住 0xNN 做主机侧 A/B
+uv run python pc/remapadctl.py -p COM3 shot            # 请求一次实机截图（PC 侧拼齐后存 PNG）
+uv run python pc/remapadctl.py -p COM3 trace 40        # 逐帧打印渲染耗时、提交耗时、damage 像素数与矩形条数（不带参数 60 帧）
+uv run python pc/remapadctl.py -p COM3 fwver 2.0.0     # 改写上报给主机的手柄固件版本（0x10 查询与出厂块共用；不带参数看当前值）
+uv run python pc/remapadctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
+uv run python pc/remapadctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
+uv run python pc/remapadctl.py -p COM3 backlight 60    # 背光并持久化
+uv run python pc/remapadctl.py -p COM3 screen off      # 息屏（on 恢复）
+uv run python pc/remapadctl.py -p COM3 mode host       # 切到 host：COM 口消失，日志与 CLI 改走 UART0
+uv run python pc/remapadctl.py -p COM3 pad             # 识别到的手柄：来源、家族、型号、命中布局行、兜底与透传状态
+uv run python pc/remapadctl.py -p COM3 usb             # USB host 状态：角色、设备、收报告与写回计数、日志出口
+uv run python pc/remapadctl.py -p COM3 relay 0         # 关掉同代透传（默认开），观察解析重编码路径
+uv run python pc/remapadctl.py -p COM3 connect         # 连接键：开连接窗口等主机连上来（未配对身份进配对流程）
+uv run python pc/remapadctl.py -p COM3 pairing start   # 配新主机：断开当前主机后进发现广播，等新主机搜索配对（stop 停止广播并断链）
+uv run python pc/remapadctl.py -p COM3 wake            # 开唤醒窗口：未连接时发 0x81 把休眠主机叫起来，已连接则断开让它重连
+uv run python pc/remapadctl.py -p COM3 adv auto        # 广播窗口内的形态（auto 默认按窗口来源 / wake / reconnect），实机 A/B 对账用
+uv run python pc/remapadctl.py -p COM3 ctrl            # 手柄配色（ctrl [body button accent grip]，四段 0xRRGGBB，持久化；无参回读）
+uv run python pc/remapadctl.py -p COM3 advaddr         # 广播地址形态（auto / public / random，不落盘），分辨主机是否按地址形态过滤
+uv run python pc/remapadctl.py -p COM3 advpdu          # 广播 PDU 形态（auto / legacy / extended，不落盘）
+uv run python pc/remapadctl.py -p COM3 --amiibo Alm.bin # 上传 amiibo 镜像到设备 storage 分区槽位（540 或 572 字节 dump；amiibo list / select 0 选用）
+uv run python pc/remapadctl.py -p COM3 poweroff        # 关机（释放电源锁存，仅电池供电有效）
+uv run python pc/remapadctl.py -p COM3 reboot          # 软重启回 COM 模式
+uv run python pc/remapadctl.py -p COM3 --log --seconds 20         # 只读设备日志 20 秒
+uv run python pc/remapadctl.py -p COM3 --log --reset --seconds 25  # 先复位再抓完整启动日志
+uv run python pc/remapadctl.py -p COM3 --shot --out pc\shots\ui.png   # 抓实机截图并指定输出路径
+uv run python pc/remapadctl.py -p COM3 capture on        # 主机输出原始采集开（off 关）：震动/玩家灯/指令等主机输出经 0x12 帧回传
+uv run python pc/remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad   # 抓 30 秒主机原始输出到文件（布局转换前），手柄转发照常
 ```
 
 `key` 的键名为 `a b x y plus minus home capture c l r zl zr ls rs up down left right gl gr ui`。
@@ -259,12 +258,11 @@ PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmwa
 设备侧实现在 `firmware/main/ota/`，PC 端入口是 [pc/remapadctl.py](../pc/remapadctl.py) 的 `--upgrade`：
 
 ```powershell
-cd pc
-uv run python remapadctl.py --dry-run                     # 只校验镜像，不接设备
-uv run python remapadctl.py -p COM3 --upgrade             # 升级默认镜像 ../firmware/build/remapad_firmware.bin
-uv run python remapadctl.py -p COM3 --upgrade --image ..\firmware\build\remapad_firmware.bin
-uv run python remapadctl.py -p COM3 --upgrade --wait      # 升级后等设备重启回来并打印新版本
-uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备日志
+uv run python pc/remapadctl.py --dry-run                  # 只校验镜像，不接设备
+uv run python pc/remapadctl.py -p COM3 --upgrade          # 升级默认镜像 firmware/build/remapad_firmware.bin（按脚本位置解析）
+uv run python pc/remapadctl.py -p COM3 --upgrade --image D:\build\remapad_firmware.bin
+uv run python pc/remapadctl.py -p COM3 --upgrade --wait   # 升级后等设备重启回来并打印新版本
+uv run python pc/remapadctl.py -p COM3 --upgrade --verbose  # 同时透传设备日志
 ```
 
 要点：

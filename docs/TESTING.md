@@ -131,8 +131,8 @@ uv run python scripts/firmware-test.py
 | `pc/tests/test_settings_reply.py` | 设置回读行的解析错了会表现为界面显示的亮度、配色或开关与设备不一致（固件是唯一事实源，界面只跟回读走），接上设备之前看不出来 |
 
 ```powershell
-cd pc ; uv run python -m unittest discover -s tests -t .     # 仓库根或 pc/ 下都是这条
-cd pc ; uv run python -m unittest discover -s tests -t . -v  # 加 -v 看每条用例名
+uv run python -m unittest discover -s pc/tests -t pc     # 在仓库根执行
+uv run python -m unittest discover -s pc/tests -t pc -v  # 加 -v 看每条用例名
 ```
 
 用例跑的是 `pc/` 下的真源码（`import remapadctl` / `import link`），不复制被测逻辑，也不创建窗口：
