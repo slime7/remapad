@@ -1,23 +1,24 @@
 # Remapad 核心概念与领域抽象
 
-本文档记录 Remapad 的两条数据路径：屏幕 UI 路径（Slint，Rust）与 USB→NS2→BLE 控制器路径（ESP-IDF 原生 C）。
-界面的编译口径、平台层与 C ABI 由本仓库自己持有：界面源码在 `ui/src/`，Rust 组件在 `firmware/components/slint_ui/`。
+本文档记录 Remapad 的两条数据路径：屏幕 UI 路径（Rust，core 经 ui_service 契约对接）与 USB→NS2→BLE 控制器路径（ESP-IDF 原生 C）。
+界面的编译口径、平台层与 C ABI 由本仓库自己持有：界面源码在 `ui/src/`，Rust 工作区（宿主用例包、固件组件与编译口径）在 `ui/` 下。
 NS2 协议内容见 [controller-switch2.md](controller-switch2.md)，PS 家族手柄数据见 [controller-ps.md](controller-ps.md)。
 
 ## 领域术语表
 
 | 术语 | 含义 |
 | :--- | :--- |
-| **Slint 组件** | `.slint` 里的界面单元：`App` 是根窗口，页面与控件都是被复用的组件（`component`）。 |
-| **属性绑定** | `.slint` 里的声明式表达式：属性依赖别的属性，依赖一变就重算；固件只写 `in-out property`。 |
+| **界面组件** | 界面框架里的界面单元：`App` 是根窗口，页面与控件都是被复用的组件（`component`）。 |
+| **属性绑定** | 界面源码里的声明式表达式：属性依赖别的属性，依赖一变就重算；固件只写 `in-out property`。 |
 | **界面回调** | 界面把用户动作交回宿主：本项目的动作统一是 `action(name, value)`，确认键走 `activate-focused()`。 |
 | **字形烘焙** | 构建期把界面里出现过的字符按字号表（12 / 14 / 16 / 24）烘成位图，运行期不解析字体文件。 |
 | **字符集锚点** | `ui/src/app.slint` 里一条不可见的 `Text`，把只在运行期拼出来的码点钉进烘焙集合（漏了就上屏成空洞）。 |
-| **Damage region** | 一帧中需要重新光栅化的矩形（Slint 按失效元素算），平台再把它折成行带。 |
+| **Damage region** | 一帧中需要重新光栅化的矩形（界面框架按失效元素算），平台再把它折成行带。 |
 | **行带（band）** | 一次面板提交的单位：damage 矩形按 48 行切分出来的横向条带。 |
-| **平台层 / 宿主层** | `firmware/components/slint_ui` 的 `platform.rs`（渲染、行带提交、触摸采样）与 `host.rs`（状态写入、动作分发、手柄焦点）。 |
-| **状态快照 / 动作回调** | C ABI 的两条通路：`remapad_ui_state_t` 每 50 ms 进界面一次，动作按名字出界面（接口见 `slint_ui.h`）。 |
+| **平台层 / 宿主层** | `ui/slint_ui` 的 `platform.rs`（渲染、行带提交、触摸采样）与 `host.rs`（状态写入、动作分发、手柄焦点）。 |
+| **状态快照 / 动作回调** | core 与界面之间的两条通路（契约在固件核心的 `ui_service.h`）：`remapad_ui_state_t` 每 50 ms 进界面一次，动作按名字出界面。 |
 | **C ABI 边界** | Rust 与 C 之间唯一的一层（`abi.rs`、`boundary.rs` 与 `include/slint_ui.h`）；Rust 侧业务零 unsafe，只有这一层留口并逐处注明原因。 |
+| **UI 提供者** | `ui_service.h` 生命周期入口的实现方：带 UI 构建是 `ui/slint_ui` 组件（Rust），无 UI 构建是 `main/ui/ui_stub.c` 空实现；固件核心对界面框架零依赖。 |
 | **硬件驱动层** | `firmware/main/drivers/`：面板、触摸、背光、按键、蜂鸣器与电池，屏幕平台只经 hooks 调它。 |
 | **USB input** | 由 ESP32 USB host 接收的外部输入报告，先进入产品数据面，不直接进入界面。 |
 | **接收段（input/、usb/）** | 输入通路的第一段：桥接帧的编解码与串口分帧、USB-Serial/JTAG 的唯一读取者、USB host 枚举与 HID 收发，以及实现 `dp_source_t` 的桥接源与 USB 源。 |
@@ -34,11 +35,11 @@ NS2 协议内容见 [controller-switch2.md](controller-switch2.md)，PS 家族�
 
 ## 界面契约：视口、字号与字体
 
-界面的编译口径由两个 `build.rs` 各持一份（宿主包与固件组件），两处必须一致：
+界面的编译口径收在 `ui/build-support` 一处（宿主用例包与固件组件的 `build.rs` 共用）：
 
 ```mermaid
 flowchart LR
-    View["ui/src/app.slint 根窗口<br/>240 × 280"] --> Compile["slint-build 编译"]
+    View["ui/src/app.slint 根窗口<br/>240 × 280"] --> Compile["构建期编译"]
     Sizes["字号表 12 / 14 / 16 / 24"] --> Compile
     Fonts["assets/fonts/<br/>NotoSansSC / MaterialIcons / seguisym"] --> Compile
     Compile --> Glyphs["字形位图 + 光栅化底图<br/>按界面用到的字符自动子集"]
@@ -47,8 +48,8 @@ flowchart LR
 ```
 
 - **视口**：根窗口与平台窗口都取 240 × 280；两处不一致时画面会被裁掉或留白。
-- **字号**：只用 12 / 14 / 16 / 24 四档（`theme.slint` 的 `text-*` token 与 `build.rs` 的 `FONT_SIZES` 一致），
-  新增档位要同时改两处，否则只会退回最近的一档位图。
+- **字号**：只用 12 / 14 / 16 / 24 四档（`theme.slint` 的 `text-*` token 与 `ui/build-support` 的 `FONT_SIZES` 一致），
+  新增档位只改这一处，否则只会退回最近的一档位图。
 - **字体**：正文用 NotoSansSC（宿主与组件的 `build.rs` 把它设成 `SLINT_DEFAULT_FONT`），
   图标与转圈由 `components.slint` / `pages.slint` 里的 `import "../assets/fonts/*.ttf"` 引入；字体文件本身不进固件。
 - **自动子集**：烘焙集合就是界面里出现过的字符；运行期才拼出来的文本（电量、内存、版本号）必须把用到的码点
@@ -115,10 +116,11 @@ flowchart TB
 - flash 写入期间 cache 被禁用：任务在禁缓存窗口里不能访问 PSRAM。凭证等持久化写因此收敛到 `ble_creds` 的内部 RAM 栈任务，
   各任务只更新内存表并投递快照；新增持久化需求沿用同一模式。面板提交、DMA 缓冲与界面行带同理都放内部 RAM。
 - `firmware/main/bridge/` 是控制面：只承载低频的模式切换、配对开关、连接状态、电池与诊断。
-  界面侧的动作经 `action` 回调交给 `slint_host.c`，转成 JSON 命令排进队列；队列由 owner task 在每轮状态轮询里服务
-  （`js_bridge_service()`），入队出队都在同一个任务上（无锁），PWR 按键与串口 CLI 等别的上下文经
-  `js_bridge_submit_command` 的外部队列转移。命令清单见 [pc/README.md](../pc/README.md) 与串口 CLI 的 `:help`。
-- **屏幕文案一律取自 `.slint` 的字面量**，固件只回状态码、不回可上屏的文本：
+  界面侧的动作经 `action` 回调交给 `main/ui/ui_service.c` 的统一分发，转成 JSON 命令排进队列；队列由
+  `js_bridge_service_start()` 建起的控制面服务任务每 50 ms 服务一次（`js_bridge_service()`），
+  入队出队经队列交接（无锁），PWR 按键与串口 CLI 等别的上下文经 `js_bridge_submit_command` 的外部队列转移。
+  命令清单见 [pc/README.md](../pc/README.md) 与串口 CLI 的 `:help`。
+- **屏幕文案一律取自界面源码的字面量**，固件只回状态码、不回可上屏的文本：
   字形只按界面里出现过的字符烘焙，固件回传的新字符串直接显示就是空洞或豆腐块（需要显示时把码点写进 `app.slint` 的锚点串）。
 - 玩家序号灯（主机 Command 0x09 下发的 4 位掩码）由 `ns2_session_player_leds()` 按活跃会话汇总，
   经状态快照的 `player_led` 供底栏四格指示灯使用。
@@ -460,7 +462,7 @@ stateDiagram-v2
 外加只用于底图的 `Image`。控件复用集中在 `ui/src/components.slint`：
 
 - **布局**：需要成排/成列、还要按内容撑开的区域用 `HorizontalLayout` / `VerticalLayout` 加 `alignment`；
-  页面主体按设计稿量测值给绝对位置（例如底栏三格按整屏 240 均分），改设计稿要同步改 `ui/tests/` 的断言。
+  页面主体按设计稿量测值给绝对位置（例如底栏三格按整屏 240 均分），改设计稿要同步改 `ui/host/tests/` 的断言。
 - **文本**：字号只取 12 / 14 / 16 / 24；中文由 NotoSansSC 烘制，图标与转圈走字形（`Icon` 控件指定字形字体）。
 - **图标**：单色图标是 Material Symbols 的字形，写成 `Icon { glyph: "\u{e30c}"; size: ...; tint: ...; }`，
   码点对照表在 [ui/README.md](../ui/README.md)；不要退回 SVG，缩放后上屏会糊。
@@ -481,7 +483,7 @@ stateDiagram-v2
 ```mermaid
 flowchart TB
     Source["ui/src/*.slint + ui/assets/（字体与 SVG）"]
-    Build["build.rs：slint-build"]
+    Build["build.rs：构建期编译"]
     Generated["OUT_DIR 下生成的 Rust 代码"]
     Cargo["cargo --target xtensa-esp32s3-none-elf"]
     Lib["firmware/build/esp-idf/slint_ui/cargo/<br/>xtensa-esp32s3-none-elf/release/libslint_ui.a"]
@@ -495,15 +497,16 @@ flowchart TB
 ```
 
 生成物只有两处：cargo 的 `target/`（`.gitignore` 已忽略）与 `firmware/build/`。仓库里没有手写的嵌入源、字节数组或同步脚本。
-宿主用例走另一条链：`ui/build.rs` 编译同一份 `.slint`，产物落在 `ui/target/`。
+宿主用例走另一条链：`ui/host/build.rs` 编译同一份 `.slint`，产物落在 `ui/target/`。
 
 ## ESP-IDF 运行时生命周期
 
-`firmware/main/slint_host.c` 只负责固件侧的装配与轮询，界面与渲染都在 Rust 组件里：
+core 与界面的分工是：`firmware/main/ui/ui_service.c` 装配状态快照并分发动作，`ui/slint_ui/ui_host.c`
+负责面板/触摸/背光装配、启动画面与渲染任务；固件核心对界面框架零依赖（契约见 `ui_service.h`）：
 
 ```mermaid
 flowchart TB
-    Task["remapad-slint owner task<br/>面板 / 触摸 / 背光 + 启动画面"]
+    Task["remapad-ui 提供者任务<br/>面板 / 触摸 / 背光 + 启动画面"]
     Start["remapad_slint_ui_start(hooks, poll, action)"]
     Platform["建平台：整帧 PSRAM 缓冲 + 内部 RAM 行带缓冲"]
     Window["建 240 × 280 窗口并设平台"]
@@ -521,15 +524,18 @@ flowchart TB
     Submit --> Loop
 ```
 
-固件只经 C ABI 传两类东西：`remapad_slint_hooks_t`（面板提交与触点采样）和两个回调（状态快照、动作分发）。
+带 UI 构建里固件经组件 C ABI 传两类东西：`remapad_slint_hooks_t`（面板提交与触点采样）和两个回调
+（状态快照，落到 core 的 `ui_service_fill_state`；动作分发，落到 `ui_service_handle_action`）。
 界面侧不持有任何固件指针；快照里的字符串是只读借用，回调返回后即作废。
+无 UI 构建（`REMAPAD_UI=OFF`）里同一组生命周期入口由 `main/ui/ui_stub.c` 顶上：
+面板/触摸/背光不初始化、屏幕熄灭，OTA 健康门槛在启动时直接放行（[ADR 0055](adr/0055-core-ui-split-optional-ui-build.md)）。
 
 ## 输入抽象
 
 界面有两条输入：**触摸**（用户手指）与**手柄按键位**（组合键捕获期间的屏幕操控）。
 
-- 触摸由固件经 `hooks.touch_sample` 提供，返回逻辑像素坐标；平台把它转成 Slint 的 `PointerMoved`、
-  `PointerPressed`、`PointerReleased` 事件序列（按住期间只补移动，抬手时补一次 `PointerExited`）。
+- 触摸由固件经 `hooks.touch_sample` 提供，返回逻辑像素坐标；平台把它转成指针移动、
+  按下、抬手的事件序列（按住期间只补移动，抬手时补一次移出）。
 - 手柄按键位来自数据面的 `dp_ui_buttons()`（只在组合键捕获期间非零，含十字键、圆圈键与肩键等价出的左右，
   见 [ADR 0028](adr/0028-pad-combo-captures-screen.md)），由 `host.rs` 转成焦点移动、翻页与确认。
 - CST816T 是单点触摸，坐标用逻辑像素；息屏（背光关闭）期间平台整段跳过采样——画面不可见，触点只剩误触，
@@ -542,7 +548,7 @@ USB→NS2 的高频状态留在产品数据面，界面只经状态快照看低�
 
 平台的职责是把界面画成像素并提交，不负责面板时序：
 
-1. Slint 的软件渲染器只画本帧 damage 区域，结果写进整帧 RGB565 缓冲（PSRAM，240 × 280）。
+1. 软件渲染器只画本帧 damage 区域，结果写进整帧 RGB565 缓冲（PSRAM，240 × 280）。
 2. 每条 damage 矩形按 48 行切分，逐行拷进内部 RAM 的行带缓冲（240 × 48）。
 3. `hooks.transfer` 把行带交给面板驱动：字节序转换、SPI EDMA 与等待完成都在驱动里。
 4. 整帧缓冲同时是截图通道的数据源：`remapad_slint_ui_frame()` 给只读指针，`remapad_slint_ui_copy_frame()` 整屏拷贝。
@@ -551,13 +557,15 @@ USB→NS2 的高频状态留在产品数据面，界面只经状态快照看低�
 
 ## 调度抽象
 
-调度只有一条任务：`remapad-slint` owner task（64 KB 栈、内部 RAM、钉在 CPU1）承载面板 / 触摸 / 背光初始化、
+界面侧只有一条任务：`remapad-ui` 提供者任务（64 KB 栈、内部 RAM、钉在 CPU1）承载面板 / 触摸 / 背光初始化、
 启动画面、`remapad_slint_ui_start` 与之后的事件循环。事件循环每轮：推进定时器与动画 → 采样触摸 → 按需重绘并提交 →
 让出 CPU（有动画时 16 ms 一档、最长 100 ms；不让出会把循环拉成自旋并饿死空闲任务）。
 
-界面状态与动作都在这个任务的上下文里交换：Slint 按单线程前提编译（`unsafe-single-threaded`），
-跨任务只走原子量（帧缓冲地址、trace 帧数、截图与内存请求）与 `bridge` 的命令队列。
-状态快照由一条 50 ms 的 Slint `Timer` 驱动，手柄按键处理与周期统计都挂在这一拍上。
+界面状态与动作都在这个任务的上下文里交换：界面框架按单线程前提编译（`unsafe-single-threaded`），
+跨任务只走原子量（帧缓冲地址、trace 帧数、截图请求）与 `bridge` 的命令队列。
+状态快照由一条 50 ms 的界面 `Timer` 驱动，手柄按键处理与周期统计都挂在这一拍上。
+core 侧的控制面另有一条服务任务（`remapad-bridge`，每 50 ms 泵一次命令队列与配对状态机），
+它不依赖界面存在——无 UI 构建里命令通路照常工作。
 
 ## 硬件扩展边界
 

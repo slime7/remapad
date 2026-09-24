@@ -9,7 +9,7 @@
 
 默认打开 ui/preview.slint：上半是 240 × 280 的设备画面（与固件同一棵 AppContent），
 下半是控制条，动作按固件语义在预览里结算，因此点设备画面上的控件就能走一遍界面
-（动作清单与固件一致，见 firmware/main/slint_host.c 的 ui_action）。
+（动作清单与固件一致，见固件核心 ui_service 的动作分发 firmware/main/ui/ui_service.c）。
 预览固定按 1:1 逻辑像素打开，想看放大后的效果就自己设 SLINT_SCALE_FACTOR；
 字体与字号表按固件构建的同名环境变量喂给编译器，因此中文与图标与实机同源（烘焙规则见 ui/README.md）。
 除 --file 之外的参数原样转给 slint-viewer，完整选项看 slint-viewer --help。
@@ -32,7 +32,7 @@ DEVICE_SOURCE = UI_DIR / "src/app.slint"
 VIEWER = "slint-viewer"
 VIEWER_VERSION = "1.18.1"
 VIEWER_INSTALL = f"cargo install {VIEWER} --version {VIEWER_VERSION} --locked"
-# 与 ui/build.rs、固件组件的 FONT_SIZES 一致；样式取构件期同款 fluent。
+# 与 ui/build-support 的 FONT_SIZES 一致；样式取构件期同款 fluent。
 FONT_SIZES = "12,14,16,24"
 STYLE = "fluent"
 

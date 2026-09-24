@@ -10,8 +10,8 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | 工具 | 版本/要求 | 用途 |
 | :--- | :--- | :--- |
 | Rust（宿主 stable） | 当前 stable | 编译界面与宿主用例（`cargo test`），以及安装预览工具 |
-| Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0`（rustup 工具链名默认 `esp`） | 把 `firmware/components/slint_ui` 交叉编译成 ESP32-S3 静态库；一键安装是 `uv run python scripts/setup-rust-toolchain.py` |
-| slint-viewer | 1.18.1 | PC 预览界面：`cargo install slint-viewer --version 1.18.1 --locked` |
+| Xtensa Rust | `esp-rs/rust-build` 的 `v1.97.0.0`（rustup 工具链名默认 `esp`） | 把 `ui/slint_ui` 交叉编译成 ESP32-S3 静态库；一键安装是 `uv run python scripts/setup-rust-toolchain.py` |
+| slint-viewer | 1.18.1 | PC 预览界面的工具（装法与版本口径见 [ui/README.md](../ui/README.md)） |
 | Python | 3.10 或更高（由 uv 准备；`idf.py` 另用 ESP-IDF 自带的解释器） | `scripts/*.py` 全部脚本与 `pc/` 下的工具 |
 | uv | 当前稳定版 | 所有 Python 入口都经它执行：`uv run python scripts/<名字>.py`（根目录 `pyproject.toml` + `uv.lock`）与 `cd pc ; uv run python remapadctl.py -p COMx`（`pc/pyproject.toml` + `pc/uv.lock`，依赖是 `hidapi` 与 `customtkinter`） |
 | ESP-IDF | `>=6.0,<6.2` | 本仓库已在 6.1 上验证 |
@@ -35,11 +35,12 @@ BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.m
 ```powershell
 uv run python scripts/setup-rust-toolchain.py          # 装 Xtensa 工具链（缺什么装什么）
 uv run python scripts/setup-rust-toolchain.py --check  # 只检查，不改动环境
-cargo install slint-viewer --version 1.18.1 --locked   # PC 预览工具，只需装一次
 ```
 
-界面与宿主用例只需要宿主 stable 工具链；Xtensa 工具链只服务于固件构建，换机步骤与 CMake 变量见 [ui/README.md](../ui/README.md)。
-界面依赖（slint、slint-build）由 `Cargo.lock` 锁定，首次构建从 crates.io 拉取，之后走本地缓存。
+PC 预览工具的安装命令见 [ui/README.md](../ui/README.md)。
+界面与宿主用例只需要宿主 stable 工具链；Xtensa 工具链只服务于固件构建（`REMAPAD_UI=OFF` 的纯 C 构建不需要它），
+换机步骤与 CMake 变量见 [ui/README.md](../ui/README.md)。
+界面依赖由 `ui/Cargo.lock` 锁定，首次构建从 crates.io 拉取，之后走本地缓存。
 
 仓库里的 Python 脚本都由 uv 托管：根目录 `pyproject.toml` + `uv.lock` 管 `scripts/`，`pc/` 自己一套；
 装好 uv 后 `uv run python <路径>` 会自动准备解释器与依赖，不需要手动建虚拟环境（首次执行会在仓库根建 `.venv`）。
@@ -62,7 +63,7 @@ cargo test --locked --manifest-path ui/Cargo.toml          # 界面宿主用例�
 
 ### 3. 检查界面改动
 
-界面没有单独的 lint 或打包步骤：`.slint` 在固件构建期编译，语法与烘焙错误会直接出现在 `idf.py build` 的输出里。
+界面没有单独的 lint 或打包步骤：界面源码在固件构建期编译，语法与烘焙错误会直接出现在 `idf.py build` 的输出里。
 只想快速验证语法用 `uv run python scripts/ui-preview.py --check`。
 
 ### 4. 编译 ESP-IDF 固件
@@ -86,9 +87,12 @@ idf.py build
   输出里会同时给出「当前环境用的解释器」与「配置工程时用的解释器」两条路径，照着切回去即可；
 - 想换到另一套环境长期使用，就在那套环境里 `idf.py fullclean` 后重新配置（代价是完整重编一次）。
 
-`firmware/components/slint_ui` 由 ESP-IDF 自动发现，它在配置阶段检查 cargo 与 Xtensa 工具链、在构建阶段用 cargo 把界面编成静态库；
+`ui/slint_ui` 是放在 `ui/` 工作区里的 ESP-IDF 组件（`REMAPAD_UI` 开关默认 ON，经 `EXTRA_COMPONENT_DIRS` 引入），
+它在配置阶段检查 cargo 与 Xtensa 工具链、在构建阶段用 cargo 把界面编成静态库；
 `ui/src/*.slint` 与 `ui/assets/*.svg` 登记为构建依赖，改完界面直接 `idf.py build` 即可，不需要删除 `firmware/build/`。
 带调试页的开发构建是默认值；发布构建设 `$env:REMAPAD_RELEASE = "1"` 后重跑配置。
+不需要屏幕时 `idf.py -DREMAPAD_UI=OFF build` 走纯 C 构建：不引入界面组件、不需要 Rust 工具链，
+面板/触摸/背光不初始化，设置经 PC 串口 CLI 控制（[ADR 0055](adr/0055-core-ui-split-optional-ui-build.md)）。
 组件构建的细节（工具链名、字体变量、字号表）见 [ui/README.md](../ui/README.md) 与 [ARCHITECTURE.md](ARCHITECTURE.md) 的「构建链路」。
 
 ### 5. 烧录与监视
@@ -275,10 +279,10 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
 
 - [ui/src/](../ui/src)：界面源码（`app.slint` 页表与根窗口、`pages.slint`、`components.slint`、`theme.slint`）。
 - [ui/assets/](../ui/assets)：字体（正文 / 图标 / 转圈）与卡片、底栏底图 SVG。
-- [ui/tests/](../ui/tests)：界面宿主用例（Slint 测试后端 + 软件渲染器）。
-- [firmware/components/slint_ui/](../firmware/components/slint_ui)：Rust 界面组件：平台层、宿主层、C ABI 与 `rust_heap.c`。
-- [firmware/main/slint_host.c](../firmware/main/slint_host.c)：owner task、状态聚合、动作分发与截图/内存请求。
-- [firmware/main/boot_splash.c](../firmware/main/boot_splash.c)：UI 就绪前的固件自绘启动画面（主题底色 + 手柄标记 + 阶段进度条），同时在启动画面落屏后提前点亮背光。
+- [ui/host/tests/](../ui/host/tests)：界面宿主用例（界面测试后端 + 软件渲染器）。
+- [ui/slint_ui/](../ui/slint_ui)：固件 Rust 界面组件：平台层、宿主层、C ABI、装配层 `ui_host.c` 与启动画面 `boot_splash.c`。
+- [ui/build-support/](../ui/build-support)：宿主用例与固件组件共用的界面编译口径（风格 / 字号表 / 字体）。
+- [firmware/main/ui/](../firmware/main/ui)：UI 契约的 core 侧（`ui_service.h` 契约、状态快照装配与动作分发；无 UI 构建另有空实现 stub）。
 - [firmware/main/config/app_config.c](../firmware/main/config/app_config.c)：用户设置 NVS 持久化（亮度 / 连接模式 / 手柄身份）。
 - [firmware/main/console/cli.c](../firmware/main/console/cli.c)：串口行命令 CLI（USB-Serial/JTAG）。
 - [firmware/main/drivers/pwr_key.c](../firmware/main/drivers/pwr_key.c)：PWR 按键采样（短按息屏、长按是连接键）。
@@ -329,20 +333,19 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 
 ### 预览时报找不到 `slint-viewer`
 
-预览工具不是本仓库的依赖，要单独装一次：`cargo install slint-viewer --version 1.18.1 --locked`。
+预览工具不是本仓库的依赖，要单独装一次（装法与版本口径见 [ui/README.md](../ui/README.md)）。
 装完重开终端让 `%USERPROFILE%\.cargo\bin` 进 `PATH`；脚本给的提示里就是这条命令。
-版本要与界面用的 Slint 对齐（`ui/Cargo.toml` 的 `slint = "1.18"`），版本差太多时新语法会编译不过。
 
 ### 屏幕上中文显示为方框（tofu）
 
-中文字形是否可用取决于构建期烘出来的字形位图：`build.rs` 把 `assets/fonts/NotoSansSC-Regular.otf` 作为默认字体，
+中文字形是否可用取决于构建期烘出来的字形位图：构建脚本把 `assets/fonts/NotoSansSC-Regular.otf` 作为默认字体，
 界面里出现过的中文会被烘进各字号槽位。仍显示方框或空洞的常见原因：
-文本是运行期拼出来的、字符从未出现在任何 `.slint` 字面量里（把码点加进 `ui/src/app.slint` 的锚点串），
+文本是运行期拼出来的、字符从未出现在任何界面源码字面量里（把码点加进 `ui/src/app.slint` 的锚点串），
 或用了字体不覆盖的码点（emoji 没有字形，只能显示为方框）。改完文案重新 `idf.py build` 即可。
 
 ### `cargo +esp 不可用` 或 `工具链缺 rust-src 组件`
 
-配置阶段的这两条报错来自 `firmware/components/slint_ui/CMakeLists.txt` 的工具链自检，按提示修：
+配置阶段的这两条报错来自 `ui/slint_ui/CMakeLists.txt` 的工具链自检（报错里同时给出 `-DREMAPAD_UI=OFF` 的出路），按提示修：
 
 ```powershell
 uv run python scripts/setup-rust-toolchain.py               # 装 Xtensa 工具链
@@ -369,20 +372,21 @@ ninja -C firmware\build -n
 ### 烧录后没有屏幕画面
 
 面板由 `drivers/panel.c` 驱动（esp_lcd 内置 ST7789，SPI2 80 MHz，见 [ARCHITECTURE.md](ARCHITECTURE.md) 的显示通路预算）。正常时序是：
-`firmware/main/boot_splash.c` 在面板与触摸初始化成功后自绘启动画面，背光随启动画面落屏由 `drivers/backlight.c` 点亮，随后每个启动阶段推进一次进度条；
-Slint 首帧提交成功后启动画面交出屏幕并释放缓冲。若画面不可见，先看串口日志：`panel init failed` 表示面板初始化失败（此时固件跳过启动画面，画面仍渲染进 PSRAM）；
-有启动画面日志但屏幕黑，再检查背光（`GPIO15` 需要显式驱动，若 `backlight init failed` 会有对应日志）与面板排线；日志里没有启动画面但 UI 正常，说明是从旧镜像启动，重新烧录即可。
+界面提供者任务在面板与触摸初始化成功后自绘启动画面（`ui/slint_ui/boot_splash.c`），背光随启动画面落屏由 `drivers/backlight.c` 点亮，随后每个启动阶段推进一次进度条；
+界面首帧提交成功后启动画面交出屏幕并释放缓冲。若画面不可见，先看串口日志：`panel init failed` 表示面板初始化失败（此时固件跳过启动画面，画面仍渲染进 PSRAM）；
+有启动画面日志但屏幕黑，再检查背光（`GPIO15` 需要显式驱动，若 `backlight init failed` 会有对应日志）与面板排线；日志里没有启动画面但 UI 正常，说明是从旧镜像启动，重新烧录即可；
+无 UI 构建（`REMAPAD_UI=OFF`）不初始化面板与背光，屏幕保持熄灭是预期行为（日志里有一句 `no-UI build`）。
 修改面板方向/偏移配置时要对照 [hardware.md](hardware.md) 与微雪官方示例，不要凭空猜测初始化序列。
 
-### `slint ui start failed (internal=… largest=… psram=…) `
+### `ui start failed (internal=… largest=… psram=…) `
 
 这条日志表示 UI 平台建不起来，括号里的三个数字是当时的空闲内存。平台要两块钱：
 整帧缓冲 240 × 280 × 2 字节（约 134 KB，进 PSRAM）与行带缓冲 240 × 48 × 2 字节（约 23 KB，要内部 RAM 且 DMA 可达），
-另外 owner task 的 64 KB 栈也在内部 RAM。largest 明显小于 23 KB 时先看谁把内部 RAM 占住了。
+另外界面任务的 64 KB 栈也在内部 RAM。largest 明显小于 23 KB 时先看谁把内部 RAM 占住了。
 
 ### 启动时崩溃重启，崩溃位置每次都不一样
 
-这类「位置漂移」的崩溃通常不是空指针，而是某个任务写穿了自己的栈。界面的渲染路径在 owner task 的 64 KB 栈上跑，
+这类「位置漂移」的崩溃通常不是空指针，而是某个任务写穿了自己的栈。界面的渲染路径在界面任务的 64 KB 栈上跑，
 改平台层（`platform.rs`）或加深界面嵌套以后，先把栈量一遍再往上加代码；不要只调大行带缓冲而不看栈。
 
 ### 启动阶段出现 `task_wdt` 告警
@@ -393,7 +397,7 @@ Slint 首帧提交成功后启动画面交出屏幕并释放缓冲。若画面�
 
 ### 运行时反复 `task_wdt` 告警并且界面掉帧
 
-先看 owner task 每 5 秒一条的统计：`frames=… avg_render_us=… avg_flush_us=… avg_damage_px=… max_render_us=… max_flush_us=…`。
+先看界面任务每 5 秒一条的统计：`frames=… avg_render_us=… avg_flush_us=… avg_damage_px=… max_render_us=… max_flush_us=…`。
 渲染与提交之和接近或超过 16 ms 时，说明每帧把整个周期都吃满了，空闲任务自然喂不上狗。
 先用串口 `trace 60` 看清是哪一类帧贵：`damage_px` 大说明重画范围大，`flush_us` 大说明面板传输慢（行带太碎或 SPI 争用）。
 CPU 频率在 `firmware/sdkconfig.defaults` 里显式配置为 240 MHz；降不下来就要从界面写法入手（见 [ADR 0050](adr/0050-repaint-friendly-screen-rules.md)）。

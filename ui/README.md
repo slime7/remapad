@@ -1,6 +1,7 @@
 # ui：屏幕界面（Slint）
 
-本目录是屏幕 UI 的 Slint 源码：构建期由固件组件编译进固件，同一份源码也由本目录的 `Cargo.toml` 编给宿主用例。
+本目录是屏幕 UI 的 Slint 工作区：界面源码在 `src/` 与 `assets/`，固件把 `slint_ui/` 里的 Rust 组件编进镜像，
+同一份源码也由 `host/` 的宿主用例包编译验证；三份 Rust 包共用根 `Cargo.toml` 的一份 `Cargo.lock`。
 
 Rust 组件、工具链与日常命令见下面各节；用 Rust 重写这套界面时记下的工具链坑与结论已并入本节与 [docs/adr/](../docs/adr/)。
 
@@ -13,8 +14,10 @@ Rust 组件、工具链与日常命令见下面各节；用 Rust 重写这套界
 | `src/pages.slint` | 七个页面（亮度、手柄、配对、电源、USB 模式、DS 设置、系统信息）与调试页 |
 | `src/components.slint` | 复用控件：底栏、状态图标、确认弹窗、拖动层 |
 | `src/theme.slint` | 配色与字号常量 |
-| `src/lib.rs` | 宿主侧包：编译界面并给用例提供元素几何与画面量测工具 |
-| `tests/*.rs` | 宿主用例：注入界面状态、按元素几何与像素断言屏幕行为（含预览窗自己的用例），见 [docs/TESTING.md](../docs/TESTING.md) |
+| `host/` | 宿主用例包：编译界面并给用例提供元素几何与画面量测工具 |
+| `host/tests/*.rs` | 宿主用例：注入界面状态、按元素几何与像素断言屏幕行为（含预览窗自己的用例），见 [docs/TESTING.md](../docs/TESTING.md) |
+| `slint_ui/` | 固件 Rust 界面组件（ESP-IDF 组件，目录名即组件名）：平台层、宿主层、C ABI、装配层 `ui_host.c`、启动画面 `boot_splash.c` 与 `rust_heap.c` |
+| `build-support/` | 界面编译口径单一来源：风格、字号表与字体路径，`host` 与 `slint_ui` 的 `build.rs` 共用 |
 | `assets/fonts/` | 正文字体（NotoSansSC）、图标字体（MaterialIcons）与转圈字体（seguisym） |
 | `assets/main.svg`、`assets/dock.svg` | 四叶草卡片底图与底栏底图 |
 
@@ -22,7 +25,7 @@ Rust 组件、工具链与日常命令见下面各节；用 Rust 重写这套界
 
 ## 构建链路
 
-`firmware/components/slint_ui` 是 Rust 组件，`idf.py build` 为它做三件事：
+`ui/slint_ui` 是 Rust 组件（固件 CMake 经 `EXTRA_COMPONENT_DIRS` 引入），`idf.py build` 为它做三件事：
 
 1. 用 `slint-build` 把 `src/app.slint` 编译成 Rust 代码（含 SVG 光栅化与资源嵌入）。
 2. 按 `build.rs` 的字号表（12/14/16/24）烘字形位图：正文用 `ui/assets/fonts/NotoSansSC-Regular.otf`，
@@ -36,9 +39,10 @@ Rust 组件、工具链与日常命令见下面各节；用 Rust 重写这套界
 
 ## 宿主用例
 
-本目录的 `Cargo.toml` 是宿主侧包：`build.rs` 用与固件组件同一套口径编两份源码
+`host/` 是宿主侧用例包：`build.rs` 经 `build-support` 用与固件组件同一套口径编两份源码
 （`src/app.slint` 给设备侧用例、`preview.slint` 给预览用例；同字体、同字号表，额外打开元素调试信息），
-`tests/*.rs` 装 Slint 测试后端注入界面状态、用软件渲染器渲染一帧，按元素几何与画面像素断言。
+`host/tests/*.rs` 装 Slint 测试后端注入界面状态、用软件渲染器渲染一帧，按元素几何与画面像素断言。
+workspace 的 `default-members` 只有 host，日常命令不会去碰 no_std 的固件包。
 
 ```powershell
 cargo test --locked --manifest-path ui/Cargo.toml              # 全量
@@ -61,7 +65,7 @@ uv run python scripts/ui-preview.py --check                       # 只编译并
 uv run python scripts/ui-preview.py --screenshot agent-temp/ui.png # 渲染一帧存图后退出
 ```
 
-设备画面里的控件点下去照常发动作，动作由预览窗按固件语义结算（与 `firmware/main/slint_host.c` 的 `ui_action` 同名同参），
+设备画面里的控件点下去照常发动作，动作由预览窗按固件语义结算（与固件核心 `firmware/main/ui/ui_service.c` 的动作分发同名同参），
 所以能点着走一遍界面：翻页、拖动切页、亮度加减、确认弹窗、配对档位、USB 角色与 OTA 进度都能在 PC 上看；
 焦点环用控制条的「手柄操控 / 焦点 ± / 确认键」走查（确认键转发给设备画面自己的按页分发）。
 「焦点 ±」在可聚焦项之间循环（到底再按回到另一端，与实机的上下键一致）。
@@ -119,6 +123,7 @@ rustc +esp --target xtensa-esp32s3-none-elf --print cfg
 
 | 变量 | 默认值 | 作用 |
 | :--- | :--- | :--- |
+| `REMAPAD_UI` | `ON` | 是否编入屏幕 UI；OFF 时纯 C 构建固件（不需要 Rust 工具链，屏幕熄灭、设置走串口 CLI，见 [ADR 0055](../docs/adr/0055-core-ui-split-optional-ui-build.md)） |
 | `REMAPAD_SLINT_RUST_TOOLCHAIN` | `esp` | 构建时调用 `cargo +<名字>`；工具链换了名字，或本机留了多套 esp 工具链时改它 |
 | `REMAPAD_SLINT_FONT` | `ui/assets/fonts/NotoSansSC-Regular.otf` | 构建期烘字形用的字体文件 |
 
@@ -142,9 +147,9 @@ idf.py -DREMAPAD_SLINT_RUST_TOOLCHAIN=my-esp build
 # 整机编译：界面编译与静态库都由它触发，中间产物在 firmware/build/esp-idf/slint_ui/cargo/ 下
 cd firmware ; idf.py build
 
-# 只编界面与 Rust 组件，几秒出结果（产物落在组件目录下的 target/，已忽略）
+# 只编界面与 Rust 组件，几秒出结果（产物落在 ui/target/，已忽略）
 # 这条通路用 build.rs 的默认值：节拍率 1000 与仓库字体，与 idf.py build 传入取值一致时才等价
-cd firmware/components/slint_ui
+cd ui/slint_ui
 cargo +esp build -Zbuild-std=core,alloc --release --locked --target xtensa-esp32s3-none-elf
 
 # 只重烧应用分区
@@ -154,7 +159,7 @@ cd firmware ; idf.py -p COMx app-flash
 ## 改动注意
 
 - 文案写在 `.slint` 里，不要在固件侧拼中文（见上文烘焙规则）。
-- 字号只取 `theme.slint` 里已有的档位；新增字号要同步 `build.rs` 的 `FONT_SIZES`，否则静默退回最近的一档位图。
+- 字号只取 `theme.slint` 里已有的档位；新增字号要同步 `build-support` 的 `FONT_SIZES`，否则静默退回最近的一档位图。
 - 单色图标用字形：`Icon { glyph: "\u{e30c}"; size: ...; tint: ...; }`，码点从下面这份对照表取（都是 Material Symbols 的现成字形）。
   新增图标只改界面与码点即可。图标字号只能取烘过的档位（12/14/16/24）。
 

@@ -2,13 +2,15 @@
 name = "slint_ui"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 publish = false
+
+# 固件侧界面包：构建期由 slint-build 编译成 Rust，交叉编译成 xtensa 静态库链进固件；
+# 编译口径在 ../build-support，宿主用例包是同工作区的 ../host。
 
 [lib]
 name = "slint_ui"
 crate-type = ["staticlib"]
-
-[workspace]
 
 [dependencies]
 # 界面在构建期由 slint-build 编译成 Rust；运行期只保留软件渲染器这条通路。
@@ -21,9 +23,4 @@ slint = { version = "1.18", default-features = false, features = [
 libm = "0.2"
 
 [build-dependencies]
-slint-build = "1.18"
-
-[profile.release]
-opt-level = "z"
-panic = "abort"
-
+build-support = { path = "../build-support" }

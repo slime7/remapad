@@ -32,7 +32,7 @@
 #include "ota_session.h"
 #include "pad_device.h"
 #include "pad_state.h"
-#include "slint_host.h"
+#include "ui_service.h"
 #include "target.h"
 #include "usb_transport.h"
 #include "usb_input.h"
@@ -128,14 +128,13 @@ static void cli_status(void)
 }
 
 /**
- * 实时内存全景：owner task 下一帧直接从引擎与堆账读数后经控制台出口回打。
- * 不经过 UI 层——截图冻结或系统页门控（隐藏时停止取数）都不影响这里的
- * 实时性，串口侧拿到的永远是发起那一刻的现场值。
+ * 实时内存全景：从堆账直接读数经控制台出口回打。
+ * 不经过 UI 层——无 UI 构建同样可用，串口侧拿到的永远是发起那一刻的现场值。
  */
 static void cli_mem(void)
 {
-    remapad_ui_request_mem();
-    cli_print("ok mem report queued (printed next frame)");
+    ui_service_print_mem();
+    cli_print("ok mem report printed");
 }
 
 /** 运行镜像信息：版本与分区来自 OTA 会话（与 UI 系统页同一来源）。 */
@@ -652,9 +651,9 @@ static void cli_motion(const char *arg)
 }
 
 /**
- * 实机截图：请求交给 Slint owner task 在下一轮状态轮询里把当前帧缓冲回传，
+ * 实机截图：请求交给 UI 提供者在下一轮状态轮询里把当前帧缓冲回传，
  * 像素经桥接图像帧发出；PC 侧（pc/remapadctl.py 的 shot）落地成 PNG。
- * 这里只置标志，不等回传，回复 ok 表示请求已入队。
+ * 这里只置标志，不等回传，回复 ok 表示请求已入队（无 UI 构建里由空实现回绝）。
  */
 static void cli_shot(void)
 {

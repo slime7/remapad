@@ -13,6 +13,7 @@ extern const host_test_suite_t suite_ns2_identity;
 extern const host_test_suite_t suite_dp_source;
 extern const host_test_suite_t suite_dp_ui;
 extern const host_test_suite_t suite_dp_capture;
+extern const host_test_suite_t suite_ui_service;
 extern const host_test_suite_t suite_pad_device;
 extern const host_test_suite_t suite_ds_behavior;
 extern const host_test_suite_t suite_pad_ns;
@@ -37,6 +38,7 @@ static const host_test_suite_t *const s_suites[] = {
     &suite_dp_source,
     &suite_dp_ui,
     &suite_dp_capture,
+    &suite_ui_service,
     &suite_pad_device,
     &suite_ds_behavior,
     &suite_pad_ns,

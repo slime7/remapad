@@ -1,4 +1,4 @@
-# 屏幕 UI 组件固定在 firmware/components/slint_ui，由 ESP-IDF 默认的组件目录规则发现；
+# 屏幕 UI 组件在仓库根的 ui/fw，由固件 CMake 的 EXTRA_COMPONENT_DIRS 引入；
 # 这里只声明应用对 ESP-IDF 版本的要求，Registry 依赖由各组件自己的清单负责。
 # 面板使用 IDF 内置 ST7789 驱动（esp_lcd），触摸走 Registry 的 CST816S 组件。
 dependencies:

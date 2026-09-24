@@ -1,0 +1,12 @@
+Remapad 第三方组件与许可声明
+
+本仓库分发的内容包含以下第三方组件，版权与许可归各自作者所有。
+
+- Slint（GPL-3.0-only，或 Slint Royalty-free 2.0 / Slint 商业授权）：屏幕 UI 的界面运行库，
+  由 ui/slint_ui 在构建期链接进带界面的固件镜像；许可原文与授权方式见 https://slint.dev/ 。
+- 字体与图标资源（ui/assets/fonts/）：正文字体 Noto Sans SC（SIL Open Font License 1.1，
+  见 ui/assets/fonts/LICENSE）、图标字体 Material Icons（Apache License 2.0，
+  见 ui/assets/fonts/MaterialIcons-LICENSE.txt）、转圈字形取自 Windows 的 Segoe UI Symbol（seguisym.ttf）。
+  字体文件只在构建期烘成字形位图，不随固件镜像分发。
+- ESP-IDF 与 ESP 组件注册表组件（Apache License 2.0 等各自许可）：固件构建依赖，
+  由开发机的 ESP-IDF 环境与 firmware/managed_components/（未入库）提供，不随本仓库分发。

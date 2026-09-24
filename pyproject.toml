@@ -4,6 +4,7 @@
 name = "remapad-scripts"
 version = "0.1.0"
 description = "Remapad 仓库脚本（界面预览、固件主机端测试、Rust 工具链安装与 ADR 新建）"
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = []
 

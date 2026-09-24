@@ -1,13 +1,13 @@
 # Remapad 测试策略与回归规则
 
-本项目用自动化测试守住行为：**屏幕 UI 宿主用例**（Slint 的 `#[test]`，编译真实 `.slint` 产物并渲染一帧）、
+本项目用自动化测试守住行为：**屏幕 UI 宿主用例**（界面的 `#[test]`，编译真实界面产物并渲染一帧）、
 **固件主机端单元测试**（把与硬件无关的纯逻辑模块编译成 PC 可执行文件）与
 **PC 侧主机端用例**（`pc/` 工具的纯逻辑，标准库 unittest）。三套都跑在开发机上，不需要真机。
 
-## 屏幕 UI 宿主用例（Slint）
+## 屏幕 UI 宿主用例
 
-`ui/tests/*.rs` 是 Slint 界面的 `#[test]` 用例：同一份 `ui/src/*.slint` 与 `ui/preview.slint` 在开发机上编译，
-装 Slint 测试后端注入界面状态，再用软件渲染器渲染一帧，按**元素几何**与**画面像素**断言。
+`ui/host/tests/*.rs` 是界面的 `#[test]` 用例：同一份 `ui/src/*.slint` 与 `ui/preview.slint` 在开发机上编译，
+装界面测试后端注入界面状态，再用软件渲染器渲染一帧，按**元素几何**与**画面像素**断言。
 被测对象是真实产物（同一套字体烘焙、固件里同一个软件渲染器），不需要真机与串口。
 
 ### 运行
@@ -18,7 +18,7 @@ cargo test --manifest-path ui/Cargo.toml --test bottom_bar 底栏    # 只跑匹
 ```
 
 窗口固定按面板尺寸（240 × 280）渲染，只需要宿主 stable 工具链；xtensa 工具链只服务于固件构建。
-界面里的 id 是用例的查询入口（例如 `BottomBar::battery-text`），改 id 要同步改 `tests/`。
+界面里的 id 是用例的查询入口（例如 `BottomBar::battery-text`），改 id 要同步改 `ui/host/tests/`。
 
 ### 断言口径
 
@@ -32,12 +32,12 @@ cargo test --manifest-path ui/Cargo.toml --test bottom_bar 底栏    # 只跑匹
 
 | 用例 | 覆盖的行为 |
 | :--- | :--- |
-| [ui/tests/bottom_bar.rs](../ui/tests/bottom_bar.rs) | 三等分状态格的格心与图标/标签同轴居中、手柄操控提示行的对齐、OTA 进度条居中且从条槽左端起填充 |
-| [ui/tests/pairing_page.rs](../ui/tests/pairing_page.rs) | 转圈按相位轮换盲文点阵单点、状态行在有无转圈时都居中 |
-| [ui/tests/system_page.rs](../ui/tests/system_page.rs) | 电池行的中点分隔符画成小圆点（字符集锚点漏码点就会红） |
-| [ui/tests/pages.rs](../ui/tests/pages.rs) | 调试页画在末位槽号上、切页后只画当前页、翻页时卡片从行进侧滑入再回到静止位置 |
-| [ui/tests/bottom_bar.rs](../ui/tests/bottom_bar.rs) | 底栏电量图标按电量逐档变满（0-6 档加满格共八个字形） |
-| [ui/tests/preview.rs](../ui/tests/preview.rs) | 预览窗控制条翻页后设备画面切到下一张卡片、确认键走设备上的焦点分发、焦点到底再按循环到另一端（PC 预览的交互靠它守住） |
+| [ui/host/tests/bottom_bar.rs](../ui/host/tests/bottom_bar.rs) | 三等分状态格的格心与图标/标签同轴居中、手柄操控提示行的对齐、OTA 进度条居中且从条槽左端起填充 |
+| [ui/host/tests/pairing_page.rs](../ui/host/tests/pairing_page.rs) | 转圈按相位轮换盲文点阵单点、状态行在有无转圈时都居中 |
+| [ui/host/tests/system_page.rs](../ui/host/tests/system_page.rs) | 电池行的中点分隔符画成小圆点（字符集锚点漏码点就会红） |
+| [ui/host/tests/pages.rs](../ui/host/tests/pages.rs) | 调试页画在末位槽号上、切页后只画当前页、翻页时卡片从行进侧滑入再回到静止位置 |
+| [ui/host/tests/bottom_bar.rs](../ui/host/tests/bottom_bar.rs) | 底栏电量图标按电量逐档变满（0-6 档加满格共八个字形） |
+| [ui/host/tests/preview.rs](../ui/host/tests/preview.rs) | 预览窗控制条翻页后设备画面切到下一张卡片、确认键走设备上的焦点分发、焦点到底再按循环到另一端（PC 预览的交互靠它守住） |
 
 ## 用例纪律
 
@@ -67,6 +67,7 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 | `main/dp/dp_source.c` | 多路输入叠加规则错了会表现为摇杆漂移、注入按键卡住；按键名表与摇杆注入的分侧语义也在这里钉住 |
 | `main/dp/dp_capture.c` | 主机原始输出采集的入环/出队写错会表现为 PC 抓包缺包乱序、长块尾巴静默丢失；排队次序、截断标记、满队丢包计数与开关清理在这里钉住 |
 | `main/dp/dp_ui.c` | 组合键捕获的判定错了会表现为「按住组合键没反应」或普通按键被吞掉，真机上不好复现；四键同按、300 ms 阈值与十字键 / 圆圈键到官方按键位的映射在这里钉住 |
+| `main/ui/ui_service.c` | UI 契约的动作映射与状态装配错了会表现为「按钮按了没反应」「提示语不对」或系统页读数错；亮度档位、动作到控制面命令的 JSON、提示/弹窗流转与快照逐字段映射在这里钉住（状态源走替身） |
 
 不在这套测试里：面板/触摸/背光驱动、BLE 与 NVS、USB host、桥接链路的串口驱动与接收任务、启动画面与 UI 任务调度——它们依赖真实硬件时序与协议栈，只能在真机上验证。
 
@@ -81,7 +82,9 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 | `firmware/test/test_*.c` | 用例 |
 
 用例编译的是**固件里的真源码**，不是副本；
-替身只补 `esp_err.h`、`esp_log.h`、FreeRTOS 临界区宏这类环境头文件，`app_config` 的取值入口，以及主机上没有的 `heap_caps_*` 分配接口（NS2 输出封装因此能整段进测试）。
+替身只补 `esp_err.h`、`esp_log.h`、FreeRTOS 临界区宏这类环境头文件，`app_config` 的取值入口，
+主机上没有的 `heap_caps_*` 分配接口（NS2 输出封装因此能整段进测试），以及 ui_service 用到的硬件状态源
+（电池/配对/USB/OTA 读数，见 `stubs/ui_service_deps_stub.c`）。
 被替换的都是硬件相关实现，编码与像素逻辑一行都没有复制。
 
 ### 运行

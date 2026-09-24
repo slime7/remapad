@@ -1,13 +1,17 @@
 # Slint 屏幕 UI 组件：界面与平台层都在 Rust 侧（slint crate 的软件渲染器），
 # 由 cargo 交叉编译成静态库后链进固件；.slint 在构建期编译成 Rust 代码并按字号烘字形位图。
+# 本组件放在 ui/ 工作区（固件经 EXTRA_COMPONENT_DIRS 引入），编译口径共享自 ../build-support；
+# 状态装配与动作分发在固件核心的 main/ui/ui_service.c，本组件经 PRIV_REQUIRES main 只用其公开接口。
 # src/rust_heap.c 是 alloc crate 的内存出口（含放置策略），Rust 侧只剩 rustc 强制的转发项。
 # 需要 Espressif 的 xtensa Rust 工具链（espup 安装，默认名字 esp）与它自带的 rust-src。
 
 idf_component_register(
-    SRCS "src/rust_heap.c"
-    INCLUDE_DIRS "include"
-    REQUIRES "esp_lcd" "esp_lcd_touch"
-    PRIV_REQUIRES "esp_timer" "freertos" "heap" "log"
+    SRCS
+        "ui_host.c"
+        "boot_splash.c"
+        "src/rust_heap.c"
+    PRIV_INCLUDE_DIRS "include" "."
+    PRIV_REQUIRES main "esp_lcd" "esp_lcd_touch" "esp_timer" "freertos" "heap" "log"
     REQUIRED_IDF_TARGETS esp32s3
 )
 
@@ -21,13 +25,13 @@ if(DEFINED ENV{REMAPAD_SLINT_RUST_TOOLCHAIN})
     message(STATUS "Slint UI: 工具链取环境变量 REMAPAD_SLINT_RUST_TOOLCHAIN=${slint_rust_toolchain}")
 endif()
 set(REMAPAD_SLINT_FONT
-    "${CMAKE_CURRENT_LIST_DIR}/../../../ui/assets/fonts/NotoSansSC-Regular.otf" CACHE FILEPATH
+    "${CMAKE_CURRENT_LIST_DIR}/../assets/fonts/NotoSansSC-Regular.otf" CACHE FILEPATH
     "界面字体：编译期按字号烘制字形位图，运行时不解析字体文件")
 set(REMAPAD_SLINT_ICON_FONT
-    "${CMAKE_CURRENT_LIST_DIR}/../../../ui/assets/fonts/MaterialIcons-Regular.ttf" CACHE FILEPATH
+    "${CMAKE_CURRENT_LIST_DIR}/../assets/fonts/MaterialIcons-Regular.ttf" CACHE FILEPATH
     "图标字体：Material Symbols，编译期按界面用到的字符烘字形位图")
 set(REMAPAD_SLINT_SPINNER_FONT
-    "${CMAKE_CURRENT_LIST_DIR}/../../../ui/assets/fonts/seguisym.ttf" CACHE FILEPATH
+    "${CMAKE_CURRENT_LIST_DIR}/../assets/fonts/seguisym.ttf" CACHE FILEPATH
     "转圈用的盲文点阵取自这份字体（素材里只有它覆盖 U+28xx）")
 # 调试页：沿用 UI 构建原有的口径，环境变量 REMAPAD_RELEASE=1 才当发布构建（页表不含调试页）。
 if(DEFINED ENV{REMAPAD_RELEASE})
@@ -59,7 +63,8 @@ if(NOT slint_cargo_status EQUAL 0)
         "cargo +${slint_rust_toolchain} 不可用：${slint_cargo_error}\n"
         "屏幕 UI 组件需要 Espressif 的 xtensa Rust 工具链：scripts/setup-rust-toolchain.py\n"
         "换机步骤见 ui/README.md；工具链名字不同时设环境变量 REMAPAD_SLINT_RUST_TOOLCHAIN\n"
-        "或加 -DREMAPAD_SLINT_RUST_TOOLCHAIN=<名字> 后重跑 idf.py build")
+        "或加 -DREMAPAD_SLINT_RUST_TOOLCHAIN=<名字> 后重跑 idf.py build；\n"
+        "不需要屏幕时也可以直接 -DREMAPAD_UI=OFF 走纯 C 构建（不需要 Rust 工具链）")
 endif()
 message(STATUS "Slint UI: ${slint_cargo_version} -> xtensa-esp32s3-none-elf")
 
@@ -85,8 +90,9 @@ set(slint_rust_lib "${slint_cargo_target_dir}/xtensa-esp32s3-none-elf/release/li
 
 file(GLOB_RECURSE slint_rust_sources CONFIGURE_DEPENDS
     "${slint_rust_dir}/src/*.rs"
-    "${slint_rust_dir}/../../../ui/src/*.slint"
-    "${slint_rust_dir}/../../../ui/assets/*.svg")
+    "${slint_rust_dir}/../build-support/src/*.rs"
+    "${slint_rust_dir}/../src/*.slint"
+    "${slint_rust_dir}/../assets/*.svg")
 
 add_custom_command(
     OUTPUT "${slint_rust_lib}"
@@ -103,7 +109,9 @@ add_custom_command(
         --manifest-path "${slint_rust_dir}/Cargo.toml"
     DEPENDS ${slint_rust_sources}
         "${slint_rust_dir}/Cargo.toml"
-        "${slint_rust_dir}/Cargo.lock"
+        "${slint_rust_dir}/../Cargo.toml"
+        "${slint_rust_dir}/../Cargo.lock"
+        "${slint_rust_dir}/../build-support/Cargo.toml"
         "${slint_rust_dir}/build.rs"
         "${REMAPAD_SLINT_FONT}"
         "${REMAPAD_SLINT_ICON_FONT}"

@@ -29,7 +29,7 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8")
 
-# 组件交叉编译用的目标三元组（slint_ui 只面向 ESP32-S3）。
+# 组件交叉编译用的目标三元组（固件界面组件只面向 ESP32-S3）。
 TARGET_TRIPLE = "xtensa-esp32s3-none-elf"
 
 

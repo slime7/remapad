@@ -3,8 +3,9 @@
 Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统：
 接收 USB 手柄输入，转换为 NS2 控制器报告，并通过 BLE 对外提供手柄服务，同时在板载屏幕上呈现运行状态与交互 UI。
 
-屏幕 UI 是 Slint（Rust）：界面在构建期编译进固件，运行期用软件渲染器画到面板；
-固件运行于 ESP-IDF，在原生任务与队列中承载控制器数据面。
+屏幕 UI 用 Rust 承载：界面在构建期编译进固件，运行期用软件渲染器画到面板；
+固件核心运行于 ESP-IDF，在原生任务与队列中承载控制器数据面，对界面只认 `ui_service.h` 一份 C 契约
+（界面组件按 `REMAPAD_UI` 开关可选编入，关闭时纯 C 也能出固件）。
 
 本项目仅为娱乐用途，实现类似功能不需要 ESP32 带有屏幕。
 
@@ -42,25 +43,25 @@ Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控�
 
 ```mermaid
 flowchart LR
-    UI[ui/：Slint .slint] --> Compile[slint-build 构建期编译]
-    Compile --> Lib[libslint_ui.a]
+    UI[ui/：界面源码] --> Compile[构建期编译]
+    Compile --> Lib[界面静态库]
     Lib --> CMake[ESP-IDF CMake]
-    CMake --> Renderer[Slint 软件渲染器]
+    CMake --> Renderer[软件渲染器]
     Renderer --> BSP[屏幕与触摸驱动]
     USB[USB 输入] --> DataPlane[控制器数据面]
     DataPlane --> NS2[NS2 报告编码]
     NS2 --> BLE[BLE 手柄服务]
     DataPlane -.状态同步.-> Bridge[Bridge 控制面]
-    Bridge -.状态轮询.-> Host[firmware/main/slint_host.c]
+    Bridge -.状态轮询.-> Host[firmware/main/ui/ui_service.c]
     Host -.界面状态与动作.-> Renderer
 ```
 
 系统核心分工与边界：
 
-- 屏幕 UI 工作区（`ui/`）是 Slint 源码与宿主用例：`.slint` 在构建期编成 Rust 静态库链进固件，界面行为由宿主用例断言。
+- 屏幕 UI 工作区（`ui/`）是界面源码、固件界面组件与宿主用例：界面在构建期编成 Rust 静态库链进固件，界面行为由宿主用例断言。
 - 固件工作区（`firmware/`）承载原生数据面：
   高频控制器接收、规范化、协议编码及 BLE 广播/GATT 状态机均在 ESP-IDF 原生任务中运行；
-  Bridge 控制面仅用于传递低频设备状态和交互指令，屏幕状态由 `firmware/main/slint_host.c` 每轮写进界面。
+  Bridge 控制面仅用于传递低频设备状态和交互指令，屏幕状态由固件核心的 `ui_service` 装配进界面、动作交回同处分发。
 - 主机协议细节见 [Switch 2 手柄协议规范 (docs/controller-switch2.md)](docs/controller-switch2.md)；
   输入设备数据见 [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)。
 
@@ -68,13 +69,14 @@ flowchart LR
 
 ```text
 remapad/
-├── ui/                          # 屏幕 UI 工作区：Slint 源码、底图与宿主用例
+├── ui/                          # 屏幕 UI 工作区：界面源码、底图、固件界面组件与宿主用例
 │   ├── src/                     # 界面源码（根组件、页面、复用控件与主题）
 │   ├── assets/                  # 字体与底图（卡片、底栏）
-│   └── tests/                   # 宿主用例：注入状态后按元素几何与像素断言
+│   ├── host/                    # 宿主用例包：注入状态后按元素几何与像素断言
+│   ├── slint_ui/                # 固件界面组件（Rust 静态库与平台层，ESP-IDF 组件）
+│   └── build-support/           # 两份 build.rs 共用的编译口径
 ├── firmware/                    # 固件工作区：ESP-IDF 嵌入式工程
-│   ├── main/                    # 固件业务源码（界面状态装配、控制器数据面、驱动等）
-│   ├── components/              # 随仓库固定的组件（slint_ui：Slint 界面与 Rust 平台层）
+│   ├── main/                    # 固件核心业务源码（UI 契约、控制器数据面、驱动等）
 │   ├── sdkconfig.defaults       # 芯片架构、CPU 频率、Flash/PSRAM 预设
 │   └── partitions.csv           # 双应用 OTA 与存储分区表
 ├── pc/                          # PC 侧辅助工具（USB 桥接、命令行控制台、实机截图、OTA）
@@ -86,16 +88,16 @@ remapad/
 
 环境要求：ESP-IDF（>=6.0,<6.2）、Python 3.10+ 与 uv、Rust（宿主 stable + Xtensa 工具链，见 [ui/README.md](ui/README.md)）。
 
-### 1. 屏幕 UI（Slint）
+### 1. 屏幕 UI
 
 ```powershell
 # PC 交互预览：设备画面 240 × 280 + 控制条，动作在预览里结算，存盘即刷新（脚本经 uv 跑）
 uv run python scripts/ui-preview.py
 
-# 界面行为的宿主用例：在开发机上跑真实 .slint 产物
+# 界面行为的宿主用例：在开发机上跑真实界面产物
 cargo test --locked --manifest-path ui/Cargo.toml
 
-# 改完 ui/src 下的 .slint，编固件时一起编译进应用（首次构建需要 xtensa Rust 工具链）
+# 改完 ui/src 下的界面源码，编固件时一起编译进应用（首次构建需要 xtensa Rust 工具链）
 cd firmware ; idf.py build
 ```
 
@@ -137,3 +139,20 @@ uv run python remapadgui.py
 - [目标硬件技术参考 (docs/hardware.md)](docs/hardware.md)：芯片引脚、外设与电气特性
 - [测试策略与回归规则 (docs/TESTING.md)](docs/TESTING.md)：自动化测试与用例规范
 - [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：历史架构决策与选型取舍，不得修改历史记录文件
+
+## 开源许可
+
+许可按模块分开，各模块目录内的许可文件为准：
+
+| 模块 | 许可 | 许可文件 |
+| :--- | :--- | :--- |
+| 屏幕 UI（`ui/`） | GPL-3.0 | [ui/LICENSE-GPL-3.0](ui/LICENSE-GPL-3.0) |
+| 设备固件（`firmware/`） | MIT | [firmware/LICENSE-MIT](firmware/LICENSE-MIT) |
+| PC 侧工具（`pc/`） | MIT | [pc/LICENSE-MIT](pc/LICENSE-MIT) |
+| 仓库脚本（`scripts/`） | MIT | [scripts/LICENSE-MIT](scripts/LICENSE-MIT) |
+| 文档与仓库根文件 | MIT | [LICENSE-MIT](LICENSE-MIT) |
+
+`ui/` 取 GPL-3.0 是因为界面链接的 Slint 运行库以 GPL-3.0 授权；Slint 另有 Royalty-free 与商业授权两条路，条款见 [slint.dev](https://slint.dev/)。
+默认构建（`REMAPAD_UI=ON`）把 `ui/slint_ui` 编出的静态库链进应用，因此带界面的固件镜像整体按 GPL-3.0 分发，对外提供镜像时同时给出对应源码即可满足要求。
+`REMAPAD_UI=OFF` 的无 UI 构建只含 MIT 部分。
+第三方组件与许可声明见 [NOTICE](NOTICE)。

@@ -90,6 +90,7 @@
 | [0052](0052-ui-tick-rate-back-to-60hz.md) | active | UI 帧节奏恢复 60 Hz（tickHz 以 host profile 为准），CST816T 触摸改连续点模式；部分取代 0037 的 30 Hz 取值；tickHz 与 host profile 随 0054 作废，60 Hz 的取值改由平台层的动画推进节拍（16 ms 一档）承担 |
 | [0053](0053-usb-serial-phy-handback-on-role-switch.md) | active | host 切回串口时固件显式把内部 PHY 指回 USB-Serial/JTAG（进 host 前先放掉句柄），COM 口不必重启即可回来；交还失败时界面在切回后询问是否立刻重启，复位仍是保底恢复路径 |
 | [0054](0054-screen-ui-slint-rust.md) | active | 屏幕 UI 改用 Slint + Rust：.slint 在构建期编译成 Rust 静态库链进固件、运行期走软件渲染器，业务逻辑零 unsafe（只在 C ABI 边界留口并在注释里写明原因），字形按界面用到的字符自动子集，界面用例改成宿主侧 #[test]；取代 0001 |
+| [0055](0055-core-ui-split-optional-ui-build.md) | active | core 与屏幕 UI 分离：固件核心持 ui_service.h 契约（状态快照装配、动作分发、生命周期），界面组件与编译口径收进 ui/ 工作区、按 REMAPAD_UI 开关可选编入（OFF 纯 C 可编译、屏幕熄灭、设置走串口 CLI），控制面命令队列改由独立服务任务泵；延伸 0054 的构建边界 |
 
 ## 创建 ADR 脚本用法
 

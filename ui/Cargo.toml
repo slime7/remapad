@@ -1,22 +1,22 @@
-[package]
-name = "remapad_ui"
-version = "0.1.0"
-edition = "2021"
-publish = false
-
-# 宿主侧界面包：编译 src/app.slint 与 preview.slint，给 #[test] 用例提供软件渲染器画面与元素几何。
-# 固件里的界面由 firmware/components/slint_ui 交叉编译（xtensa-esp32s3-none-elf），共用 src/。
-
-[lib]
-name = "remapad_ui"
-path = "src/lib.rs"
-
-[dependencies]
-# 与固件组件同一套语言口径；后端由用例装成 Slint 测试后端 + 软件渲染器（不拉窗口后端）。
-slint = { version = "1.18", default-features = false, features = ["std", "compat-1-2"] }
-i-slint-backend-testing = { version = "1.18", features = ["renderer-software"] }
-
-[build-dependencies]
-slint-build = "1.18"
+# 屏幕 UI 工作区:界面源码(ui/src、ui/assets)与三份 Rust 包共用一份 Cargo.lock。
+# host 是宿主侧用例包(stable 工具链),slint_ui 是交叉编译进固件的静态库(目录名同时是
+# ESP-IDF 组件名,由 idf.py build 触发),build-support 是两份 build.rs 共用的编译口径。
 
 [workspace]
+resolver = "2"
+members = ["host", "slint_ui", "build-support"]
+# 日常命令(cargo test / build 不带 -p)只落在 host:slint_ui 是 no_std 固件包,
+# 测试目标链 std 会与它的 panic handler 冲突;它只由 ui/slint_ui/CMakeLists.txt 显式构建。
+default-members = ["host"]
+
+# 三份包随界面源码采用 GPL-3.0-only:界面依赖的 Slint 以 GPL-3.0 授权(见 ui/LICENSE-GPL-3.0)。
+[workspace.package]
+license = "GPL-3.0-only"
+
+# 只有 slint_ui 会以 release 构建:固件侧 no_std 静态库不做栈展开。
+# host 用例走 dev/test profile 不受影响,但不要用 --release 跑用例。
+[profile.release]
+panic = "abort"
+
+[profile.release.package.slint_ui]
+opt-level = "z"

@@ -1,0 +1,21 @@
+[package]
+name = "remapad_ui"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+# 宿主侧界面包：编译 ui/src/app.slint 与 ui/preview.slint，给 #[test] 用例提供软件渲染器画面与元素几何。
+# 固件里的界面由同工作区的 slint_ui 包交叉编译（xtensa-esp32s3-none-elf），共用 ui/src/。
+
+[lib]
+name = "remapad_ui"
+path = "src/lib.rs"
+
+[dependencies]
+# 与固件组件同一套语言口径；后端由用例装成 Slint 测试后端 + 软件渲染器（不拉窗口后端）。
+slint = { version = "1.18", default-features = false, features = ["std", "compat-1-2"] }
+i-slint-backend-testing = { version = "1.18", features = ["renderer-software"] }
+
+[build-dependencies]
+build-support = { path = "../build-support" }

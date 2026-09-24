@@ -1,0 +1,12 @@
+[package]
+name = "build-support"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+# 界面编译口径的单一来源:宿主用例包(host)与固件组件(fw)的 build.rs 共用,
+# PC 预览脚本(scripts/ui-preview.py)按同一组环境变量喂给 slint-viewer。
+
+[dependencies]
+slint-build = "1.18"

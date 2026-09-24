@@ -20,7 +20,7 @@
 #include "drivers/pwr_key.h"
 #include "input_link.h"
 #include "ota_session.h"
-#include "slint_host.h"
+#include "ui_service.h"
 
 /** 完全关机状态重新上电的开机提示音时长（毫秒）：与 PWR 长按提示同为一声短鸣。 */
 #define REMAPAD_POWER_ON_BEEP_MS 120
@@ -39,7 +39,7 @@ static void nvs_init(void)
 
 /** PWR 按键事件（pwr-key 任务上下文）：短按息屏/亮屏，长按 3-6s 是连接键
  *  ——有链路或正在广播就断开并静默，否则打开连接（已配对身份回连形态、
- *  未配对身份发现广播）。命令经 bridge 外部队列在 owner task 上执行。 */
+ *  未配对身份发现广播）。命令经 bridge 外部队列在控制面服务任务上执行。 */
 static void pwr_key_handler(pwr_key_event_t event, void *user)
 {
     (void)user;
@@ -72,7 +72,7 @@ void app_main(void)
     const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
-    ESP_LOGI("remapad_app", "Remapad ESP32-S3 Slint host starting");
+    ESP_LOGI("remapad_app", "Remapad ESP32-S3 UI host starting");
     ESP_LOGI("remapad_app", "Internal SRAM free: %" PRIu32 " bytes", (uint32_t)internal_free);
     ESP_LOGI("remapad_app", "PSRAM free: %" PRIu32 " bytes", (uint32_t)psram_free);
 
@@ -84,8 +84,15 @@ void app_main(void)
     // if (xTaskCreate(amiibo_store_init_task, "amiibo-init", 8192, NULL, 3, NULL) != pdPASS) {
     //     ESP_LOGE("remapad_app", "amiibo init task create failed (tag emulation stays empty)");
     // }
-    ESP_ERROR_CHECK(remapad_slint_start());
-    ESP_LOGI("remapad_app", "Slint owner task started");
+    /* 控制面先行：命令队列与服务任务是无 UI 构建也必须活着的通路。 */
+    ESP_ERROR_CHECK(js_bridge_init());
+    const esp_err_t bridge_err = js_bridge_service_start();
+    if (bridge_err != ESP_OK) {
+        ESP_LOGE("remapad_app", "bridge service start failed: %s", esp_err_to_name(bridge_err));
+    }
+    /* 屏幕 UI 是可选装配：契约见 ui_service.h，提供者是界面组件或无 UI 空实现。 */
+    ESP_ERROR_CHECK(remapad_ui_start());
+    ESP_LOGI("remapad_app", "screen UI provider started");
 
     /* 蜂鸣器供 PWR 长按提示与开机提示音使用；初始化失败只影响提示音，不阻断启动。 */
     if (buzzer_init() != ESP_OK) {

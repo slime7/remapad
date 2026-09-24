@@ -120,7 +120,7 @@ esp_err_t js_bridge_enqueue(const char *cmd_json)
     return ESP_OK;
 }
 
-/** 事件只记日志：Slint 界面不接事件通道，状态由 owner task 轮询取得。 */
+/** 事件只记日志：屏幕界面不接事件通道，状态由 UI 任务轮询取得。 */
 static void post_event_json(const char *event_json)
 {
     ESP_LOGD(TAG, "event: %s", event_json);
@@ -764,4 +764,33 @@ void js_bridge_service(void)
         s_bridge.queue_len--;
         handle_cmd(slot.data);
     }
+}
+
+/** 控制面服务任务参数：与界面任务同核（CPU1），优先级低于界面渲染。 */
+#define REMAPAD_BRIDGE_TASK_NAME "remapad-bridge"
+#define REMAPAD_BRIDGE_TASK_STACK_BYTES (6U * 1024U)
+#define REMAPAD_BRIDGE_TASK_PRIORITY 4
+#define REMAPAD_BRIDGE_TASK_CORE 1
+#define REMAPAD_BRIDGE_SERVICE_PERIOD_MS 50U
+
+/** 控制面泵：周期驱动命令队列与配对状态机（无 UI 构建也靠它活着）。 */
+static void bridge_service_task(void *opaque)
+{
+    (void)opaque;
+    for (;;) {
+        js_bridge_service();
+        vTaskDelay(pdMS_TO_TICKS(REMAPAD_BRIDGE_SERVICE_PERIOD_MS));
+    }
+}
+
+esp_err_t js_bridge_service_start(void)
+{
+    if (xTaskCreatePinnedToCore(bridge_service_task, REMAPAD_BRIDGE_TASK_NAME,
+                                REMAPAD_BRIDGE_TASK_STACK_BYTES / sizeof(StackType_t), NULL,
+                                REMAPAD_BRIDGE_TASK_PRIORITY, NULL,
+                                REMAPAD_BRIDGE_TASK_CORE) != pdPASS) {
+        ESP_LOGE(TAG, "bridge service task create failed");
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }

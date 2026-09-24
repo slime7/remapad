@@ -86,7 +86,7 @@ export component DragArea inherits TouchArea {
  *
  * 走字形而不是 SVG：SVG 在构建期按文件的固有尺寸（24px）光栅化，缩到 16px 上屏要插值，
  * 笔画会糊；字形位图按字号烘，正好是上屏尺寸。字号只取烘过的档位（12/14/16/24，
- * 见 firmware/components/slint_ui/build.rs 的 FONT_SIZES），别的字号会退回最近的一档。 */
+ * 见 ui/build-support 的 FONT_SIZES），别的字号会退回最近的一档。 */
 export component Icon inherits Text {
     in property <string> glyph;
     in property <length> size: Theme.text-base;

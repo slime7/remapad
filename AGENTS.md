@@ -1,8 +1,8 @@
 # Remapad Agent 开发与维护指南
 
 Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统：
-USB 输入 → NS2 手柄报告 → BLE 手柄，配套 Slint 屏幕 UI。
-工程分为 `ui/`（Slint 屏幕 UI 与宿主用例）与 `firmware/`（ESP-IDF 固件）两个工作区；
+USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
+工程分为 `ui/`（屏幕 UI 工作区：界面源码、固件界面组件与宿主用例）与 `firmware/`（ESP-IDF 固件核心）两个工作区；
 主机协议资料见 [docs/controller-switch2.md](docs/controller-switch2.md)，输入设备数据见 [docs/controller-ps.md](docs/controller-ps.md)，
 板卡规格见 [docs/hardware.md](docs/hardware.md)。
 
@@ -24,7 +24,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 Slint 屏幕 UI。
 
 1. [产品愿景与边界 (docs/VISION.md)](docs/VISION.md)：项目定位、目标受众与非目标。
 2. [系统架构与技术实现 (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)：双工作区组成、数据流与构建流水线。
-3. [核心概念与领域抽象 (docs/ABSTRACTIONS.md)](docs/ABSTRACTIONS.md)：Slint 组件模型、字形烘焙与软硬件契约。
+3. [核心概念与领域抽象 (docs/ABSTRACTIONS.md)](docs/ABSTRACTIONS.md)：界面组件模型、字形烘焙与软硬件契约。
 4. [新手开发与上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)：环境搭建、常用命令与调试排错。
 5. [架构决策记录索引 (docs/adr/README.md)](docs/adr/README.md)：既定架构决策与选型取舍。
 6. [Switch 2 手柄协议规范 (docs/controller-switch2.md)](docs/controller-switch2.md)：广播、GATT、HID 报告、配对、指令集、出厂块与 NFC。
@@ -38,16 +38,17 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 Slint 屏幕 UI。
 ## 项目工程架构与工作区划分
 
 - **屏幕 UI 工程 (`ui/`)**：
-  - 界面是 Slint（`.slint`）：`ui/src/` 下是根组件、页面与复用控件，目录表与构建链见 [ui/README.md](ui/README.md)。
-  - `ui/Cargo.toml` 是宿主侧包：`build.rs` 用与固件组件同一套口径编译 `src/app.slint`，
-    `ui/tests/*.rs` 是界面用例（Slint 测试后端 + 软件渲染器，`cargo test --manifest-path ui/Cargo.toml`）。
+  - 界面源码（声明式界面框架）在 `ui/src/`：根组件、页面与复用控件，目录表与构建链见 [ui/README.md](ui/README.md)。
+  - `ui/` 是 Cargo workspace（单一 `Cargo.lock`）：`host/` 是宿主侧用例包，`slint_ui/` 是交叉编译进固件的界面组件，
+    `build-support/` 是两份 build.rs 共用的编译口径（风格/字号/字体）；日常 `cargo test --manifest-path ui/Cargo.toml` 只跑 host。
   - 开发机上预览界面用 `uv run python scripts/ui-preview.py`：上半是 240 × 280 的设备画面（与固件同一棵 `AppContent`），
     下半是控制条，动作在预览里按固件语义结算，点着就能走一遍界面；改完存盘即刷新。
 - **设备固件工程 (`firmware/`)**：
   - 基于 ESP-IDF `>=6.0,<6.2` 与 C 语言；硬件绑定微雪 ESP32-S3-Touch-LCD-1.69
     （16MB Flash + 8MB Octal PSRAM，240×280 ST7789V2 触摸屏），规格与引脚见 [docs/hardware.md](docs/hardware.md)。
-  - 屏幕状态由 `firmware/main/slint_host.c` 每轮轮询写进界面、动作经回调交回；界面在 `firmware/components/slint_ui` 里
-    与固件一起编译（Rust，[ADR 0054](docs/adr/0054-screen-ui-slint-rust.md)），改动调度前先读 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+  - 固件核心对界面知道的全部内容是 `firmware/main/ui/ui_service.h` 契约：状态快照装配、动作分发与生命周期入口；
+    实现按构建形态选择——界面组件在 `ui/slint_ui` 与固件一起编译（Rust，[ADR 0054](docs/adr/0054-screen-ui-slint-rust.md)），
+    或无 UI 构建的空实现（[ADR 0055](docs/adr/0055-core-ui-split-optional-ui-build.md)）；改动调度前先读 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
   - 产品固件负责 USB 接收、NS2 报告转换、BLE 广播/GATT/配对和显示提交。
 - **`firmware/main/` 模块**：
   - `bridge/`：控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入。
@@ -70,7 +71,8 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 Slint 屏幕 UI。
   - `ble/`：NimBLE 手柄外设、双身份会话与分槽凭证。
   - `drivers/`：panel / touch / backlight / pwr_key / buzzer / battery；
     面板刷新取值与行带提交见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的「内存与显示策略」。
-  - 顶层 `boot_splash.c`：UI 就绪前的启动画面，随面板启动点亮背光；`slint_host.c`：屏幕状态装配与动作分发。
+  - `ui/`：屏幕 UI 契约的 core 侧实现——状态快照装配与动作分发（无 UI 构建另有空实现 stub）。
+  - 顶层 `main.c`：启动装配（控制面服务任务与界面提供者都由它拉起）。
   - PC 侧程序在 `pc/`（`remapadctl.py`：转发 + 命令行 + 实机截图 + OTA + DS5 音频触觉合成 `ds5_haptics.py`；
     `remapadgui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
   - 新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
@@ -79,12 +81,12 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 Slint 屏幕 UI。
 
 | 操作项 | 执行指令 | 说明 |
 | :--- | :--- | :--- |
-| **屏幕 UI 预览** | `uv run python scripts/ui-preview.py` | 用 slint-viewer 打开 `ui/preview.slint`：设备画面 240 × 280 在上、控制条在下，动作在预览里结算，改完存盘即刷新；`--file ui/src/app.slint` 只看设备画面，`--check` 只编译打印诊断，`--screenshot <png>` 渲染一帧存图 |
-| **屏幕 UI 宿主用例** | `cargo test --locked --manifest-path ui/Cargo.toml [用例名片段]` | 在开发机上编译真实 `.slint` 产物（Slint 测试后端 + 软件渲染器），按元素几何与像素断言屏幕行为；改界面先加一条能复现的红用例，其余用例等改完再整跑 |
+| **屏幕 UI 预览** | `uv run python scripts/ui-preview.py` | 打开 `ui/preview.slint`：设备画面 240 × 280 在上、控制条在下，动作在预览里结算，改完存盘即刷新；`--file ui/src/app.slint` 只看设备画面，`--check` 只编译打印诊断，`--screenshot <png>` 渲染一帧存图（预览工具的装法见 [ui/README.md](ui/README.md)） |
+| **屏幕 UI 宿主用例** | `cargo test --locked --manifest-path ui/Cargo.toml [用例名片段]` | 在开发机上编译真实界面产物（界面测试后端 + 软件渲染器），按元素几何与像素断言屏幕行为；改界面先加一条能复现的红用例，其余用例等改完再整跑 |
 | **固件主机端测试** | `uv run python scripts/firmware-test.py` | 把与硬件无关的固件逻辑编译成开发机可执行文件并运行，秒级出结果 |
 | **PC 侧主机端测试** | `cd pc ; uv run python -m unittest discover -s tests -t .` | `pc/` 工具里与设备无关的纯逻辑（串口枚举、镜像校验、帧编解码、输出分流、工具命令解析）在 `pc/tests/` 用标准库 unittest 跑，不接设备 |
 | **固件配置** | `cd firmware ; idf.py set-target esp32s3` | 配置目标芯片架构并合并硬件预设 |
-| **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件 |
+| **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件（默认带屏幕 UI，需要 xtensa Rust 工具链）；`idf.py -DREMAPAD_UI=OFF build` 走纯 C 的无 UI 构建（不需要 Rust，屏幕熄灭、设置走串口 CLI） |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器；禁止对已写入用户数据的设备执行 `erase-flash`（会清空 NVS 设置/配对与 `storage` 分区，见 [ADR 0009](docs/adr/0009-ota-storage-flash-layout.md)） |
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
 | **固件 OTA 升级** | `cd pc ; uv run python remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（界面已编进应用）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
@@ -126,14 +128,14 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 Slint 屏幕 UI。
   主机主动断开后自动开 30 秒回连窗口（只发回连形态、不带唤醒突发），到期静默；
   未连接时按手柄 HOME（实体手柄按下去或调试页注入）打开唤醒窗口把休眠主机叫起来；窗口到期或主机连上即收窗。
   改这条策略前先读 [ADR 0038](docs/adr/0038-user-initiated-connection-window.md)。
-- **先写测试再改代码**：改屏幕 UI 的 bug 先在 `ui/tests/` 加一条能复现的红用例（宿主侧跑真实产物），改完让用例转绿才算修完；
+- **先写测试再改代码**：改屏幕 UI 的 bug 先在 `ui/host/tests/` 加一条能复现的红用例（宿主侧跑真实产物），改完让用例转绿才算修完；
   固件里与硬件无关的逻辑缺陷先补 `firmware/test/` 的主机端用例，PC 侧工具同理先补 `pc/tests/` 的用例。任何业务改动都一样：
   没红过不许改代码，没转绿不算改完。用例标题写用户看到的现象，不放宽断言迁就实现，同一行为只留一条用例。
 - **优先端到端测试**：能在端到端层断言的行为（屏幕画面与交互、真实产物链路）就在端到端层写；
   单元用例只补端到端覆盖不到的纯逻辑。
 - **开发期间不跑端到端套件**：迭代中只跑当前这条用例，端到端套件等全部改完再整跑一次；
   各套用例的位置与运行方式见 [docs/TESTING.md](docs/TESTING.md)。
-- **测试只用真源码**：屏幕 UI 用例编译 `ui/src/*.slint` 真实产物并在软件渲染器上渲染画面，固件测试编译 `firmware/main/` 下的源码；
+- **测试只用真源码**：屏幕 UI 用例编译 `ui/src/` 真实界面产物并在软件渲染器上渲染画面，固件测试编译 `firmware/main/` 下的源码；
   `firmware/test/support/stubs/` 只补齐主机缺失的 ESP-IDF 头文件与硬件取值入口，不得把被测逻辑复制一份进测试。
 - **手柄操控屏幕模式**：手柄按 L1+R1+L3+R3（按住 300 ms）捕获输入，此后只向主机续发全松开的中性帧、玩家按键不再上行（整段停发会被主机判离线），
   改为方向键翻页与移动焦点（焦点在可聚焦项之间循环，到底再按回到另一端）、圆圈键确认（[ADR 0028](docs/adr/0028-pad-combo-captures-screen.md)）；
@@ -148,15 +150,17 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套 Slint 屏幕 UI。
   卡片与底栏底图是构建期光栅化的位图（`ui/assets/*.svg`），改底图底色要同步 `theme.slint` 的 `Theme.background`（窗口底色）。
   量重画范围与代价用串口 `trace [frames]`（逐帧渲染耗时、提交耗时、damage 像素数与矩形条数）。
 - **字体与字形烘焙规则**：
-  - 文本字号只取 theme.slint 里烘过的档位（12 / 14 / 16 / 24，与固件组件 build.rs 的 `FONT_SIZES` 一致）。
-  - 构建期按 `.slint` 字面量自动子集烘字形位图：只出现在运行期拼出来的字符串里的码点不会被烘，
+  - 文本字号只取 theme.slint 里烘过的档位（12 / 14 / 16 / 24，与 `ui/build-support` 的 `FONT_SIZES` 一致）。
+  - 构建期按界面源码字面量自动子集烘字形位图：只出现在运行期拼出来的字符串里的码点不会被烘，
     必须写进 [ui/src/app.slint](ui/src/app.slint) 的字符集锚点串，否则上屏是空洞或豆腐块。
   - 单色图标用 Material Symbols 字形（`Icon { glyph: "\u{e30c}"; size: ...; tint: ...; }`），转圈用覆盖 U+28xx 的 seguisym；
     SVG 只留给卡片与底栏底图。
 - **屏幕 UI 的构建与工具链**：
-  - `firmware/components/slint_ui` 用 slint-build 在构建期编译 `ui/src/*.slint`，再交叉编译成静态库链进固件，
-    需要 Espressif 的 xtensa Rust 工具链：换机步骤见 [ui/README.md](ui/README.md)，一键安装是 [scripts/setup-rust-toolchain.py](scripts/setup-rust-toolchain.py)。
-  - 宿主用例用开发机的 stable 工具链跑；界面 id 是用例的查询入口，改 id 要同步 [ui/tests/](ui/tests)。
+  - `ui/slint_ui`（ESP-IDF 组件，经固件 CMake 的 `EXTRA_COMPONENT_DIRS` 引入）在构建期把
+    `ui/src/*.slint` 编译并交叉编译成静态库链进固件，需要 Espressif 的 xtensa Rust 工具链：
+    换机步骤见 [ui/README.md](ui/README.md)，一键安装是 [scripts/setup-rust-toolchain.py](scripts/setup-rust-toolchain.py)；
+    `REMAPAD_UI=OFF` 时不编该组件，纯 C 即可出固件（[ADR 0055](docs/adr/0055-core-ui-split-optional-ui-build.md)）。
+  - 宿主用例用开发机的 stable 工具链跑；界面 id 是用例的查询入口，改 id 要同步 [ui/host/tests/](ui/host/tests)。
   - PocketJS 时代的组件、脚本与宿主（`firmware/components/pocketjs_*`、`patches/`、`.pocket` 包链）已随 [ADR 0054](docs/adr/0054-screen-ui-slint-rust.md) 整体移除。
 - **工具链只用 Python 与 Rust**：仓库不含 Node.js / Bun，脚本一律是 `scripts/*.py` 与 `pc/` 下的 Python 源码，
   依赖与解释器都交给 uv：根目录 `pyproject.toml` + `uv.lock` 管 `scripts/`，`pc/pyproject.toml` + `pc/uv.lock` 管 PC 工具，

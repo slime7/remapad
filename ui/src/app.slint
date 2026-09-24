@@ -50,7 +50,7 @@ export component AppContent inherits Rectangle {
     in-out property <bool> rebooting: false;
 
     // ---- 交回固件的动作 ----
-    /** name 动作名、value 参数；固件侧按名分发（见 firmware 侧 slint_host.cpp）。 */
+    /** name 动作名、value 参数；固件侧按名分发（见固件核心 main/ui/ui_service.c）。 */
     callback action(string, int);
 
     /** 焦点项确认：由固件侧在手柄圆圈键 / 回车按下时调用。 */
