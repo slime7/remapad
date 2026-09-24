@@ -189,7 +189,7 @@ export component AppContent inherits Rectangle {
         return 1200px;
     }
 
-    /** 页面内容只画在当前页与左右邻页三格上：静止时两侧露出的只是邻页的卡边。 */
+    /** 页面内容只留当前页与左右邻页三格：静止时两侧露出的只是邻页的卡边，切页只重建进出窗口的那两页。 */
     function slot-visible(slot: int) -> bool {
         return slot == root.page || slot == root.next-slot || slot == root.prev-slot;
     }
@@ -224,27 +224,24 @@ export component AppContent inherits Rectangle {
             Image { x: 200px; y: 24px; width: 200px; height: 200px; source: @image-url("../assets/main.svg"); }
             Image { x: 400px; y: 24px; width: 200px; height: 200px; source: @image-url("../assets/main.svg"); }
 
-            BrightnessPage {
+            if root.slot-visible(0): BrightnessPage {
                 x: root.slot-x(0);
-                visible: root.slot-visible(0);
                 backlight: root.backlight;
                 focus-index: root.page-focus && root.page == 0 ? root.focus-index : -1;
                 interactive: root.page == 0 && !root.dialog-open && !root.sliding;
                 step-up => { root.action("brightness-up", 0); }
                 step-down => { root.action("brightness-down", 0); }
             }
-            ControllerPage {
+            if root.slot-visible(1): ControllerPage {
                 x: root.slot-x(1);
-                visible: root.slot-visible(1);
                 address: root.controller-address;
                 selected: root.selected-colorway;
                 focus-index: root.page-focus && root.page == 1 ? root.focus-index : -1;
                 interactive: root.page == 1 && !root.dialog-open && !root.sliding;
                 select(index) => { root.action("colorway", index); }
             }
-            PairingPage {
+            if root.slot-visible(2): PairingPage {
                 x: root.slot-x(2);
-                visible: root.slot-visible(2);
                 pairing: root.pairing;
                 notice: root.notice;
                 spinner-phase: root.spinner-phase;
@@ -254,26 +251,23 @@ export component AppContent inherits Rectangle {
                 stop => { root.action("disconnect", 0); }
                 pair => { root.action("pair", 0); }
             }
-            PowerPage {
+            if root.slot-visible(3): PowerPage {
                 x: root.slot-x(3);
-                visible: root.slot-visible(3);
                 focus-index: root.page-focus && root.page == 3 ? root.focus-index : -1;
                 interactive: root.page == 3 && !root.dialog-open && !root.sliding;
                 ask-reboot => { root.action("ask-reboot", 0); }
                 ask-power-off => { root.action("ask-power-off", 0); }
             }
-            UsbModePage {
+            if root.slot-visible(4): UsbModePage {
                 x: root.slot-x(4);
-                visible: root.slot-visible(4);
                 usb-role: root.usb-role;
                 focus-index: root.page-focus && root.page == 4 ? root.focus-index : -1;
                 interactive: root.page == 4 && !root.dialog-open && !root.sliding;
                 select-device => { root.action("usb-device", 0); }
                 ask-host => { root.action("ask-usb-host", 0); }
             }
-            DsSettingsPage {
+            if root.slot-visible(5): DsSettingsPage {
                 x: root.slot-x(5);
-                visible: root.slot-visible(5);
                 touchpad-plus-minus: root.ds-touchpad-plus-minus;
                 capture-key: root.ds-capture-key;
                 focus-index: root.page-focus && root.page == 5 ? root.focus-index : -1;
@@ -281,17 +275,15 @@ export component AppContent inherits Rectangle {
                 toggle-touchpad => { root.action("ds-touchpad", 0); }
                 toggle-capture => { root.action("ds-capture", 0); }
             }
-            SystemInfoPage {
+            if root.slot-visible(6): SystemInfoPage {
                 x: root.slot-x(6);
-                visible: root.slot-visible(6);
                 firmware-version: root.firmware-version;
                 heap-text: root.heap-text;
                 psram-text: root.psram-text;
                 battery-text: root.battery-text;
             }
-            debug-page := DebugPage {
+            if root.slot-visible(7): debug-page := DebugPage {
                 x: root.slot-x(7);
-                visible: root.slot-visible(7);
                 pairing: root.pairing;
                 pad-ui-mode: root.pad-ui-mode;
                 flash: root.debug-flash;
