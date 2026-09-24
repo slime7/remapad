@@ -188,6 +188,7 @@ export component ConfirmDialog inherits Rectangle {
                 color: Theme.on-surface;
                 horizontal-alignment: center;
             }
+            /* 标题与说明之间的 4px 留白：本层 spacing 为 0，间距由占位元素给。 */
             Rectangle { height: 4px; }
             Text {
                 text: root.line1;
@@ -205,6 +206,7 @@ export component ConfirmDialog inherits Rectangle {
                 horizontal-alignment: center;
                 wrap: word-wrap;
             }
+            /* 说明与按钮行之间的 12px 留白，同样由占位元素给。 */
             Rectangle { height: 12px; }
             Rectangle {
                 height: 40px;

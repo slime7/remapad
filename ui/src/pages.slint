@@ -162,6 +162,7 @@ export component ControllerPage inherits Rectangle {
             alignment: start;
             spacing: 6px;
 
+            /* 与上方信息组之间多留 2px：连同本层的 6px spacing，第一行圆钮距信息组 8px。 */
             Rectangle { height: 2px; }
 
             for row in 2: HorizontalLayout {
@@ -431,7 +432,8 @@ export component UsbModePage inherits Rectangle {
             HorizontalLayout {
                 padding-left: 12px;
                 padding-right: 12px;
-                alignment: center;
+                /* 起点对齐：图标落在 12px 内边距上，两卡的图标才对得齐（居中会随文案宽度漂移）。 */
+                alignment: start;
                 spacing: 8px;
                 IconBox {
                     glyph: "\u{e30c}";
@@ -471,7 +473,8 @@ export component UsbModePage inherits Rectangle {
             HorizontalLayout {
                 padding-left: 12px;
                 padding-right: 12px;
-                alignment: center;
+                /* 同上：起点对齐，图标落在 12px 内边距上。 */
+                alignment: start;
                 spacing: 8px;
                 IconBox {
                     glyph: "\u{e338}";
@@ -534,7 +537,7 @@ export component DsSettingsPage inherits Rectangle {
         }
 
         HorizontalLayout {
-            alignment: space-between;
+            alignment: stretch;
             padding-left: 4px;
             padding-right: 4px;
             Text {
@@ -544,6 +547,8 @@ export component DsSettingsPage inherits Rectangle {
                 color: Theme.on-primary-container;
                 vertical-alignment: center;
             }
+            /* 无定宽即参与分余量：这枚占位元素吃满余量，开关被推到行末。 */
+            Rectangle { horizontal-stretch: 1; }
             Switch {
                 on: root.touchpad-plus-minus;
                 focused: root.focus-index == 0;
@@ -552,7 +557,7 @@ export component DsSettingsPage inherits Rectangle {
         }
 
         HorizontalLayout {
-            alignment: space-between;
+            alignment: stretch;
             padding-left: 4px;
             padding-right: 4px;
             Text {
@@ -562,6 +567,8 @@ export component DsSettingsPage inherits Rectangle {
                 color: Theme.on-primary-container;
                 vertical-alignment: center;
             }
+            /* 同上：占位元素吃满余量，开关落在行末。 */
+            Rectangle { horizontal-stretch: 1; }
             Switch {
                 on: root.capture-key;
                 focused: root.focus-index == 1;

@@ -16,6 +16,10 @@ const SLOT_PITCH: f32 = 200.0;
 const BAND_REST_X: f32 = -8.0;
 /// 调试页槽号：dev 构建的页表在末尾追加它（固件侧的页数见 ui/slint_ui/src/host.rs 的 PAGE_COUNT）。
 const DEBUG_PAGE: i32 = 7;
+/// USB 模式页槽号：页面槽位顺序见 ui/src/app.slint 的页表。
+const USB_PAGE: i32 = 4;
+/// 模式页卡片的内容内边距：ui/src/pages.slint 里两卡的 padding-left / padding-right。
+const CARD_PADDING: f32 = 12.0;
 
 /// 开发构建的页面里，调试页画得出三个注入钮；切到别的页就不画了。
 #[test]
@@ -129,4 +133,29 @@ fn 静止画面以两百像素为周期() {
             );
         }
     }
+}
+
+/// USB 模式页两张卡：图标都落在卡片自己的 12px 内边距上，两卡的图标因此在同一条竖线上。
+/// 行内改回居中对齐时，图标会随各卡最宽文案的宽度漂移，这条先红。
+#[test]
+fn usb模式页两卡的图标对齐在卡片内边距上() {
+    let app = ui::new_app();
+    app.set_page(USB_PAGE);
+    ui::settle(&app);
+
+    let cards = ["UsbModePage::device-card", "UsbModePage::host-card"];
+    let mut icon_x = Vec::new();
+    for id in cards {
+        let card = ui::rect(&app, id);
+        let icons = ui::element(&app, id).query_descendants().match_type_name("IconBox").find_all();
+        assert_eq!(icons.len(), 1, "{id} 里应有一枚图标盒");
+        let icon_x_position = icons[0].absolute_position().x;
+        assert!(
+            (icon_x_position - (card.x + CARD_PADDING)).abs() < 0.5,
+            "{id} 的图标没落在卡片的 {CARD_PADDING}px 内边距上：{icon_x_position:.1} 对 {:.1}",
+            card.x + CARD_PADDING
+        );
+        icon_x.push(icon_x_position);
+    }
+    assert!((icon_x[0] - icon_x[1]).abs() < 0.5, "两卡的图标没落在同一条竖线上：{icon_x:?}");
 }
