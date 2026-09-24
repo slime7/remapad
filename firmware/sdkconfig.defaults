@@ -39,7 +39,7 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # can break init on T-variant silicon.
 CONFIG_ESP_LCD_TOUCH_CST816S_DISABLE_READ_ID=y
 
-# Bluetooth LE controller peripheral (ADR 0010): NimBLE host, BLE-only,
+# Bluetooth LE controller peripheral: NimBLE host, BLE-only,
 # no SMP (NS2 pairing is a private protocol), host memory in PSRAM.
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
@@ -53,8 +53,7 @@ CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2
 # 这个开关控制（bt.c 据此调用 ble_min_conn_interval_enable(3)，最低 3.75ms），
 # IDF 6.1 默认开启，这里显式写出以免后续版本默认值变化悄悄带偏。NimBLE 主机
 # 侧仍按规范拒绝 itvl < 6 的主动请求，因此本工程不主动请求连接参数，只接受
-# 主机下发的值（输入被采用的门槛是 0x0C/0x04 特性启用与稳定上报流，见
-# ADR 0023）。
+# 主机下发的值（输入被采用的门槛是 0x0C/0x04 特性启用与稳定上报流）。
 CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE=y
 
 # NS2 主机只认经扩展广播 HCI 路径（LE Set Extended Advertising Parameters，

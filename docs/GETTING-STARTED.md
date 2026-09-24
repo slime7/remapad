@@ -23,10 +23,9 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 
 板卡已知信息都记录在 [hardware.md](hardware.md)：
 屏幕为 ST7789V2（240 × 280，4-wire SPI），触摸为 CST816T（I2C `0x15`），面板和触摸的具体引脚、共享 I2C 总线、背光控制脚和 USB 口约束都在那里。
-固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点（选型见 [ADR 0007](adr/0007-esp-lcd-panel-touch-bsp.md)）；
-BLE 手柄数据面已接入（[ADR 0010](adr/0010-nimble-ble-controller-stack.md)）。
-协议边界见 [ADR 0011](adr/0011-controller-dataplane-module-boundary.md)，主机互操作已实机验证；
-其余板载外设没有接入计划（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
+固件已通过 `drivers/` 中的 panel/touch/backlight BSP 点亮屏幕并上报触点；
+BLE 手柄数据面已接入。
+主机互操作已实机验证；其余板载外设没有接入计划（电池电压采样已接入，充电状态只能按电压趋势推断，见 [hardware.md](hardware.md)）。
 
 ## 最短步骤
 
@@ -42,7 +41,7 @@ PC 预览工具的安装命令见 [ui/README.md](../ui/README.md)。
 换机步骤与 CMake 变量见 [ui/README.md](../ui/README.md)。
 界面依赖由 `ui/Cargo.lock` 锁定，首次构建从 crates.io 拉取，之后走本地缓存。
 
-仓库里的 Python 脚本都由 uv 托管：根目录 `pyproject.toml` + `uv.lock` 管 `scripts/`，`pc/` 自己一套；
+仓库里的 Python 脚本都由 uv 托管：根目录 `pyproject.toml` + `uv.lock` 管 `scripts/`，`pc/` 自己一套（两份 `uv.lock` 都要入库）；
 装好 uv 后 `uv run python <路径>` 会自动准备解释器与依赖，不需要手动建虚拟环境（首次执行会在仓库根建 `.venv`）。
 
 ### 2. 预览界面与跑宿主用例
@@ -92,7 +91,7 @@ idf.py build
 `ui/src/*.slint` 与 `ui/assets/*.svg` 登记为构建依赖，改完界面直接 `idf.py build` 即可，不需要删除 `firmware/build/`。
 带调试页的开发构建是默认值；发布构建设 `$env:REMAPAD_RELEASE = "1"` 后重跑配置。
 不需要屏幕时 `idf.py -DREMAPAD_UI=OFF build` 走纯 C 构建：不引入界面组件、不需要 Rust 工具链，
-面板/触摸/背光不初始化，设置经 PC 串口 CLI 控制（[ADR 0055](adr/0055-core-ui-split-optional-ui-build.md)）。
+面板/触摸/背光不初始化，设置经 PC 串口 CLI 控制。
 组件构建的细节（工具链名、字体变量、字号表）见 [ui/README.md](../ui/README.md) 与 [ARCHITECTURE.md](ARCHITECTURE.md) 的「构建链路」。
 
 ### 5. 烧录与监视
@@ -129,7 +128,7 @@ idf.py -p COM3 app-flash monitor
 
 改动 bootloader、分区表或 `sdkconfig` 后仍需完整 `flash`。esptool 的等价操作是对 `0x10000` 单独 `write-flash`。
 
-分区表自 ADR 0009 起为终局布局（`ota_0`/`ota_1` 双应用分区 + `storage` 通用存储区，`ota_0` 继承原 factory 的 `0x10000`）。烧录时注意：
+分区表为终局布局（`ota_0`/`ota_1` 双应用分区 + `storage` 通用存储区，`ota_0` 继承原 factory 的 `0x10000`）。烧录时注意：
 
 - 分区表布局变更后烧录分区表即可让已部署固件原地迁移为 `ota_0`，但保险起见直接完整 `flash`。
 - `erase-flash` 会全片擦除，清掉 NVS 里的设置与 BLE 配对、`storage` 里的用户数据；设备交到用户手上之后不要再随手执行。
@@ -166,7 +165,7 @@ cd pc ; uv run python -m unittest discover -s tests -t .   # PC 侧：串口枚�
 固件主机端测试会自动探测本机编译器（MSVC / clang / gcc，可用 `CC` 指定），几秒钟出结果。
 界面排版与配色也可以先用 `uv run python scripts/ui-preview.py` 点着看，但预览不产生断言。
 
-用例纪律（先写用例、确认红过再改、优先端到端、开发期间不跑端到端套件）与各套用例的位置、运行方式以 [AGENTS.md](../AGENTS.md) 与 [TESTING.md](TESTING.md) 为准。
+用例纪律（先写用例、确认红过再改、优先端到端、开发期间不跑端到端套件）与各套用例的位置、运行方式以 [TESTING.md](TESTING.md) 为准。
 
 ## 串口 CLI 与 PWR 按键
 
@@ -186,10 +185,10 @@ uv run python remapadctl.py -p COM3 key release     # 立即释放注入的按�
 uv run python remapadctl.py -p COM3 ui on           # 手动进出屏幕操控模式（on / off，不带参数看状态）
 uv run python remapadctl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）
 uv run python remapadctl.py -p COM3 stick reset     # 两侧摇杆回中
-uv run python remapadctl.py -p COM3 link            # 两只手柄的地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
+uv run python remapadctl.py -p COM3 link            # 链路快照：广播地址、连接间隔（itvl，4 = 5ms）、特性启用（feat）与上报计数
 uv run python remapadctl.py -p COM3 headset auto    # 耳机状态字节：auto 按输入设备派生，也可钉住 0xNN 做主机侧 A/B
 uv run python remapadctl.py -p COM3 shot            # 请求一次实机截图（PC 侧拼齐后存 PNG）
-uv run python remapadctl.py -p COM3 trace 40        # 逐帧打印 damage 计划、逐条行带耗时与绘制指令直方图（不带参数 30 帧）
+uv run python remapadctl.py -p COM3 trace 40        # 逐帧打印渲染耗时、提交耗时、damage 像素数与矩形条数（不带参数 60 帧）
 uv run python remapadctl.py -p COM3 fwver 2.0.0     # 改写上报给主机的手柄固件版本（0x10 查询与出厂块共用；不带参数看当前值）
 uv run python remapadctl.py -p COM3 version         # 运行镜像版本与分区、是否待验证
 uv run python remapadctl.py -p COM3 rollback        # 回滚到上一个可用镜像（仅待验证状态）
@@ -221,17 +220,16 @@ uv run python remapadctl.py -p COM3 --capture host-raw.log --seconds 30 --pad   
 `stick` 设定的一侧摇杆持续生效、未设定的一侧沿用输入源，因此可以分别推左摇杆与右摇杆做对照。`link` 打印当前身份一行：
 对外广播地址、连接句柄、会话状态（idle / advertising / wait-pair / normal）、报告格式、已开启的通知通道、已发送报告数与凭证条数，配对与回连过程可以直接在串口上对账。
 
-`ui` 与 `ui on` / `ui off` 对应手柄操控屏幕模式（[ADR 0028](adr/0028-pad-combo-captures-screen.md)）：
+`ui` 与 `ui on` / `ui off` 对应手柄操控屏幕模式：
 `key ui` 注入的就是 L1+R1+L3+R3 组合键（保持 500 ms，盖过 300 ms 的翻转阈值），进模式后方向键移动焦点、圆圈键等价于点按屏幕，再按一次组合键退出；
-`ui on` / `ui off` 直接置位，不经过组合键判定，用来单独确认模式的开关与退出恢复。方向键在模式里分两个轴（见 [ADR 0029](adr/0029-pad-ui-axis-split.md)）：
-上下在页面内容里走，走到最后一项再按下会让页面继续往下滚到页底；
-左右只在悬浮底栏两项之间走，实机上单独按住 L1 / R1 与按左 / 右等价（注入用 `key l` / `key r`；组合键以 L1 + R1 起手，四键同按与两肩键同按都不发方向）。
+`ui on` / `ui off` 直接置位，不经过组合键判定，用来单独确认模式的开关与退出恢复。方向键在模式里分两个轴：
+左右翻页（四叶草卡片无限轮播，到底再按从另一端继续），上下在当前页的可聚焦项之间走（同样循环到另一端）；
+实机上按住 L1 / R1 与按左 / 右等价（注入用 `key l` / `key r`；组合键以 L1 + R1 起手，四键同按与两肩键同按都不发方向）。
 进入模式会先向主机补发一帧全松开，捕获期间按原来的上报节奏续发同样的中性帧：玩家的按键不再上行，主机也不会因为上报流中断把手柄判成离线。
 模式里用 `key up` / `key down` / `key left` / `key right` 移动焦点，`key a` 等价于点按屏幕（键名表的 `a` 就是私有格式的圆圈键位，与手柄上的圆圈键同一位）。
 
 不带设备命令时进入桥接 + 交互模式：不是 `:` 开头的行按固件 CLI 命令发送（回复是 `ok`/`err` 单行，串口上同时会滚动固件日志），`:` 开头的是工具命令（`:help` 看清单，另有 `:shot` / `:log` / `:ota` / `:quit`）。
 命令走产品控制面同一路径（`firmware/main/console/cli.c` → bridge），不产生第二套控制逻辑；同一个进程持有串口，因此桥接转发、命令行、截图与升级可以同时进行（`idf.py monitor` 仍与之互斥）。
-`drawlist` 的输出是几十 KB 的十六进制字，只发一行 `ok` 应答、正文按日志流出，因此要在交互模式（`--logs`）里看，或者把日志重定向到文件后再离线解码。
 `--log` 只读日志、不改任何状态，每行前缀是本次读取的相对时间（`--raw` 可去掉），便于把按键、长按这类人工动作和固件日志对上。注意两点：
 USB-Serial/JTAG 的片内状态机把 CDC 的 DTR/RTS 当复位控制线解释——RTS 拉高即复位设备，DTR 与 RTS 同时拉高会让设备停在不再运行应用的状态；
 `remapadctl.py` 用 Win32 API 打开端口并把两条线固定为低电平，因此打开、读取、关闭都不会复位设备（连续调用 `status`，uptime 会持续增长）。
@@ -239,7 +237,7 @@ USB-Serial/JTAG 的片内状态机把 CDC 的 DTR/RTS 当复位控制线解释�
 
 PWR 按键（`firmware/main/drivers/pwr_key.c`，采样 GPIO40）：**短按**息屏/亮屏（息屏只关背光，再按恢复持久化亮度）；
 **长按 3-6 秒松开**是连接键（与配对页「连接」按钮同一个动作）：没有链路也不在广播时打开连接窗口（已配对发回连形态、未配对进配对流程），
-有链路或正在广播时停止广播并断开（设备平时静默，见 [ADR 0038](adr/0038-user-initiated-connection-window.md)）。USB 角色切换只在模式页与串口 `mode` 里做。
+有链路或正在广播时停止广播并断开（设备平时静默）。USB 角色切换只在模式页与串口 `mode` 里做。
 长按到 3 秒时蜂鸣器（GPIO42，`drivers/buzzer.c`；LEDC 定时器与通道与背光分离，两者占空比互不覆盖）短鸣一声提示可以松开；按住超过 6 秒不产生软件事件。
 完全关机后重新上电（按 PWR 或插上 USB）时蜂鸣器同样短鸣一声作开机反馈，判据是复位原因 `power-on`：软件复位、OTA 重启与看门狗复位都不响。
 SYS_EN（GPIO41）电源保持脚由固件在 `app_main` 入口最先拉高锁存：电池供电时松开 PWR 键后系统继续工作，复位窗口也不会掉电；USB 供电下锁存被旁路，拉高无副作用。
@@ -252,7 +250,6 @@ PC 手柄经桥接程序进入设备这条路径已落地：设备侧见 `firmwa
 ## 固件 OTA 升级
 
 整包应用镜像（界面已编在应用里）可以在不接线烧录的情况下升级：PC 端把镜像经 USB-Serial/JTAG 推给设备，设备写进当前未运行的应用分区，`esp_ota_end` 校验通过后切换启动分区并重启。
-选型与协议见 [ADR 0022](adr/0022-ota-over-bridge-frames-with-rollback.md)。
 设备侧实现在 `firmware/main/ota/`，PC 端入口是 [pc/remapadctl.py](../pc/remapadctl.py) 的 `--upgrade`：
 
 ```powershell
@@ -298,11 +295,11 @@ uv run python remapadctl.py -p COM3 --upgrade --verbose   # 同时透传设备�
   涵盖按键构建报告、结构化反馈、电池与 amiibo 预置。
 - [pc/remapadctl.py](../pc/remapadctl.py) 与 [pc/link.py](../pc/link.py)：
   PC 侧单工具（hidapi 读手柄 → 桥接帧、串口命令行、实机截图与 OTA 在同一个进程里；`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
-- [pc/remapadgui.py](../pc/remapadgui.py)：同一套会话的图形界面（CustomTkinter；输出走可注入的 Reporter、命令由按钮与输入框投递，见 [ADR 0040](adr/0040-pc-gui-customtkinter-console.md)）；
-  「设置」页把设备屏幕上的可改项搬到 PC（读写都走固件 CLI，控件值来自回读行，见 [ADR 0048](adr/0048-pc-gui-settings-tab-mirrors-device-ui.md)）。
+- [pc/remapadgui.py](../pc/remapadgui.py)：同一套会话的图形界面（CustomTkinter；输出走可注入的 Reporter、命令由按钮与输入框投递）；
+  「设置」页把设备屏幕上的可改项搬到 PC（读写都走固件 CLI，控件值来自回读行）。
 - [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端入口是 `remapadctl.py --upgrade`。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
-- [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局（ADR 0009）。
+- [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局。
 - [scripts/](../scripts)：`setup-rust-toolchain.py`（工具链）、`ui-preview.py`（预览）、`firmware-test.py`（主机端用例）、`create_adr.py`（新建 ADR）。
 - [agent-temp/](../agent-temp)：代理与调试的临时文件目录（脚本、抓包输出、截图与日志；内容不进版本库，约定见 [AGENTS.md](../AGENTS.md)）。
 - [docs/controller-switch2.md](controller-switch2.md)：NS2 手柄广播、GATT、HID 报告、配对、指令集与 NFC 规范。
@@ -325,7 +322,7 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 
 - 回到串口有三条路：模式页切回「串口」、UART0 上敲 `mode device`、复位。
   切回时固件把内部 PHY 显式交还 USB-Serial/JTAG，COM 口随之回来；这一步失败时只有复位能恢复，
-  界面因此在切回后询问是否立刻重启（取舍见 [ADR 0053](adr/0053-usb-serial-phy-handback-on-role-switch.md)）。
+  界面因此在切回后询问是否立刻重启。
 - 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 XInput 形态布局并打兜底标记。
 - 供电：host 模式要给插入的手柄供 VBUS 5V，V2.1 原理图确认板上无升压输出，需从 TP1 外部注入 5V（见 [hardware.md](hardware.md)）；手柄能否枚举仍需实机验证。
 
@@ -400,7 +397,7 @@ ninja -C firmware\build -n
 先看界面任务每 5 秒一条的统计：`frames=… avg_render_us=… avg_flush_us=… avg_damage_px=… max_render_us=… max_flush_us=…`。
 渲染与提交之和接近或超过 16 ms 时，说明每帧把整个周期都吃满了，空闲任务自然喂不上狗。
 先用串口 `trace 60` 看清是哪一类帧贵：`damage_px` 大说明重画范围大，`flush_us` 大说明面板传输慢（行带太碎或 SPI 争用）。
-CPU 频率在 `firmware/sdkconfig.defaults` 里显式配置为 240 MHz；降不下来就要从界面写法入手（见 [ADR 0050](adr/0050-repaint-friendly-screen-rules.md)）。
+CPU 频率在 `firmware/sdkconfig.defaults` 里显式配置为 240 MHz；降不下来就要从界面写法入手。
 
 ### `Could not open COM3, the port is busy`
 

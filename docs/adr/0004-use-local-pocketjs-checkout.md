@@ -1,6 +1,6 @@
 # 0004 — PocketJS 组件与原生归档改由本地 checkout 提供，Web 预览切换为官方开发主机
 
-- 状态: active
+- 状态: retired
 - 日期: 2026-09-11
 - 替代: 无
 

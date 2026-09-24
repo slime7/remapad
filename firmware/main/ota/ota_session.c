@@ -370,7 +370,7 @@ static void check_timeout(void)
 }
 
 /**
- * 回滚健康门槛：UI 首帧成功（guest 起得来、渲染通路通）且开机满 30 秒，才把
+ * 回滚健康门槛：UI 首帧成功（渲染通路通）且开机满 30 秒，才把
  * 镜像标记为有效；在此之前重启，引导器回退到升级前的镜像。
  */
 static void check_health(void)

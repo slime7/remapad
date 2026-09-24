@@ -61,7 +61,7 @@ static void cli_help(void)
     cli_print("  ui [on|off]         pad-captured screen control (no arg = state)");
     cli_print("  link                per-identity BLE link status");
     cli_print("  shot                capture the real screen to the PC (PNG on the PC side)");
-    cli_print("  trace [frames]      per-frame damage plan + row-band cost (default 30)");
+    cli_print("  trace [frames]      per-frame render/flush time, damage px, rects (default 60)");
     cli_print("  backlight [0-100]   set + persist backlight (no arg = current)");
     cli_print("  screen [on|off]     screen power (no arg = current)");
     cli_print("  beep [ms]           buzzer hint tone (default 120)");

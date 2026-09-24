@@ -41,7 +41,7 @@ static const char *TAG = "remapad_dp";
 /** 单拍最多发几条采集帧：突发时余下的留在环里，别把一拍时间全交给串口。 */
 #define DP_CAPTURE_DRAIN_MAX 8
 
-/** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告，写死不提供运行时档位（取值与理由见 ADR 0034）。 */
+/** 目标上报节奏：5 ms 采样、每 15 ms 发一份报告，写死不提供运行时档位。 */
 #define DP_REPORT_INTERVAL_MS 15u
 
 /** 上报分频：每 DP_TICK_MS 一次采样，够这个数就发一份报告。 */

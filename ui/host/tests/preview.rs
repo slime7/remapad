@@ -1,5 +1,5 @@
 //! 预览用例：PC 预览窗里的控制条与设备画面写的是同一套动作名，
-//! 点按等价于固件侧的分发（动作清单见 firmware/main/slint_host.c 的 ui_action）。
+//! 点按等价于固件侧的分发（动作清单见 firmware/main/ui/ui_service.c 的 ui_service_handle_action）。
 
 use remapad_ui as ui;
 

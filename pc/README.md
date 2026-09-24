@@ -143,8 +143,8 @@ amiibo list      amiibo 槽位列表（名称 + UID，当前选中带 *）；ami
 ```
 
 无参敲这些命令即回读当前值（`backlight`、`ctrl`、`motion`、`relay`、`rumble`…），
-`--all` 拉的就是这批回读。`mem` 的应答在下一帧打出：PSRAM / 内部堆的余量与历史
-最低、QuickJS 记账与对象计数，观察内存趋势不用等 60 秒一条的周期日志。
+`--all` 拉的就是这批回读。`mem` 的应答在下一帧打出：PSRAM 与内部堆的空闲、最大块与
+历史最低，观察内存趋势不用等 60 秒一条的周期日志。
 
 交互模式里 `:` 开头的是本工具命令：
 
@@ -202,7 +202,7 @@ USB 手柄，按顺序选柄可能把它当桥接目标抓走——输入转发�
 插入位）：输入设备侧的字节偏移与核对状态见 [../docs/controller-ps.md](../docs/controller-ps.md)
 的「耳机状态」，主机侧接受的档位与取值对照见
 [../docs/controller-switch2.md](../docs/controller-switch2.md) 的输入报告一节。
-`headset <值>` 覆盖派生值、`headset auto` 回到按输入设备派生；要复现主机侧的取舍：
+`headset <值>` 覆盖派生值、`headset auto` 回到按输入设备派生；复核主机侧判定：
 `headset 0x07`（或 `0x0F`）→ `wake` → `link` 看 `notify=--`。
 
 换手柄或换系列时按同样步骤复核：
@@ -302,10 +302,7 @@ DualSense 连在 PC 上时音频接口由 PC 持有，触觉与喇叭改由 PC �
 老固件的 16 字节帧回落两带正弦、扬声器恒零）。两条通路都按内容门控（静默整流停发），
 启用后发固件命令 `haptic audio on` 让 HID 震动字节让位，会话退出或断开时 `haptic audio off` 复位，
 开流失败或写回被拒静默回落 HID。
-报文布局、承载选择、让位语义、增益与核对状态见 [../docs/controller-ps.md](../docs/controller-ps.md)
-的「音频触觉与 HD 触觉」，取舍见 [ADR 0042](../docs/adr/0042-ds5-audio-haptics-onboard-synthesis.md)、
-[ADR 0043](../docs/adr/0043-ds5-bridge-pc-side-audio-haptics.md) 与
-[ADR 0046](../docs/adr/0046-ns-waveform-to-ds5-pcm-hd-haptics.md)。
+报文布局、承载选择、让位语义、增益与核对状态见 [../docs/controller-ps.md](../docs/controller-ps.md) 的「音频触觉与 HD 触觉」。
 
 ## 固件 OTA（--upgrade）
 
@@ -357,5 +354,5 @@ uv run python -m unittest discover -s tests -t . -v
   描述与核对状态见 [../docs/controller-ps.md](../docs/controller-ps.md) 与其余 `docs/controller-*.md`；
   写回没效果时先看该系列布局行的 `out` 描述。
 - 手柄同时按住 L1+R1+L3+R3（约 300 ms）会被设备捕获成屏幕操控模式：设备先补一帧全松开、其后续发中性帧（玩家的按键不再上行），之后方向键移动屏幕焦点、圆圈键等价于点按屏幕。
-  再按一次同样的组合退出（[ADR 0028](../docs/adr/0028-pad-combo-captures-screen.md)）。桥接程序不感知这个状态，转发照旧；
+  再按一次同样的组合退出。桥接程序不感知这个状态，转发照旧；
   不想要这个行为就别按这个组合，串口 `ui on` / `ui off` 可以直接置位验证。

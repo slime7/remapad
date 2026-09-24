@@ -1,6 +1,6 @@
 # 0001 — 采用 PocketJS 与 Vue Vapor 驱动 ESP32-S3 屏幕 UI
 
-- 状态: active
+- 状态: superseded
 - 日期: 2026-09-03
 - 替代: 无
 

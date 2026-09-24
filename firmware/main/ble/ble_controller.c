@@ -550,7 +550,7 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
         /* 连接参数由主机发起：主机常把连接压到 4 单位（5ms，亚规范间隔），
          * 控制器侧需放行（CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE）；
          * 这里只观测，不反向请求（NimBLE 主机侧拒绝 itvl < 6 的请求）。
-         * 输入被主机采用的门槛是 0x0C/0x04 特性启用，不是间隔（ADR 0023）。 */
+         * 输入被主机采用的门槛是 0x0C/0x04 特性启用，不是间隔。 */
         conn_slot_t *slot = conn_slot(event->conn_update.conn_handle);
         struct ble_gap_conn_desc desc = {0};
         uint16_t itvl = 0;

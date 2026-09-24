@@ -1,6 +1,6 @@
 # 0003 — 采用官方 PocketJS ESP-IDF host 构建链路
 
-- 状态: active
+- 状态: retired
 - 日期: 2026-09-03
 - 替代: 0002
 

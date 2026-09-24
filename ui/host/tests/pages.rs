@@ -6,7 +6,7 @@ use remapad_ui as ui;
 const BUTTON_BG: [u8; 3] = [0x15, 0x26, 0x3e];
 /// 面板中心：页面内容以整屏中线对称。
 const CENTER_X: f32 = 120.0;
-/// 调试页槽号：dev 构建的页表在末尾追加它（固件侧的页数见 slint_host.c 的 PAGE_COUNT）。
+/// 调试页槽号：dev 构建的页表在末尾追加它（固件侧的页数见 ui/slint_ui/src/host.rs 的 PAGE_COUNT）。
 const DEBUG_PAGE: i32 = 7;
 
 /// 开发构建的页面里，调试页画得出三个注入钮；切到别的页就不画了。

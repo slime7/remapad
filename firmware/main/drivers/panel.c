@@ -14,7 +14,7 @@
 
 /* 面板与引脚事实来自 docs/hardware.md；方向、GRAM 偏移与反转配置逐条对照微雪官方示例，
  * 电源/VCOM/gamma 寄存器不在 IDF 内置驱动的初始化序列里，另按厂商调优表补发（见 s_panel_vendor_tuning）。
- * 像素时钟取 SPI2 上限 80 MHz 以压缩整帧重绘的串行等待，依据见 ADR 0018。 */
+ * 像素时钟取 SPI2 上限 80 MHz 以压缩整帧重绘的串行等待。 */
 #define REMAPAD_LCD_H_RES 240
 #define REMAPAD_LCD_V_RES 280
 #define REMAPAD_LCD_SPI_HOST SPI2_HOST

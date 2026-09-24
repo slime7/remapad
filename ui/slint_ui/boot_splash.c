@@ -67,7 +67,7 @@ static const char *TAG = "boot_splash";
 #define SPLASH_AA_SAMPLES (SPLASH_SUBSAMPLES * SPLASH_SUBSAMPLES)
 
 /* 阶段权重表容量与动画刷新周期：进度条按「阶段预计耗时 + 阶段内经过时间」
- * 推进，长阶段（guest 创建、mount、eval）期间条子持续前进而不是停在格上。 */
+ * 推进，长阶段（面板与触摸初始化、平台建立、首帧）期间条子持续前进而不是停在格上。 */
 #define SPLASH_STAGE_MAX 24
 #define SPLASH_ANIM_MS 100
 

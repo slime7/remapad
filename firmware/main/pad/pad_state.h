@@ -52,7 +52,7 @@ typedef enum {
 } pad_lang_t;
 
 /** 设备自身的型号（诊断与按型号分配置用）：目标侧只模拟 Pro，透传不看它，
- *  同代手柄的报文体能否原样转发由报告格式与目标语言决定（ADR 0026）。 */
+ *  同代手柄的报文体能否原样转发由报告格式与目标语言决定。 */
 typedef enum {
     PAD_IDENTITY_ANY = 0,
     PAD_IDENTITY_PRO,

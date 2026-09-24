@@ -154,7 +154,7 @@ bool ns2_output_send_raw(const pad_state_t *pad)
             continue;
         }
         /* 会话身份只有 Pro 一种，透传只按报告格式对账：同代手柄的报文体与目标
-         * 语言一致时原样转发（ADR 0026），格式对不上就回落解析重编码。 */
+         * 语言一致时原样转发，格式对不上就回落解析重编码。 */
         if (format != report_id) {
             continue;
         }

@@ -2,7 +2,7 @@
 
 use remapad_ui as ui;
 
-/// 固件拼的电池行（见 firmware/main/slint_host.c）：数字、%、· 与 V 只出现在运行期的
+/// 固件拼的电池行（见 firmware/main/ui/ui_service.c）：数字、%、· 与 V 只出现在运行期的
 /// 字符串里，靠 ui/src/app.slint 的字符集锚点才被烘成字形；锚点漏了码点，
 /// 上屏就是空洞或豆腐块。
 const BATTERY_TEXT: &str = "100% · 4.20V";

@@ -1,6 +1,6 @@
 # 0006 — 由产品 owner task 承载 PocketJS guest 生命周期
 
-- 状态: active
+- 状态: retired
 - 日期: 2026-09-11
 - 替代: 无
 

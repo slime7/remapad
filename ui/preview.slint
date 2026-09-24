@@ -1,6 +1,6 @@
 // PC 交互预览：上半是设备画面（与固件同一棵 AppContent），下半是控制条。
 // 控制条与设备画面上的控件走同一套动作名，动作按固件侧的分发语义
-// （firmware/main/slint_host.c 的 ui_action）在本文件里结算，因此能在 PC 上点着走一遍界面。
+// （firmware/main/ui/ui_service.c 的动作分发）在本文件里结算，因此能在 PC 上点着走一遍界面。
 // 本文件只给预览用，不参与固件构建；设备尺寸仍是 240 × 280（控制条在它下面）。
 
 // App 只作为宿主侧包的入口一起编进来（用例拿的是 App，预览拿的是 PreviewApp）。
@@ -179,7 +179,7 @@ export component PreviewApp inherits Window {
         root.log = "电量 = " + root.battery-percent + "%";
     }
 
-    // ---- 动作结算：与 firmware/main/slint_host.c 的 ui_action 同一套名字与语义 ----
+    // ---- 动作结算：与 firmware/main/ui/ui_service.c 的动作分发同一套名字与语义 ----
     action(name, value) => {
         root.log = name + "(" + value + ")";
         if (name == "next-page") {
@@ -239,7 +239,7 @@ export component PreviewApp inherits Window {
             root.log = "USB 角色 = 手柄（PC 的串口会消失）";
         } else if (name == "usb-device") {
             root.usb-role = 0;
-            /* 固件从手柄切回串口时会问一次要不要重启（见 slint_host.c 的 ui_poll）。 */
+            /* 固件从手柄切回串口时会问一次要不要重启（见 ui_host.c 的 ui_poll）。 */
             root.dialog = 4;
             root.log = "USB 角色 = 串口（问一次要不要重启）";
         } else if (name == "ds-touchpad") {

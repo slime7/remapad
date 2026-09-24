@@ -262,8 +262,7 @@ static uint8_t s_dormant_drops;
 
 /** 广播窗口：各情况按组装信号开窗（连接键与开机/Dock 的信号搜索带唤醒突发、
  *  断连回连与休眠看门狗重连只发回连形态、HOME 唤醒窗口全程唤醒），主机连上
- *  或窗口到期收窗。设备只在窗口开着或配对流程里广播——不被请求就静默
- *  （见 ADR 0038）。 */
+ *  或窗口到期收窗。设备只在窗口开着或配对流程里广播——不被请求就静默。 */
 static ns2_adv_window_t s_adv_win;
 static int64_t s_pairing_until_us;
 static bool s_user_explicit_disconnect;
