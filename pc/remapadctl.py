@@ -907,6 +907,18 @@ def _hex_field(text: str | None) -> int | None:
     return value if 0 <= value <= 0xFFFFFF else None
 
 
+def _heap_field(text: str | None) -> tuple[int, int | None] | None:
+    """`458752/524288` → （空闲字节, 总量字节）；老固件只报空闲时总量为 None。"""
+    free = _int_field(text)
+    if free is not None:
+        return free, None
+    if not text or "/" not in text:
+        return None
+    free_text, _, total_text = text.partition("/")
+    free, total = _int_field(free_text), _int_field(total_text)
+    return (free, total) if free is not None and total is not None else None
+
+
 def _battery_field(text: str | None) -> tuple[int, int] | None:
     """`3971mV/85%` → （毫伏, 百分比）。"""
     if not text or "/" not in text:
@@ -933,7 +945,7 @@ def parse_device_reply(line: str) -> tuple[str, dict] | None:
     - `device`：`status` 与 `version` 的一行回读 → 版本、分区、电池、堆与配对等事实，
       固件字段名收敛成 `firmware` / `partition` / `image` / `ota_state` /
       `pairing` / `role` / `pad` / `light` / `screen_on` / `battery_mv` /
-      `battery_percent` / `charging` / `heap` / `uptime_s`。
+      `battery_percent` / `charging` / `heap`（空闲字节）/ `heap_total` / `uptime_s`。
 
     带状态词的应答先剥前缀：`err` 行大多答不进这里的字段表，自然返回 None。
     """
@@ -974,10 +986,14 @@ def parse_device_reply(line: str) -> tuple[str, dict] | None:
                           ("pad", "pad")):
             if key in fields:
                 facts[name] = fields[key]
-        for key, name in (("backlight", "light"), ("heap", "heap")):
-            value = _int_field(fields.get(key))
-            if value is not None:
-                facts[name] = value
+        light = _int_field(fields.get("backlight"))
+        if light is not None:
+            facts["light"] = light
+        heap = _heap_field(fields.get("heap"))
+        if heap is not None:
+            facts["heap"] = heap[0]
+            if heap[1] is not None:
+                facts["heap_total"] = heap[1]
         if fields.get("screen") in ("0", "1"):
             facts["screen_on"] = fields["screen"] == "1"
         if fields.get("chg") in ("0", "1"):

@@ -16,8 +16,8 @@ import remapadgui  # noqa: E402
 
 # 固件 cli_status 的一行回读：pad 字段带空格（输入设备的型号描述）。
 STATUS_LINE = ("state pairing=idle role=device backlight=60 screen=1 uptime=1234s "
-               "heap=458752 batt=3971mV/85% chg=0 fw=v0.4.0-12-gabcdef part=ota_0 ota=idle "
-               "ui=off pad=DualSense Edge (USB)")
+               "heap=458752/524288 batt=3971mV/85% chg=0 fw=v0.4.0-12-gabcdef part=ota_0 "
+               "ota=idle ui=off pad=DualSense Edge (USB)")
 
 
 class DeviceReplyTest(unittest.TestCase):
@@ -66,10 +66,19 @@ class DeviceReplyTest(unittest.TestCase):
         self.assertTrue(fields["screen_on"])
         self.assertEqual(fields["uptime_s"], 1234)
         self.assertEqual(fields["heap"], 458752)
+        self.assertEqual(fields["heap_total"], 524288)
         self.assertEqual((fields["battery_mv"], fields["battery_percent"]), (3971, 85))
         self.assertFalse(fields["charging"])
         # pad 字段的值里带空格（型号描述）：只保留第一段，但必须仍然存在。
         self.assertEqual(fields["pad"], "DualSense")
+
+    def test_status_reply_from_an_older_firmware_keeps_free_only(self):
+        channel, fields = remapadctl.parse_device_reply(
+            "state pairing=idle role=device backlight=60 screen=1 uptime=1234s "
+            "heap=458752 batt=3971mV/85% chg=0 fw=v0.4.0-12-gabcdef part=ota_0 ota=idle")
+        self.assertEqual(channel, "device")
+        self.assertEqual(fields["heap"], 458752)
+        self.assertNotIn("heap_total", fields)
 
     def test_version_reply_carries_image_state(self):
         channel, fields = remapadctl.parse_device_reply(

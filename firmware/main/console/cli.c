@@ -105,18 +105,20 @@ static void cli_help(void)
     cli_print("  reboot              restart into COM mode");
 }
 
+/** 一行状态回读；heap 是内部堆的空闲/总量字节，口径与设备屏幕的系统信息页一致。 */
 static void cli_status(void)
 {
     char line[288];
     const app_config_t *cfg = app_config_get();
     snprintf(line, sizeof(line),
-             "state pairing=%s role=%s backlight=%u screen=%u uptime=%llds heap=%u "
+             "state pairing=%s role=%s backlight=%u screen=%u uptime=%llds heap=%u/%u "
              "batt=%umV/%u%% chg=%u fw=%s part=%s ota=%s ui=%s pad=%s",
              js_bridge_pairing_state(),
              cfg->usb_role == APP_CONFIG_USB_HOST ? "host" : "device",
              (unsigned)backlight_get(), (unsigned)cfg->screen_on,
              (long long)(esp_timer_get_time() / 1000000LL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
              (unsigned)battery_get_voltage_mv(), (unsigned)battery_get_percentage(),
              battery_is_charging() ? 1u : 0u,
              ota_session_running_version(), ota_session_running_partition(),

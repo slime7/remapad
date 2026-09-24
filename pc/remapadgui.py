@@ -215,6 +215,45 @@ def format_uptime(seconds: int) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:02d}:{secs:02d}"
 
 
+def format_device_facts(facts: dict) -> str:
+    """设备事实拼成两行：没读到的项不占位。
+
+    堆内存按设备屏幕的系统信息页同口径（内部堆的已用 / 总量 KB），空闲字节由回读给出、
+    总量缺省（老固件）时退回到空闲值。
+    """
+    image = str(facts.get("image") or "")
+    first = [
+        f"固件 {facts['firmware']}" if facts.get("firmware") else "",
+        f"分区 {facts['partition']}" if facts.get("partition") else "",
+        f"镜像 {IMAGE_TEXT.get(image, image)}" if image else "",
+        f"升级 {facts['ota_state']}" if facts.get("ota_state") else "",
+    ]
+    second = []
+    if facts.get("battery_mv") is not None:
+        charge = "（充电中）" if facts.get("charging") else ""
+        second.append(f"电量 {int(facts['battery_percent'])}% · "
+                      f"{int(facts['battery_mv']) / 1000:.2f}V{charge}")
+    if facts.get("heap") is not None:
+        free_kb = int(facts["heap"]) // 1024
+        total = facts.get("heap_total")
+        if total is None:
+            second.append(f"堆内存 空闲 {free_kb} KB")
+        else:
+            second.append(f"堆内存 {(int(total) - int(facts['heap'])) // 1024} / {int(total) // 1024} KB")
+    if facts.get("uptime_s") is not None:
+        second.append(f"运行 {format_uptime(int(facts['uptime_s']))}")
+    pairing = str(facts.get("pairing") or "")
+    if pairing:
+        second.append(f"配对 {PAIRING_TEXT.get(pairing, pairing)}")
+    role = str(facts.get("role") or "")
+    if role:
+        second.append(f"角色 {ROLE_TEXT.get(role, role)}")
+    if facts.get("pad") and facts["pad"] != "none":
+        second.append(f"手柄 {facts['pad']}")
+    lines = [" ｜ ".join(part for part in line if part) for line in (first, second)]
+    return "\n".join(line for line in lines if line) or "设备没有回可读的状态"
+
+
 class ConsoleWindow(ctk.CTk):
     """连接控制台：一个串口会话 + 一块实时日志 + 一组控制按钮。"""
 
@@ -962,35 +1001,8 @@ class ConsoleWindow(ctk.CTk):
             self._render_device_facts()
 
     def _render_device_facts(self) -> None:
-        """设备事实拼成两行：没读到的项不占位。"""
-        facts = self.device_facts
-        image = str(facts.get("image") or "")
-        first = [
-            f"固件 {facts['firmware']}" if facts.get("firmware") else "",
-            f"分区 {facts['partition']}" if facts.get("partition") else "",
-            f"镜像 {IMAGE_TEXT.get(image, image)}" if image else "",
-            f"升级 {facts['ota_state']}" if facts.get("ota_state") else "",
-        ]
-        second = []
-        if facts.get("battery_mv") is not None:
-            charge = "（充电中）" if facts.get("charging") else ""
-            second.append(f"电量 {int(facts['battery_percent'])}% · "
-                          f"{int(facts['battery_mv']) / 1000:.2f}V{charge}")
-        if facts.get("heap") is not None:
-            second.append(f"堆内存 {int(facts['heap']) // 1024} KB")
-        if facts.get("uptime_s") is not None:
-            second.append(f"运行 {format_uptime(int(facts['uptime_s']))}")
-        pairing = str(facts.get("pairing") or "")
-        if pairing:
-            second.append(f"配对 {PAIRING_TEXT.get(pairing, pairing)}")
-        role = str(facts.get("role") or "")
-        if role:
-            second.append(f"角色 {ROLE_TEXT.get(role, role)}")
-        if facts.get("pad") and facts["pad"] != "none":
-            second.append(f"手柄 {facts['pad']}")
-        lines = [" ｜ ".join(part for part in line if part) for line in (first, second)]
-        self.device_info_label.configure(
-            text="\n".join(line for line in lines if line) or "设备没有回可读的状态")
+        """把设备事实刷进信息标签（拼行规则见 format_device_facts）。"""
+        self.device_info_label.configure(text=format_device_facts(self.device_facts))
 
     # --- 升级 ------------------------------------------------------
 
