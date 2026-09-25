@@ -97,6 +97,9 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 - **I2C 地址冲突**：板内已占用 `0x15`（触摸）、`0x6B`（IMU）、`0x51`（RTC）。外接 I2C 设备必须避开这三个地址。
 - **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志与 USB 设备共用同一个物理口。
   复位后默认以 `USB-Serial/JTAG` 模式枚举，复用机制见「USB 控制器复用」。
+- **Type-C 座子是纯 UFP 接线**：CC1 / CC2 各只接一颗 5.1 kΩ 下拉到地、没有 Rp 上拉，CC 也不连 ESP32（V2.1 原理图核对）。
+  host 模式用 C-to-C 线直连手柄时，手柄在 CC 上看不到主机角色，VBUS 到位也只亮充电灯、数据不建立（实机已复现）；
+  直插手柄要用的线序见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「USB 手柄直插（host 模式）」。
 - **`GPIO19` / `GPIO20`** 已接 Type-C，不要当普通 GPIO 使用。
 - **`GPIO0` 是 BOOT**、`CHIP_PU` 是复位信号，都不适合作为普通用户输入。
 - **按键资源**：`BOOT`(GPIO0)、`RST`(CHIP_PU)、`PWR`(SYS_OUT=GPIO40 / SYS_EN=GPIO41)。
