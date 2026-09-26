@@ -11,8 +11,8 @@ extern "C" {
 
 /** 一次采样得到的触点，坐标为逻辑视口像素（与面板方向一致）。 */
 typedef struct {
-    uint16_t x;
-    uint16_t y;
+  uint16_t x;
+  uint16_t y;
 } touch_contact_t;
 
 /** 初始化 CST816T 触摸控制器：共享 I2C 总线（SCL=GPIO10, SDA=GPIO11）、

@@ -25,9 +25,9 @@
 static const char *TAG = "driver_pwrkey";
 
 typedef enum {
-    PWR_IDLE = 0,
-    PWR_DOWN,
-    PWR_IGNORE, /* 超长按住：等待释放，不再产生事件。 */
+  PWR_IDLE = 0,
+  PWR_DOWN,
+  PWR_IGNORE, /* 超长按住：等待释放，不再产生事件。 */
 } pwr_state_t;
 
 static pwr_key_fn s_callback;
@@ -35,58 +35,57 @@ static void *s_user;
 
 static void pwr_key_task(void *param)
 {
-    pwr_state_t state = PWR_IDLE;
-    int64_t pressed_at_us = 0;
-    bool long_hint_beeped = false;
+  pwr_state_t state = PWR_IDLE;
+  int64_t pressed_at_us = 0;
+  bool long_hint_beeped = false;
 
-    ESP_LOGI(TAG, "pwr key polling on GPIO%d", PWR_KEY_GPIO);
-    for (;;) {
-        const bool level_low = gpio_get_level(PWR_KEY_GPIO) == 0;
-        const int64_t now = esp_timer_get_time();
-        switch (state) {
-        case PWR_IDLE:
-            if (level_low) {
-                pressed_at_us = now;
-                long_hint_beeped = false;
-                state = PWR_DOWN;
-            }
-            break;
-        case PWR_DOWN:
-            if (!level_low) {
-                const int64_t held = now - pressed_at_us;
-                if (held >= PWR_KEY_LONG_MIN_US && held <= PWR_KEY_LONG_MAX_US) {
-                    ESP_LOGI(TAG, "long press %lld ms", (long long)(held / 1000LL));
-                    s_callback(PWR_KEY_LONG, s_user);
-                } else if (held < PWR_KEY_SHORT_MAX_US) {
-                    ESP_LOGI(TAG, "short press %lld ms", (long long)(held / 1000LL));
-                    s_callback(PWR_KEY_SHORT, s_user);
-                } else {
-                    ESP_LOGI(TAG, "press %lld ms ignored (no event)",
-                             (long long)(held / 1000LL));
-                }
-                state = PWR_IDLE;
-            } else if (now - pressed_at_us > PWR_KEY_LONG_MAX_US) {
-                /* 按住超出长按窗：进入忽略态，避免在未知硬件切电阈值边缘
-                 * 触发软件动作。 */
-                state = PWR_IGNORE;
-            } else if (!long_hint_beeped && now - pressed_at_us >= PWR_KEY_LONG_MIN_US) {
-                /* 到达 3 秒长按窗：短鸣一声提示「可以松开」。 */
-                long_hint_beeped = true;
-                buzzer_beep(120);
-                ESP_LOGI(TAG, "long press hint beep");
-            }
-            break;
-        case PWR_IGNORE:
-            if (!level_low) {
-                state = PWR_IDLE;
-            }
-            break;
-        default:
-            state = PWR_IDLE;
-            break;
+  ESP_LOGI(TAG, "pwr key polling on GPIO%d", PWR_KEY_GPIO);
+  for (;;) {
+    const bool level_low = gpio_get_level(PWR_KEY_GPIO) == 0;
+    const int64_t now = esp_timer_get_time();
+    switch (state) {
+    case PWR_IDLE:
+      if (level_low) {
+        pressed_at_us = now;
+        long_hint_beeped = false;
+        state = PWR_DOWN;
+      }
+      break;
+    case PWR_DOWN:
+      if (!level_low) {
+        const int64_t held = now - pressed_at_us;
+        if (held >= PWR_KEY_LONG_MIN_US && held <= PWR_KEY_LONG_MAX_US) {
+          ESP_LOGI(TAG, "long press %lld ms", (long long)(held / 1000LL));
+          s_callback(PWR_KEY_LONG, s_user);
+        } else if (held < PWR_KEY_SHORT_MAX_US) {
+          ESP_LOGI(TAG, "short press %lld ms", (long long)(held / 1000LL));
+          s_callback(PWR_KEY_SHORT, s_user);
+        } else {
+          ESP_LOGI(TAG, "press %lld ms ignored (no event)", (long long)(held / 1000LL));
         }
-        vTaskDelay(pdMS_TO_TICKS(PWR_KEY_POLL_MS));
+        state = PWR_IDLE;
+      } else if (now - pressed_at_us > PWR_KEY_LONG_MAX_US) {
+        /* 按住超出长按窗：进入忽略态，避免在未知硬件切电阈值边缘
+                 * 触发软件动作。 */
+        state = PWR_IGNORE;
+      } else if (!long_hint_beeped && now - pressed_at_us >= PWR_KEY_LONG_MIN_US) {
+        /* 到达 3 秒长按窗：短鸣一声提示「可以松开」。 */
+        long_hint_beeped = true;
+        buzzer_beep(120);
+        ESP_LOGI(TAG, "long press hint beep");
+      }
+      break;
+    case PWR_IGNORE:
+      if (!level_low) {
+        state = PWR_IDLE;
+      }
+      break;
+    default:
+      state = PWR_IDLE;
+      break;
     }
+    vTaskDelay(pdMS_TO_TICKS(PWR_KEY_POLL_MS));
+  }
 }
 
 /** 拉高 SYS_EN 锁存系统供电。电池供电时按键松开后系统是否继续工作只取决于
@@ -94,60 +93,60 @@ static void pwr_key_task(void *param)
  *  因此调用点必须是 app_main 的第一件事。USB 供电下锁存被旁路，拉高无副作用。 */
 esp_err_t pwr_key_power_hold(void)
 {
-    const gpio_config_t io_conf = {
-        .pin_bit_mask = 1ULL << PWR_KEY_HOLD_GPIO,
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    esp_err_t err = gpio_config(&io_conf);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "power latch config failed: %s", esp_err_to_name(err));
-        return err;
-    }
-    err = gpio_set_level(PWR_KEY_HOLD_GPIO, 1);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "power latch hold failed: %s", esp_err_to_name(err));
-        return err;
-    }
-    ESP_LOGI(TAG, "power latch held (SYS_EN GPIO%d high)", PWR_KEY_HOLD_GPIO);
-    return ESP_OK;
+  const gpio_config_t io_conf = {
+    .pin_bit_mask = 1ULL << PWR_KEY_HOLD_GPIO,
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE,
+  };
+  esp_err_t err = gpio_config(&io_conf);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "power latch config failed: %s", esp_err_to_name(err));
+    return err;
+  }
+  err = gpio_set_level(PWR_KEY_HOLD_GPIO, 1);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "power latch hold failed: %s", esp_err_to_name(err));
+    return err;
+  }
+  ESP_LOGI(TAG, "power latch held (SYS_EN GPIO%d high)", PWR_KEY_HOLD_GPIO);
+  return ESP_OK;
 }
 
 /** 拉低 SYS_EN 释放锁存：电池供电下系统就此断电，函数之后的代码不会执行；
  *  USB 供电下锁存被旁路，调用方（bridge）会重新锁存并如实回报，不会假关机。 */
 esp_err_t pwr_key_power_release(void)
 {
-    const esp_err_t err = gpio_set_level(PWR_KEY_HOLD_GPIO, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "power latch release failed: %s", esp_err_to_name(err));
-        return err;
-    }
-    ESP_LOGI(TAG, "power latch released (SYS_EN GPIO%d low)", PWR_KEY_HOLD_GPIO);
-    return ESP_OK;
+  const esp_err_t err = gpio_set_level(PWR_KEY_HOLD_GPIO, 0);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "power latch release failed: %s", esp_err_to_name(err));
+    return err;
+  }
+  ESP_LOGI(TAG, "power latch released (SYS_EN GPIO%d low)", PWR_KEY_HOLD_GPIO);
+  return ESP_OK;
 }
 
 esp_err_t pwr_key_start(pwr_key_fn callback, void *user)
 {
-    if (callback == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    const gpio_config_t io_conf = {
-        .pin_bit_mask = 1ULL << PWR_KEY_GPIO,
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    esp_err_t err = gpio_config(&io_conf);
-    if (err != ESP_OK) {
-        return err;
-    }
-    s_callback = callback;
-    s_user = user;
-    if (xTaskCreate(pwr_key_task, "pwr-key", 3072, NULL, 3, NULL) != pdPASS) {
-        return ESP_ERR_NO_MEM;
-    }
-    return ESP_OK;
+  if (callback == NULL) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  const gpio_config_t io_conf = {
+    .pin_bit_mask = 1ULL << PWR_KEY_GPIO,
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_ENABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE,
+  };
+  esp_err_t err = gpio_config(&io_conf);
+  if (err != ESP_OK) {
+    return err;
+  }
+  s_callback = callback;
+  s_user = user;
+  if (xTaskCreate(pwr_key_task, "pwr-key", 3072, NULL, 3, NULL) != pdPASS) {
+    return ESP_ERR_NO_MEM;
+  }
+  return ESP_OK;
 }

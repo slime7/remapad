@@ -30,23 +30,23 @@ use core::ffi::c_void;
 #[allow(unsafe_code)]
 #[no_mangle]
 pub unsafe extern "C" fn remapad_slint_ui_start(
-    hooks: *const abi::Hooks,
-    poll: Option<abi::PollFn>,
-    action: Option<abi::ActionFn>,
-    user: *mut c_void,
+  hooks: *const abi::Hooks,
+  poll: Option<abi::PollFn>,
+  action: Option<abi::ActionFn>,
+  user: *mut c_void,
 ) -> i32 {
-    if hooks.is_null() {
-        return abi::ESP_ERR_INVALID_ARG;
-    }
-    let hooks = unsafe { boundary::read_hooks(hooks) };
-    host::start(hooks, poll, action, user)
+  if hooks.is_null() {
+    return abi::ESP_ERR_INVALID_ARG;
+  }
+  let hooks = unsafe { boundary::read_hooks(hooks) };
+  host::start(hooks, poll, action, user)
 }
 
 /// 进入 Slint 事件循环：本函数不返回，独占调用它的任务。
 #[allow(unsafe_code)]
 #[no_mangle]
 pub extern "C" fn remapad_slint_ui_loop() {
-    host::run();
+  host::run();
 }
 
 /// 把整屏当前画面按 RGB565 小端拷进 out（240 × 280 × 2 字节），截图通路使用。
@@ -57,20 +57,20 @@ pub extern "C" fn remapad_slint_ui_loop() {
 #[allow(unsafe_code)]
 #[no_mangle]
 pub unsafe extern "C" fn remapad_slint_ui_copy_frame(out: *mut u16) {
-    let frame = platform::frame_ptr();
-    if out.is_null() || frame.is_null() {
-        return;
-    }
-    unsafe {
-        core::ptr::copy_nonoverlapping(frame, out, platform::VIEW_WIDTH * platform::VIEW_HEIGHT);
-    }
+  let frame = platform::frame_ptr();
+  if out.is_null() || frame.is_null() {
+    return;
+  }
+  unsafe {
+    core::ptr::copy_nonoverlapping(frame, out, platform::VIEW_WIDTH * platform::VIEW_HEIGHT);
+  }
 }
 
 /// 当前帧缓冲（RGB565 小端，视口全宽）；平台未就绪时为 NULL。
 #[allow(unsafe_code)]
 #[no_mangle]
 pub extern "C" fn remapad_slint_ui_frame() -> *const u16 {
-    platform::frame_ptr()
+  platform::frame_ptr()
 }
 
 /// 读取并清零一个统计窗口的逐帧数据。
@@ -81,28 +81,28 @@ pub extern "C" fn remapad_slint_ui_frame() -> *const u16 {
 #[allow(unsafe_code)]
 #[no_mangle]
 pub unsafe extern "C" fn remapad_slint_ui_take_stats(out: *mut abi::Stats) {
-    if out.is_null() {
-        return;
-    }
-    unsafe { platform::take_stats(&mut *out) };
+  if out.is_null() {
+    return;
+  }
+  unsafe { platform::take_stats(&mut *out) };
 }
 
 /// 息屏/亮屏开关：关闭时平台整段跳过触摸采样。
 #[allow(unsafe_code)]
 #[no_mangle]
 pub extern "C" fn remapad_slint_ui_set_touch_enabled(enabled: bool) {
-    platform::set_touch_enabled(enabled);
+  platform::set_touch_enabled(enabled);
 }
 
 /// 接下来 frames 帧逐帧打印渲染与提交耗时（串口 trace 命令；0 取默认长度）。
 #[allow(unsafe_code)]
 #[no_mangle]
 pub extern "C" fn remapad_slint_ui_trace_frames(frames: u32) {
-    platform::trace_frames(frames);
+  platform::trace_frames(frames);
 }
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    log::write(log::LEVEL_ERROR, c"slint_ui", format_args!("panic: {info}"));
-    boundary::abort()
+  log::write(log::LEVEL_ERROR, c"slint_ui", format_args!("panic: {info}"));
+  boundary::abort()
 }

@@ -45,53 +45,53 @@ extern "C" {
 
 /** 会话状态（与 PC 端 state 字段一致）。 */
 typedef enum {
-    OTA_STATE_IDLE = 0,
-    OTA_STATE_RECEIVING = 1,
-    OTA_STATE_DONE = 2,
-    OTA_STATE_FAILED = 3,
+  OTA_STATE_IDLE = 0,
+  OTA_STATE_RECEIVING = 1,
+  OTA_STATE_DONE = 2,
+  OTA_STATE_FAILED = 3,
 } ota_state_t;
 
 /** 应答错误码（与 PC 端 code 字段一致）。 */
 typedef enum {
-    OTA_CODE_OK = 0,
-    OTA_CODE_BUSY = 1,
-    OTA_CODE_BAD_HEADER = 2,
-    OTA_CODE_SEQ_ERROR = 3,
-    OTA_CODE_FLASH_ERROR = 4,
-    OTA_CODE_SIZE_MISMATCH = 5,
-    OTA_CODE_VERIFY_FAILED = 6,
-    OTA_CODE_TIMEOUT = 7,
+  OTA_CODE_OK = 0,
+  OTA_CODE_BUSY = 1,
+  OTA_CODE_BAD_HEADER = 2,
+  OTA_CODE_SEQ_ERROR = 3,
+  OTA_CODE_FLASH_ERROR = 4,
+  OTA_CODE_SIZE_MISMATCH = 5,
+  OTA_CODE_VERIFY_FAILED = 6,
+  OTA_CODE_TIMEOUT = 7,
 } ota_code_t;
 
 /** 一次处理的结论：`reply` 为真时上层把 state/code/next_seq/received 编码成 ACK 发回。 */
 typedef struct {
-    ota_state_t state;
-    ota_code_t code;
-    uint16_t next_seq;
-    uint32_t received;
-    bool reply;
-    /** END 已收齐声明长度且数据全部交付上层，等上层校验镜像。 */
-    bool finished;
+  ota_state_t state;
+  ota_code_t code;
+  uint16_t next_seq;
+  uint32_t received;
+  bool reply;
+  /** END 已收齐声明长度且数据全部交付上层，等上层校验镜像。 */
+  bool finished;
 } ota_proto_result_t;
 
 /** 交付一块镜像数据：成功返回 OTA_CODE_OK，失败返回具体错误码（会话随即作废）。 */
 typedef ota_code_t (*ota_flush_fn)(const uint8_t *data, size_t len, void *user);
 
 typedef struct {
-    ota_state_t state;
-    ota_code_t code;
-    uint16_t next_seq;
-    uint32_t received;
-    uint32_t image_size;
-    size_t chunk_len;
-    uint16_t accepted_since_ack;
-    /** 已经为当前期望序号回过一次序号错误应答。 */
-    bool seq_error_reported;
-    /** 上次为重复序号回应答的时刻（微秒），用来给重发应答限流。 */
-    int64_t seq_error_reply_us;
-    bool finished;
-    int64_t last_rx_us;
-    uint8_t chunk[OTA_CHUNK_LEN];
+  ota_state_t state;
+  ota_code_t code;
+  uint16_t next_seq;
+  uint32_t received;
+  uint32_t image_size;
+  size_t chunk_len;
+  uint16_t accepted_since_ack;
+  /** 已经为当前期望序号回过一次序号错误应答。 */
+  bool seq_error_reported;
+  /** 上次为重复序号回应答的时刻（微秒），用来给重发应答限流。 */
+  int64_t seq_error_reply_us;
+  bool finished;
+  int64_t last_rx_us;
+  uint8_t chunk[OTA_CHUNK_LEN];
 } ota_proto_t;
 
 /** 复位会话（回到空闲，清聚合缓冲）。 */
@@ -104,8 +104,7 @@ bool ota_proto_parse_begin(const uint8_t *payload, size_t len, uint32_t *image_s
  * 接受 BEGIN：image_size 是声明的镜像大小，max_image_size 是目标分区容量。
  * 尺寸为 0 或超出分区即拒绝并回 BAD_HEADER，不进入接收态。
  */
-ota_proto_result_t ota_proto_begin(ota_proto_t *proto, uint32_t image_size,
-                                   uint32_t max_image_size, int64_t now_us);
+ota_proto_result_t ota_proto_begin(ota_proto_t *proto, uint32_t image_size, uint32_t max_image_size, int64_t now_us);
 
 /**
  * 刷新空闲计时起点：BEGIN 之后的目标分区预擦在应答之前完成，
@@ -118,13 +117,11 @@ void ota_proto_note_rx(ota_proto_t *proto, int64_t now_us);
  * 收一块镜像数据：序号不符回 SEQ_ERROR（next_seq 是 PC 的重发起点）。window_end
  * 为真（帧 slot 标记）或已收满一个固定窗口时回 ACK。
  */
-ota_proto_result_t ota_proto_data(ota_proto_t *proto, const uint8_t *payload, size_t len,
-                                  bool window_end, int64_t now_us, ota_flush_fn flush,
-                                  void *user);
+ota_proto_result_t ota_proto_data(ota_proto_t *proto, const uint8_t *payload, size_t len, bool window_end,
+                                  int64_t now_us, ota_flush_fn flush, void *user);
 
 /** 声明数据发完：字节数与声明不符即失败，否则把剩余数据交付上层并置 finished。 */
-ota_proto_result_t ota_proto_end(ota_proto_t *proto, int64_t now_us, ota_flush_fn flush,
-                                 void *user);
+ota_proto_result_t ota_proto_end(ota_proto_t *proto, int64_t now_us, ota_flush_fn flush, void *user);
 
 /** 周期调用：接收中空闲超时即作废会话并回 TIMEOUT。 */
 ota_proto_result_t ota_proto_tick(ota_proto_t *proto, int64_t now_us);
@@ -142,8 +139,8 @@ bool ota_proto_busy(const ota_proto_t *proto);
  * 编码 ACK 载荷：state + code + next_seq + received；with_version 为真时追加
  * 16 字节运行版本（BEGIN 的应答用）。缓冲不足返回 0。
  */
-size_t ota_proto_encode_ack(const ota_proto_result_t *result, const char *version,
-                            bool with_version, uint8_t *out, size_t out_len);
+size_t ota_proto_encode_ack(const ota_proto_result_t *result, const char *version, bool with_version, uint8_t *out,
+                            size_t out_len);
 
 #ifdef __cplusplus
 }

@@ -84,7 +84,7 @@ static const pad_layout_t s_rows[] = {
 };
 
 const pad_layout_module_t pad_layout_module_ds4 = {
-    .name = "ds4",
-    .rows = s_rows,
-    .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
+  .name = "ds4",
+  .rows = s_rows,
+  .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
 };

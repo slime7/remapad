@@ -19,52 +19,55 @@ const COLOR_WARN: &str = "\u{1b}[0;33m";
 const COLOR_INFO: &str = "\u{1b}[0;32m";
 
 struct Line {
-    buf: [u8; LINE_CAPACITY],
-    len: usize,
+  buf: [u8; LINE_CAPACITY],
+  len: usize,
 }
 
 impl Line {
-    fn new() -> Self {
-        Self { buf: [0; LINE_CAPACITY], len: 0 }
+  fn new() -> Self {
+    Self {
+      buf: [0; LINE_CAPACITY],
+      len: 0,
     }
+  }
 
-    fn as_c_str(&self) -> Option<&CStr> {
-        CStr::from_bytes_until_nul(&self.buf).ok()
-    }
+  fn as_c_str(&self) -> Option<&CStr> {
+    CStr::from_bytes_until_nul(&self.buf).ok()
+  }
 }
 
 impl Write for Line {
-    fn write_str(&mut self, text: &str) -> fmt::Result {
-        let bytes = text.as_bytes();
-        let free = LINE_CAPACITY - 1 - self.len;
-        let count = free.min(bytes.len());
-        self.buf[self.len..self.len + count].copy_from_slice(&bytes[..count]);
-        self.len += count;
-        Ok(())
-    }
+  fn write_str(&mut self, text: &str) -> fmt::Result {
+    let bytes = text.as_bytes();
+    let free = LINE_CAPACITY - 1 - self.len;
+    let count = free.min(bytes.len());
+    self.buf[self.len..self.len + count].copy_from_slice(&bytes[..count]);
+    self.len += count;
+    Ok(())
+  }
 }
 
 /// 输出一行日志（level 同时用于 IDF 的日志过滤）。
 pub fn write(level: u32, tag: &CStr, args: fmt::Arguments) {
-    let (color, letter) = match level {
-        LEVEL_ERROR => (COLOR_ERROR, 'E'),
-        LEVEL_WARN => (COLOR_WARN, 'W'),
-        _ => (COLOR_INFO, 'I'),
-    };
-    let mut line = Line::new();
-    let _ = fmt::write(
-        &mut line,
-        format_args!(
-            "{color}{letter} ({}): {}: ",
-            boundary::log_timestamp(),
-            tag.to_str().unwrap_or("slint_ui")
-        ),
-    );
-    let _ = fmt::write(&mut line, args);
-    let _ = fmt::write(&mut line, format_args!("{RESET}\n"));
-    if let Some(text) = line.as_c_str() {
-        boundary::log_write(level, tag, text);
-    }
+  let (color, letter) = match level {
+    LEVEL_ERROR => (COLOR_ERROR, 'E'),
+    LEVEL_WARN => (COLOR_WARN, 'W'),
+    _ => (COLOR_INFO, 'I'),
+  };
+  let mut line = Line::new();
+  let _ = fmt::write(
+    &mut line,
+    format_args!(
+      "{color}{letter} ({}): {}: ",
+      boundary::log_timestamp(),
+      tag.to_str().unwrap_or("slint_ui")
+    ),
+  );
+  let _ = fmt::write(&mut line, args);
+  let _ = fmt::write(&mut line, format_args!("{RESET}\n"));
+  if let Some(text) = line.as_c_str() {
+    boundary::log_write(level, tag, text);
+  }
 }
 
 macro_rules! log_info {
@@ -88,4 +91,3 @@ macro_rules! log_error {
 pub(crate) use log_error;
 pub(crate) use log_info;
 pub(crate) use log_warn;
-

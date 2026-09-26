@@ -10,13 +10,33 @@
 
 /** NS1（0x30）标准报文按键位：右半边、功能键、左半边各一字节，两侧按键可叠在同一行。 */
 static const uint32_t s_ns1_btn_map[24] = {
-    /* b0：Y / X / B / A / SR / SL / R / ZR。面键按位置取值。 */
-    PAD_BTN_SQUARE, PAD_BTN_TRIANGLE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, 0, 0, PAD_BTN_R1, 0,
-    /* b1：Minus / Plus / RStick / LStick / Home / Capture / 保留 / 充电握把。 */
-    PAD_BTN_TOUCHPAD, PAD_BTN_OPT, PAD_BTN_R3, PAD_BTN_L3, PAD_BTN_HOME, PAD_BTN_SHARE, 0, 0,
-    /* b2：Down / Up / Right / Left / SR / SL / L / ZL。 */
-    PAD_BTN_DPAD_DOWN, PAD_BTN_DPAD_UP, PAD_BTN_DPAD_RIGHT, PAD_BTN_DPAD_LEFT, 0, 0,
-    PAD_BTN_L1, 0,
+  /* b0：Y / X / B / A / SR / SL / R / ZR。面键按位置取值。 */
+  PAD_BTN_SQUARE,
+  PAD_BTN_TRIANGLE,
+  PAD_BTN_CROSS,
+  PAD_BTN_CIRCLE,
+  0,
+  0,
+  PAD_BTN_R1,
+  0,
+  /* b1：Minus / Plus / RStick / LStick / Home / Capture / 保留 / 充电握把。 */
+  PAD_BTN_TOUCHPAD,
+  PAD_BTN_OPT,
+  PAD_BTN_R3,
+  PAD_BTN_L3,
+  PAD_BTN_HOME,
+  PAD_BTN_SHARE,
+  0,
+  0,
+  /* b2：Down / Up / Right / Left / SR / SL / L / ZL。 */
+  PAD_BTN_DPAD_DOWN,
+  PAD_BTN_DPAD_UP,
+  PAD_BTN_DPAD_RIGHT,
+  PAD_BTN_DPAD_LEFT,
+  0,
+  0,
+  PAD_BTN_L1,
+  0,
 };
 
 /**
@@ -25,15 +45,27 @@ static const uint32_t s_ns1_btn_map[24] = {
  * 因此左右各一份表。ZL / ZR 是数字位，由行的 trigger_btn 声明成满量程扳机。
  */
 static const uint32_t s_ns1_simple_l_btn_map[16] = {
-    PAD_BTN_DPAD_DOWN, PAD_BTN_DPAD_RIGHT, PAD_BTN_DPAD_LEFT, PAD_BTN_DPAD_UP, 0, 0, 0, 0,
-    PAD_BTN_TOUCHPAD, PAD_BTN_OPT, PAD_BTN_L3, PAD_BTN_R3, PAD_BTN_HOME, PAD_BTN_SHARE,
-    PAD_BTN_L1, 0,
+  PAD_BTN_DPAD_DOWN,
+  PAD_BTN_DPAD_RIGHT,
+  PAD_BTN_DPAD_LEFT,
+  PAD_BTN_DPAD_UP,
+  0,
+  0,
+  0,
+  0,
+  PAD_BTN_TOUCHPAD,
+  PAD_BTN_OPT,
+  PAD_BTN_L3,
+  PAD_BTN_R3,
+  PAD_BTN_HOME,
+  PAD_BTN_SHARE,
+  PAD_BTN_L1,
+  0,
 };
 
 static const uint32_t s_ns1_simple_r_btn_map[16] = {
-    PAD_BTN_SQUARE, PAD_BTN_TRIANGLE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, 0, 0, 0, 0,
-    PAD_BTN_TOUCHPAD, PAD_BTN_OPT, PAD_BTN_L3, PAD_BTN_R3, PAD_BTN_HOME, PAD_BTN_SHARE,
-    PAD_BTN_R1, 0,
+  PAD_BTN_SQUARE, PAD_BTN_TRIANGLE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, 0,          0, 0, 0, PAD_BTN_TOUCHPAD, PAD_BTN_OPT,
+  PAD_BTN_L3,     PAD_BTN_R3,       PAD_BTN_HOME,  PAD_BTN_SHARE,  PAD_BTN_R1, 0,
 };
 
 /**
@@ -41,28 +73,73 @@ static const uint32_t s_ns1_simple_r_btn_map[16] = {
  * ZL / ZR 是数字位，由行的 trigger_btn 声明成满量程扳机（透传路径不受影响）。
  */
 static const uint32_t s_ns2_09_btn_map[24] = {
-    /* b0：B / A / Y / X / R / ZR / Plus / RStick。 */
-    PAD_BTN_CROSS, PAD_BTN_CIRCLE, PAD_BTN_SQUARE, PAD_BTN_TRIANGLE, PAD_BTN_R1, 0,
-    PAD_BTN_OPT, PAD_BTN_R3,
-    /* b1：Down / Right / Left / Up / L / ZL / Minus / LStick。 */
-    PAD_BTN_DPAD_DOWN, PAD_BTN_DPAD_RIGHT, PAD_BTN_DPAD_LEFT, PAD_BTN_DPAD_UP, PAD_BTN_L1, 0,
-    PAD_BTN_TOUCHPAD, PAD_BTN_L3,
-    /* b2：Home / Capture / GR / GL / C / 保留。 */
-    PAD_BTN_HOME, PAD_BTN_SHARE, PAD_BTN_R4, PAD_BTN_L4, PAD_BTN_MUTE, 0, 0, 0,
+  /* b0：B / A / Y / X / R / ZR / Plus / RStick。 */
+  PAD_BTN_CROSS,
+  PAD_BTN_CIRCLE,
+  PAD_BTN_SQUARE,
+  PAD_BTN_TRIANGLE,
+  PAD_BTN_R1,
+  0,
+  PAD_BTN_OPT,
+  PAD_BTN_R3,
+  /* b1：Down / Right / Left / Up / L / ZL / Minus / LStick。 */
+  PAD_BTN_DPAD_DOWN,
+  PAD_BTN_DPAD_RIGHT,
+  PAD_BTN_DPAD_LEFT,
+  PAD_BTN_DPAD_UP,
+  PAD_BTN_L1,
+  0,
+  PAD_BTN_TOUCHPAD,
+  PAD_BTN_L3,
+  /* b2：Home / Capture / GR / GL / C / 保留。 */
+  PAD_BTN_HOME,
+  PAD_BTN_SHARE,
+  PAD_BTN_R4,
+  PAD_BTN_L4,
+  PAD_BTN_MUTE,
+  0,
+  0,
+  0,
 };
 
 /** NS2（0x05 报文体）按键位：四字节，第三字节还带左半边的 SL/SR 与 C 键。 */
 static const uint32_t s_ns2_05_btn_map[32] = {
-    /* b0：Y / X / B / A / 右SL / 右SR / R / ZR。 */
-    PAD_BTN_SQUARE, PAD_BTN_TRIANGLE, PAD_BTN_CROSS, PAD_BTN_CIRCLE, 0, 0, PAD_BTN_R1, 0,
-    /* b1：Minus / Plus / RStick / LStick / Home / Capture / C / 保留。 */
-    PAD_BTN_TOUCHPAD, PAD_BTN_OPT, PAD_BTN_R3, PAD_BTN_L3, PAD_BTN_HOME, PAD_BTN_SHARE,
-    PAD_BTN_MUTE, 0,
-    /* b2：Down / Up / Right / Left / 左SR / 左SL / L / ZL。 */
-    PAD_BTN_DPAD_DOWN, PAD_BTN_DPAD_UP, PAD_BTN_DPAD_RIGHT, PAD_BTN_DPAD_LEFT, 0, 0,
-    PAD_BTN_L1, 0,
-    /* b3：GR / GL / 其余保留。 */
-    PAD_BTN_R4, PAD_BTN_L4, 0, 0, 0, 0, 0, 0,
+  /* b0：Y / X / B / A / 右SL / 右SR / R / ZR。 */
+  PAD_BTN_SQUARE,
+  PAD_BTN_TRIANGLE,
+  PAD_BTN_CROSS,
+  PAD_BTN_CIRCLE,
+  0,
+  0,
+  PAD_BTN_R1,
+  0,
+  /* b1：Minus / Plus / RStick / LStick / Home / Capture / C / 保留。 */
+  PAD_BTN_TOUCHPAD,
+  PAD_BTN_OPT,
+  PAD_BTN_R3,
+  PAD_BTN_L3,
+  PAD_BTN_HOME,
+  PAD_BTN_SHARE,
+  PAD_BTN_MUTE,
+  0,
+  /* b2：Down / Up / Right / Left / 左SR / 左SL / L / ZL。 */
+  PAD_BTN_DPAD_DOWN,
+  PAD_BTN_DPAD_UP,
+  PAD_BTN_DPAD_RIGHT,
+  PAD_BTN_DPAD_LEFT,
+  0,
+  0,
+  PAD_BTN_L1,
+  0,
+  /* b3：GR / GL / 其余保留。 */
+  PAD_BTN_R4,
+  PAD_BTN_L4,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
 };
 
 /**
@@ -342,7 +419,7 @@ static const pad_layout_t s_rows[] = {
 };
 
 const pad_layout_module_t pad_layout_module_ns = {
-    .name = "ns",
-    .rows = s_rows,
-    .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
+  .name = "ns",
+  .rows = s_rows,
+  .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
 };

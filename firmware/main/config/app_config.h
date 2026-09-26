@@ -28,36 +28,36 @@ extern "C" {
 /** USB 连接模式：device = 端口给 PC 串口，host = 端口给 OTG host 直插手柄。
  *  该值不持久化，重启回到 device。 */
 typedef enum {
-    APP_CONFIG_USB_DEVICE = 0,
-    APP_CONFIG_USB_HOST = 1,
+  APP_CONFIG_USB_DEVICE = 0,
+  APP_CONFIG_USB_HOST = 1,
 } app_config_usb_role_t;
 
 typedef struct {
-    /** 背光亮度 0-100；0 仅在息屏时出现，开机下限由调用方保证。 */
-    uint8_t brightness;
-    /** 息屏状态：息屏时背光 0，亮屏恢复 brightness。 */
-    bool screen_on;
-    /** USB 角色（app_config_usb_role_t）：仅本次运行有效。 */
-    uint8_t usb_role;
-    /** 机身 / 按键 / 高光 / 握把配色 0xRRGGBB，0 表示未设置（沿用出厂占位）。
+  /** 背光亮度 0-100；0 仅在息屏时出现，开机下限由调用方保证。 */
+  uint8_t brightness;
+  /** 息屏状态：息屏时背光 0，亮屏恢复 brightness。 */
+  bool screen_on;
+  /** USB 角色（app_config_usb_role_t）：仅本次运行有效。 */
+  uint8_t usb_role;
+  /** 机身 / 按键 / 高光 / 握把配色 0xRRGGBB，0 表示未设置（沿用出厂占位）。
      *  四段与出厂块 0x13019 起的布局一一对应。 */
-    uint32_t body_color;
-    uint32_t button_color;
-    uint32_t accent_color;
-    uint32_t grip_color;
-    /**
+  uint32_t body_color;
+  uint32_t button_color;
+  uint32_t accent_color;
+  uint32_t grip_color;
+  /**
      * 上报给主机的手柄固件版本（主.次.修订），0x10 版本查询、0x7E40 与
      * 0x13000 出厂块的版本字段共用。出厂值见 CONFIG_DEFAULT_FW_VERSION_*；
      * 主机的固件更新推送由假升级会话接收并逐帧应答，
      * 是否重启伪装成「已升级」由串口 fwapply 一次性武装。
      */
-    uint8_t fw_version[3];
-    /**
+  uint8_t fw_version[3];
+  /**
      * DS4 / DS5 手柄行为（见 pad/ds_behavior.h）：触摸板映射加减键（默认关）、
      * 触摸板按下发截图（默认开）。
      */
-    bool ds_touchpad_plus_minus;
-    bool ds_capture_key;
+  bool ds_touchpad_plus_minus;
+  bool ds_capture_key;
 } app_config_t;
 
 /** 读入 NVS 配置到内存表（无记录时用默认值）。须在 nvs_init 之后调用。 */
@@ -70,8 +70,7 @@ void app_config_set_brightness(uint8_t pct);
 void app_config_set_screen_on(bool on);
 /** 只改运行时角色（不落盘）：重启后回到串口。 */
 void app_config_set_usb_role(app_config_usb_role_t role);
-void app_config_set_controller_colors(uint32_t body_rgb, uint32_t button_rgb,
-                                      uint32_t accent_rgb, uint32_t grip_rgb);
+void app_config_set_controller_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent_rgb, uint32_t grip_rgb);
 
 /** 覆盖上报固件版本（假升级完成时递增），随周期检查落盘。 */
 void app_config_set_fw_version(const uint8_t ver[3]);

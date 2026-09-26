@@ -10,38 +10,38 @@
 
 void *heap_caps_malloc(size_t size, uint32_t caps)
 {
-    (void)caps;
-    return malloc(size);
+  (void)caps;
+  return malloc(size);
 }
 
 void heap_caps_free(void *ptr)
 {
-    free(ptr);
+  free(ptr);
 }
 
 void *heap_caps_aligned_alloc(size_t alignment, size_t size, uint32_t caps)
 {
-    (void)alignment;
-    (void)caps;
-    return malloc(size);
+  (void)alignment;
+  (void)caps;
+  return malloc(size);
 }
 
 size_t heap_caps_get_free_size(uint32_t caps)
 {
-    return (caps & MALLOC_CAP_SPIRAM) != 0u ? HOST_SPIRAM_FREE : HOST_INTERNAL_FREE;
+  return (caps & MALLOC_CAP_SPIRAM) != 0u ? HOST_SPIRAM_FREE : HOST_INTERNAL_FREE;
 }
 
 size_t heap_caps_get_total_size(uint32_t caps)
 {
-    return (caps & MALLOC_CAP_SPIRAM) != 0u ? HOST_SPIRAM_TOTAL : HOST_INTERNAL_TOTAL;
+  return (caps & MALLOC_CAP_SPIRAM) != 0u ? HOST_SPIRAM_TOTAL : HOST_INTERNAL_TOTAL;
 }
 
 size_t heap_caps_get_largest_free_block(uint32_t caps)
 {
-    return heap_caps_get_free_size(caps) / 2u;
+  return heap_caps_get_free_size(caps) / 2u;
 }
 
 size_t heap_caps_get_minimum_free_size(uint32_t caps)
 {
-    return heap_caps_get_free_size(caps) - (64u * 1024u);
+  return heap_caps_get_free_size(caps) - (64u * 1024u);
 }

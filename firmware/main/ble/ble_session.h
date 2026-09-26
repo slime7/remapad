@@ -43,8 +43,7 @@ void ns2_session_tick(void);
 void ns2_session_on_disconnect(uint16_t conn_handle, uint8_t identity);
 
 /** Command 通道（0x0014）写入：8 字节帧头 + 应答体，BLE 传输层。 */
-void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport,
-                            uint16_t conn_handle);
+void ns2_session_on_command(const uint8_t *data, size_t len, uint8_t transport, uint16_t conn_handle);
 
 /** 震动通道（0x0012）写入：Output Report 0x02。解析成结构化事件交给反馈监听者。 */
 void ns2_session_on_output(const uint8_t *data, size_t len, uint16_t conn_handle);
@@ -112,9 +111,9 @@ void ns2_session_ble_service(void);
 
 /** 广播窗口内形态的来源（对账开关）。 */
 typedef enum {
-    NS2_WINDOW_FORM_AUTO = 0,      /**< 按窗口来源：连接键回连形态、HOME 唤醒形态。 */
-    NS2_WINDOW_FORM_WAKE = 1,      /**< 钉住唤醒形态 0x81。 */
-    NS2_WINDOW_FORM_RECONNECT = 2, /**< 钉住回连形态 0x00。 */
+  NS2_WINDOW_FORM_AUTO = 0,      /**< 按窗口来源：连接键回连形态、HOME 唤醒形态。 */
+  NS2_WINDOW_FORM_WAKE = 1,      /**< 钉住唤醒形态 0x81。 */
+  NS2_WINDOW_FORM_RECONNECT = 2, /**< 钉住回连形态 0x00。 */
 } ns2_window_form_t;
 
 /** 窗口内形态的对账开关：只有串口 `adv` 诊断命令改它。 */
@@ -152,8 +151,7 @@ void ns2_session_unpair(void);
 
 /** 下发四段配色（机身 / 按键 / 高光 / 握把）：重建出厂块配色；host 已同步时
  *  立即生效（断开现有链路，用户按连接键后新配色随握手生效）。 */
-void ns2_session_set_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent_rgb,
-                            uint32_t grip_rgb);
+void ns2_session_set_colors(uint32_t body_rgb, uint32_t button_rgb, uint32_t accent_rgb, uint32_t grip_rgb);
 
 /** 上报固件版本改动后重建出厂块（0x7E40 / 0x13000 的版本字段来自工厂数据）；
  *  0x10 版本查询直接读配置，无需重建。 */
@@ -174,30 +172,30 @@ void ns2_session_deliver_report(size_t index, uint8_t report_id, const uint8_t *
 
 /** 单个身份的链路状态（控制面诊断取值）。 */
 typedef enum {
-    NS2_LINK_IDLE = 0,    /* 无会话、也不在广播 */
-    NS2_LINK_ADVERTISING, /* 无会话，广播实例在发（发现或回连） */
-    NS2_LINK_WAIT_PAIR,   /* 已连接，主机握手未完成 */
-    NS2_LINK_NORMAL,      /* 已连接，凭证匹配（或本会话完成握手） */
+  NS2_LINK_IDLE = 0,    /* 无会话、也不在广播 */
+  NS2_LINK_ADVERTISING, /* 无会话，广播实例在发（发现或回连） */
+  NS2_LINK_WAIT_PAIR,   /* 已连接，主机握手未完成 */
+  NS2_LINK_NORMAL,      /* 已连接，凭证匹配（或本会话完成握手） */
 } ns2_link_state_t;
 
 /** 单个身份的链路快照。地址为 NimBLE 存储序（显示序反转）。 */
 typedef struct {
-    uint8_t identity;      /* ns2_identity_t */
-    uint8_t state;         /* ns2_link_state_t */
-    bool connected;
-    uint16_t conn_handle;
-    uint8_t report_format; /* 0x05 / 0x07 / 0x08 / 0x09；未连接为 0 */
-    bool notify_05;        /* 主机已订阅 0x05 输入报告通道 */
-    bool notify_priv;      /* 主机已订阅专用输入通道（0x07 / 0x08 / 0x09 之一） */
-    uint16_t notify_priv_handle; /* 订的那个通道句柄（0 = 未订阅） */
-    bool features_enabled; /* 主机已发 0x0c/0x04 启用特性（输入被采用的门槛） */
-    uint32_t reports;      /* 已投递的输入报告数（订阅后计数） */
-    uint16_t conn_itvl;    /* 当前连接间隔（1.25ms 单位，4 = 5ms）；未连接为 0 */
-    uint8_t creds;         /* 该身份的配对凭证条数 */
-    bool advertising;      /* 该身份的广播实例在发 */
-    uint8_t adv_mode;      /* ns2_adv_mode_t：在发（或按当前状态会发）的广播形态 */
-    bool mac_valid;
-    uint8_t mac[6];
+  uint8_t identity; /* ns2_identity_t */
+  uint8_t state;    /* ns2_link_state_t */
+  bool connected;
+  uint16_t conn_handle;
+  uint8_t report_format;       /* 0x05 / 0x07 / 0x08 / 0x09；未连接为 0 */
+  bool notify_05;              /* 主机已订阅 0x05 输入报告通道 */
+  bool notify_priv;            /* 主机已订阅专用输入通道（0x07 / 0x08 / 0x09 之一） */
+  uint16_t notify_priv_handle; /* 订的那个通道句柄（0 = 未订阅） */
+  bool features_enabled;       /* 主机已发 0x0c/0x04 启用特性（输入被采用的门槛） */
+  uint32_t reports;            /* 已投递的输入报告数（订阅后计数） */
+  uint16_t conn_itvl;          /* 当前连接间隔（1.25ms 单位，4 = 5ms）；未连接为 0 */
+  uint8_t creds;               /* 该身份的配对凭证条数 */
+  bool advertising;            /* 该身份的广播实例在发 */
+  uint8_t adv_mode;            /* ns2_adv_mode_t：在发（或按当前状态会发）的广播形态 */
+  bool mac_valid;
+  uint8_t mac[6];
 } ns2_session_status_t;
 
 /** 当前身份列表（只有 Pro 一个），返回写入个数。 */

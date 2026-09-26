@@ -63,8 +63,8 @@ bool ble_controller_conn_itvl(uint16_t conn_handle, uint16_t *out_itvl);
 /** 连接观测：当前间隔（1.25ms 单位）、协商后的 ATT MTU、通知投递失败计数
  *  与最近一次失败的返回码（0 = 未失败）。MTU < 66 时 63 字节输入通知发不
  *  出去，主机会表现为「已订阅但无输入」。任一指针可传 NULL。 */
-bool ble_controller_conn_stats(uint16_t conn_handle, uint16_t *out_itvl, uint16_t *out_mtu,
-                               uint32_t *out_tx_fail, int *out_tx_rc, bool *out_encrypted);
+bool ble_controller_conn_stats(uint16_t conn_handle, uint16_t *out_itvl, uint16_t *out_mtu, uint32_t *out_tx_fail,
+                               int *out_tx_rc, bool *out_encrypted);
 
 /** 最近一次真正投递的输入报文（63B，不含 Report ID），供 CLI 抓取线上内容。 */
 bool ble_controller_last_input(uint16_t conn_handle, uint8_t report_format, uint8_t *out);
@@ -75,8 +75,7 @@ void ble_controller_notify_input_05(uint16_t conn_handle, const uint8_t report[6
 void ble_controller_notify_input_09(uint16_t conn_handle, const uint8_t report[63]);
 
 /** 只刷新 READ 缓存、不发通知（特性未启用的链路上也要保持快照新鲜）。 */
-void ble_controller_store_input(uint16_t conn_handle, uint8_t report_format,
-                                const uint8_t report[63]);
+void ble_controller_store_input(uint16_t conn_handle, uint8_t report_format, const uint8_t report[63]);
 
 /** 发送指令应答帧（0x001E，需该主机已开 0x001F CCCD）到指定连接。 */
 void ble_controller_notify_answer(uint16_t conn_handle, const uint8_t *frame, size_t len);
@@ -89,16 +88,15 @@ void ble_controller_adv_stop_identity(uint8_t identity);
 
 /** 以 31 字节原始载荷启动一个广播实例：addr 为 NULL 用公共伪装地址，否则用该静态随机地址；
  *  instance 取 0/1，identity 由会话层显式给出（传输层不从地址反推身份）。 */
-void ble_controller_adv_start(uint8_t instance, uint8_t identity,
-                              const uint8_t payload[31], const uint8_t addr[6]);
+void ble_controller_adv_start(uint8_t instance, uint8_t identity, const uint8_t payload[31], const uint8_t addr[6]);
 
 /** 广播 PDU 形态（对账开关，不落盘）：auto 与 legacy 都是 legacy PDU
  *  （可连接 + 可扫描，主机只认这种）；extended 换成
  *  扩展 PDU 做反向验证——扩展实例在主机侧完全看不见。 */
 typedef enum {
-    BLE_CTL_ADV_PDU_AUTO = 0,
-    BLE_CTL_ADV_PDU_LEGACY = 1,
-    BLE_CTL_ADV_PDU_EXTENDED = 2,
+  BLE_CTL_ADV_PDU_AUTO = 0,
+  BLE_CTL_ADV_PDU_LEGACY = 1,
+  BLE_CTL_ADV_PDU_EXTENDED = 2,
 } ble_ctl_adv_pdu_form_t;
 
 void ble_controller_set_adv_pdu_form(uint8_t form);

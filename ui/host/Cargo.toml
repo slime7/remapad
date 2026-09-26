@@ -8,6 +8,9 @@ publish = false
 # 宿主侧界面包：编译 ui/src/app.slint 与 ui/preview.slint，给 #[test] 用例提供软件渲染器画面与元素几何。
 # 固件里的界面由同工作区的 slint_ui 包交叉编译（xtensa-esp32s3-none-elf），共用 ui/src/。
 
+[lints]
+workspace = true
+
 [lib]
 name = "remapad_ui"
 path = "src/lib.rs"

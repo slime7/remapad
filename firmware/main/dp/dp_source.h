@@ -18,10 +18,10 @@ extern "C" {
  */
 
 typedef struct {
-    /** 源名称（日志用）。 */
-    const char *name;
-    /** 采样：在 pad_state_defaults 之后的私有状态上填入本源数据。 */
-    void (*sample)(pad_state_t *state);
+  /** 源名称（日志用）。 */
+  const char *name;
+  /** 采样：在 pad_state_defaults 之后的私有状态上填入本源数据。 */
+  void (*sample)(pad_state_t *state);
 } dp_source_t;
 
 /** 注册输入源（静态生命周期，注册后不可注销）。先注册者优先拥有摇杆。 */

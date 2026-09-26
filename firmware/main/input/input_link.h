@@ -37,15 +37,14 @@ uint32_t input_link_frame_count(void);
  * 往 PC 发一帧（反馈、PING 应答与 OTA 应答共用）。主机没在读时丢弃，
  * 在任何任务上下文调用都不会阻塞。
  */
-void input_link_send_frame(uint8_t type, uint8_t slot, const uint8_t *payload,
-                           size_t payload_len);
+void input_link_send_frame(uint8_t type, uint8_t slot, const uint8_t *payload, size_t payload_len);
 
 /**
  * 同上，但在 timeout_ms 内重试把整帧推进发送环：串口上的日志流量会占满缓冲，
  * 升级应答这类控制帧不能像数据面那样随手丢。仍可能在超时后放弃，不无限阻塞。
  */
-esp_err_t input_link_send_frame_wait(uint8_t type, uint8_t slot, const uint8_t *payload,
-                                    size_t payload_len, uint32_t timeout_ms);
+esp_err_t input_link_send_frame_wait(uint8_t type, uint8_t slot, const uint8_t *payload, size_t payload_len,
+                                     uint32_t timeout_ms);
 
 /**
  * 回发一帧反馈给 PC（主机 → 手柄方向）：载荷由 pad_feedback_wire 编码
@@ -76,7 +75,6 @@ void input_link_send_host_raw(uint8_t slot, const uint8_t *payload, size_t paylo
 esp_err_t input_link_send_image_info(uint16_t width, uint16_t height, uint32_t timeout_ms);
 
 /** 偏移单位是整幅画面的字节偏移（行序自上而下、每像素 2 字节，小端）。 */
-esp_err_t input_link_send_image_data(uint32_t offset, const uint8_t *data, size_t len,
-                                    uint32_t timeout_ms);
+esp_err_t input_link_send_image_data(uint32_t offset, const uint8_t *data, size_t len, uint32_t timeout_ms);
 
 esp_err_t input_link_send_image_end(uint32_t total_bytes, uint32_t timeout_ms);

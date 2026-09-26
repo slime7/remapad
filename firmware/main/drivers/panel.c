@@ -53,140 +53,133 @@ typedef uint32_t __attribute__((may_alias)) panel_pair_t;
  * 为相邻像素成对交换（平坦色块看不出来，文字与圆弧会发糊、边缘上下波动）。 */
 static inline uint32_t panel_byteswap_pair(uint32_t value)
 {
-    return ((value & 0x00FF00FFU) << 8) | ((value >> 8) & 0x00FF00FFU);
+  return ((value & 0x00FF00FFU) << 8) | ((value >> 8) & 0x00FF00FFU);
 }
 
 static void panel_byteswap_rgb565(uint16_t *pixels, size_t count)
 {
-    /* 缓冲按 64 字节对齐申请，奇像素前缀只可能来自非对齐调用方。 */
-    if (((uintptr_t)pixels & (uintptr_t)2U) != 0U && count != 0U) {
-        pixels[0] = (uint16_t)__builtin_bswap16(pixels[0]);
-        pixels++;
-        count--;
-    }
-    size_t index = 0;
-    for (; index + 8U <= count; index += 8U) {
-        panel_pair_t *pairs = (panel_pair_t *)(void *)(pixels + index);
-        pairs[0] = panel_byteswap_pair(pairs[0]);
-        pairs[1] = panel_byteswap_pair(pairs[1]);
-        pairs[2] = panel_byteswap_pair(pairs[2]);
-        pairs[3] = panel_byteswap_pair(pairs[3]);
-    }
-    for (; index + 2U <= count; index += 2U) {
-        panel_pair_t *pair = (panel_pair_t *)(void *)(pixels + index);
-        *pair = panel_byteswap_pair(*pair);
-    }
-    if (index < count) {
-        pixels[index] = (uint16_t)__builtin_bswap16(pixels[index]);
-    }
+  /* 缓冲按 64 字节对齐申请，奇像素前缀只可能来自非对齐调用方。 */
+  if (((uintptr_t)pixels & (uintptr_t)2U) != 0U && count != 0U) {
+    pixels[0] = (uint16_t)__builtin_bswap16(pixels[0]);
+    pixels++;
+    count--;
+  }
+  size_t index = 0;
+  for (; index + 8U <= count; index += 8U) {
+    panel_pair_t *pairs = (panel_pair_t *)(void *)(pixels + index);
+    pairs[0] = panel_byteswap_pair(pairs[0]);
+    pairs[1] = panel_byteswap_pair(pairs[1]);
+    pairs[2] = panel_byteswap_pair(pairs[2]);
+    pairs[3] = panel_byteswap_pair(pairs[3]);
+  }
+  for (; index + 2U <= count; index += 2U) {
+    panel_pair_t *pair = (panel_pair_t *)(void *)(pixels + index);
+    *pair = panel_byteswap_pair(*pair);
+  }
+  if (index < count) {
+    pixels[index] = (uint16_t)__builtin_bswap16(pixels[index]);
+  }
 }
 
 /* 启动时自检批量换序与逐像素参考实现是否一致；不一致只记日志，不阻断启动
  * （换序错了整幅图会成对错位，必须能立刻看见）。 */
 static void panel_byteswap_selftest(void)
 {
-    uint16_t sample[8] = { 0x1234U, 0xABCDU, 0x0000U, 0xFFFFU,
-                           0x07E0U, 0x001FU, 0x8410U, 0x5A5AU };
-    uint16_t expected[8];
-    for (size_t index = 0; index < 8U; ++index) {
-        expected[index] = (uint16_t)__builtin_bswap16(sample[index]);
+  uint16_t sample[8] = { 0x1234U, 0xABCDU, 0x0000U, 0xFFFFU, 0x07E0U, 0x001FU, 0x8410U, 0x5A5AU };
+  uint16_t expected[8];
+  for (size_t index = 0; index < 8U; ++index) {
+    expected[index] = (uint16_t)__builtin_bswap16(sample[index]);
+  }
+  panel_byteswap_rgb565(sample, 8U);
+  for (size_t index = 0; index < 8U; ++index) {
+    if (sample[index] != expected[index]) {
+      ESP_LOGE(TAG, "byte swap self-check failed at %u: %04x != %04x", (unsigned)index, sample[index], expected[index]);
+      return;
     }
-    panel_byteswap_rgb565(sample, 8U);
-    for (size_t index = 0; index < 8U; ++index) {
-        if (sample[index] != expected[index]) {
-            ESP_LOGE(TAG, "byte swap self-check failed at %u: %04x != %04x",
-                     (unsigned)index, sample[index], expected[index]);
-            return;
-        }
-    }
-    ESP_LOGI(TAG, "byte swap self-check ok");
+  }
+  ESP_LOGI(TAG, "byte swap self-check ok");
 }
 
-static bool IRAM_ATTR panel_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
-                                             esp_lcd_panel_io_event_data_t *edata,
+static bool IRAM_ATTR panel_color_trans_done(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata,
                                              void *user_ctx)
 {
-    (void)panel_io;
-    (void)edata;
-    (void)user_ctx;
-    (void)__atomic_fetch_sub(&s_color_pending, 1U, __ATOMIC_RELAXED);
-    (void)__atomic_fetch_add(&s_color_completed, 1U, __ATOMIC_RELEASE);
-    BaseType_t higher_priority_woken = pdFALSE;
-    xSemaphoreGiveFromISR(s_color_done, &higher_priority_woken);
-    return higher_priority_woken == pdTRUE;
+  (void)panel_io;
+  (void)edata;
+  (void)user_ctx;
+  (void)__atomic_fetch_sub(&s_color_pending, 1U, __ATOMIC_RELAXED);
+  (void)__atomic_fetch_add(&s_color_completed, 1U, __ATOMIC_RELEASE);
+  BaseType_t higher_priority_woken = pdFALSE;
+  xSemaphoreGiveFromISR(s_color_done, &higher_priority_woken);
+  return higher_priority_woken == pdTRUE;
 }
 
 /* 面板电源、VCOM 与两组 gamma 抽头，取自微雪为同一块板自带的 Arduino 库：
  * IDF 内置驱动只发四条命令，不补这几组寄存器时面板黑位抬高、画面发灰；
  * 其余条目与上电默认值一致，保留是为了让面板状态与厂商序列逐条对齐。 */
 typedef struct {
-    uint8_t command;
-    uint8_t length;
-    uint8_t data[14];
+  uint8_t command;
+  uint8_t length;
+  uint8_t data[14];
 } panel_vendor_cmd_t;
 
 static const panel_vendor_cmd_t s_panel_vendor_tuning[] = {
-    { .command = 0xB2, .length = 5, .data = { 0x0C, 0x0C, 0x00, 0x33, 0x33 } },
-    { .command = 0xB7, .length = 1, .data = { 0x35 } },
-    { .command = 0xBB, .length = 1, .data = { 0x19 } },
-    { .command = 0xC0, .length = 1, .data = { 0x2C } },
-    { .command = 0xC2, .length = 1, .data = { 0x01 } },
-    { .command = 0xC3, .length = 1, .data = { 0x12 } },
-    { .command = 0xC4, .length = 1, .data = { 0x20 } },
-    { .command = 0xC6, .length = 1, .data = { 0x0F } },
-    { .command = 0xD0, .length = 2, .data = { 0xA4, 0xA1 } },
-    { .command = 0xE0, .length = 14,
-      .data = { 0xF0, 0x09, 0x13, 0x12, 0x12, 0x2B, 0x3C,
-                0x44, 0x4B, 0x1B, 0x18, 0x17, 0x1D, 0x21 } },
-    { .command = 0xE1, .length = 14,
-      .data = { 0xF0, 0x09, 0x13, 0x0C, 0x0D, 0x27, 0x3B,
-                0x44, 0x4D, 0x0B, 0x17, 0x17, 0x1D, 0x21 } },
+  { .command = 0xB2, .length = 5, .data = { 0x0C, 0x0C, 0x00, 0x33, 0x33 } },
+  { .command = 0xB7, .length = 1, .data = { 0x35 } },
+  { .command = 0xBB, .length = 1, .data = { 0x19 } },
+  { .command = 0xC0, .length = 1, .data = { 0x2C } },
+  { .command = 0xC2, .length = 1, .data = { 0x01 } },
+  { .command = 0xC3, .length = 1, .data = { 0x12 } },
+  { .command = 0xC4, .length = 1, .data = { 0x20 } },
+  { .command = 0xC6, .length = 1, .data = { 0x0F } },
+  { .command = 0xD0, .length = 2, .data = { 0xA4, 0xA1 } },
+  { .command = 0xE0,
+    .length = 14,
+    .data = { 0xF0, 0x09, 0x13, 0x12, 0x12, 0x2B, 0x3C, 0x44, 0x4B, 0x1B, 0x18, 0x17, 0x1D, 0x21 } },
+  { .command = 0xE1,
+    .length = 14,
+    .data = { 0xF0, 0x09, 0x13, 0x0C, 0x0D, 0x27, 0x3B, 0x44, 0x4D, 0x0B, 0x17, 0x17, 0x1D, 0x21 } },
 };
 
 /** 逐条下发厂商调优序列；面板 IO 直写，IDF 驱动不会覆盖这些寄存器。 */
 static esp_err_t panel_apply_vendor_tuning(void)
 {
-    for (size_t index = 0;
-         index < sizeof(s_panel_vendor_tuning) / sizeof(s_panel_vendor_tuning[0]);
-         ++index) {
-        const panel_vendor_cmd_t *entry = &s_panel_vendor_tuning[index];
-        ESP_RETURN_ON_ERROR(
-            esp_lcd_panel_io_tx_param(s_io, entry->command, entry->data, entry->length),
-            TAG, "vendor tuning 0x%02x failed", (unsigned)entry->command);
-    }
-    /* 厂商序列在打开显示前留 10 ms，等电源与 gamma 电压稳定。 */
-    vTaskDelay(pdMS_TO_TICKS(10));
-    return ESP_OK;
+  for (size_t index = 0; index < sizeof(s_panel_vendor_tuning) / sizeof(s_panel_vendor_tuning[0]); ++index) {
+    const panel_vendor_cmd_t *entry = &s_panel_vendor_tuning[index];
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(s_io, entry->command, entry->data, entry->length), TAG,
+                        "vendor tuning 0x%02x failed", (unsigned)entry->command);
+  }
+  /* 厂商序列在打开显示前留 10 ms，等电源与 gamma 电压稳定。 */
+  vTaskDelay(pdMS_TO_TICKS(10));
+  return ESP_OK;
 }
 
 esp_err_t panel_init(void)
 {
-    if (s_panel != NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    panel_byteswap_selftest();
+  if (s_panel != NULL) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  panel_byteswap_selftest();
+  if (s_color_done == NULL) {
+    s_color_done = xSemaphoreCreateBinary();
     if (s_color_done == NULL) {
-        s_color_done = xSemaphoreCreateBinary();
-        if (s_color_done == NULL) {
-            return ESP_ERR_NO_MEM;
-        }
+      return ESP_ERR_NO_MEM;
     }
+  }
 
-    /* 面板只有 DIN 写入线，MISO 悬空；最大传输按整帧预留。 */
-    const spi_bus_config_t bus_config = {
-        .sclk_io_num = REMAPAD_LCD_GPIO_SCLK,
-        .mosi_io_num = REMAPAD_LCD_GPIO_MOSI,
-        .miso_io_num = -1,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = REMAPAD_LCD_H_RES * REMAPAD_LCD_V_RES * sizeof(uint16_t),
-    };
-    ESP_RETURN_ON_ERROR(
-        spi_bus_initialize(REMAPAD_LCD_SPI_HOST, &bus_config, SPI_DMA_CH_AUTO),
-        TAG, "init SPI bus failed");
+  /* 面板只有 DIN 写入线，MISO 悬空；最大传输按整帧预留。 */
+  const spi_bus_config_t bus_config = {
+    .sclk_io_num = REMAPAD_LCD_GPIO_SCLK,
+    .mosi_io_num = REMAPAD_LCD_GPIO_MOSI,
+    .miso_io_num = -1,
+    .quadwp_io_num = -1,
+    .quadhd_io_num = -1,
+    .max_transfer_sz = REMAPAD_LCD_H_RES * REMAPAD_LCD_V_RES * sizeof(uint16_t),
+  };
+  ESP_RETURN_ON_ERROR(spi_bus_initialize(REMAPAD_LCD_SPI_HOST, &bus_config, SPI_DMA_CH_AUTO), TAG,
+                      "init SPI bus failed");
 
-    /* PSRAM 颜色缓冲经 EDMA 直读，省去驱动侧内部搬运缓冲。 */
-    const esp_lcd_panel_io_spi_config_t io_config = {
+  /* PSRAM 颜色缓冲经 EDMA 直读，省去驱动侧内部搬运缓冲。 */
+  const esp_lcd_panel_io_spi_config_t io_config = {
         .dc_gpio_num = REMAPAD_LCD_GPIO_DC,
         .cs_gpio_num = REMAPAD_LCD_GPIO_CS,
         .pclk_hz = REMAPAD_LCD_PIXEL_CLK_HZ,
@@ -200,109 +193,103 @@ esp_err_t panel_init(void)
             .psram_dma_direct = 1,
         },
     };
-    esp_err_t result = esp_lcd_new_panel_io_spi(
-        (esp_lcd_spi_bus_handle_t)REMAPAD_LCD_SPI_HOST, &io_config, &s_io);
-    if (result != ESP_OK) {
-        goto fail;
-    }
+  esp_err_t result = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)REMAPAD_LCD_SPI_HOST, &io_config, &s_io);
+  if (result != ESP_OK) {
+    goto fail;
+  }
 
-    const esp_lcd_panel_dev_config_t panel_config = {
-        .reset_gpio_num = REMAPAD_LCD_GPIO_RST,
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
-        .bits_per_pixel = 16,
-    };
-    result = esp_lcd_new_panel_st7789(s_io, &panel_config, &s_panel);
-    if (result != ESP_OK) {
-        goto fail;
-    }
+  const esp_lcd_panel_dev_config_t panel_config = {
+    .reset_gpio_num = REMAPAD_LCD_GPIO_RST,
+    .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+    .bits_per_pixel = 16,
+  };
+  result = esp_lcd_new_panel_st7789(s_io, &panel_config, &s_panel);
+  if (result != ESP_OK) {
+    goto fail;
+  }
 
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "panel reset failed");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "panel init failed");
-    ESP_RETURN_ON_ERROR(panel_apply_vendor_tuning(), TAG, "panel vendor tuning failed");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, false), TAG, "panel mirror failed");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "panel invert failed");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_set_gap(s_panel, 0, 20), TAG, "panel set gap failed");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "panel display on failed");
-    return ESP_OK;
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "panel reset failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "panel init failed");
+  ESP_RETURN_ON_ERROR(panel_apply_vendor_tuning(), TAG, "panel vendor tuning failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, false), TAG, "panel mirror failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "panel invert failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_set_gap(s_panel, 0, 20), TAG, "panel set gap failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "panel display on failed");
+  return ESP_OK;
 
 fail:
-    if (s_panel != NULL) {
-        esp_lcd_panel_del(s_panel);
-        s_panel = NULL;
-    }
-    if (s_io != NULL) {
-        esp_lcd_panel_io_del(s_io);
-        s_io = NULL;
-    }
-    spi_bus_free(REMAPAD_LCD_SPI_HOST);
-    return result;
+  if (s_panel != NULL) {
+    esp_lcd_panel_del(s_panel);
+    s_panel = NULL;
+  }
+  if (s_io != NULL) {
+    esp_lcd_panel_io_del(s_io);
+    s_io = NULL;
+  }
+  spi_bus_free(REMAPAD_LCD_SPI_HOST);
+  return result;
 }
 
-static esp_err_t panel_submit(uint16_t *pixels, int x, int y, int width, int height,
-                              uint32_t *out_seq)
+static esp_err_t panel_submit(uint16_t *pixels, int x, int y, int width, int height, uint32_t *out_seq)
 {
-    if (s_panel == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (pixels == NULL || width <= 0 || height <= 0 || x < 0 || y < 0 ||
-        x + width > REMAPAD_LCD_H_RES || y + height > REMAPAD_LCD_V_RES) {
-        return ESP_ERR_INVALID_ARG;
-    }
+  if (s_panel == NULL) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  if (pixels == NULL || width <= 0 || height <= 0 || x < 0 || y < 0 || x + width > REMAPAD_LCD_H_RES ||
+      y + height > REMAPAD_LCD_V_RES) {
+    return ESP_ERR_INVALID_ARG;
+  }
 
-    const size_t count = (size_t)width * (size_t)height;
-    panel_byteswap_rgb565(pixels, count);
+  const size_t count = (size_t)width * (size_t)height;
+  panel_byteswap_rgb565(pixels, count);
 
-    /* esp_lcd 的 draw_bitmap 使用开区间终点。它把 CASET/RASET 命令与颜色数据
+  /* esp_lcd 的 draw_bitmap 使用开区间终点。它把 CASET/RASET 命令与颜色数据
      * 排进 SPI 队列后即返回，颜色分块的 DMA 可能仍在飞行；官方约定颜色缓冲
      * 必须在 on_color_trans_done 之后才能复用，因此先记在飞笔数再提交，保证
      * 回调的减计数不会跑到计数的前面。 */
-    (void)__atomic_fetch_add(&s_color_pending, 1U, __ATOMIC_RELEASE);
-    const uint32_t seq = __atomic_add_fetch(&s_color_submitted, 1U, __ATOMIC_RELAXED);
-    esp_err_t result =
-        esp_lcd_panel_draw_bitmap(s_panel, x, y, x + width, y + height, pixels);
-    if (result != ESP_OK) {
-        (void)__atomic_fetch_sub(&s_color_pending, 1U, __ATOMIC_RELAXED);
-        return result;
-    }
-    if (out_seq != NULL) {
-        *out_seq = seq;
-    }
-    return ESP_OK;
+  (void)__atomic_fetch_add(&s_color_pending, 1U, __ATOMIC_RELEASE);
+  const uint32_t seq = __atomic_add_fetch(&s_color_submitted, 1U, __ATOMIC_RELAXED);
+  esp_err_t result = esp_lcd_panel_draw_bitmap(s_panel, x, y, x + width, y + height, pixels);
+  if (result != ESP_OK) {
+    (void)__atomic_fetch_sub(&s_color_pending, 1U, __ATOMIC_RELAXED);
+    return result;
+  }
+  if (out_seq != NULL) {
+    *out_seq = seq;
+  }
+  return ESP_OK;
 }
 
 esp_err_t panel_transfer_wait(uint32_t timeout_ms)
 {
-    return panel_wait_seq(__atomic_load_n(&s_color_submitted, __ATOMIC_ACQUIRE),
-                          timeout_ms);
+  return panel_wait_seq(__atomic_load_n(&s_color_submitted, __ATOMIC_ACQUIRE), timeout_ms);
 }
 
 esp_err_t panel_wait_seq(uint32_t seq, uint32_t timeout_ms)
 {
-    const int64_t deadline = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
-    while (__atomic_load_n(&s_color_completed, __ATOMIC_ACQUIRE) < seq) {
-        const int64_t remaining = deadline - esp_timer_get_time();
-        if (remaining <= 0) {
-            ESP_LOGE(TAG, "panel transfer did not finish in time");
-            return ESP_ERR_TIMEOUT;
-        }
-        TickType_t ticks = pdMS_TO_TICKS((uint32_t)(remaining / 1000));
-        if (ticks == 0) {
-            ticks = 1;
-        }
-        (void)xSemaphoreTake(s_color_done, ticks);
+  const int64_t deadline = esp_timer_get_time() + (int64_t)timeout_ms * 1000;
+  while (__atomic_load_n(&s_color_completed, __ATOMIC_ACQUIRE) < seq) {
+    const int64_t remaining = deadline - esp_timer_get_time();
+    if (remaining <= 0) {
+      ESP_LOGE(TAG, "panel transfer did not finish in time");
+      return ESP_ERR_TIMEOUT;
     }
-    return ESP_OK;
+    TickType_t ticks = pdMS_TO_TICKS((uint32_t)(remaining / 1000));
+    if (ticks == 0) {
+      ticks = 1;
+    }
+    (void)xSemaphoreTake(s_color_done, ticks);
+  }
+  return ESP_OK;
 }
 
 esp_err_t panel_transfer(uint16_t *pixels, int x, int y, int width, int height)
 {
-    ESP_RETURN_ON_ERROR(panel_submit(pixels, x, y, width, height, NULL),
-                        TAG, "panel submit failed");
-    return panel_transfer_wait(REMAPAD_PANEL_TIMEOUT_MS);
+  ESP_RETURN_ON_ERROR(panel_submit(pixels, x, y, width, height, NULL), TAG, "panel submit failed");
+  return panel_transfer_wait(REMAPAD_PANEL_TIMEOUT_MS);
 }
 
-esp_err_t panel_transfer_async(uint16_t *pixels, int x, int y, int width, int height,
-                               uint32_t *out_seq)
+esp_err_t panel_transfer_async(uint16_t *pixels, int x, int y, int width, int height, uint32_t *out_seq)
 {
-    return panel_submit(pixels, x, y, width, height, out_seq);
+  return panel_submit(pixels, x, y, width, height, out_seq);
 }

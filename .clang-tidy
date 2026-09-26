@@ -1,0 +1,26 @@
+# 仓库 C 代码的静态检查口径，clang-tidy 从源文件向上找到本文件生效；
+# 编译参数用 firmware/build/compile_commands.json，运行方式见 AGENTS.md 的固件 C 检查条目。
+# 基线取 clang-analyzer + bugprone + misc + readability 四组，下方逐条关掉对 C 固件噪声过大的检查。
+Checks: >
+  clang-analyzer-*,
+  -clang-analyzer-security.*,
+  bugprone-*,
+  misc-*,
+  readability-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-casting-through-void,
+  -misc-header-include-cycle,
+  -misc-include-cleaner,
+  -misc-unused-parameters,
+  -readability-avoid-nested-conditional-operator,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-magic-numbers,
+  -readability-math-missing-parentheses,
+  -readability-uppercase-literal-suffix
+# 诊断只对 firmware/main 下的头文件展开，官方组件与第三方头不进报告。
+HeaderFilterRegex: '[/\\]firmware[/\\]main[/\\]'
+# 自动修复时按本仓库 .clang-format 重排。
+FormatStyle: file

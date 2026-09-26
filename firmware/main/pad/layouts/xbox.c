@@ -12,18 +12,38 @@
  * 第三字节，接不成 16 位字，因此按位列出。面键按位置语义映射，背键由行单独声明。
  */
 static const uint32_t s_bt_btn_map[24] = {
-    /* b0：A / B / 保留 / X / Y / 保留 / LB / RB。 */
-    PAD_BTN_CROSS, PAD_BTN_CIRCLE, 0, PAD_BTN_SQUARE, PAD_BTN_TRIANGLE, 0, PAD_BTN_L1,
-    PAD_BTN_R1,
-    /* b1：保留 / 保留 / View / Menu / 西瓜键 / L3 / R3 / 保留。 */
-    0, 0, PAD_BTN_TOUCHPAD, PAD_BTN_OPT, PAD_BTN_HOME, PAD_BTN_L3, PAD_BTN_R3, 0,
-    /* b2：分享键（Series 手柄与 5.x 固件的精英手柄）。 */
-    PAD_BTN_SHARE, 0, 0, 0, 0, 0, 0, 0,
+  /* b0：A / B / 保留 / X / Y / 保留 / LB / RB。 */
+  PAD_BTN_CROSS,
+  PAD_BTN_CIRCLE,
+  0,
+  PAD_BTN_SQUARE,
+  PAD_BTN_TRIANGLE,
+  0,
+  PAD_BTN_L1,
+  PAD_BTN_R1,
+  /* b1：保留 / 保留 / View / Menu / 西瓜键 / L3 / R3 / 保留。 */
+  0,
+  0,
+  PAD_BTN_TOUCHPAD,
+  PAD_BTN_OPT,
+  PAD_BTN_HOME,
+  PAD_BTN_L3,
+  PAD_BTN_R3,
+  0,
+  /* b2：分享键（Series 手柄与 5.x 固件的精英手柄）。 */
+  PAD_BTN_SHARE,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
 };
 
 /** 精英手柄 2 的背键位：P1-P4 依次落 L4 / R4 / L5 / R5（上左、上右、下左、下右）。 */
 static const uint32_t s_elite_back_map[8] = {
-    PAD_BTN_L4, PAD_BTN_R4, PAD_BTN_L5, PAD_BTN_R5, 0, 0, 0, 0,
+  PAD_BTN_L4, PAD_BTN_R4, PAD_BTN_L5, PAD_BTN_R5, 0, 0, 0, 0,
 };
 
 static const pad_layout_t s_rows[] = {
@@ -185,8 +205,7 @@ static const pad_layout_t s_rows[] = {
 };
 
 const pad_layout_module_t pad_layout_module_xbox = {
-    .name = "xbox",
-    .rows = s_rows,
-    .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
+  .name = "xbox",
+  .rows = s_rows,
+  .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
 };
-

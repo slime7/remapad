@@ -8,6 +8,9 @@ publish = false
 # 行带计划：平台层（slint_ui）与宿主用例共用的纯逻辑，只依赖 core。
 # 单独一包是因为 slint_ui 是 no_std 固件包，宿主用例装不进它的测试目标。
 
+[lints]
+workspace = true
+
 [lib]
 name = "render_plan"
 path = "src/lib.rs"

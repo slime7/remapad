@@ -17,16 +17,16 @@ extern "C" {
  * 直插共用同一种载荷，解析与映射只在固件做一份。
  */
 typedef struct {
-    /** 家族提示：PC 侧按 VID/PID 判定后随帧传来；未知填 PAD_FAMILY_UNKNOWN，
+  /** 家族提示：PC 侧按 VID/PID 判定后随帧传来；未知填 PAD_FAMILY_UNKNOWN，
      *  解析侧会按 VID/PID 再判一次，仍不认识则按 XInput 形态兜底。 */
-    pad_family_t family;
-    pad_conn_t conn;
-    uint16_t vid;
-    uint16_t pid;
-    uint8_t report_id;
-    uint8_t len;
-    uint32_t seq;
-    uint8_t data[PAD_REPORT_MAX];
+  pad_family_t family;
+  pad_conn_t conn;
+  uint16_t vid;
+  uint16_t pid;
+  uint8_t report_id;
+  uint8_t len;
+  uint32_t seq;
+  uint8_t data[PAD_REPORT_MAX];
 } pad_report_t;
 
 /** 按 VID/PID 判定家族；不认识返回 PAD_FAMILY_UNKNOWN。 */

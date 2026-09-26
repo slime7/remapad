@@ -33,7 +33,7 @@ extern "C" {
 /** 0x05 应答体长度（定长，尾部补零）。 */
 #define NS2_NFC_TAG_INFO_BODY_LEN 63u
 /** 0x0C 应答体（NFC 控制器状态原值）。 */
-#define NS2_NFC_STATUS_BODY {0x61, 0x12, 0x50, 0x0D}
+#define NS2_NFC_STATUS_BODY { 0x61, 0x12, 0x50, 0x0D }
 
 /** 清空镜像与轮询状态，解除写回回调（主机端用例的隔离入口）。 */
 void ns2_nfc_reset(void);
@@ -84,9 +84,9 @@ uint8_t ns2_nfc_push_mode(void);
 
 /** 待推的完成事件（ble_session 在 0x15 EOF 应答后补发一帧）。 */
 typedef struct {
-    uint8_t subcmd;
-    uint8_t body[NS2_NFC_TAG_INFO_BODY_LEN];
-    size_t body_len;
+  uint8_t subcmd;
+  uint8_t body[NS2_NFC_TAG_INFO_BODY_LEN];
+  size_t body_len;
 } ns2_nfc_event_t;
 
 /** 弹出待推事件（有则填充 out 并返回 true；事件只弹一次）。 */
@@ -94,8 +94,7 @@ bool ns2_nfc_pop_event(ns2_nfc_event_t *out);
 
 /** Command 0x01 分发入口（ble_session 调用）：按子命令填应答帧（帧头 + 体），
  *  返回应答总长度；参数不完整时只回帧头。req 是完整指令帧。 */
-size_t ns2_nfc_on_command(const uint8_t *req, size_t len, uint8_t subcmd, uint8_t *resp,
-                          size_t cap);
+size_t ns2_nfc_on_command(const uint8_t *req, size_t len, uint8_t subcmd, uint8_t *resp, size_t cap);
 
 /** 应答帧头的 Status/ACK 字节按子命令取固定值：0x0C/0x15 是 10/78，其余已见子命令是 00/F8；
  *  命中返回 true 并写出两个字节，未知子命令返回 false、沿用通用帧头。 */

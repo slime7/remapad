@@ -83,12 +83,14 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
 | :--- | :--- | :--- |
 | **屏幕 UI 预览** | `uv run python scripts/ui-preview.py` | 打开 `ui/preview.slint`：设备画面 240 × 280 在上、控制条在下，动作在预览里结算，改完存盘即刷新；`--file ui/src/app.slint` 只看设备画面，`--check` 只编译打印诊断，`--screenshot <png>` 渲染一帧存图（预览工具的装法见 [ui/README.md](ui/README.md)） |
 | **屏幕 UI 宿主用例** | `cargo test --locked --manifest-path ui/Cargo.toml [用例名片段]` | 在开发机上编译真实界面产物（界面测试后端 + 软件渲染器），按元素几何与像素断言屏幕行为；改界面先加一条能复现的红用例，其余用例等改完再整跑 |
+| **屏幕 UI Rust 格式化与 Lint** | `cargo fmt --manifest-path ui/Cargo.toml --all` | 口径在 `ui/rustfmt.toml`（2 空格缩进、120 列）与 `ui/Cargo.toml` 的 workspace lints；lint 用 `cargo clippy --manifest-path ui/Cargo.toml`，CI 提级加 `-- -D warnings` |
 | **固件主机端测试** | `uv run python scripts/firmware-test.py` | 把与硬件无关的固件逻辑编译成开发机可执行文件并运行，秒级出结果 |
 | **PC 侧主机端测试** | `uv run python -m unittest discover -s pc/tests -t pc` | `pc/` 工具里与设备无关的纯逻辑（串口枚举、镜像校验、帧编解码、输出分流、工具命令解析）在 `pc/tests/` 用标准库 unittest 跑，不接设备 |
 | **固件配置** | `cd firmware ; idf.py set-target esp32s3` | 配置目标芯片架构并合并硬件预设 |
 | **固件编译** | `cd firmware ; idf.py build` | 编译 ESP-IDF 完整固件（默认带屏幕 UI，需要 xtensa Rust 工具链）；`idf.py -DREMAPAD_UI=OFF build` 走纯 C 的无 UI 构建（不需要 Rust，屏幕熄灭、设置走串口 CLI） |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器；禁止对已写入用户数据的设备执行 `erase-flash`（会清空 NVS 设置/配对与 `storage` 分区） |
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
+| **固件 C 格式化与静态检查** | `clang-format -i <改动的 .c/.h>` | C 口径在仓库根 `.clang-format`（2 空格缩进、120 列）与 `.clang-tidy`，工具来自 esp-clang；不要对 `firmware/components` 运行格式化；静态检查 `uv run python scripts/clang_tidy.py`（配置见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)） |
 | **固件 OTA 升级** | `uv run python pc/remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（界面已编进应用）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
 | **PC 手柄桥接** | `uv run python pc/remapadctl.py -p COMx` | 读 PC 手柄原始报告按桥接帧转发给设备，同进程提供串口命令行、实机截图与 OTA；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移；转发默认只在交互模式开，`--pad` / `--no-pad` 控制 |
 | **PC 连接控制台** | `uv run python pc/remapadgui.py` | 同一套会话的图形界面：选串口、连接/断开、手柄转发开关、实时日志、命令输入、屏幕设置（亮度、手柄配色、DS4/DS5、电源）、实机截图与 OTA；调试动作只在「命令」页；与命令行不要同时连同一个口 |

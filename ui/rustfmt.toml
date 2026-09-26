@@ -1,0 +1,5 @@
+# ui 工作区 Rust 代码的格式口径，四个成员包（含 build.rs）都按它格式化；
+# 只收 stable 支持的选项，行宽与仓库 120 列约定一致，其余跟随 rustfmt 默认。
+hard_tabs = false
+tab_spaces = 2
+max_width = 120

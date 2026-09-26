@@ -8,11 +8,11 @@ extern "C" {
 #endif
 
 typedef struct {
-    uint32_t magic_word;
-    uint32_t secure_version;
-    uint32_t reserv1[2];
-    char version[32];
-    char project_name[16];
+  uint32_t magic_word;
+  uint32_t secure_version;
+  uint32_t reserv1[2];
+  char version[32];
+  char project_name[16];
 } esp_app_desc_t;
 
 const esp_app_desc_t *esp_app_get_description(void);

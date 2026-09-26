@@ -12,19 +12,19 @@ static const char *TAG = "remapad_ui";
 
 esp_err_t remapad_ui_start(void)
 {
-    /* 没有画面可等：核心就绪即视为健康（对应有 UI 构建的「画面已上屏」信号）。 */
-    ota_session_notify_ui_ready();
-    ESP_LOGI(TAG, "no-UI build: screen stays dark, control via serial CLI");
-    return ESP_OK;
+  /* 没有画面可等：核心就绪即视为健康（对应有 UI 构建的「画面已上屏」信号）。 */
+  ota_session_notify_ui_ready();
+  ESP_LOGI(TAG, "no-UI build: screen stays dark, control via serial CLI");
+  return ESP_OK;
 }
 
 void remapad_ui_request_shot(void)
 {
-    ESP_LOGW(TAG, "shot unavailable in no-UI build");
+  ESP_LOGW(TAG, "shot unavailable in no-UI build");
 }
 
 void remapad_ui_request_trace(unsigned frames)
 {
-    (void)frames;
-    ESP_LOGW(TAG, "trace unavailable in no-UI build");
+  (void)frames;
+  ESP_LOGW(TAG, "trace unavailable in no-UI build");
 }

@@ -16,8 +16,8 @@ extern "C" {
  */
 
 typedef enum {
-    PWR_KEY_SHORT = 0,
-    PWR_KEY_LONG = 1,
+  PWR_KEY_SHORT = 0,
+  PWR_KEY_LONG = 1,
 } pwr_key_event_t;
 
 typedef void (*pwr_key_fn)(pwr_key_event_t event, void *user);

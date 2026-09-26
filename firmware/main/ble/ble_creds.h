@@ -35,8 +35,8 @@ void ble_creds_note_host_mac(ns2_identity_t identity, const uint8_t mac[NS2_CRED
 bool ble_creds_host_mac(ns2_identity_t identity, uint8_t out[NS2_CREDS_MAC_LEN]);
 
 typedef struct {
-    uint8_t mac[NS2_CREDS_MAC_LEN];
-    uint8_t ltk[NS2_CREDS_LTK_LEN];
+  uint8_t mac[NS2_CREDS_MAC_LEN];
+  uint8_t ltk[NS2_CREDS_LTK_LEN];
 } ns2_cred_record_t;
 
 /** 从 NVS 装载凭证到内存（旧版单表记录迁移进 Pro 槽）；在

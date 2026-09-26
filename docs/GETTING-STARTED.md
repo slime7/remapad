@@ -167,6 +167,27 @@ uv run python -m unittest discover -s pc/tests -t pc   # PC 侧：串口枚举�
 
 用例纪律（先写用例、确认红过再改、优先端到端、开发期间不跑端到端套件）与各套用例的位置、运行方式以 [TESTING.md](TESTING.md) 为准。
 
+## 代码风格与静态检查
+
+两种语言的格式化与静态检查口径都落在仓库配置里，改完代码跑一遍即可保持一致。
+Rust 的口径在 `ui/rustfmt.toml`（2 空格缩进、120 列）与 `ui/Cargo.toml` 的 workspace lints；
+C 的口径在仓库根 `.clang-format` 与 `.clang-tidy`；
+clang-format / clang-tidy 工具来自 ESP-IDF 的 esp-clang，装法是 `idf_tools.py install esp-clang`。
+
+```powershell
+cargo fmt --manifest-path ui/Cargo.toml --all      # Rust 格式化（对 ui 工作区四个包生效）
+cargo clippy --manifest-path ui/Cargo.toml         # Rust lint（CI 提级用 cargo clippy -- -D warnings）
+clang-format -i <改动的 .c/.h>                      # C 格式化（不要对 firmware/components 运行）
+```
+
+固件 C 的静态检查走 IDF 的 clang 工具链，检查结果与 gcc 构建互不影响：第一次先配置独立的 clang 构建目录，之后用仓库脚本检查（规则在仓库根 `.clang-tidy`，诊断直接打到标准输出）：
+
+```powershell
+idf.py -B build-clang -DIDF_TARGET=esp32s3 -DIDF_TOOLCHAIN=clang reconfigure   # 一次性配置
+uv run python scripts/clang_tidy.py                 # 检查 firmware/main 全部 .c（4 并发，耗时以分钟计）
+uv run python scripts/clang_tidy.py pad usb         # 按路径片段过滤，只查 pad/ 与 usb/
+```
+
 ## 串口 CLI 与 PWR 按键
 
 

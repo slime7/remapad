@@ -1,0 +1,30 @@
+# 仓库 C 代码（firmware 与 ui/slint_ui）的格式口径，clang-format 从源文件向上找到本文件生效；
+# firmware/components 是官方 ESP-IDF 组件快照，保持上游原样，不要对它运行格式化。
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# 缩进与行宽：2 空格缩进、120 列，与 .editorconfig 及旧 ESLint 口径一致。
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 120
+
+# 花括号：函数体开括号换行（Allman），语句块同行（K&R），短函数不并成单行。
+BreakBeforeBraces: Linux
+AllowShortFunctionsOnASingleLine: None
+
+# 花括号初始化内侧留空格，对齐旧 ESLint 的 object-curly-spacing: always。
+Cpp11BracedListStyle: false
+
+# 指针贴近变量名（ESP-IDF 惯例），不从文件自行推断。
+DerivePointerAlignment: false
+PointerAlignment: Right
+
+# 空白卫生：最多连续 1 个空行、文件末尾必有换行、注释按原样保留（中文注释一句一行）。
+MaxEmptyLinesToKeep: 1
+InsertNewlineAtEOF: true
+ReflowComments: false
+
+# include 顺序保持手写语义（自身头在前、系统头在后），不做排序。
+SortIncludes: Never

@@ -15,8 +15,8 @@ extern "C" {
  * 后两路直接驱动左右触觉音圈。只认布局行声明了音频触觉能力的设备：claim 音频流 OUT 接口的
  * 非 0 备用设置并持续送合成 PCM，震动参数经 usb_audio_haptic 随到随换；HID 震动字节由数据面让位。
  */
-bool usb_audio_attach(usb_host_client_handle_t client, usb_device_handle_t dev,
-                      const usb_config_desc_t *cfg, uint16_t vid, uint16_t pid);
+bool usb_audio_attach(usb_host_client_handle_t client, usb_device_handle_t dev, const usb_config_desc_t *cfg,
+                      uint16_t vid, uint16_t pid);
 
 /** 停流并释放音频接口（拔线 / 角色切换 / 关机时随 close_device 调用）。 */
 void usb_audio_detach(void);

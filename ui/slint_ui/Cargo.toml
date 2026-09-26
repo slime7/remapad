@@ -8,6 +8,9 @@ publish = false
 # 固件侧界面包：构建期由 slint-build 编译成 Rust，交叉编译成 xtensa 静态库链进固件；
 # 编译口径在 ../build-support，宿主用例包是同工作区的 ../host。
 
+[lints]
+workspace = true
+
 [lib]
 name = "slint_ui"
 crate-type = ["staticlib"]

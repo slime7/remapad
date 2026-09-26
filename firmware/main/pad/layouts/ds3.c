@@ -4,12 +4,30 @@
  *  （目标侧作减号）、Start 填选项位，与 PS 家族其余型号的位置语义一致；L2 / R2 的
  *  数字位不映射，扳机走同字的压力值。 */
 static const uint32_t s_btn_map[24] = {
-    PAD_BTN_TOUCHPAD, PAD_BTN_L3, PAD_BTN_R3, PAD_BTN_OPT,
-    PAD_BTN_DPAD_UP, PAD_BTN_DPAD_RIGHT, PAD_BTN_DPAD_DOWN, PAD_BTN_DPAD_LEFT,
-    0, 0, PAD_BTN_L1, PAD_BTN_R1,
-    PAD_BTN_TRIANGLE, PAD_BTN_CIRCLE, PAD_BTN_CROSS, PAD_BTN_SQUARE,
-    PAD_BTN_HOME, 0, 0, 0,
-    0, 0, 0, 0,
+  PAD_BTN_TOUCHPAD,
+  PAD_BTN_L3,
+  PAD_BTN_R3,
+  PAD_BTN_OPT,
+  PAD_BTN_DPAD_UP,
+  PAD_BTN_DPAD_RIGHT,
+  PAD_BTN_DPAD_DOWN,
+  PAD_BTN_DPAD_LEFT,
+  0,
+  0,
+  PAD_BTN_L1,
+  PAD_BTN_R1,
+  PAD_BTN_TRIANGLE,
+  PAD_BTN_CIRCLE,
+  PAD_BTN_CROSS,
+  PAD_BTN_SQUARE,
+  PAD_BTN_HOME,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
 };
 
 /** DualShock 3（0x054C:0x0268）：有线与蓝牙都报 0x01、字段偏移一致，因此一行覆盖两种连接。
@@ -48,7 +66,7 @@ static const pad_layout_t s_rows[] = {
 };
 
 const pad_layout_module_t pad_layout_module_ds3 = {
-    .name = "ds3",
-    .rows = s_rows,
-    .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
+  .name = "ds3",
+  .rows = s_rows,
+  .row_count = sizeof(s_rows) / sizeof(s_rows[0]),
 };

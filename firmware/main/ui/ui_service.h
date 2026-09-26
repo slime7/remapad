@@ -20,53 +20,53 @@ extern "C" {
 /** 界面状态快照：一次轮询填满，UI 侧按字段写入对应属性。
  *  布局与 ui/slint_ui/src/abi.rs 的镜像一致，改字段两侧同步。 */
 typedef struct {
-    /** 背光百分比（0-100）。 */
-    int backlight;
-    /** 电池百分比与充电标记。 */
-    int battery_percent;
-    /** 配对状态：0 idle、1 paired、2 advertising、3 scanning、4 pairing、5 connected。 */
-    int pairing;
-    /** 命令应答提示（0 无），取值见 ui/src/pages.slint 的 notice-label。 */
-    int notice;
-    /** USB 角色：0 device（串口）、1 host（手柄）。 */
-    int usb_role;
-    /** PC 是否连在串口上。 */
-    bool pc_link;
-    /** 物理手柄是否接入与家族（0 PAD、1 PS、2 XBOX、3 NS、4 STEAM）。 */
-    bool pad_attached;
-    int pad_family;
-    /** 主机下发的玩家序号灯掩码。 */
-    int player_led;
-    /** 手柄操控屏幕模式是否生效。 */
-    bool pad_ui_mode;
-    /** UI 按键位（见 dp/dp_ui.h 的 DP_UI_BTN_*），未按下为 0。 */
-    int buttons;
-    /** OTA 阶段与百分比。 */
-    int ota_phase;
-    int ota_percent;
-    /** 手柄配色命中款（0-3），未命中为 -1。 */
-    int selected_colorway;
-    /** 对外蓝牙地址（显示序），未同步时传 "--"。 */
-    const char *controller_address;
-    /** DS4 / DS5 行为开关。 */
-    bool ds_touchpad_plus_minus;
-    bool ds_capture_key;
-    /** 系统信息页四行文本（数字与单位在固件侧格式化）。 */
-    const char *firmware_version;
-    const char *heap_text;
-    const char *psram_text;
-    const char *battery_text;
-    /** 调试页注入反馈高亮（-1 无，0-2 对应三个按钮）。 */
-    int debug_flash;
-    /** 弹窗：0 无、1 重启确认、2 关机确认、3 切手柄确认、4 切回串口后重启询问。 */
-    int dialog;
-    /** 全屏遮罩。 */
-    bool powering_off;
-    bool rebooting;
-    /** 息屏时触摸整段跳过（画面不可见，触点只会误触看不见的控件）。 */
-    bool screen_on;
-    /** 省电档（BLE 关闭）：界面按 12 fps 等效节拍轮询与推进动画。 */
-    bool power_save;
+  /** 背光百分比（0-100）。 */
+  int backlight;
+  /** 电池百分比与充电标记。 */
+  int battery_percent;
+  /** 配对状态：0 idle、1 paired、2 advertising、3 scanning、4 pairing、5 connected。 */
+  int pairing;
+  /** 命令应答提示（0 无），取值见 ui/src/pages.slint 的 notice-label。 */
+  int notice;
+  /** USB 角色：0 device（串口）、1 host（手柄）。 */
+  int usb_role;
+  /** PC 是否连在串口上。 */
+  bool pc_link;
+  /** 物理手柄是否接入与家族（0 PAD、1 PS、2 XBOX、3 NS、4 STEAM）。 */
+  bool pad_attached;
+  int pad_family;
+  /** 主机下发的玩家序号灯掩码。 */
+  int player_led;
+  /** 手柄操控屏幕模式是否生效。 */
+  bool pad_ui_mode;
+  /** UI 按键位（见 dp/dp_ui.h 的 DP_UI_BTN_*），未按下为 0。 */
+  int buttons;
+  /** OTA 阶段与百分比。 */
+  int ota_phase;
+  int ota_percent;
+  /** 手柄配色命中款（0-3），未命中为 -1。 */
+  int selected_colorway;
+  /** 对外蓝牙地址（显示序），未同步时传 "--"。 */
+  const char *controller_address;
+  /** DS4 / DS5 行为开关。 */
+  bool ds_touchpad_plus_minus;
+  bool ds_capture_key;
+  /** 系统信息页四行文本（数字与单位在固件侧格式化）。 */
+  const char *firmware_version;
+  const char *heap_text;
+  const char *psram_text;
+  const char *battery_text;
+  /** 调试页注入反馈高亮（-1 无，0-2 对应三个按钮）。 */
+  int debug_flash;
+  /** 弹窗：0 无、1 重启确认、2 关机确认、3 切手柄确认、4 切回串口后重启询问。 */
+  int dialog;
+  /** 全屏遮罩。 */
+  bool powering_off;
+  bool rebooting;
+  /** 息屏时触摸整段跳过（画面不可见，触点只会误触看不见的控件）。 */
+  bool screen_on;
+  /** 省电档（BLE 关闭）：界面按 12 fps 等效节拍轮询与推进动画。 */
+  bool power_save;
 } remapad_ui_state_t;
 
 /** trace 命令不带帧数时的追踪长度。 */

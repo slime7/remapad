@@ -23,30 +23,29 @@ extern "C" {
  * 通道可承载多个并发的输出会话（一条 BLE 连接一个），ns2_output_send 逐
  * 会话按报告格式编码发送。 */
 typedef struct {
-    /** 当前活跃会话数。 */
-    size_t (*session_count)(void *user);
-    /** 第 index 个会话的身份（ns2_identity_t）与报告格式（0x05 / 0x09）。 */
-    bool (*session_info)(size_t index, uint8_t *identity, uint8_t *report_format, void *user);
-    /** 向第 index 个会话发送编码好的报告体（连接未订阅时由通道内部丢弃）。 */
-    void (*send_report)(size_t index, uint8_t report_id, const uint8_t *body, size_t len,
-                        void *user);
-    void *user;
+  /** 当前活跃会话数。 */
+  size_t (*session_count)(void *user);
+  /** 第 index 个会话的身份（ns2_identity_t）与报告格式（0x05 / 0x09）。 */
+  bool (*session_info)(size_t index, uint8_t *identity, uint8_t *report_format, void *user);
+  /** 向第 index 个会话发送编码好的报告体（连接未订阅时由通道内部丢弃）。 */
+  void (*send_report)(size_t index, uint8_t report_id, const uint8_t *body, size_t len, void *user);
+  void *user;
 } ns2_output_sink_t;
 
 /** 主机反馈事件类型（结构化，转发方按类型取对应 payload）。 */
 typedef enum {
-    NS2_FEEDBACK_RUMBLE = 0,   /* payload = ns2_rumble_event_t */
-    NS2_FEEDBACK_PLAYER_LED,   /* payload = uint8_t 掩码 bit0-3 */
-    NS2_FEEDBACK_HAPTIC_SAMPLE, /* payload = uint8_t 采样 ID */
+  NS2_FEEDBACK_RUMBLE = 0,    /* payload = ns2_rumble_event_t */
+  NS2_FEEDBACK_PLAYER_LED,    /* payload = uint8_t 掩码 bit0-3 */
+  NS2_FEEDBACK_HAPTIC_SAMPLE, /* payload = uint8_t 采样 ID */
 } ns2_feedback_type_t;
 
 /** Output Report 0x02 的结构化解析结果：左右 LRA 使能与原始参数包。 */
 typedef struct {
-    bool left_on;
-    bool right_on;
-    /** 原始 2×16B LRA 参数包（状态字 + 3 组音调/振幅指令），供转发方
+  bool left_on;
+  bool right_on;
+  /** 原始 2×16B LRA 参数包（状态字 + 3 组音调/振幅指令），供转发方
      *  按目标设备能力二次编码。 */
-    uint8_t raw[32];
+  uint8_t raw[32];
 } ns2_rumble_event_t;
 
 /**

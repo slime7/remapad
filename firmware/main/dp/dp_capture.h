@@ -33,11 +33,11 @@ extern "C" {
 
 /** 一条主机输出记录（原始字节原样保存，超长截断并带标记）。 */
 typedef struct {
-    uint8_t channel;
-    uint8_t len;
-    bool truncated;
-    uint8_t seq; /**< 设备侧记录号（回传给 PC 检测跳号 = 队列满丢包）。 */
-    uint8_t data[DP_CAPTURE_MAX_DATA];
+  uint8_t channel;
+  uint8_t len;
+  bool truncated;
+  uint8_t seq; /**< 设备侧记录号（回传给 PC 检测跳号 = 队列满丢包）。 */
+  uint8_t data[DP_CAPTURE_MAX_DATA];
 } dp_capture_record_t;
 
 /**

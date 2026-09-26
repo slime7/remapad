@@ -12,14 +12,14 @@ extern "C" {
  *  非 0 备用设置。DualSense 的音频布局固定为 48kHz / 4ch
  *  （接口 1 alt 1、端点 0x01、MPS 392 = 49 样本 × 4ch × 2B）。 */
 typedef struct {
-    uint8_t iface;
-    uint8_t alt;
-    uint8_t ep_addr;
-    uint16_t ep_mps;
-    uint8_t channels;
-    uint8_t subframe_size;
-    uint8_t bit_resolution;
-    uint32_t sample_rate_hz;
+  uint8_t iface;
+  uint8_t alt;
+  uint8_t ep_addr;
+  uint16_t ep_mps;
+  uint8_t channels;
+  uint8_t subframe_size;
+  uint8_t bit_resolution;
+  uint32_t sample_rate_hz;
 } usb_audio_as_out_t;
 
 /**

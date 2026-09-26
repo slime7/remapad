@@ -32,25 +32,25 @@ extern "C" {
 
 /** 一次 feed 的结果。 */
 typedef enum {
-    NS2_UPGRADE_NONE = 0,  /**< 记录已收下，帧还没凑齐。 */
-    NS2_UPGRADE_FRAME,     /**< 一帧凑齐：frame / frame_len 有效，应回应答。 */
-    NS2_UPGRADE_MALFORMED, /**< 记录头不完整，已计入统计但不参与装配。 */
+  NS2_UPGRADE_NONE = 0,  /**< 记录已收下，帧还没凑齐。 */
+  NS2_UPGRADE_FRAME,     /**< 一帧凑齐：frame / frame_len 有效，应回应答。 */
+  NS2_UPGRADE_MALFORMED, /**< 记录头不完整，已计入统计但不参与装配。 */
 } ns2_upgrade_event_t;
 
 typedef struct {
-    uint32_t records;     /**< 收到的记录数（含畸形记录）。 */
-    uint32_t bytes;       /**< 收到的记录字节数（含记录头）。 */
-    uint32_t frames;      /**< 凑齐的帧数。 */
-    size_t min_record;    /**< 记录长度下限（无记录时为 SIZE_MAX）。 */
-    size_t max_record;    /**< 记录长度上限。 */
-    bool truncated;       /**< 某帧体超过缓冲：该帧不再报完成。 */
-    bool frame_ready;     /**< 上一帧已交出、尚未被下一条记录让位。 */
-    size_t frame_len;     /**< 当前帧已装配字节数。 */
-    uint8_t frame[NS2_UPGRADE_FRAME_CAP];
-    size_t sample_len;    /**< 首帧留样字节数。 */
-    uint8_t sample[NS2_UPGRADE_SAMPLE_CAP];
-    size_t tail_len;      /**< 记录流留样字节数。 */
-    uint8_t tail[NS2_UPGRADE_TAIL_CAP];
+  uint32_t records;  /**< 收到的记录数（含畸形记录）。 */
+  uint32_t bytes;    /**< 收到的记录字节数（含记录头）。 */
+  uint32_t frames;   /**< 凑齐的帧数。 */
+  size_t min_record; /**< 记录长度下限（无记录时为 SIZE_MAX）。 */
+  size_t max_record; /**< 记录长度上限。 */
+  bool truncated;    /**< 某帧体超过缓冲：该帧不再报完成。 */
+  bool frame_ready;  /**< 上一帧已交出、尚未被下一条记录让位。 */
+  size_t frame_len;  /**< 当前帧已装配字节数。 */
+  uint8_t frame[NS2_UPGRADE_FRAME_CAP];
+  size_t sample_len; /**< 首帧留样字节数。 */
+  uint8_t sample[NS2_UPGRADE_SAMPLE_CAP];
+  size_t tail_len; /**< 记录流留样字节数。 */
+  uint8_t tail[NS2_UPGRADE_TAIL_CAP];
 } ns2_upgrade_t;
 
 /** 清空一次升级会话的装配状态（计数与留样一并复位）。 */

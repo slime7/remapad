@@ -22,9 +22,9 @@ const char *ns2_identity_name(uint8_t identity);
 /** 广播地址形态（对账开关，见 ns2_session_set_adv_addr_form）：
  *  auto 与 public 都是公共伪装地址，random 换成派生静态随机地址做对照。 */
 typedef enum {
-    NS2_ADV_ADDR_AUTO = 0,
-    NS2_ADV_ADDR_PUBLIC = 1,
-    NS2_ADV_ADDR_RANDOM = 2,
+  NS2_ADV_ADDR_AUTO = 0,
+  NS2_ADV_ADDR_PUBLIC = 1,
+  NS2_ADV_ADDR_RANDOM = 2,
 } ns2_adv_addr_form_t;
 
 /** 形态短名（日志与串口回显）：auto / public / random。 */

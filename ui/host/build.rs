@@ -6,8 +6,8 @@
 use std::path::PathBuf;
 
 fn main() {
-    let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let ui_root = manifest.parent().unwrap();
-    build_support::compile(ui_root, "src/app.slint", true);
-    build_support::compile(ui_root, "preview.slint", true);
+  let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+  let ui_root = manifest.parent().unwrap();
+  build_support::compile(ui_root, "src/app.slint", true);
+  build_support::compile(ui_root, "preview.slint", true);
 }

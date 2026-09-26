@@ -35,8 +35,8 @@ extern "C" {
  * 因此不需要任何字段映射；其余家族按布局行的 out 描述写震动强度、玩家灯
  * 与退化的触觉采样。返回编码长度，没有可写的反馈通道时返回 0。
  */
-size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid,
-                           const pad_feedback_t *feedback, uint8_t *out, size_t out_len);
+size_t pad_feedback_encode(pad_conn_t conn, uint16_t vid, uint16_t pid, const pad_feedback_t *feedback, uint8_t *out,
+                           size_t out_len);
 
 /** 上次编码命中的布局行（诊断；未命中或无反馈通道时为 NULL）。 */
 const pad_layout_t *pad_feedback_last_layout(void);
@@ -49,8 +49,7 @@ const pad_layout_t *pad_feedback_last_layout(void);
  * 段以 hd.pulse_hz 覆盖各子帧的音圈、「发声」段以 hd.beep_hz 铺到扬声器。
  * 布局行没有 HD 通路时输出全零。
  */
-void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *feedback,
-                            pad_hd_render_t *out);
+void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *feedback, pad_hd_render_t *out);
 
 /**
  * 反馈状态线格式（桥接 FEEDBACK 帧载荷）：前 16 字节是基础段（使能、两带
@@ -58,14 +57,13 @@ void pad_feedback_hd_render(const pad_layout_t *layout, const pad_feedback_t *fe
  * 了 HD 通路时追加到 57 字节（每侧时序子帧表 + 扬声器音色，PC 侧音频触觉/
  * 蓝牙私有流的哑渲染输入）。返回实际长度，cap 不够且需要 HD 段时返回 0。
  */
-size_t pad_feedback_wire(const pad_feedback_t *feedback, const pad_hd_render_t *hd,
-                         uint8_t *out, size_t cap);
+size_t pad_feedback_wire(const pad_feedback_t *feedback, const pad_hd_render_t *hd, uint8_t *out, size_t cap);
 
 /** 反馈事件带来的字段（pad_feedback_apply 的 fields 位）。 */
 typedef enum {
-    PAD_FEEDBACK_FIELD_RUMBLE = 1u << 0,
-    PAD_FEEDBACK_FIELD_PLAYER_LED = 1u << 1,
-    PAD_FEEDBACK_FIELD_HAPTIC = 1u << 2,
+  PAD_FEEDBACK_FIELD_RUMBLE = 1u << 0,
+  PAD_FEEDBACK_FIELD_PLAYER_LED = 1u << 1,
+  PAD_FEEDBACK_FIELD_HAPTIC = 1u << 2,
 } pad_feedback_field_t;
 
 /**
@@ -106,9 +104,8 @@ bool pad_feedback_segment_changed(const pad_feedback_t *sent, uint8_t env, uint1
  * 震动仿真模式、马达字节又已清零，表现是「没有震动、只剩玩家灯」）。
  * 布局行没声明 `quiet_presets` 时与 pad_feedback_encode 同形。
  */
-size_t pad_feedback_encode_quiet(pad_conn_t conn, uint16_t vid, uint16_t pid,
-                                 const pad_feedback_t *feedback, uint8_t *out,
-                                 size_t out_len);
+size_t pad_feedback_encode_quiet(pad_conn_t conn, uint16_t vid, uint16_t pid, const pad_feedback_t *feedback,
+                                 uint8_t *out, size_t out_len);
 
 /**
  * 主机震动振幅的感知重映射（0-255 → 0-255）：NS2 的振幅是 LRA 线性驱动档位，
@@ -136,8 +133,7 @@ void pad_feedback_bt_seq_reset(void);
  * 毫秒数；数据面据此驱动板载蜂鸣器按段发声（USB 直插），蓝牙桥接路径的
  * 发声段由 HD 通路折进音圈。
  */
-uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_ms,
-                              uint16_t *tone_hz);
+uint8_t pad_haptic_pulse_step(uint8_t sample, uint32_t age_ms, uint32_t *remain_ms, uint16_t *tone_hz);
 
 /** 采样音色当前时刻的渲染幅度（pad_haptic_pulse_step 的只取幅度形态）。 */
 uint8_t pad_haptic_pulse_envelope(uint8_t sample, uint32_t age_ms);

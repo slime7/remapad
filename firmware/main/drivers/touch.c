@@ -25,11 +25,11 @@ static esp_lcd_touch_handle_t s_touch = NULL;
 
 esp_err_t touch_init(void)
 {
-    if (s_touch != NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
+  if (s_touch != NULL) {
+    return ESP_ERR_INVALID_STATE;
+  }
 
-    const i2c_master_bus_config_t bus_config = {
+  const i2c_master_bus_config_t bus_config = {
         .i2c_port = REMAPAD_TOUCH_I2C_PORT,
         .sda_io_num = REMAPAD_TOUCH_GPIO_SDA,
         .scl_io_num = REMAPAD_TOUCH_GPIO_SCL,
@@ -40,20 +40,19 @@ esp_err_t touch_init(void)
                 .enable_internal_pullup = true,
             },
     };
-    i2c_master_bus_handle_t bus = NULL;
-    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_config, &bus), TAG, "init I2C bus failed");
+  i2c_master_bus_handle_t bus = NULL;
+  ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_config, &bus), TAG, "init I2C bus failed");
 
-    esp_lcd_panel_io_handle_t io = NULL;
-    const esp_lcd_panel_io_i2c_config_t io_config =
-        ESP_LCD_TOUCH_IO_I2C_CST816S_CONFIG();
-    esp_err_t result = esp_lcd_new_panel_io_i2c(bus, &io_config, &io);
-    if (result != ESP_OK) {
-        goto fail;
-    }
+  esp_lcd_panel_io_handle_t io = NULL;
+  const esp_lcd_panel_io_i2c_config_t io_config = ESP_LCD_TOUCH_IO_I2C_CST816S_CONFIG();
+  esp_err_t result = esp_lcd_new_panel_io_i2c(bus, &io_config, &io);
+  if (result != ESP_OK) {
+    goto fail;
+  }
 
-    /* 面板经 mirror(true,true) 摆正后，触摸原始坐标系与显示一致，无需交换
+  /* 面板经 mirror(true,true) 摆正后，触摸原始坐标系与显示一致，无需交换
      * 或镜像。 */
-    const esp_lcd_touch_config_t touch_config = {
+  const esp_lcd_touch_config_t touch_config = {
         .x_max = REMAPAD_TOUCH_X_MAX,
         .y_max = REMAPAD_TOUCH_Y_MAX,
         .rst_gpio_num = REMAPAD_TOUCH_GPIO_RST,
@@ -70,44 +69,44 @@ esp_err_t touch_init(void)
                 .mirror_y = 0,
             },
     };
-    result = esp_lcd_touch_new_i2c_cst816s(io, &touch_config, &s_touch);
-    if (result != ESP_OK) {
-        goto fail;
-    }
+  result = esp_lcd_touch_new_i2c_cst816s(io, &touch_config, &s_touch);
+  if (result != ESP_OK) {
+    goto fail;
+  }
 
-    /* 配置 CST816T 连续坐标模式：消除默认约 0.5s 的手势/长按仲裁等待，
+  /* 配置 CST816T 连续坐标模式：消除默认约 0.5s 的手势/长按仲裁等待，
      * 允许手指移动时即时刷新坐标。0xFA: EnTouch (0x40) | EnChange (0x20)；
      * 0xEC: 关闭内部手势过滤；0xFE: 禁用低功耗快速休眠。 */
-    const uint8_t irq_ctl = 0x60;
-    const uint8_t motion_mask = 0x00;
-    const uint8_t dis_autosleep = 0x01;
-    (void)esp_lcd_panel_io_tx_param(io, 0xFA, &irq_ctl, sizeof(irq_ctl));
-    (void)esp_lcd_panel_io_tx_param(io, 0xEC, &motion_mask, sizeof(motion_mask));
-    (void)esp_lcd_panel_io_tx_param(io, 0xFE, &dis_autosleep, sizeof(dis_autosleep));
-    return ESP_OK;
+  const uint8_t irq_ctl = 0x60;
+  const uint8_t motion_mask = 0x00;
+  const uint8_t dis_autosleep = 0x01;
+  (void)esp_lcd_panel_io_tx_param(io, 0xFA, &irq_ctl, sizeof(irq_ctl));
+  (void)esp_lcd_panel_io_tx_param(io, 0xEC, &motion_mask, sizeof(motion_mask));
+  (void)esp_lcd_panel_io_tx_param(io, 0xFE, &dis_autosleep, sizeof(dis_autosleep));
+  return ESP_OK;
 
 fail:
-    if (io != NULL) {
-        esp_lcd_panel_io_del(io);
-    }
-    i2c_del_master_bus(bus);
-    return result;
+  if (io != NULL) {
+    esp_lcd_panel_io_del(io);
+  }
+  i2c_del_master_bus(bus);
+  return result;
 }
 
 size_t touch_sample(touch_contact_t *out, size_t capacity)
 {
-    if (s_touch == NULL || out == NULL || capacity == 0) {
-        return 0;
-    }
+  if (s_touch == NULL || out == NULL || capacity == 0) {
+    return 0;
+  }
 
-    /* CST816T 是单点触摸，读到按下即返回一个触点；无按下时触点数组清空。 */
-    esp_lcd_touch_point_data_t point = {0};
-    uint8_t count = 0;
-    (void)esp_lcd_touch_read_data(s_touch);
-    if (esp_lcd_touch_get_data(s_touch, &point, &count, 1) != ESP_OK || count == 0) {
-        return 0;
-    }
-    out[0].x = point.x;
-    out[0].y = point.y;
-    return 1;
+  /* CST816T 是单点触摸，读到按下即返回一个触点；无按下时触点数组清空。 */
+  esp_lcd_touch_point_data_t point = { 0 };
+  uint8_t count = 0;
+  (void)esp_lcd_touch_read_data(s_touch);
+  if (esp_lcd_touch_get_data(s_touch, &point, &count, 1) != ESP_OK || count == 0) {
+    return 0;
+  }
+  out[0].x = point.x;
+  out[0].y = point.y;
+  return 1;
 }

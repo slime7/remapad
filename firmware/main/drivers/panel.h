@@ -24,8 +24,7 @@ esp_err_t panel_transfer(uint16_t *pixels, int x, int y, int width, int height);
  * out_seq 交回本笔提交的完成序号。缓冲在 panel_wait_seq 等到该序号之前属于
  * DMA，期间改写会让画面出现黑线或错位；spi_master 按提交顺序完成事务，序号
  * 因此可以用作「这块缓冲什么时候能再用」的判据。 */
-esp_err_t panel_transfer_async(uint16_t *pixels, int x, int y, int width, int height,
-                               uint32_t *out_seq);
+esp_err_t panel_transfer_async(uint16_t *pixels, int x, int y, int width, int height, uint32_t *out_seq);
 
 /** 等到指定序号的传输结束；序号已过或没有在飞传输时立即返回。 */
 esp_err_t panel_wait_seq(uint32_t seq, uint32_t timeout_ms);

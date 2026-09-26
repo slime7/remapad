@@ -21,3 +21,11 @@ panic = "abort"
 
 [profile.release.package.slint_ui]
 opt-level = "z"
+
+# 质量门槛对齐旧 ESLint 口径：js.recommended 对应 clippy::all，no-unused-vars 对应 rust 的 unused；
+# no-param-reassign 由语言显式 mut 保证，不需要 lint。CI 用 cargo clippy -- -D warnings 提级。
+[workspace.lints.rust]
+unused = "warn"
+
+[workspace.lints.clippy]
+all = "warn"

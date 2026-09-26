@@ -31,31 +31,31 @@ extern "C" {
  * 峰值。
  */
 typedef struct {
-    uint16_t amp_peak;
-    uint16_t slice_frames; /**< 每个子帧的帧数（rate × cycle_ms / 1000 / 3）。 */
-    pad_hd_render_t tones;
+  uint16_t amp_peak;
+  uint16_t slice_frames; /**< 每个子帧的帧数（rate × cycle_ms / 1000 / 3）。 */
+  pad_hd_render_t tones;
 } haptic_synth_params_t;
 
 /** 一条时序子帧的音色（与 `pad_hd_render_t` 的子帧同构）：包络门的收音尾
  *  锁定最后发声的子帧用。 */
 typedef struct {
-    uint16_t lf_freq;
-    uint8_t lf_gain;
-    uint16_t hf_freq;
-    uint8_t hf_gain;
+  uint16_t lf_freq;
+  uint8_t lf_gain;
+  uint16_t hf_freq;
+  uint8_t hf_gain;
 } haptic_synth_key_t;
 
 /** 振荡器相位与子帧游标（跨块连续，换参数不重置相位）：每侧低频/高频各一相、扬声器另有一相；
  *  子帧游标按帧数倒数、到 0 切下一子帧。coil_env 是音圈包络门的 Q15 增益（满幅 32768），
  *  speaker_env 是发声段音色的 Q15 边沿包络；整段静默后的新震动从时间轴与相位回零起播。 */
 typedef struct {
-    uint32_t phase[2][2];
-    uint32_t speaker_phase;
-    uint16_t speaker_env;
-    haptic_synth_key_t coil_latch[2];
-    uint16_t coil_env[2];
-    uint16_t slice_left;
-    uint8_t key_index;
+  uint32_t phase[2][2];
+  uint32_t speaker_phase;
+  uint16_t speaker_env;
+  haptic_synth_key_t coil_latch[2];
+  uint16_t coil_env[2];
+  uint16_t slice_left;
+  uint8_t key_index;
 } haptic_synth_state_t;
 
 /** 频率落地值：0 取该带缺省，再夹到 [HAPTIC_SYNTH_FREQ_MIN, MAX]。 */
@@ -66,8 +66,7 @@ void haptic_synth_reset(haptic_synth_state_t *state);
 /** 生成 frames 帧四通道交错 PCM：扬声器两路放发声音色（静音时恒零），触觉
  *  两路按各自子帧序列的当前子帧合成并过音圈包络门（起音/收音插值），相位
  *  与子帧游标在 state 里跨块推进。 */
-void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t *params,
-                       int16_t *pcm, size_t frames);
+void haptic_synth_fill(haptic_synth_state_t *state, const haptic_synth_params_t *params, int16_t *pcm, size_t frames);
 
 #ifdef __cplusplus
 }

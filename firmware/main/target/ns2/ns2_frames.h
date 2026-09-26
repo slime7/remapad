@@ -28,12 +28,11 @@ extern const uint8_t ns2_pair_pubkey_b1[NS2_PAIR_PUBKEY_LEN];
 #define NS2_VERSION_BODY_LEN 12
 
 /** 构造响应帧头：Direction 0x01、Status 0x10、ACK 0x78。 */
-void ns2_frame_response_header(uint8_t out[NS2_FRAME_HEADER_LEN],
-                               uint8_t cmd, uint8_t transport, uint8_t subcmd);
+void ns2_frame_response_header(uint8_t out[NS2_FRAME_HEADER_LEN], uint8_t cmd, uint8_t transport, uint8_t subcmd);
 
 /** 响应帧头 + 应答体一次成型；容量不足返回 0，成功返回总长度。 */
-size_t ns2_frame_response(uint8_t *out, size_t cap, uint8_t cmd, uint8_t transport,
-                          uint8_t subcmd, const void *body, size_t body_len);
+size_t ns2_frame_response(uint8_t *out, size_t cap, uint8_t cmd, uint8_t transport, uint8_t subcmd, const void *body,
+                          size_t body_len);
 
 /** Command 0x10 应答体：持久化固件版本 + 手柄类型码（固定 Pro = 0x02）。 */
 void ns2_body_version(uint8_t out[NS2_VERSION_BODY_LEN]);

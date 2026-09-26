@@ -31,27 +31,27 @@ typedef void (*remapad_ui_action_fn)(const char *name, int value, void *user);
 
 /** 一次采样得到的触点，坐标为逻辑视口像素。 */
 typedef struct {
-    uint16_t x;
-    uint16_t y;
+  uint16_t x;
+  uint16_t y;
 } remapad_slint_touch_t;
 
 /** 平台需要的硬件入口：面板提交与触摸采样都由固件侧提供。 */
 typedef struct {
-    /** 把一段 RGB565 小端像素写到面板窗口，阻塞到传输完成。 */
-    esp_err_t (*transfer)(uint16_t *pixels, int x, int y, int width, int height);
-    /** 采样当前触点，返回有效触点数。 */
-    size_t (*touch_sample)(remapad_slint_touch_t *out, size_t capacity);
+  /** 把一段 RGB565 小端像素写到面板窗口，阻塞到传输完成。 */
+  esp_err_t (*transfer)(uint16_t *pixels, int x, int y, int width, int height);
+  /** 采样当前触点，返回有效触点数。 */
+  size_t (*touch_sample)(remapad_slint_touch_t *out, size_t capacity);
 } remapad_slint_hooks_t;
 
 /** 逐帧渲染统计：面板提交耗时与渲染耗时分开记，供串口 trace 与周期日志使用。 */
 typedef struct {
-    uint32_t frames;
-    uint32_t window_frames;
-    uint64_t window_render_us;
-    uint64_t window_flush_us;
-    uint64_t window_damage_px;
-    uint32_t max_render_us;
-    uint32_t max_flush_us;
+  uint32_t frames;
+  uint32_t window_frames;
+  uint64_t window_render_us;
+  uint64_t window_flush_us;
+  uint64_t window_damage_px;
+  uint32_t max_render_us;
+  uint32_t max_flush_us;
 } remapad_slint_stats_t;
 
 /**
