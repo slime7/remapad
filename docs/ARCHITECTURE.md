@@ -116,7 +116,7 @@ flowchart TB
     FwMain --> MainTarget["target/：转换段（目标编码，含 target/ns2/）"]
     FwMain --> MainBle["ble/：NimBLE 手柄外设、会话与凭证"]
     FwMain --> MainDp["dp/：数据面任务与输入源抽象"]
-    FwMain --> MainOta["ota/：升级会话（分区回写与回滚门槛）"]
+    FwMain --> MainOta["ota/：升级通道（传输无关会话核心 + 桥接帧适配）"]
 ```
 
 仓库是自包含的：界面源码、字体与 Rust 工作区都在 `ui/`（宿主用例包 `host/`、固件组件 `slint_ui/`、
@@ -190,7 +190,7 @@ flowchart TB
     Drv --> Splash["boot_splash：自绘启动画面并点亮背光"]
     Splash --> Start["remapad_slint_ui_start：建平台与窗口、接状态与动作回调"]
     Start --> First["首帧：整屏渲染并折行带提交"]
-    First --> Ready["boot_splash_end 交屏；第二轮回调向 OTA 门槛报 UI 就绪"]
+    First --> Ready["boot_splash_end 交屏"]
     Ready --> Loop["事件循环：推进定时器与动画 → 采样触摸 → 按需重绘 → 让出 CPU"]
     Loop --> Loop
 ```
@@ -283,19 +283,22 @@ device 角色下「PC 接没接」直接取 USB-Serial/JTAG 的 SOF 接入状态
 flowchart LR
     Tool["pc/remapadctl.py --upgrade<br/>校验镜像头与应用描述符"]
     Link["input/input_link.c<br/>USJ 唯一读取者"]
-    Session["ota/ota_session.c<br/>队列 + 内部 RAM 栈任务"]
+    Adapt["ota/ota_link.c<br/>桥接帧 ↔ 会话消息<br/>ACK 回发 + 进度事件"]
+    Session["ota/ota_session.c<br/>传输无关会话核心<br/>队列 + 内部 RAM 栈任务"]
     Proto["ota/ota_proto.c<br/>序号 / 窗口 / 4 KB 聚合 / 超时"]
     Flash["esp_ota API<br/>非运行分区 → otadata"]
-    Health["回滚健康门槛<br/>UI 首帧 + 开机 30 秒"]
+    Health["回滚健康门槛<br/>应用就绪 + 开机 30 秒"]
 
     Tool -->|"OTA 帧 0x30-0x33（桥接帧格式）"| Link
-    Link -->|OTA 帧| Session
+    Link -->|OTA 帧| Adapt
+    Adapt --> Session
     Session --> Proto
     Proto -->|"4 KB 块"| Flash
-    Session -->|ACK 帧| Tool
+    Adapt -->|"ACK 帧"| Tool
     Health -->|esp_ota_mark_app_valid_cancel_rollback| Flash
 ```
 
+- **组件边界**：升级通道按「纯协议 + 传输无关核心 + 装配适配」三层拆分，方便同板不同功能的固件复用同一机制互刷（OTA 只写应用槽，分区表与 bootloader 不动）：`ota_proto` 是纯逻辑可主机端测试；`ota_session` 经 `ota_session_port_t` 注入 ACK 发送与进度广播出口，回滚健康门槛的「应用就绪」信号也由装配方定义；本工程的桥接帧装配在 `ota_link`，换传输或换业务只重写这一层。
 - **协议**：沿用桥接帧（`A5 5A` + ver/type/slot/seq/len + 载荷 + CRC16）。
   新增 `0x30` BEGIN（`ROM1` + 镜像字节数）、`0x31` DATA（块序号 + 最多 200 字节）、
   `0x32` END 与设备回发的 `0x33` ACK（状态 + 错误码 + 期望序号 + 已收字节；BEGIN 的应答在末尾附 16 字节运行版本）。解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验。
@@ -311,7 +314,7 @@ flowchart LR
 - **内存约束**：升级任务由 `xTaskCreate` 创建（栈在内部 RAM），帧队列与 4 KB 聚合缓冲同样固定在内部 RAM——flash 写入的禁缓存窗口内不能访问 PSRAM。
   另外，非 DRAM 缓冲会让 IDF 退化成 32 字节一次的栈拷贝。
 - **回滚保护**：开启 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` 后新镜像以「待验证」启动。
-  界面就绪（状态轮询的第二轮，意味着首帧已经上屏）且开机满 30 秒才调用 `esp_ota_mark_app_valid_cancel_rollback()`；未过门槛就重启会回退到升级前的镜像。
+  应用就绪（`ota_session_notify_ready()`，本工程在 `main.c` 装配收尾时上报，含义是控制面/数据面/桥接链路等核心服务启动完成，有屏与无屏构建同一判据）且开机满 30 秒才调用 `esp_ota_mark_app_valid_cancel_rollback()`；未过门槛就重启会回退到升级前的镜像。
   待验证窗口内 `esp_ota_begin` 返回 `ESP_ERR_OTA_ROLLBACK_INVALID_STATE`，设备据此回 BUSY。
 - **观测**：
   串口 CLI 的 `version`（版本 / 分区 / 待验证状态）与 `status`（`fw=` 与 `ota=` 字段）、UI 系统页的固件信息行共用同一个版本字符串——它来自构建时的 `git describe`。

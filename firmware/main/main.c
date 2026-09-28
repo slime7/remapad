@@ -19,6 +19,7 @@
 #include "drivers/buzzer.h"
 #include "drivers/pwr_key.h"
 #include "input_link.h"
+#include "ota_link.h"
 #include "ota_session.h"
 #include "ui_service.h"
 
@@ -116,9 +117,9 @@ void app_main(void)
   if (cli_err != ESP_OK) {
     ESP_LOGE("remapad_app", "cli start failed: %s", esp_err_to_name(cli_err));
   }
-  /* OTA 升级通道先于桥接链路起来：input_link 读到 OTA 帧时分派给它。
+  /* OTA 升级通道先于桥接链路起来：input_link 读到 OTA 帧时经 ota_link 适配分派给会话核心。
      * 失败不阻断启动，屏幕 UI 与 BLE 链路照常工作。 */
-  const esp_err_t ota_err = ota_session_start();
+  const esp_err_t ota_err = ota_link_start();
   if (ota_err != ESP_OK) {
     ESP_LOGE("remapad_app", "ota session start failed: %s", esp_err_to_name(ota_err));
   }
@@ -132,4 +133,7 @@ void app_main(void)
   if (pwr_err != ESP_OK) {
     ESP_LOGE("remapad_app", "pwr key start failed: %s", esp_err_to_name(pwr_err));
   }
+  /* 装配收尾即向 OTA 回滚门槛报就绪：判据是核心服务启动完成 + 开机满 30 秒，
+     * 不看画面首帧，有屏与无屏构建同一口径。 */
+  ota_session_notify_ready();
 }

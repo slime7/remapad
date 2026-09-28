@@ -10,7 +10,7 @@
 /**
  * 桥接链路（接收段的传输侧）：USB-Serial/JTAG 上的唯一读取者。安装 USJ
  * 驱动后把收到的字节流解成桥接帧与非帧文本：输入帧交给 input_source，
- * OTA 帧交给 ota_session，PING 在这里直接应答，文本交给 CLI 行解析，因此
+ * OTA 帧交给 ota_link（升级通道适配），PING 在这里直接应答，文本交给 CLI 行解析，因此
  * 桥接数据、升级数据与调试命令行共用同一根 Type-C。
  */
 

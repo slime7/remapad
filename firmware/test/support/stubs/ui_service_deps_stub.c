@@ -38,7 +38,6 @@ static struct {
   bool ble_running;
   int ota_phase;
   int ota_percent;
-  size_t ota_ui_ready;
 } s_stub;
 
 static struct {
@@ -104,16 +103,6 @@ void host_test_set_ota_progress(int phase, int percent)
 {
   s_stub.ota_phase = phase;
   s_stub.ota_percent = percent;
-}
-
-size_t host_test_ota_ui_ready_count(void)
-{
-  return s_stub.ota_ui_ready;
-}
-
-void host_test_ota_ui_ready_reset(void)
-{
-  s_stub.ota_ui_ready = 0;
 }
 
 void host_test_js_bridge_reset(void)
@@ -251,11 +240,6 @@ void ota_session_progress(int *phase, int *percent)
   if (percent != NULL) {
     *percent = s_stub.ota_percent;
   }
-}
-
-void ota_session_notify_ui_ready(void)
-{
-  s_stub.ota_ui_ready++;
 }
 
 esp_err_t js_bridge_submit_command(const char *cmd_json)

@@ -49,6 +49,7 @@ set(remapad_srcs
     "input/input_link.c"
     "ota/ota_proto.c"
     "ota/ota_session.c"
+    "ota/ota_link.c"
     "target/target.c"
     "target/ns2/ns2_report.c"
     "target/ns2/ns2_adv.c"

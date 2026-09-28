@@ -14,7 +14,7 @@
 #include "cli.h"
 #include "input_frame.h"
 #include "input_source.h"
-#include "ota_session.h"
+#include "ota_link.h"
 
 static const char *TAG = "remapad_input";
 
@@ -43,10 +43,10 @@ static void on_frame(const input_frame_view_t *frame, void *user)
     return;
   }
   s_frames++;
-  /* 升级帧由 OTA 会话接走（要写 flash，不能落在输入通路里）；amiibo 上传
-     * 帧由 amiibo 会话接走（要写 NVS）；探测帧在这里直接应答，其余交给输入源。 */
-  if (ota_session_is_frame_type(frame->type)) {
-    ota_session_handle_frame(frame);
+  /* 升级帧由 ota_link 适配转交 OTA 会话核心（要写 flash，不能落在输入通路里）；
+     * amiibo 上传帧由 amiibo 会话接走（要写 NVS）；探测帧在这里直接应答，其余交给输入源。 */
+  if (ota_link_is_frame_type(frame->type)) {
+    ota_link_handle_frame(frame);
     return;
   }
   if (amiibo_session_is_frame_type(frame->type)) {

@@ -21,8 +21,6 @@ void host_test_set_usb_role_host(bool host);
 void host_test_set_pc_link(bool active, bool pc_connected);
 void host_test_set_ble_stack_running(bool running);
 void host_test_set_ota_progress(int phase, int percent);
-size_t host_test_ota_ui_ready_count(void);
-void host_test_ota_ui_ready_reset(void);
 void host_test_js_bridge_reset(void);
 size_t host_test_js_bridge_command_count(void);
 const char *host_test_js_bridge_command(size_t index);
@@ -35,7 +33,6 @@ static void begin_case(void)
 {
   ui_service_reset();
   host_test_js_bridge_reset();
-  host_test_ota_ui_ready_reset();
   host_test_set_battery(4123, 75);
   host_test_set_backlight(40);
   host_test_set_ns2_pairing(false, false, false, false, false);
@@ -287,18 +284,6 @@ static void power_save_follows_ble_stack(void)
   CHECK(s_state.power_save);
 }
 
-static void ui_ready_notified_from_second_poll(void)
-{
-  begin_case();
-  ui_service_fill_state(&s_state);
-  CHECK_EQ(host_test_ota_ui_ready_count(), 0U);
-  /* 第二轮回调起每轮都报就绪：OTA 回滚门槛要的是「画面已经上屏」。 */
-  ui_service_fill_state(&s_state);
-  CHECK_EQ(host_test_ota_ui_ready_count(), 1U);
-  ui_service_fill_state(&s_state);
-  CHECK_EQ(host_test_ota_ui_ready_count(), 2U);
-}
-
 HOST_TEST_SUITE(suite_ui_service, "ui_service 屏幕 UI 契约",
                 { "亮度加减按五档步进并在两端钳位", brightness_actions_step_in_fives },
                 { "colorway 动作写入四段配色并命中预设", colorway_action_writes_config_colors },
@@ -312,5 +297,4 @@ HOST_TEST_SUITE(suite_ui_service, "ui_service 屏幕 UI 契约",
                 { "配对状态流转清掉命令提示", pairing_transition_clears_notice },
                 { "状态快照装配逐字段对上读数", fill_state_maps_device_snapshot },
                 { "蓝牙地址按显示序展示", identity_mac_shows_display_order },
-                { "省电档跟着 BLE 栈开关走", power_save_follows_ble_stack },
-                { "UI 就绪从第二轮轮询起上报", ui_ready_notified_from_second_poll })
+                { "省电档跟着 BLE 栈开关走", power_save_follows_ble_stack })

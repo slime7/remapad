@@ -14,13 +14,11 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
-#include "input_link.h"
-#include "bridge/js_bridge.h"
 #include "ota_proto.h"
 
 static const char *TAG = "remapad_ota";
 
-/** 帧队列按 PC 端一个窗口 16 帧设计：接收任务只入队，绝不阻塞。 */
+/** 帧队列按发送端一个窗口 16 帧设计：接收任务只入队，绝不阻塞。 */
 #define OTA_QUEUE_LEN 16u
 /** 任务栈来自内部 RAM（xTaskCreate 默认），flash 写入的禁缓存窗口离不开它。 */
 #define OTA_TASK_STACK 6144u
@@ -28,25 +26,15 @@ static const char *TAG = "remapad_ota";
 #define OTA_TASK_PRIO 6
 /** 队列轮询周期，同时充当超时检查与健康门槛检查的心跳。 */
 #define OTA_POLL_MS 200u
-/** 完成后先让 USJ 把应答帧送出去，再重启。 */
+/** 完成后先让链路把应答帧送出去，再重启；具体等待由适配层的发送策略兜底。 */
 #define OTA_REBOOT_DELAY_MS 500u
-/** 应答等发送环的上限：串口日志会挤占发送环，升级应答不能像数据面那样随手丢。 */
-#define OTA_ACK_TX_TIMEOUT_MS 200u
-/** 健康门槛：UI 首帧成功且开机满这么久，才确认新镜像有效。 */
+/** 健康门槛：应用就绪且开机满这么久，才确认新镜像有效。 */
 #define OTA_HEALTH_MIN_UPTIME_US (30 * 1000 * 1000LL)
-
-typedef enum {
-  OTA_PHASE_IDLE = 0,
-  OTA_PHASE_RECEIVING,
-  OTA_PHASE_VERIFYING,
-  OTA_PHASE_REBOOTING,
-  OTA_PHASE_FAILED,
-} ota_phase_t;
 
 /** 队列槽：载荷最大的是 DATA 帧（序号 + 200 字节数据）。 */
 typedef struct {
-  uint8_t type;
-  /** 该数据帧带窗口末帧标记（帧 slot 字段），收到即回应答。 */
+  ota_session_msg_t msg;
+  /** 该数据帧带窗口末帧标记，收到即回应答。 */
   bool window_end;
   uint16_t len;
   uint8_t data[OTA_DATA_PAYLOAD_MAX];
@@ -55,56 +43,52 @@ typedef struct {
 static struct {
   QueueHandle_t queue;
   TaskHandle_t task;
+  ota_session_port_t port;
   ota_proto_t proto;
   esp_ota_handle_t handle;
   const esp_partition_t *target;
   bool handle_open;
-  volatile bool ui_ready;
+  volatile bool app_ready;
   bool health_confirmed;
-  ota_phase_t phase;
-  /** 上次向 UI 广播的整数百分比：数据帧按 1% 粒度限频，不逐帧刷事件队列。 */
+  ota_session_phase_t phase;
+  /** 上次广播的整数百分比：数据帧按 1% 粒度限频，不逐帧打扰 port。 */
   uint32_t reported_pct;
 } s_ota;
 
-static const char *phase_name(ota_phase_t phase)
+static const char *phase_name(ota_session_phase_t phase)
 {
   switch (phase) {
-  case OTA_PHASE_RECEIVING:
+  case OTA_SESSION_PHASE_RECEIVING:
     return "receiving";
-  case OTA_PHASE_VERIFYING:
+  case OTA_SESSION_PHASE_VERIFYING:
     return "verifying";
-  case OTA_PHASE_REBOOTING:
+  case OTA_SESSION_PHASE_REBOOTING:
     return "rebooting";
-  case OTA_PHASE_FAILED:
+  case OTA_SESSION_PHASE_FAILED:
     return "failed";
   default:
     return "idle";
   }
 }
 
-/** 向 UI 广播 OTA 进度：事件经外部队列由 owner task 回发，任意任务上下文可调。 */
-static void notify_ui(ota_phase_t phase, uint32_t received, uint32_t total)
+/** 经 port 广播阶段/进度：port 未注入进度出口时静默跳过。 */
+static void emit_progress(ota_session_phase_t phase, uint32_t received, uint32_t total)
 {
-  char event[128];
-  const uint32_t pct = total > 0u ? (uint32_t)((uint64_t)received * 100u / total) : 0u;
-  const int len = snprintf(event, sizeof(event),
-                           "{\"t\":\"otaProgress\",\"phase\":\"%s\",\"received\":%u,"
-                           "\"total\":%u,\"percentage\":%u}",
-                           phase_name(phase), (unsigned)received, (unsigned)total, (unsigned)pct);
-  if (len > 0 && (size_t)len < sizeof(event)) {
-    js_bridge_post_event(event);
+  if (s_ota.port.on_progress == NULL) {
+    return;
   }
+  s_ota.port.on_progress(phase, received, total, s_ota.port.user);
 }
 
-/** 接收进度按整数百分比限频广播：同一百分比的数据帧不重复进事件队列。 */
-static void notify_receiving(uint32_t received, uint32_t total)
+/** 接收进度按整数百分比限频广播：同一百分比的数据帧不重复进 port。 */
+static void emit_receiving(uint32_t received, uint32_t total)
 {
   const uint32_t pct = total > 0u ? (uint32_t)((uint64_t)received * 100u / total) : 0u;
   if (pct == s_ota.reported_pct) {
     return;
   }
   s_ota.reported_pct = pct;
-  notify_ui(OTA_PHASE_RECEIVING, received, total);
+  emit_progress(OTA_SESSION_PHASE_RECEIVING, received, total);
 }
 
 const char *ota_session_state_name(void)
@@ -154,12 +138,7 @@ esp_err_t ota_session_rollback_and_reboot(void)
   return esp_ota_mark_app_invalid_rollback_and_reboot();
 }
 
-bool ota_session_is_frame_type(uint8_t type)
-{
-  return type == INPUT_FRAME_TYPE_OTA_BEGIN || type == INPUT_FRAME_TYPE_OTA_DATA || type == INPUT_FRAME_TYPE_OTA_END;
-}
-
-/** 回一帧 ACK；BEGIN 的应答带 16 字节运行版本，便于 PC 端显示升级方向。 */
+/** 回一帧 ACK；BEGIN 的应答带 16 字节运行版本，便于发送端显示升级方向。 */
 static void reply(const ota_proto_result_t *result, bool with_version)
 {
   uint8_t payload[OTA_ACK_PAYLOAD_LEN + OTA_ACK_VERSION_LEN];
@@ -168,7 +147,9 @@ static void reply(const ota_proto_result_t *result, bool with_version)
   if (len == 0) {
     return;
   }
-  input_link_send_frame_wait(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len, OTA_ACK_TX_TIMEOUT_MS);
+  if (s_ota.port.send_ack != NULL) {
+    s_ota.port.send_ack(payload, len, s_ota.port.user);
+  }
 }
 
 /** 交一块聚合好的镜像数据给 flash：缓冲与栈都在内部 RAM，可在禁缓存窗口内读。 */
@@ -184,7 +165,7 @@ static ota_code_t ota_flash_write(const uint8_t *data, size_t len, void *user)
   }
   ESP_LOGE(TAG, "esp_ota_write failed: %s (len=%u)", esp_err_to_name(err), (unsigned)len);
   if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
-    /* 首字节 magic 不对：送来的不是本工程的 ESP32 应用镜像。 */
+    /* 首字节 magic 不对：送来的不是合法的 ESP32 应用镜像（这里只验结构，不认项目身份）。 */
     return OTA_CODE_BAD_HEADER;
   }
   return OTA_CODE_FLASH_ERROR;
@@ -207,8 +188,8 @@ static void handle_begin(const uint8_t *payload, size_t len)
   if (!ota_proto_parse_begin(payload, len, &image_size)) {
     const ota_proto_result_t bad = ota_proto_fail(&s_ota.proto, OTA_CODE_BAD_HEADER);
     reply(&bad, true);
-    s_ota.phase = OTA_PHASE_FAILED;
-    notify_ui(OTA_PHASE_FAILED, 0, 0);
+    s_ota.phase = OTA_SESSION_PHASE_FAILED;
+    emit_progress(OTA_SESSION_PHASE_FAILED, 0, 0);
     ESP_LOGW(TAG, "ota begin rejected: bad header");
     return;
   }
@@ -216,8 +197,8 @@ static void handle_begin(const uint8_t *payload, size_t len)
   if (target == NULL) {
     const ota_proto_result_t result = ota_proto_fail(&s_ota.proto, OTA_CODE_BUSY);
     reply(&result, true);
-    s_ota.phase = OTA_PHASE_FAILED;
-    notify_ui(OTA_PHASE_FAILED, 0, 0);
+    s_ota.phase = OTA_SESSION_PHASE_FAILED;
+    emit_progress(OTA_SESSION_PHASE_FAILED, 0, 0);
     ESP_LOGE(TAG, "no update partition available");
     return;
   }
@@ -226,8 +207,8 @@ static void handle_begin(const uint8_t *payload, size_t len)
   if (result.state != OTA_STATE_RECEIVING) {
     reply(&result, true);
     if (result.code != OTA_CODE_BUSY) {
-      s_ota.phase = OTA_PHASE_FAILED;
-      notify_ui(OTA_PHASE_FAILED, 0, image_size);
+      s_ota.phase = OTA_SESSION_PHASE_FAILED;
+      emit_progress(OTA_SESSION_PHASE_FAILED, 0, image_size);
     }
     ESP_LOGW(TAG, "ota begin refused (code=%d, image=%u, partition=%s %u bytes)", (int)result.code,
              (unsigned)image_size, target->label, (unsigned)target->size);
@@ -242,8 +223,8 @@ static void handle_begin(const uint8_t *payload, size_t len)
     result = ota_proto_fail(&s_ota.proto, code);
     reply(&result, true);
     if (code != OTA_CODE_BUSY) {
-      s_ota.phase = OTA_PHASE_FAILED;
-      notify_ui(OTA_PHASE_FAILED, 0, image_size);
+      s_ota.phase = OTA_SESSION_PHASE_FAILED;
+      emit_progress(OTA_SESSION_PHASE_FAILED, 0, image_size);
     }
     ESP_LOGE(TAG, "esp_ota_begin failed: %s (image=%u)", esp_err_to_name(err), (unsigned)image_size);
     return;
@@ -251,11 +232,11 @@ static void handle_begin(const uint8_t *payload, size_t len)
   s_ota.handle = handle;
   s_ota.handle_open = true;
   s_ota.target = target;
-  s_ota.phase = OTA_PHASE_RECEIVING;
+  s_ota.phase = OTA_SESSION_PHASE_RECEIVING;
   s_ota.reported_pct = 0;
-  /* 空闲超时从应答时刻起算：预擦已经过去，接收窗口要完整留给 PC。 */
+  /* 空闲超时从应答时刻起算：预擦已经过去，接收窗口要完整留给发送端。 */
   ota_proto_note_rx(&s_ota.proto, esp_timer_get_time());
-  notify_ui(OTA_PHASE_RECEIVING, 0, image_size);
+  emit_progress(OTA_SESSION_PHASE_RECEIVING, 0, image_size);
   reply(&result, true);
   ESP_LOGI(TAG, "ota begin: %u bytes -> %s (running %s %s)", (unsigned)image_size, target->label,
            ota_session_running_partition(), ota_session_running_version());
@@ -270,14 +251,14 @@ static void handle_data(const uint8_t *payload, size_t len, bool window_end)
   }
   if (result.state == OTA_STATE_FAILED) {
     abort_flash_session();
-    s_ota.phase = OTA_PHASE_FAILED;
-    notify_ui(OTA_PHASE_FAILED, result.received, s_ota.proto.image_size);
+    s_ota.phase = OTA_SESSION_PHASE_FAILED;
+    emit_progress(OTA_SESSION_PHASE_FAILED, result.received, s_ota.proto.image_size);
     ESP_LOGE(TAG, "ota data failed: code=%d received=%u/%u", (int)result.code, (unsigned)result.received,
              (unsigned)s_ota.proto.image_size);
     return;
   }
-  if (s_ota.phase == OTA_PHASE_RECEIVING) {
-    notify_receiving(result.received, s_ota.proto.image_size);
+  if (s_ota.phase == OTA_SESSION_PHASE_RECEIVING) {
+    emit_receiving(result.received, s_ota.proto.image_size);
   }
 }
 
@@ -287,15 +268,15 @@ static void handle_end(void)
   if (result.state == OTA_STATE_FAILED || !result.finished) {
     reply(&result, false);
     abort_flash_session();
-    s_ota.phase = OTA_PHASE_FAILED;
-    notify_ui(OTA_PHASE_FAILED, result.received, s_ota.proto.image_size);
+    s_ota.phase = OTA_SESSION_PHASE_FAILED;
+    emit_progress(OTA_SESSION_PHASE_FAILED, result.received, s_ota.proto.image_size);
     ESP_LOGE(TAG, "ota end failed: code=%d received=%u/%u", (int)result.code, (unsigned)result.received,
              (unsigned)s_ota.proto.image_size);
     return;
   }
 
-  s_ota.phase = OTA_PHASE_VERIFYING;
-  notify_ui(OTA_PHASE_VERIFYING, s_ota.proto.image_size, s_ota.proto.image_size);
+  s_ota.phase = OTA_SESSION_PHASE_VERIFYING;
+  emit_progress(OTA_SESSION_PHASE_VERIFYING, s_ota.proto.image_size, s_ota.proto.image_size);
   /* esp_ota_end 整体校验镜像：应用描述符、芯片标识与尾部 SHA-256。 */
   esp_err_t err = esp_ota_end(s_ota.handle);
   s_ota.handle_open = false;
@@ -303,8 +284,8 @@ static void handle_end(void)
     const ota_code_t code = err == ESP_ERR_OTA_VALIDATE_FAILED ? OTA_CODE_VERIFY_FAILED : OTA_CODE_FLASH_ERROR;
     result = ota_proto_fail(&s_ota.proto, code);
     reply(&result, false);
-    s_ota.phase = OTA_PHASE_FAILED;
-    notify_ui(OTA_PHASE_FAILED, s_ota.proto.received, s_ota.proto.image_size);
+    s_ota.phase = OTA_SESSION_PHASE_FAILED;
+    emit_progress(OTA_SESSION_PHASE_FAILED, s_ota.proto.received, s_ota.proto.image_size);
     ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
     return;
   }
@@ -313,16 +294,16 @@ static void handle_end(void)
   if (err != ESP_OK) {
     result = ota_proto_fail(&s_ota.proto, OTA_CODE_FLASH_ERROR);
     reply(&result, false);
-    s_ota.phase = OTA_PHASE_FAILED;
-    notify_ui(OTA_PHASE_FAILED, s_ota.proto.received, s_ota.proto.image_size);
+    s_ota.phase = OTA_SESSION_PHASE_FAILED;
+    emit_progress(OTA_SESSION_PHASE_FAILED, s_ota.proto.received, s_ota.proto.image_size);
     ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
     return;
   }
 
   result = ota_proto_done(&s_ota.proto);
   reply(&result, false);
-  s_ota.phase = OTA_PHASE_REBOOTING;
-  notify_ui(OTA_PHASE_REBOOTING, s_ota.proto.image_size, s_ota.proto.image_size);
+  s_ota.phase = OTA_SESSION_PHASE_REBOOTING;
+  emit_progress(OTA_SESSION_PHASE_REBOOTING, s_ota.proto.image_size, s_ota.proto.image_size);
   ESP_LOGI(TAG, "ota done: %s is the boot partition, restarting in %d ms",
            s_ota.target != NULL ? s_ota.target->label : "?", OTA_REBOOT_DELAY_MS);
   vTaskDelay(pdMS_TO_TICKS(OTA_REBOOT_DELAY_MS));
@@ -331,14 +312,14 @@ static void handle_end(void)
 
 static void handle_slot(const ota_queue_slot_t *slot)
 {
-  switch (slot->type) {
-  case INPUT_FRAME_TYPE_OTA_BEGIN:
+  switch (slot->msg) {
+  case OTA_SESSION_MSG_BEGIN:
     handle_begin(slot->data, slot->len);
     break;
-  case INPUT_FRAME_TYPE_OTA_DATA:
+  case OTA_SESSION_MSG_DATA:
     handle_data(slot->data, slot->len, slot->window_end);
     break;
-  case INPUT_FRAME_TYPE_OTA_END:
+  case OTA_SESSION_MSG_END:
     handle_end();
     break;
   default:
@@ -346,7 +327,7 @@ static void handle_slot(const ota_queue_slot_t *slot)
   }
 }
 
-/** 空闲超时：PC 端被杀或线掉了就作废会话，不让半镜像占着句柄。 */
+/** 空闲超时：发送端被杀或线掉了就作废会话，不让半镜像占着句柄。 */
 static void check_timeout(void)
 {
   const ota_proto_result_t result = ota_proto_tick(&s_ota.proto, esp_timer_get_time());
@@ -355,18 +336,18 @@ static void check_timeout(void)
   }
   reply(&result, false);
   abort_flash_session();
-  s_ota.phase = OTA_PHASE_FAILED;
-  notify_ui(OTA_PHASE_FAILED, result.received, s_ota.proto.image_size);
+  s_ota.phase = OTA_SESSION_PHASE_FAILED;
+  emit_progress(OTA_SESSION_PHASE_FAILED, result.received, s_ota.proto.image_size);
   ESP_LOGW(TAG, "ota session timed out after %d ms without data", (int)(OTA_SESSION_TIMEOUT_US / 1000LL));
 }
 
 /**
- * 回滚健康门槛：UI 首帧成功（渲染通路通）且开机满 30 秒，才把
- * 镜像标记为有效；在此之前重启，引导器回退到升级前的镜像。
+ * 回滚健康门槛：应用就绪（装配方定义，本工程是核心服务启动完成）且开机满 30 秒，
+ * 才把镜像标记为有效；在此之前重启，引导器回退到升级前的镜像。
  */
 static void check_health(void)
 {
-  if (s_ota.health_confirmed || !s_ota.ui_ready) {
+  if (s_ota.health_confirmed || !s_ota.app_ready) {
     return;
   }
   if (esp_timer_get_time() < OTA_HEALTH_MIN_UPTIME_US) {
@@ -378,8 +359,7 @@ static void check_health(void)
   }
   const esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
   if (err == ESP_OK) {
-    ESP_LOGI(TAG, "new image confirmed valid (ui first frame + %d s uptime)",
-             (int)(OTA_HEALTH_MIN_UPTIME_US / 1000000LL));
+    ESP_LOGI(TAG, "new image confirmed valid (app ready + %d s uptime)", (int)(OTA_HEALTH_MIN_UPTIME_US / 1000000LL));
     return;
   }
   s_ota.health_confirmed = false; /* 下个周期再试。 */
@@ -389,7 +369,7 @@ static void check_health(void)
 static void ota_task(void *param)
 {
   (void)param;
-  ESP_LOGI(TAG, "ota channel ready (frames 0x30-0x32 on USB-Serial/JTAG)");
+  ESP_LOGI(TAG, "ota session core ready");
   for (;;) {
     ota_queue_slot_t slot;
     if (xQueueReceive(s_ota.queue, &slot, pdMS_TO_TICKS(OTA_POLL_MS)) == pdTRUE) {
@@ -400,37 +380,41 @@ static void ota_task(void *param)
   }
 }
 
-void ota_session_handle_frame(const input_frame_view_t *frame)
+void ota_session_handle_frame(ota_session_msg_t msg, bool window_end, const uint8_t *payload, size_t len)
 {
-  if (frame == NULL || s_ota.queue == NULL) {
+  if (s_ota.queue == NULL || msg > OTA_SESSION_MSG_END) {
     return;
   }
-  if (frame->payload_len > OTA_DATA_PAYLOAD_MAX) {
-    ESP_LOGW(TAG, "ota frame 0x%02x too long (%u bytes), dropped", frame->type, (unsigned)frame->payload_len);
+  if (len > OTA_DATA_PAYLOAD_MAX) {
+    ESP_LOGW(TAG, "ota message %d too long (%u bytes), dropped", (int)msg, (unsigned)len);
     return;
   }
   ota_queue_slot_t slot;
-  slot.type = frame->type;
-  slot.window_end = frame->slot == OTA_SLOT_WINDOW_END;
-  slot.len = (uint16_t)frame->payload_len;
+  slot.msg = msg;
+  slot.window_end = window_end;
+  slot.len = (uint16_t)len;
   if (slot.len > 0) {
-    memcpy(slot.data, frame->payload, slot.len);
+    memcpy(slot.data, payload, slot.len);
   }
-  /* 队列满就丢帧：PC 端等不到窗口应答会从 ACK 的 next_seq 重发，丢掉可恢复。 */
+  /* 队列满就丢帧：发送端等不到窗口应答会从 ACK 的 next_seq 重发，丢掉可恢复。 */
   if (xQueueSend(s_ota.queue, &slot, 0) != pdTRUE) {
-    ESP_LOGW(TAG, "ota queue full, frame 0x%02x dropped", frame->type);
+    ESP_LOGW(TAG, "ota queue full, message %d dropped", (int)msg);
   }
 }
 
-void ota_session_notify_ui_ready(void)
+void ota_session_notify_ready(void)
 {
-  s_ota.ui_ready = true;
+  s_ota.app_ready = true;
 }
 
-esp_err_t ota_session_start(void)
+esp_err_t ota_session_start(const ota_session_port_t *port)
 {
+  if (port == NULL || port->send_ack == NULL) {
+    return ESP_ERR_INVALID_ARG;
+  }
   ota_proto_init(&s_ota.proto);
-  s_ota.phase = OTA_PHASE_IDLE;
+  s_ota.port = *port;
+  s_ota.phase = OTA_SESSION_PHASE_IDLE;
   /* 队列放内部 RAM：flash 写入的禁缓存窗口内不能碰 PSRAM。 */
   s_ota.queue = xQueueCreateWithCaps(OTA_QUEUE_LEN, sizeof(ota_queue_slot_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (s_ota.queue == NULL) {

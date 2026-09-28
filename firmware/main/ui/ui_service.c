@@ -55,7 +55,6 @@ static struct {
   int last_pairing;
   int last_usb_role;
   int page;
-  bool ui_ready_sent;
   char firmware_version[48];
   char heap_text[32];
   char psram_text[32];
@@ -135,7 +134,6 @@ void ui_service_reset(void)
   s_ui.notice = 0;
   s_ui.rebooting = false;
   s_ui.powering_off = false;
-  s_ui.ui_ready_sent = false;
 }
 
 void ui_service_fill_state(remapad_ui_state_t *state)
@@ -210,13 +208,6 @@ void ui_service_fill_state(remapad_ui_state_t *state)
   state->screen_on = config->screen_on;
   /* 省电档由 BLE 栈的开关决定：栈关着（未连接也未广播）就降节拍。 */
   state->power_save = dp_power_save_active(ble_controller_running());
-
-  /* 首帧之后的第二轮回调才算 UI 就绪：OTA 健康门槛要的是「画面已经上屏」。 */
-  if (!s_ui.ui_ready_sent) {
-    s_ui.ui_ready_sent = true;
-  } else {
-    ota_session_notify_ui_ready();
-  }
 }
 
 /** 亮度档位：与亮度页的 5 档一致（20/40/60/80/100）。 */

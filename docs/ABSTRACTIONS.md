@@ -28,7 +28,7 @@ NS2 协议内容见 [controller-switch2.md](controller-switch2.md)，PS 家族�
 | **同代透传** | 设备自带的报告语言与目标语言一致时，把设备报文体原样交给目标发送（NS2 手柄 → NS2 主机），只重写由本机会话决定的状态字节。 |
 | **输出报告（反馈）** | 主机下发的震动 / 玩家灯 / 触觉采样经 `pad/feedback.c` 按设备布局行编码成该手柄的输出报告：USB host 直插写 OUT 端点，桥接路径把原始报告交给 PC 写回。布局与 HD 触觉的承载见 [controller-ps.md](controller-ps.md)。 |
 | **主机输出原始采集（capture）** | 诊断通道：主机写进输出特征值的原始字节在解析与编码之前经桥接帧 `0x12` 回传 PC 落盘；默认关闭，串口 `capture on|off` 开关，PC 侧 `--capture` / `:capture` 接住。 |
-| **OTA 会话（ota/）** | 升级通道的固件侧：`ota_session` 负责帧队列、flash 写入与重启，`ota_proto` 是纯逻辑的序号判定与窗口应答；镜像写进非运行分区、校验通过后切启动分区（链路见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」）。 |
+| **OTA 会话（ota/）** | 升级通道的固件侧，按「纯协议 + 传输无关核心 + 装配适配」分层：`ota_proto` 是纯逻辑的序号判定与窗口应答，`ota_session` 是传输无关会话核心（帧队列、flash 写入、回滚门槛，收发与进度出口经 port 注入），`ota_link` 是本工程的桥接帧装配；镜像写进非运行分区、校验通过后切启动分区（链路见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」）。 |
 | **NS2 report encoder** | 将私有手柄状态（`pad_state_t`）编码为目标 NS2 手柄的 USB/BLE 报告，位于 `firmware/main/target/ns2/`。 |
 | **BLE controller peripheral** | 对 NS2 主机执行广播、GATT 服务、输入通知、输出命令和配对状态管理的 ESP32 外设角色。 |
 | **Product control plane** | UI bridge 与固件控制面，用于低频状态、配置、配对操作和诊断；不承载高频输入报告。 |
@@ -361,7 +361,7 @@ classDiagram
 
 解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验（8 字节设备标识 + 最多 64 字节报告），
 输出报告帧按 78 字节校验（DualSense / DualShock 4 的蓝牙输出报告长度）。
-OTA 帧由 `input_link` 交给 `ota/ota_session`，amiibo 上传帧交给 `amiibo/amiibo_session`（逐帧回 ACK，
+OTA 帧由 `input_link` 经 `ota/ota_link` 适配交给 `ota/ota_session` 核心，amiibo 上传帧交给 `amiibo/amiibo_session`（逐帧回 ACK，
 收齐后经 `amiibo_store` 落 storage 分区 SPIFFS 槽位），PING 由 `input_link` 直接应答，其余交给 `input_source`；
 升级协议、流控与回滚门槛见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」。
 
@@ -531,7 +531,7 @@ flowchart TB
 （状态快照，落到 core 的 `ui_service_fill_state`；动作分发，落到 `ui_service_handle_action`）。
 界面侧不持有任何固件指针；快照里的字符串是只读借用，回调返回后即作废。
 无 UI 构建（`REMAPAD_UI=OFF`）里同一组生命周期入口由 `main/ui/ui_stub.c` 顶上：
-面板/触摸/背光不初始化、屏幕熄灭，OTA 健康门槛在启动时直接放行。
+面板/触摸/背光不初始化、屏幕熄灭，OTA 回滚门槛的「应用就绪」由 `main.c` 装配收尾统一上报，与有屏构建同一判据。
 
 ## 输入抽象
 
