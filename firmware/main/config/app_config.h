@@ -58,6 +58,12 @@ typedef struct {
      */
   bool ds_touchpad_plus_minus;
   bool ds_capture_key;
+  /**
+     * 局域网调试会话（netlog）的接入凭据：空 SSID 表示未配置。
+     * 不进 "cfg" blob（超出定长布局），单独存 NVS 字符串键、保存即落盘。
+     */
+  char wifi_ssid[33];
+  char wifi_pass[65];
 } app_config_t;
 
 /** 读入 NVS 配置到内存表（无记录时用默认值）。须在 nvs_init 之后调用。 */
@@ -77,6 +83,10 @@ void app_config_set_fw_version(const uint8_t ver[3]);
 
 /** DS 手柄行为两项开关（默认：触摸板映射关、截图键开）。 */
 void app_config_set_ds_behavior(bool touchpad_plus_minus, bool capture_key);
+
+/** 保存局域网调试会话的 WiFi 凭据：立即写 NVS（不等周期提交），写失败返回错误。
+ *  SSID 与密码不支持空格，长度按 app_config_t 字段上限。 */
+esp_err_t app_config_set_wifi(const char *ssid, const char *password);
 
 /** 立即叫醒提交任务落盘（默认每 1 分钟检查一次）。用于「改完就要重启」的
  * 场景：不落盘直接重启会丢掉刚改的版本。 */

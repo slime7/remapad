@@ -100,6 +100,9 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 - **Type-C 座子是纯 UFP 接线**：CC1 / CC2 各只接一颗 5.1 kΩ 下拉到地、没有 Rp 上拉，CC 也不连 ESP32（V2.1 原理图核对）。
   host 模式用 C-to-C 线直连手柄时，手柄在 CC 上看不到主机角色，VBUS 到位也只亮充电灯、数据不建立（实机已复现）；
   直插手柄要用的线序见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「USB 手柄直插（host 模式）」。
+- **数据脚两排并联**：A6/B6 并为 USB_P（D+，经 22 Ω 进 GPIO20）、A7/B7 并为 USB_N（D-，经 22 Ω 进 GPIO19），插头方向不影响数据通路（V2.1 原理图核对）。
+- **VBUS 只进不出**：座子 VBUS 直连充电 IC（ETA6098）与系统电源路径（经 D4 进 LDO），板上没有对外的 VBUS 输出开关；
+  host 模式要给手柄供电需从 TP1（GPIO 端子的「5V」脚，通 VBUS 网络）注入 5V，手柄看不到 VBUS 不会接通数据脚。
 - **`GPIO19` / `GPIO20`** 已接 Type-C，不要当普通 GPIO 使用。
 - **`GPIO0` 是 BOOT**、`CHIP_PU` 是复位信号，都不适合作为普通用户输入。
 - **按键资源**：`BOOT`(GPIO0)、`RST`(CHIP_PU)、`PWR`(SYS_OUT=GPIO40 / SYS_EN=GPIO41)。

@@ -18,7 +18,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
 目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围。
-两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）的代码都已落地，实机核对待做（VBUS 供电路径已按 V2.1 原理图确认为 TP1 外部注入）。
+两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）都已落地并实机核对通过；直插的线序与供电前提见该节（VBUS 需从 TP1 外部注入 5V）。
 不要因为 PC 预览能看界面就认为真实 BLE 链路已经可用：预览只画排版，动作要连到固件才生效。
 
 板卡已知信息都记录在 [hardware.md](hardware.md)：
@@ -326,7 +326,8 @@ uv run python pc/remapadctl.py -p COM3 --upgrade --verbose  # 同时透传设备
 - [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端入口是 `remapadctl.py --upgrade`。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
 - [firmware/partitions.csv](../firmware/partitions.csv)：NVS、PHY、OTA 双应用分区和通用存储区（storage）的终局布局。
-- [scripts/](../scripts)：`setup-rust-toolchain.py`（工具链）、`ui-preview.py`（预览）、`firmware-test.py`（主机端用例）、`create_adr.py`（新建 ADR）。
+- [scripts/](../scripts)：`setup-rust-toolchain.py`（工具链）、`ui-preview.py`（预览）、`firmware-test.py`（主机端用例）、`create_adr.py`（新建 ADR）、
+  `netlog_listen.py`（局域网日志收听端）。
 - [agent-temp/](../agent-temp)：代理与调试的临时文件目录（脚本、抓包输出、截图与日志；内容不进版本库，约定见 [AGENTS.md](../AGENTS.md)）。
 - [docs/controller-switch2.md](controller-switch2.md)：NS2 手柄广播、GATT、HID 报告、配对、指令集与 NFC 规范。
 - [docs/controller-ps.md](controller-ps.md)：DS3 / DS4 / DualSense 的输入输出报告、触觉通路与行为设置。
@@ -341,9 +342,34 @@ uv run python pc/remapadctl.py -p COM3 --upgrade --verbose  # 同时透传设备
 切过去之后在 UART0 上敲 `pad` 看识别结果与是否透传，敲 `usb` 看 host 栈状态与收发计数。
 
 host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 host 就没有 COM 口，串口 CLI、桥接程序与 OTA 全部用不了，日志与 CLI 只剩 UART0——
-扩展焊盘 **GPIO43（TX）/ GPIO44（RX）接 3.3V USB-UART 适配器**，115200 8N1、GND 共地；固件在切 host 之前先把日志与 CLI 出口迁到那里，接上适配器就能看到切换全过程与手柄枚举日志。
+扩展焊盘 **GPIO43（TX）/ GPIO44（RX）接 3.3V USB-UART 适配器**，115200 8N1、GND 共地；固件在切 host 之前先把日志与 CLI 出口迁到那里，接上适配器就能看到切换全过程与手柄枚举日志
+（netlog 会话在跑时跳过这一步：日志与 CLI 已有 UDP 出路，且 WiFi 起来后内部 RAM 也挤不出控制台任务的 8K 栈）。
 
-没有适配器时的替代只有三条：看屏幕（系统信息页、底栏手柄状态、模式页选中的角色）、整机复位（复用开关默认接 USB-Serial/JTAG，COM 口与烧录链路天然回来）、
+没有适配器时可以走 WiFi 调试通道（netlog，固件默认编入，`-DREMAPAD_NETLOG=OFF` 可整体裁掉）：
+单个 UDP 端口（默认 9999）承载与串口同一模型的数据——日志与 CLI 回复抄送到 PC、UDP 上收桥接帧当
+网络手柄、行命令远程敲，`mode host` 之后照常工作。用法两条路：
+
+- 串口上敲 `netlog save <ssid> <password>`：凭据写入 NVS（立即落盘）并立即连上；开机不自动连，
+  会话由屏幕开关（读存好的凭据，无凭据时页面提示「未配置」）或 `netlog <ssid> <password>` 手动起。
+  再敲一次 `netlog save` 或用 GUI 设置页的「WiFi（局域网调试）」改凭据。凭据不落盘的临时会话用
+  `netlog <ssid> <password> [ip] [port]`，`netlog off` 停止，无参看状态；`netlog scan` 后台扫一圈周围 AP
+  （ssid/BSSID/信道/信号/加密模式，约 2-15 秒后打进日志，`netlog scanlist` 随时重印——连不上时先看这里，
+  以及断开日志里的 reason 与 RSSI）。断线按 3 秒定时重连，认证方式由驱动按 AP 广播自动协商（WPA2/WPA3 均可连）。
+  发射功率默认压在 15dBm（`netlog power` 回读、`netlog power <0-84>` 运行时改，0.25dBm 单位）：
+  本板裸片功放在 20dBm 满档发射失真、任何 AP 都解不出认证帧，17.5dBm 起临界，勿调回满档；
+  `netlog reconnect` 主动重走一轮认证-关联，`netlog phyreset` 擦掉 NVS 里的射频校准数据并重启（现场修复用）。
+  屏幕上也有同一开关：
+  「无线调试」页（release 页表末位）右上角的 WiFi 角钮（会话在位换红色「断开」），正文显示
+  「未连接 / 连接中… / 设备的 ip:port」与信号强度（已连接时）；开关同时接通网络手柄与日志，
+  屏幕开关开机不记忆。
+- PC 侧接收：`uv run python scripts/netlog_listen.py`（收日志 + 回发命令），或 GUI 工具栏「网络」栏
+  填 `设备IP:9999` 连接（手柄转发照常）。设备不知道 PC 的 IP：PC 先说话（listener 的广播 hello、
+  GUI 的连接）即完成目标自学习，`netlog` 状态行里能看到设备自己拿到的 IP。
+
+UDP 会丢包：截图与 OTA 仍只走串口（网络上发这些帧设备端直接忽略）；凭据与该通道都是局域网内
+明文、无鉴权，只在可信网络里用。
+
+没有适配器、也不开 netlog 时的替代只有三条：看屏幕（系统信息页、底栏手柄状态、模式页选中的角色）、整机复位（复用开关默认接 USB-Serial/JTAG，COM 口与烧录链路天然回来）、
 或先切回串口再在 PC 上查——host 期间的日志没有缓冲，切回来补看不到。
 
 - 回到串口有三条路：模式页切回「串口」、UART0 上敲 `mode device`、复位。
@@ -352,8 +378,11 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 - 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 XInput 形态布局并打兜底标记。
 - 线序：Type-C 座子没有 Rp 上拉、CC 只有 5.1 kΩ 下拉（见 [hardware.md](hardware.md)），C-to-C 线直连手柄只亮充电灯、不枚举（实机已复现）；
   直插须用 C 公转 A 母转接加 A-to-C 数据线——A-to-C 线的 C 头自带 Rp，手柄侧才认得到主机；转接头与线都必须能过数据。
-- 供电：host 模式要给插入的手柄供 VBUS 5V，V2.1 原理图确认板上无升压输出，需从 TP1 外部注入 5V（见 [hardware.md](hardware.md)）；
-  5V 焊盘注入点亮手柄充电灯已实机确认，转接线序下的枚举结果仍待实机验证。
+  板上数据脚两排并联（A6/B6→D+、A7/B7→D-），插头方向不影响数据通路，枚举失败不要在插头方向上找原因。
+- 供电：host 模式要给插入的手柄供 VBUS 5V，板上 VBUS 只进不出（直连充电 IC 与系统电源路径，无对外输出开关），需从
+  GPIO 端子的「5V」脚（即 TP1，通座子 VBUS 网络）注入 5V、GND 就近共地（见 [hardware.md](hardware.md)）；
+  手柄看不到 VBUS 就不接通数据脚，所以先灌电再插手柄。实测该链路下 DualSense Edge（054c:0df2）识别为 PS 家族，输入与反馈链路全通。
+- 已知限制：DS Edge 的音频触觉接口 ISO 端点 MPS 392 超出 HCD 128 上限，直插时音频触觉通道起不来（日志 `audio interface 1 claim failed`），HID 反馈不受影响。
 
 ## 常见问题
 

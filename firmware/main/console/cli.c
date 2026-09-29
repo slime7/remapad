@@ -7,7 +7,10 @@
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "amiibo_store.h"
 #include "app_config.h"
@@ -25,6 +28,9 @@
 #include "feedback.h"
 #include "input_source.h"
 #include "layout.h"
+#ifdef REMAPAD_NETLOG
+#include "netlog.h"
+#endif
 #include "ns2_identity.h"
 #include "ns2_nfc.h"
 #include "ns2_output.h"
@@ -41,6 +47,9 @@ static const char *TAG = "remapad_cli";
 
 #define CLI_LINE_MAX 96
 
+/** 行缓冲互斥：USJ 桥接读任务、UART0 读任务与 netlog 收任务都会喂行。 */
+static SemaphoreHandle_t s_feed_lock;
+
 static void cli_print(const char *text)
 {
   /* 输出走当前控制台通道：设备模式是 USJ 的非阻塞 vfs，host 模式是 UART0。 */
@@ -52,7 +61,7 @@ static void cli_help(void)
 {
   cli_print("remapad cli commands:");
   cli_print("  status              system status one-liner");
-  cli_print("  mem                 live memory snapshot (psram/internal/js, printed next frame)");
+  cli_print("  mem                 heap watermarks (internal/dma/psram) + ui memory snapshot");
   cli_print("  key <name> [ms]     inject debug key (key release clears)");
   cli_print("                      a b x y plus minus home capture c l r zl zr");
   cli_print("                      ls rs up down left right gl gr ui");
@@ -91,6 +100,11 @@ static void cli_help(void)
   cli_print("  haptic [0xNN|audio on|off]");
   cli_print("                      manual sample byte; audio = PC drives DS5 haptics");
   cli_print("  capture [on|off]    raw host output tap -> PC bridge frames (default off)");
+#ifdef REMAPAD_NETLOG
+  cli_print("  netlog [save <ssid> <password> | scan | scanlist | phyreset | power [0-84] | reconnect | <ssid> "
+            "<password> [ip] [port] | off]");
+  cli_print("                      wifi udp session: logs/cli + network pad (no arg = state)");
+#endif
   cli_print("  amiibo [list|select <n>|select off|del <n>|poll on|off]");
   cli_print("                      amiibo slots and NFC tag emulation (no arg = state)");
   cli_print("                      amiibo state <hex> pin report stage, done <hex> post-drain");
@@ -130,6 +144,22 @@ static void cli_status(void)
  */
 static void cli_mem(void)
 {
+  char line[128];
+  /* 最大连续块与「空闲总量」同样关键：8K 栈这类大块分配卡的是连续块，不是总量。 */
+  snprintf(line, sizeof(line), "mem internal free=%u largest=%u total=%u",
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_total_size(MALLOC_CAP_INTERNAL));
+  cli_print(line);
+  snprintf(line, sizeof(line), "mem internal-dma free=%u largest=%u",
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));
+  cli_print(line);
+  snprintf(line, sizeof(line), "mem psram free=%u largest=%u total=%u",
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM),
+           (unsigned)heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+  cli_print(line);
   ui_service_print_mem();
   cli_print("ok mem report printed");
 }
@@ -906,6 +936,149 @@ static void cli_capture(const char *arg)
   cli_print(line);
 }
 
+#ifdef REMAPAD_NETLOG
+/** 局域网调试会话（netlog.h）：日志与 CLI 回复抄送 UDP、UDP 收桥接帧当网络
+ *  手柄；凭据可保存进 NVS 开机自连，目标 IP 由收到的第一个报文自学。 */
+static void cli_netlog(const char *arg)
+{
+  char line[160];
+  if (arg[0] == '\0') {
+    netlog_status_line(line, sizeof(line));
+    cli_print(line);
+    return;
+  }
+  if (strcmp(arg, "off") == 0) {
+    netlog_stop();
+    cli_print("ok netlog stopped");
+    return;
+  }
+  if (strcmp(arg, "scan") == 0) {
+    int count = 0;
+    const esp_err_t scan_err = netlog_scan(&count);
+    if (scan_err == ESP_ERR_INVALID_STATE) {
+      cli_print("err netlog scan: wifi driver not up yet (netlog on once first)");
+      return;
+    }
+    if (scan_err != ESP_OK) {
+      snprintf(line, sizeof(line), "err netlog scan failed: %s", esp_err_to_name(scan_err));
+      cli_print(line);
+      return;
+    }
+    cli_print("ok netlog scan started (results in log in ~15s, netlog scanlist reprints)");
+    return;
+  }
+  if (strcmp(arg, "scanlist") == 0) {
+    int printed = 0;
+    while (netlog_scan_line(printed, line, sizeof(line))) {
+      cli_print(line);
+      printed++;
+    }
+    snprintf(line, sizeof(line), "ok netlog scanlist %d aps (rssi desc)", printed);
+    cli_print(line);
+    return;
+  }
+  if (strcmp(arg, "phyreset") == 0) {
+    const esp_err_t phy_err = netlog_phy_reset();
+    if (phy_err != ESP_OK) {
+      snprintf(line, sizeof(line), "err netlog phyreset failed: %s", esp_err_to_name(phy_err));
+      cli_print(line);
+      return;
+    }
+    cli_print("ok phy calibration erased, rebooting");
+    esp_restart();
+    return;
+  }
+  if (strcmp(arg, "reconnect") == 0) {
+    const esp_err_t re_err = netlog_reconnect();
+    if (re_err != ESP_OK) {
+      snprintf(line, sizeof(line), "err netlog reconnect: %s", esp_err_to_name(re_err));
+      cli_print(line);
+      return;
+    }
+    cli_print("ok netlog reconnecting in 3s");
+    return;
+  }
+  if (strncmp(arg, "power", 5) == 0 && (arg[5] == '\0' || arg[5] == ' ')) {
+    if (arg[5] == '\0') {
+      int8_t power = 0;
+      const esp_err_t get_err = netlog_get_tx_power(&power);
+      if (get_err != ESP_OK) {
+        snprintf(line, sizeof(line), "err netlog power read: %s", esp_err_to_name(get_err));
+        cli_print(line);
+        return;
+      }
+      snprintf(line, sizeof(line), "ok netlog tx power %d (0.25dBm) = %d.%02d dBm", (int)power, (int)power / 4,
+               (int)power % 4 * 25);
+      cli_print(line);
+      return;
+    }
+    const int value = atoi(arg + 6);
+    if (value < 0 || value > 84) {
+      cli_print("err power is 0-84 (0.25dBm units, 80 = 20dBm)");
+      return;
+    }
+    const esp_err_t set_err = netlog_set_tx_power((int8_t)value);
+    if (set_err != ESP_OK) {
+      snprintf(line, sizeof(line), "err netlog power set: %s", esp_err_to_name(set_err));
+      cli_print(line);
+      return;
+    }
+    snprintf(line, sizeof(line), "ok netlog tx power %d (0.25dBm), takes effect on next auth", value);
+    cli_print(line);
+    return;
+  }
+  if (strncmp(arg, "save", 4) == 0 && (arg[4] == '\0' || arg[4] == ' ')) {
+    const char *creds = arg[4] == '\0' ? "" : arg + 5;
+    char ssid[NETLOG_SSID_MAX] = { 0 };
+    char password[NETLOG_PASS_MAX] = { 0 };
+    if (sscanf(creds, "%32s %64s", ssid, password) != 2) {
+      cli_print("err usage: netlog save <ssid> <password>");
+      return;
+    }
+    const esp_err_t save_err = netlog_save_wifi(ssid, password);
+    if (save_err != ESP_OK) {
+      snprintf(line, sizeof(line), "err netlog save failed: %s", esp_err_to_name(save_err));
+      cli_print(line);
+      return;
+    }
+    cli_print(netlog_running() ? "ok wifi saved and connecting" : "ok wifi saved");
+    return;
+  }
+  char ssid[NETLOG_SSID_MAX] = { 0 };
+  char password[NETLOG_PASS_MAX] = { 0 };
+  char host[NETLOG_HOST_MAX] = { 0 };
+  char port_text[8] = { 0 };
+  const int fields = sscanf(arg, "%32s %64s %39s %7s", ssid, password, host, port_text);
+  if (fields < 2) {
+    cli_print("err usage: netlog [save <ssid> <password> | scan | scanlist | phyreset | power [0-84] | reconnect | "
+              "<ssid> <password> [ip] [port] | off]");
+    return;
+  }
+  uint16_t port = NETLOG_PORT_DEFAULT;
+  if (fields >= 4) {
+    char *end = NULL;
+    const unsigned long parsed = strtoul(port_text, &end, 10);
+    if (end == port_text || *end != '\0' || parsed == 0 || parsed > 65535) {
+      cli_print("err port is 1-65535");
+      return;
+    }
+    port = (uint16_t)parsed;
+  }
+  /* 不给 ip 时目标自学习：等 PC 先发一个报文（listener 的广播 hello 或 GUI 连接）。 */
+  const esp_err_t err = netlog_start(ssid, password, fields >= 3 ? host : NULL, port);
+  if (err == ESP_ERR_INVALID_STATE) {
+    cli_print("err netlog session already running (netlog off first)");
+    return;
+  }
+  if (err != ESP_OK) {
+    snprintf(line, sizeof(line), "err netlog start failed: %s", esp_err_to_name(err));
+    cli_print(line);
+    return;
+  }
+  cli_print("ok netlog connecting");
+}
+#endif
+
 /** 同代透传开关：0 关、1 开（默认开）；无参回读当前值。 */
 static void cli_relay(const char *arg)
 {
@@ -1270,6 +1443,10 @@ static void cli_dispatch(char *line)
     cli_haptic(arg);
   } else if (strcmp(line, "capture") == 0) {
     cli_capture(arg);
+#ifdef REMAPAD_NETLOG
+  } else if (strcmp(line, "netlog") == 0) {
+    cli_netlog(arg);
+#endif
   } else if (strcmp(line, "amiibo") == 0) {
     cli_amiibo(arg);
   } else if (strcmp(line, "ltk") == 0) {
@@ -1306,6 +1483,9 @@ void cli_feed_bytes(const uint8_t *data, size_t len)
   if (data == NULL) {
     return;
   }
+  if (s_feed_lock != NULL) {
+    xSemaphoreTake(s_feed_lock, portMAX_DELAY);
+  }
   for (size_t i = 0; i < len; i++) {
     const char ch = (char)data[i];
     if (ch == '\r' || ch == '\n') {
@@ -1324,12 +1504,19 @@ void cli_feed_bytes(const uint8_t *data, size_t len)
       used = 0;
     }
   }
+  if (s_feed_lock != NULL) {
+    xSemaphoreGive(s_feed_lock);
+  }
 }
 
 esp_err_t remapad_cli_start(void)
 {
   /* 接收与分帧由 input_link 的接收任务承担（USJ 驱动 + 环形缓冲），这里
      * 只报告命令行就绪；命令分发在 cli_feed_bytes 里同步进行。 */
+  s_feed_lock = xSemaphoreCreateMutex();
+  if (s_feed_lock == NULL) {
+    return ESP_ERR_NO_MEM;
+  }
   ESP_LOGI(TAG, "cli ready (type help)");
   return ESP_OK;
 }

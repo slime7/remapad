@@ -81,6 +81,15 @@ if(NOT REMAPAD_UI)
     list(APPEND remapad_srcs "ui/ui_stub.c")
 endif()
 
+# 局域网调试会话（netlog：UDP 日志/CLI 抄送 + 网络手柄）：默认编入，
+# `idf.py -DREMAPAD_NETLOG=OFF build` 整体裁掉（换入空实现，CLI 命令同步裁剪）。
+if(NOT DEFINED REMAPAD_NETLOG OR REMAPAD_NETLOG)
+    list(APPEND remapad_srcs "netlog/netlog.c")
+    list(APPEND remapad_requires esp_wifi esp_netif esp_event)
+else()
+    list(APPEND remapad_srcs "netlog/netlog_stub.c")
+endif()
+
 idf_component_register(
     SRCS ${remapad_srcs}
     INCLUDE_DIRS
@@ -90,6 +99,7 @@ idf_component_register(
         "config"
         "console"
         "drivers"
+        "netlog"
         "pad"
         "input"
         "ota"
@@ -101,3 +111,7 @@ idf_component_register(
         "usb"
     REQUIRES ${remapad_requires} spiffs
 )
+
+if(REMAPAD_NETLOG)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE REMAPAD_NETLOG=1)
+endif()

@@ -88,6 +88,12 @@ pub struct UiState {
   pub screen_on: bool,
   /// 省电档（BLE 关闭）：界面按 12 fps 等效节拍轮询与推进动画。
   pub power_save: bool,
+  /// 局域网调试会话（netlog）：0 关、1 连接中、2 已连接、3 无凭据。
+  pub netlog_state: i32,
+  /// 设备自己的 ip:port（连接后有效），未连接时传 "--"。
+  pub netlog_addr: *const c_char,
+  /// WiFi 信号强度（dBm，负值），未知为 0。
+  pub netlog_rssi: i32,
 }
 
 /// 逐帧渲染统计：面板提交耗时与渲染耗时分开记。
@@ -107,7 +113,7 @@ pub struct Stats {
 const _: () = {
   assert!(core::mem::size_of::<Touch>() == 4);
   assert!(core::mem::size_of::<Hooks>() == 8);
-  assert!(core::mem::size_of::<UiState>() == 88);
+  assert!(core::mem::size_of::<UiState>() == 100);
   assert!(core::mem::align_of::<UiState>() == 4);
   assert!(core::mem::offset_of!(UiState, usb_role) == 16);
   assert!(core::mem::offset_of!(UiState, pad_family) == 24);
@@ -123,6 +129,9 @@ const _: () = {
   assert!(core::mem::offset_of!(UiState, rebooting) == 85);
   assert!(core::mem::offset_of!(UiState, screen_on) == 86);
   assert!(core::mem::offset_of!(UiState, power_save) == 87);
+  assert!(core::mem::offset_of!(UiState, netlog_state) == 88);
+  assert!(core::mem::offset_of!(UiState, netlog_addr) == 92);
+  assert!(core::mem::offset_of!(UiState, netlog_rssi) == 96);
   assert!(core::mem::size_of::<Stats>() == 40);
   assert!(core::mem::align_of::<Stats>() == 8);
   assert!(core::mem::offset_of!(Stats, window_render_us) == 8);

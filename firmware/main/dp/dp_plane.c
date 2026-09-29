@@ -333,7 +333,8 @@ static uint8_t held_haptic_envelope(int64_t now_us, uint32_t *remain_ms, uint16_
  */
 static void drain_host_capture(void)
 {
-  if (!input_link_active() || !dp_capture_enabled()) {
+  /* 串口链路与网络桥接（netlog）都在位时帧走 UDP 出口，采集照常排空。 */
+  if ((!input_link_active() && !input_link_net_active()) || !dp_capture_enabled()) {
     return;
   }
   static uint8_t payload[INPUT_FRAME_WIRE_MAX_PAYLOAD];

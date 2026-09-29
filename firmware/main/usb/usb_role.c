@@ -6,6 +6,7 @@
 
 #include "console_out.h"
 #include "input_link.h"
+#include "netlog.h"
 #include "usb_transport.h"
 
 static const char *TAG = "remapad_usb_role";
@@ -51,10 +52,17 @@ esp_err_t usb_role_enter_host(void)
   /* 顺序要紧：先把日志与 CLI 出口换到 UART0（USJ 马上要让给手柄），再放掉
      * 串口链路，最后装 host 栈。任何一步失败都退回串口角色，绝不停在既没有
      * 日志也没有串口的状态。 */
-  esp_err_t err = console_out_use_uart0();
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "uart0 console unavailable: %s", esp_err_to_name(err));
-    return err;
+  esp_err_t err;
+  if (netlog_running()) {
+    /* netlog 在跑时日志与 CLI 已有 UDP 出路；且 WiFi 把内部 RAM 压到装不下控制台的
+     * 8K 收任务栈，装了再拆的窗口里并发日志正好在写 UART，会踩坏堆。干脆不试。 */
+    ESP_LOGI(TAG, "netlog carries logs, uart0 console skipped");
+  } else {
+    err = console_out_use_uart0();
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "uart0 console unavailable: %s", esp_err_to_name(err));
+      return err;
+    }
   }
   input_link_stop();
   usj_phy_release();

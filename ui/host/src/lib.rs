@@ -25,7 +25,7 @@ pub const SCREEN_WIDTH: u32 = 240;
 pub const SCREEN_HEIGHT: u32 = 280;
 /// 预览窗尺寸：设备画面（240 × 280）加下方控制条（与 ui/preview.slint 的窗口同高）。
 pub const PREVIEW_WIDTH: u32 = 240;
-pub const PREVIEW_HEIGHT: u32 = 570;
+pub const PREVIEW_HEIGHT: u32 = 600;
 
 /// 区域内算作墨迹的判据：与底色每通道的差都超过这个值。
 const INK_TOLERANCE: u8 = 32;

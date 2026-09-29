@@ -67,6 +67,12 @@ typedef struct {
   bool screen_on;
   /** 省电档（BLE 关闭）：界面按 12 fps 等效节拍轮询与推进动画。 */
   bool power_save;
+  /** 局域网调试会话（netlog）：0 关、1 连接中、2 已连接、3 无凭据。 */
+  int netlog_state;
+  /** 设备自己的 ip:port（连接后有效），未连接时传 "--"。 */
+  const char *netlog_addr;
+  /** WiFi 信号强度（dBm，负值），未知为 0。 */
+  int netlog_rssi;
 } remapad_ui_state_t;
 
 /** trace 命令不带帧数时的追踪长度。 */

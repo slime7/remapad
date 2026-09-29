@@ -48,6 +48,15 @@ CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
 CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
 CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2
 
+# 控制器缓冲按「单连接手柄外设」精简：默认值按扫描网关给（6 活动、100 条广播
+# 报告流控、100 条重复过滤缓存），其中广播报告池是一大块内部连续内存——开机堆
+# 干净时装得下，休眠拆栈后再装，碎片堆里就挤不出来（BLE_INIT Malloc failed、
+# connect 永远 NO_MEM 的根因）。本设备只有广播+信号搜索扫描+一条连接。
+CONFIG_BT_CTRL_BLE_MAX_ACT=4
+CONFIG_BT_CTRL_BLE_ADV_REPORT_FLOW_CTRL_NUM=50
+CONFIG_BT_CTRL_ADV_DUP_FILT_MAX=20
+CONFIG_BT_CTRL_SCAN_DUPL_CACHE_SIZE=40
+
 # NS2 主机把连接压到 5ms（4 单位，低于 BLE 规范的 7.5ms 下限），控制器必须
 # 放行亚规范间隔主机下发的更新才能落地。ESP32-C3/S3 控制器允许亚规范间隔由
 # 这个开关控制（bt.c 据此调用 ble_min_conn_interval_enable(3)，最低 3.75ms），
@@ -58,11 +67,27 @@ CONFIG_BT_CTRL_BLE_MIN_CONN_INTERVAL_ENABLE=y
 
 # NS2 主机只认经扩展广播 HCI 路径（LE Set Extended Advertising Parameters，
 # legacy_pdu=1）下发的 legacy PDU；缓冲参数对齐已验证可被 NS2 发现的
-# ESP32 实现（zhantss/ESP32-BLE5-NSController-Emulator）。
+# ESP32 实现（zhantss/ESP32-BLE5-NSController-Emulator），按单连接手柄的
+# 流量再收敛一档：一条 5ms 连接的小报文用不满网关级的池子，池子越大，
+# 拆栈后重新起栈在碎片堆里越难凑齐（BLE_INIT Malloc failed 的另一半）。
 CONFIG_BT_NIMBLE_EXT_ADV=y
 CONFIG_BT_NIMBLE_HCI_EVT_BUF_SIZE=255
-CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT=150
+CONFIG_BT_NIMBLE_HCI_EVT_HI_BUF_COUNT=12
+CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT=60
 CONFIG_BT_NIMBLE_MSYS_1_BLOCK_SIZE=128
-CONFIG_BT_NIMBLE_MSYS_2_BLOCK_COUNT=30
+CONFIG_BT_NIMBLE_MSYS_2_BLOCK_COUNT=16
 CONFIG_BT_NIMBLE_MSYS_2_BLOCK_SIZE=512
-CONFIG_BT_NIMBLE_TRANSPORT_ACL_FROM_LL_COUNT=30
+CONFIG_BT_NIMBLE_TRANSPORT_ACL_FROM_LL_COUNT=16
+
+# 局域网调试会话（netlog）与屏幕 UI、BLE 共用内部 RAM：压缩 WiFi 缓冲——
+# 静态 RX 缓冲 10→6、动态 TX 缓冲 32→8（esp_wifi_init 一次性分配，每个约
+# 1.6 KB，32 个就是 ~52 KB 内部 RAM，正是 NO_MEM 的来源；调试 UDP 流量用不
+# 上那么多）、关掉 AMPDU（重排与聚合的缓冲同样省下）。
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+
+# 针对裸片射频设计的完整校准：裸片直焊没有预校准，完整射频校准测定电容阵列与频偏
+CONFIG_ESP_PHY_RF_CAL_FULL=y

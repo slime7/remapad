@@ -19,6 +19,17 @@ extern "C" {
 /** 把一段文本写到当前通道（未切 UART0 时走 stdout，即 USJ 的非阻塞 vfs）。 */
 void console_out_write(const char *text, size_t len);
 
+/** 输出旁路汇点：注册后日志行与 CLI 输出同步抄送一份（netlog 用）。
+ *  汇点必须非阻塞、自身可重入安全，且不得回头调用本模块。 */
+typedef void (*console_out_sink_t)(const char *text, size_t len);
+
+/** 注册输出汇点（传 NULL 清除）。 */
+void console_out_set_sink(console_out_sink_t sink);
+
+/** 安装 USJ 日志 vprintf：写 stdout（与默认一致），另抄送汇点。
+ *  在 app_main 早期调用，让日志出口全程归本模块管理，device/host 两态都能被汇点截到。 */
+void console_out_init(void);
+
 /** 日志与 CLI 输出切到 UART0 并起读任务（喂 CLI 行解析）。重复调用无副作用。 */
 esp_err_t console_out_use_uart0(void);
 

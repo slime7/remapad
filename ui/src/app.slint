@@ -1,12 +1,12 @@
 // Remapad 屏幕界面主体：四叶草轮播带 + 底部状态栏 + 确认弹窗。
-// 页面槽位顺序：亮度 / 手柄 / 配对 / 电源 / USB 模式 / DS 设置 / 系统信息，
+// 页面槽位顺序：亮度 / 手柄 / 配对 / 电源 / USB 模式 / DS 设置 / 系统信息 / 无线调试，
 // dev 构建在末位追加调试页；切页时整条带划过一整页，静止时两侧各露一条邻页花瓣边。
 // 所有状态由固件侧写入，动作经 action 回调交回固件。
 // 主体是 AppContent（设备与 PC 预览共用同一棵树），设备侧入口 App 只把它包进 240 × 280 窗口。
 
 import { Theme } from "theme.slint";
 import { BottomBar, ConfirmDialog, Drag, DragArea } from "components.slint";
-import { BrightnessPage, ControllerPage, DebugPage, DsSettingsPage, PairingPage, PowerPage, SystemInfoPage, UsbModePage } from "pages.slint";
+import { BrightnessPage, ControllerPage, DebugPage, DsSettingsPage, NetworkPage, PairingPage, PowerPage, SystemInfoPage, UsbModePage } from "pages.slint";
 
 export component AppContent inherits Rectangle {
     width: 240px;
@@ -15,7 +15,7 @@ export component AppContent inherits Rectangle {
 
     // ---- 界面状态（固件侧写入）----
     in-out property <int> page: 0;
-    in-out property <int> page-count: 7;
+    in-out property <int> page-count: 8;
     in-out property <int> focus-index: -1;
     /** 手柄操控窗口：操控模式或最近 4 秒内有按键时为真，焦点环只在此时可见。 */
     in-out property <bool> pad-active: false;
@@ -43,6 +43,10 @@ export component AppContent inherits Rectangle {
     in-out property <string> psram-text: "- / - MB";
     in-out property <string> battery-text: "-";
     in-out property <int> debug-flash: -1;
+    /** 无线调试会话（netlog）：0 关、1 连接中、2 已连接、3 无凭据。 */
+    in-out property <int> netlog-state: 0;
+    in-out property <string> netlog-addr: "--";
+    in-out property <int> netlog-rssi: 0;
     /** 弹窗：0 无 1 重启确认 2 关机确认 3 切手柄确认 4 切回串口后重启询问 */
     in-out property <int> dialog: 0;
     in-out property <int> dialog-focus: 0;
@@ -123,6 +127,9 @@ export component AppContent inherits Rectangle {
             return 0;
         }
         if (slot == 7) {
+            return 1;
+        }
+        if (slot == 8) {
             return 3;
         }
         return 2;
@@ -282,13 +289,22 @@ export component AppContent inherits Rectangle {
                 psram-text: root.psram-text;
                 battery-text: root.battery-text;
             }
-            if root.slot-visible(7): debug-page := DebugPage {
+            if root.slot-visible(7): NetworkPage {
                 x: root.slot-x(7);
+                netlog-state: root.netlog-state;
+                netlog-addr: root.netlog-addr;
+                netlog-rssi: root.netlog-rssi;
+                focus-index: root.page-focus && root.page == 7 ? root.focus-index : -1;
+                interactive: root.page == 7 && !root.dialog-open && !root.sliding;
+                toggle => { root.action("netlog-toggle", 0); }
+            }
+            if root.slot-visible(8): debug-page := DebugPage {
+                x: root.slot-x(8);
                 pairing: root.pairing;
                 pad-ui-mode: root.pad-ui-mode;
                 flash: root.debug-flash;
-                focus-index: root.page-focus && root.page == 7 ? root.focus-index : -1;
-                interactive: root.page == 7 && !root.dialog-open && !root.sliding;
+                focus-index: root.page-focus && root.page == 8 ? root.focus-index : -1;
+                interactive: root.page == 8 && !root.dialog-open && !root.sliding;
                 inject(index) => { root.action("debug-key", index); }
             }
         }
@@ -410,6 +426,8 @@ export component AppContent inherits Rectangle {
         } else if (root.page == 5) {
             root.action(root.focus-index == 1 ? "ds-capture" : "ds-touchpad", 0);
         } else if (root.page == 7) {
+            root.action("netlog-toggle", 0);
+        } else if (root.page == 8) {
             root.action("debug-key", root.focus-index);
         }
     }
@@ -450,6 +468,9 @@ export component App inherits Window {
     in-out property <string> psram-text <=> content.psram-text;
     in-out property <string> battery-text <=> content.battery-text;
     in-out property <int> debug-flash <=> content.debug-flash;
+    in-out property <int> netlog-state <=> content.netlog-state;
+    in-out property <string> netlog-addr <=> content.netlog-addr;
+    in-out property <int> netlog-rssi <=> content.netlog-rssi;
     in-out property <int> dialog <=> content.dialog;
     in-out property <int> dialog-focus <=> content.dialog-focus;
     in-out property <bool> powering-off <=> content.powering-off;

@@ -20,6 +20,7 @@ CRC-16/CCITT-FALSE 覆盖除末尾两字节外的整帧（含同步字）。
 from __future__ import annotations
 
 import ctypes
+import socket
 import struct
 import sys
 import time
@@ -631,6 +632,76 @@ class SerialLink:
 
     def __exit__(self, *_exc) -> None:
         self.close()
+
+
+#: 设备端 UDP 调试通道（netlog）的默认端口：桥接帧、CLI 文本与日志同一端口。
+NETLOG_PORT_DEFAULT = 9999
+
+
+def parse_endpoint(text: str, default_port: int = NETLOG_PORT_DEFAULT) -> tuple[str, int]:
+    """网络连接地址 "ip[:port]" → (ip, port)；端口缺省给 default_port，格式不对抛 ValueError。"""
+    text = text.strip()
+    host, sep, port_text = text.partition(":")
+    host = host.strip()
+    if not host:
+        raise ValueError(f"地址里没有 IP：{text!r}")
+    if sep:
+        try:
+            port = int(port_text)
+        except ValueError as exc:
+            raise ValueError(f"端口不是数字：{text!r}") from exc
+        if not 1 <= port <= 65535:
+            raise ValueError(f"端口超出 1-65535：{text!r}")
+    else:
+        port = default_port
+    return host, port
+
+
+class UdpLink:
+    """设备的 UDP 桥接链路：与串口同一模型——桥接帧与 CLI 文本共用一条字节流，靠帧同步字区分。
+
+    read/write/flush/close 与 SerialLink 同签名，可直接交给 remapadctl.Session。
+    UDP 报文不可靠：输入报告与命令丢一拍无感，OTA/截图这类要完整性的会话仍走串口。
+    """
+
+    def __init__(self, host: str, port: int) -> None:
+        self.address = (host, port)
+        self._sock: socket.socket | None = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.settimeout(0)  # 非阻塞：会话 pump 按节拍轮询。
+        try:
+            # connect 固定对端：send 不用带地址，recvfrom 只收设备发回的报文。
+            self._sock.connect((host, port))
+        except OSError as exc:
+            self.close()
+            raise OSError(f"UDP 连接 {host}:{port} 失败：{exc}") from exc
+
+    def read(self, size: int = 4096) -> bytes:
+        if self._sock is None:
+            return b""
+        try:
+            data, _addr = self._sock.recvfrom(size)
+        except (BlockingIOError, TimeoutError):
+            return b""
+        except OSError as exc:
+            raise OSError(f"读取 UDP 失败：{exc}") from exc
+        return data
+
+    def write(self, data: bytes) -> None:
+        # UDP 不分片：桥接帧最长 264 字节、命令行几十字节，一个报文放得下。
+        if self._sock is None:
+            raise OSError("UDP 链路已关闭")
+        try:
+            self._sock.send(data)
+        except OSError as exc:
+            raise OSError(f"发送 UDP 失败：{exc}") from exc
+
+    def flush(self) -> None:
+        """UDP 没有发送缓冲可等，与串口同签名即可。"""
+
+    def close(self) -> None:
+        if self._sock is not None:
+            self._sock.close()
+            self._sock = None
 
 
 def open_port(port: str, baud: int = 115200) -> SerialLink:

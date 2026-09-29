@@ -15,6 +15,7 @@
 #include "app_config.h"
 #include "bridge/js_bridge.h"
 #include "console/cli.h"
+#include "console_out.h"
 #include "dp_plane.h"
 #include "drivers/buzzer.h"
 #include "drivers/pwr_key.h"
@@ -60,15 +61,20 @@ void app_main(void)
     ESP_LOGE("remapad_app", "power latch not held, battery power will drop");
   }
 
+  /* 日志出口全程归控制台通道管：device/host 两态都能被 netlog 汇点抄到；
+   * 未注册汇点时与默认 vprintf 行为一致。 */
+  console_out_init();
+
   /* 广播地址伪装必须在蓝牙控制器初始化前完成：public 广播的空中地址由 controller 的 BD_ADDR 决定。
-     * 换成一个主机没见过的 OUI 等于让主机把本设备当新设备重配一次（主机按地址存配对记录，
-     * 旧记录与其作废的 LTK 会让回连停在加密失败上）；蓝牙地址随之派生，后缀沿用 eFuse，上电稳定。 */
-  uint8_t base[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-  esp_read_mac(base, ESP_MAC_WIFI_STA);
-  base[0] = 0x9C;
-  base[1] = 0xE6;
-  base[2] = 0x35;
-  ESP_ERROR_CHECK(esp_base_mac_addr_set(base));
+     * 仅覆写蓝牙接口的 MAC（ESP_MAC_BT），前 3 字节换成任天堂 OUI，后缀沿用 eFuse；
+     * 绝不能调 esp_base_mac_addr_set 污染全局基准 MAC，否则 WiFi STA 也会变成任天堂 OUI，
+     * 导致大部分无线路由器与手机热点直接判定为异常伪造源并不予应答。 */
+  uint8_t bt_mac[6] = { 0 };
+  ESP_ERROR_CHECK(esp_read_mac(bt_mac, ESP_MAC_BT));
+  bt_mac[0] = 0x9C;
+  bt_mac[1] = 0xE6;
+  bt_mac[2] = 0x35;
+  ESP_ERROR_CHECK(esp_iface_mac_addr_set(bt_mac, ESP_MAC_BT));
 
   const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
   const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);

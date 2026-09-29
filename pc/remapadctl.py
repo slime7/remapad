@@ -942,6 +942,7 @@ def parse_device_reply(line: str) -> tuple[str, dict] | None:
     - `screen`：`screen on|off` → `screen_on`；
     - `ctrl`：`ok ctrl body=0x… button=0x… accent=0x… grip=0x…` → 四段 `0xRRGGBB`；
     - `ds`：`ds touchpad=on|off capture=on|off` → `touchpad_plus_minus` / `capture_key`；
+    - `netlog`：`netlog state=… ssid=… dest=…` → 会话状态（state / ssid / dest）；
     - `device`：`status` 与 `version` 的一行回读 → 版本、分区、电池、堆与配对等事实，
       固件字段名收敛成 `firmware` / `partition` / `image` / `ota_state` /
       `pairing` / `role` / `pad` / `light` / `screen_on` / `battery_mv` /
@@ -978,6 +979,13 @@ def parse_device_reply(line: str) -> tuple[str, dict] | None:
         if touchpad in ("on", "off") and capture in ("on", "off"):
             return "ds", {"touchpad_plus_minus": touchpad == "on",
                           "capture_key": capture == "on"}
+        return None
+    if words[0] == "netlog":
+        # netlog state=connected ssid=slime_nest dest=192.168.1.5:9999 …
+        state = fields.get("state")
+        if state:
+            return "netlog", {"state": state, "ssid": fields.get("ssid", "-"),
+                              "dest": fields.get("dest", "-")}
         return None
     if words[0] == "state" or text.startswith("fw="):
         facts: dict[str, object] = {}

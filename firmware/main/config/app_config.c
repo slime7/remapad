@@ -12,6 +12,9 @@ static const char *TAG = "remapad_config";
 
 #define CONFIG_NS "remapad"
 #define CONFIG_KEY "cfg"
+/** WiFi 凭据的独立键：超出 cfg blob 的定长布局，读不到（旧记录/未配置）按空串用。 */
+#define CONFIG_KEY_WIFI_SSID "wifi_ssid"
+#define CONFIG_KEY_WIFI_PASS "wifi_pass"
 
 /** 序列化格式：版本字节 + 字段（尾部保留对齐）。v1 长度 16；引入固件版本
  * 字段后扩到 24（[16..18] 固件版本），读回兼容 16 字节旧记录（新字段用
@@ -146,6 +149,9 @@ esp_err_t app_config_init(void)
   /* DS 手柄行为：触摸板映射加减键默认关、截图键默认开。 */
   s_appcfg.cfg.ds_touchpad_plus_minus = false;
   s_appcfg.cfg.ds_capture_key = true;
+  /* WiFi 凭据：先按未配置兜底，下面从独立键读回。 */
+  s_appcfg.cfg.wifi_ssid[0] = '\0';
+  s_appcfg.cfg.wifi_pass[0] = '\0';
 
   nvs_handle_t handle;
   const esp_err_t err = nvs_open(CONFIG_NS, NVS_READONLY, &handle);
@@ -158,6 +164,14 @@ esp_err_t app_config_init(void)
   uint8_t blob[CONFIG_BLOB_LEN];
   size_t len = sizeof(blob);
   const esp_err_t get = nvs_get_blob(handle, CONFIG_KEY, blob, &len);
+  size_t ssid_len = sizeof(s_appcfg.cfg.wifi_ssid);
+  if (nvs_get_str(handle, CONFIG_KEY_WIFI_SSID, s_appcfg.cfg.wifi_ssid, &ssid_len) != ESP_OK) {
+    s_appcfg.cfg.wifi_ssid[0] = '\0';
+  }
+  size_t pass_len = sizeof(s_appcfg.cfg.wifi_pass);
+  if (nvs_get_str(handle, CONFIG_KEY_WIFI_PASS, s_appcfg.cfg.wifi_pass, &pass_len) != ESP_OK) {
+    s_appcfg.cfg.wifi_pass[0] = '\0';
+  }
   nvs_close(handle);
   if (get == ESP_ERR_NVS_NOT_FOUND) {
     return ESP_OK;
@@ -257,6 +271,40 @@ void app_config_set_ds_behavior(bool touchpad_plus_minus, bool capture_key)
     xSemaphoreGive(s_appcfg.lock);
   }
   mark_dirty();
+}
+
+esp_err_t app_config_set_wifi(const char *ssid, const char *password)
+{
+  if (ssid == NULL || password == NULL || ssid[0] == '\0' || strlen(ssid) >= sizeof(s_appcfg.cfg.wifi_ssid) ||
+      strlen(password) >= sizeof(s_appcfg.cfg.wifi_pass)) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  char ssid_copy[sizeof(s_appcfg.cfg.wifi_ssid)];
+  char pass_copy[sizeof(s_appcfg.cfg.wifi_pass)];
+  if (s_appcfg.lock != NULL && xSemaphoreTake(s_appcfg.lock, portMAX_DELAY) == pdTRUE) {
+    strcpy(s_appcfg.cfg.wifi_ssid, ssid);
+    strcpy(s_appcfg.cfg.wifi_pass, password);
+    xSemaphoreGive(s_appcfg.lock);
+  }
+  strcpy(ssid_copy, ssid);
+  strcpy(pass_copy, password);
+  /* 保存即落盘：凭据属于「改完就要重启也生效」的设置，不等周期提交任务。 */
+  nvs_handle_t handle;
+  esp_err_t err = nvs_open(CONFIG_NS, NVS_READWRITE, &handle);
+  if (err == ESP_OK) {
+    err = nvs_set_str(handle, CONFIG_KEY_WIFI_SSID, ssid_copy);
+    if (err == ESP_OK) {
+      err = nvs_set_str(handle, CONFIG_KEY_WIFI_PASS, pass_copy);
+    }
+    if (err == ESP_OK) {
+      err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+  }
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "wifi save failed: %s", esp_err_to_name(err));
+  }
+  return err;
 }
 
 void app_config_flush(void)

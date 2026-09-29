@@ -34,6 +34,32 @@ static input_frame_rx_t s_rx;
 static uint32_t s_frames;
 static volatile bool s_running;
 static TaskHandle_t s_task;
+/** 网络桥接的帧出口（netlog 注册）：在位时反馈 / 输出 / 采集帧改投 UDP。 */
+static void (*s_net_tx)(const uint8_t *frame, size_t len);
+static bool (*s_net_active)(void);
+
+void input_link_set_net_tx(void (*tx)(const uint8_t *frame, size_t len), bool (*active)(void))
+{
+  s_net_tx = tx;
+  s_net_active = active;
+}
+
+bool input_link_net_active(void)
+{
+  return s_net_active != NULL && s_net_active();
+}
+
+/** 已编码帧的出口：网络桥接在位投 UDP，否则走串口（链路停着就丢）。 */
+static void dispatch_frame(const uint8_t *frame, size_t len)
+{
+  if (s_net_tx != NULL && input_link_net_active()) {
+    s_net_tx(frame, len);
+    return;
+  }
+  if (s_running) {
+    usb_serial_jtag_write_bytes(frame, len, 0);
+  }
+}
 
 static void on_frame(const input_frame_view_t *frame, void *user)
 {
@@ -116,6 +142,9 @@ void input_link_stop(void)
     return;
   }
   s_running = false;
+  /* stdout 先离开驱动路径再卸驱动：这个切换拿 VFS 写锁，等在途日志写收尾；
+   * 卸载会直接释放 ring buffer 与信号量，留着驱动路径的并发写就是释放后使用。 */
+  usb_serial_jtag_vfs_use_nonblocking();
   for (int i = 0; i < 20 && s_task != NULL; i++) {
     vTaskDelay(pdMS_TO_TICKS(5));
   }
@@ -256,26 +285,36 @@ void input_link_send_feedback(const uint8_t *payload, size_t payload_len)
 {
   /* 载荷来自 pad_feedback_wire（16 字节基础段或 57 字节 HD 版），编码在
      * 处理段完成，这里只搬运。 */
-  if (!s_running || payload == NULL || payload_len < 8u || payload_len > 64u) {
+  if (payload == NULL || payload_len < 8u || payload_len > 64u) {
     return;
   }
-  input_link_send_frame(INPUT_FRAME_TYPE_FEEDBACK, 0, payload, payload_len);
+  uint8_t frame[INPUT_FRAME_MAX_LEN];
+  const size_t len = encode_frame(frame, INPUT_FRAME_TYPE_FEEDBACK, 0, payload, payload_len);
+  if (len == 0) {
+    return;
+  }
+  dispatch_frame(frame, len);
 }
 
 void input_link_send_out_report(const uint8_t *report, size_t len)
 {
   /* 上限按输出报告帧算，不用原始报告的上限：蓝牙 PS 的输出报告 78 字节。 */
-  if (!s_running || report == NULL || len == 0 || len > INPUT_FRAME_OUT_MAX_PAYLOAD) {
+  if (report == NULL || len == 0 || len > INPUT_FRAME_OUT_MAX_PAYLOAD) {
     return;
   }
-  input_link_send_frame(INPUT_FRAME_TYPE_OUT_REPORT, 0, report, len);
+  uint8_t frame[INPUT_FRAME_MAX_LEN];
+  const size_t frame_len = encode_frame(frame, INPUT_FRAME_TYPE_OUT_REPORT, 0, report, len);
+  if (frame_len == 0) {
+    return;
+  }
+  dispatch_frame(frame, frame_len);
 }
 
 void input_link_send_host_raw(uint8_t slot, const uint8_t *payload, size_t payload_len)
 {
   /* 采集载荷到线格式上限（255 字节），用放宽版编码入口；与反馈同一路径
      * 的非阻塞写，主机没在读时整帧丢弃。 */
-  if (!s_running || payload == NULL || payload_len < 2u || payload_len > INPUT_FRAME_WIRE_MAX_PAYLOAD) {
+  if (payload == NULL || payload_len < 2u || payload_len > INPUT_FRAME_WIRE_MAX_PAYLOAD) {
     return;
   }
   uint8_t frame[INPUT_FRAME_WIRE_MAX_LEN];
@@ -284,5 +323,5 @@ void input_link_send_host_raw(uint8_t slot, const uint8_t *payload, size_t paylo
   if (len == 0) {
     return;
   }
-  usb_serial_jtag_write_bytes(frame, len, 0);
+  dispatch_frame(frame, len);
 }

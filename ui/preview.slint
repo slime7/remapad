@@ -38,13 +38,13 @@ component Key inherits Rectangle {
 
 export component PreviewApp inherits Window {
     width: 240px;
-    height: 570px;
+    height: 600px;
     background: Theme.surface-container-low;
     title: "Remapad 预览：设备画面 240 × 280 + 控制条";
 
     // ---- 模拟状态：固件侧本该写进来的取值，这里由控制条与动作结算维护 ----
     in-out property <int> page: 0;
-    in-out property <int> page-count: 8;
+    in-out property <int> page-count: 9;
     in-out property <int> focus-index: 0;
     in-out property <bool> pad-active: false;
     in-out property <int> backlight: 60;
@@ -66,6 +66,10 @@ export component PreviewApp inherits Window {
     in-out property <int> dialog-focus: 0;
     in-out property <bool> rebooting: false;
     in-out property <bool> powering-off: false;
+    /** 无线调试会话的模拟值：开关在 0（关）与 2（已连接）间切，地址与信号给采样值。 */
+    in-out property <int> netlog-state: 0;
+    in-out property <string> netlog-addr: "192.168.1.5:9999";
+    in-out property <int> netlog-rssi: -58;
     /** 控制条最后一行：最近一次动作与结算结果，动作看着没生效时先看这里。 */
     in-out property <string> log: "点设备画面里的控件，动作在这里结算";
 
@@ -150,6 +154,9 @@ export component PreviewApp inherits Window {
         psram-text: "2.1 / 8 MB";
         battery-text: battery-line(root.battery-percent);
         debug-flash: root.debug-flash;
+        netlog-state: root.netlog-state;
+        netlog-addr: root.netlog-addr;
+        netlog-rssi: root.netlog-rssi;
         dialog: root.dialog;
         dialog-focus: root.dialog-focus;
         powering-off: root.powering-off;
@@ -251,6 +258,9 @@ export component PreviewApp inherits Window {
         } else if (name == "debug-key") {
             root.debug-flash = value;
             root.log = "调试页注入 = " + value;
+        } else if (name == "netlog-toggle") {
+            root.netlog-state = root.netlog-state == 0 ? 2 : 0;
+            root.log = "无线调试 = " + (root.netlog-state == 0 ? "关" : "开（" + root.netlog-addr + "）");
         } else if (name == "page") {
             root.page = value;
         }
@@ -260,7 +270,7 @@ export component PreviewApp inherits Window {
     Rectangle {
         y: 280px;
         width: 240px;
-        height: 290px;
+        height: 320px;
         background: Theme.surface-container-low;
         border-width: 1px;
         border-color: Theme.outline-variant;
@@ -450,10 +460,19 @@ export component PreviewApp inherits Window {
             }
         }
 
+        // 第八行：无线调试开关
+        Key {
+            x: 6px;
+            y: 238px;
+            label: root.netlog-state == 0 ? "WiFi 关" : "WiFi 开";
+            active: root.netlog-state != 0;
+            clicked => { root.action("netlog-toggle", 0); }
+        }
+
         // 当前读数与最近一次动作
         Text {
             x: 6px;
-            y: 238px;
+            y: 268px;
             width: 228px;
             height: 14px;
             text: "弹窗 " + root.dialog + " · 焦点 " + root.focus-index + " · 配对 " + root.pairing
@@ -464,7 +483,7 @@ export component PreviewApp inherits Window {
         }
         Text {
             x: 6px;
-            y: 256px;
+            y: 286px;
             width: 228px;
             height: 28px;
             text: root.log;

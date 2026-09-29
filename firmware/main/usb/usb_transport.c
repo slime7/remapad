@@ -43,6 +43,8 @@ typedef struct {
 
   usb_device_handle_t dev;
   bool dev_open;
+  uint8_t pending_addr; /* 已连接待打开的设备地址；0 表示无（地址 0 不是合法设备地址）。 */
+  volatile bool close_pending; /* DEV_GONE 已到，收尾放到客户端任务循环里做。 */
   uint8_t iface_num;
   uint8_t ep_in;
   uint8_t ep_out;
@@ -66,6 +68,15 @@ typedef struct {
 
 static usb_host_ctx_t s_host = { .mux = portMUX_INITIALIZER_UNLOCKED };
 
+/** 控制传输完成标志：回调上下文只置位，提交方在客户端任务里泵事件等它。 */
+static volatile bool s_ctrl_done;
+
+static void ctrl_transfer_cb(usb_transfer_t *xfer)
+{
+  (void)xfer;
+  s_ctrl_done = true;
+}
+
 /** 报告描述符开头是否声明了手柄用途（Generic Desktop 下的 Joystick / Game Pad）。 */
 static bool report_desc_is_gamepad(const uint8_t *desc, size_t len)
 {
@@ -78,7 +89,8 @@ static bool report_desc_is_gamepad(const uint8_t *desc, size_t len)
   return false;
 }
 
-/** 取报告描述符开头一段（GET_DESCRIPTOR / HID Report）。返回实际字节数。 */
+/** 取报告描述符开头一段（GET_DESCRIPTOR / HID Report）。返回实际字节数。
+ *  控制传输异步完成：提交后在客户端任务里泵事件等回调，因此只能在事件回调之外调用。 */
 static size_t fetch_report_desc(usb_device_handle_t dev, uint8_t iface_num, uint8_t *out, size_t out_len)
 {
   usb_transfer_t *xfer = NULL;
@@ -87,7 +99,7 @@ static size_t fetch_report_desc(usb_device_handle_t dev, uint8_t iface_num, uint
   }
   xfer->device_handle = dev;
   xfer->bEndpointAddress = 0; /* 控制传输走默认管道 */
-  xfer->callback = NULL;
+  xfer->callback = ctrl_transfer_cb;
   xfer->context = NULL;
   usb_setup_packet_t *setup = (usb_setup_packet_t *)xfer->data_buffer;
   setup->bmRequestType =
@@ -99,13 +111,18 @@ static size_t fetch_report_desc(usb_device_handle_t dev, uint8_t iface_num, uint
   xfer->num_bytes = (int)(sizeof(usb_setup_packet_t) + out_len);
 
   size_t got = 0;
-  if (usb_host_transfer_submit_control(s_host.client, xfer) == ESP_OK &&
-      xfer->status == USB_TRANSFER_STATUS_COMPLETED && xfer->actual_num_bytes > 0) {
-    got = (size_t)xfer->actual_num_bytes;
-    if (got > out_len) {
-      got = out_len;
+  s_ctrl_done = false;
+  if (usb_host_transfer_submit_control(s_host.client, xfer) == ESP_OK) {
+    for (int i = 0; i < 100 && !s_ctrl_done; i++) {
+      usb_host_client_handle_events(s_host.client, pdMS_TO_TICKS(10));
     }
-    memcpy(out, xfer->data_buffer + sizeof(usb_setup_packet_t), got);
+    if (s_ctrl_done && xfer->status == USB_TRANSFER_STATUS_COMPLETED && xfer->actual_num_bytes > 0) {
+      got = (size_t)xfer->actual_num_bytes;
+      if (got > out_len) {
+        got = out_len;
+      }
+      memcpy(out, xfer->data_buffer + sizeof(usb_setup_packet_t), got);
+    }
   }
   usb_host_transfer_free(xfer);
   return got;
@@ -249,11 +266,12 @@ static void close_device(void)
     return;
   }
   s_host.dev_open = false;
-  /* 音频触觉先收（自己的接口与传输），再等 HID 的在途传输收尾。 */
+  /* 音频触觉先收（自己的接口与传输），再等 HID 的在途传输收尾。
+   * 本函数只允许在事件回调之外调用：等待靠泵事件让完成回调跑起来，绝不盲等
+   * （盲等期间完成事件无人处理，超时后强删在途传输就是释放后使用）。 */
   usb_audio_detach();
-  /* 等在途传输收尾（拔线时由 host 栈以 NO_DEVICE 结束），再释放传输与接口。 */
   for (int i = 0; i < 50 && (s_host.in_inflight || s_host.out_inflight); i++) {
-    vTaskDelay(pdMS_TO_TICKS(2));
+    usb_host_client_handle_events(s_host.client, pdMS_TO_TICKS(2));
   }
   if (s_host.in_xfer != NULL) {
     usb_host_transfer_free(s_host.in_xfer);
@@ -339,14 +357,16 @@ static void client_event_cb(const usb_host_client_event_msg_t *event, void *arg)
   switch (event->event) {
   case USB_HOST_CLIENT_EVENT_NEW_DEV:
     ESP_LOGI(TAG, "device connected (addr %u)", (unsigned)event->new_dev.address);
-    open_device(event->new_dev.address);
+    /* 打开流程放到客户端任务循环：取报告描述符要泵事件等控制传输，回调上下文里做不了。 */
+    s_host.pending_addr = event->new_dev.address;
     break;
   case USB_HOST_CLIENT_EVENT_DEV_GONE:
     ESP_LOGW(TAG, "device disconnected");
-    if (s_host.dev_open && event->dev_gone.dev_hdl != s_host.dev) {
-      break;
+    /* 收尾挪到客户端任务循环：回调里等在途传输收尾等不到（完成事件没人处理），
+     * 等到超时强删在途传输就是释放后使用。 */
+    if (s_host.dev_open && event->dev_gone.dev_hdl == s_host.dev) {
+      s_host.close_pending = true;
     }
-    close_device();
     break;
   default:
     break;
@@ -379,6 +399,15 @@ static void client_task(void *param)
   (void)param;
   while (s_host.running) {
     usb_host_client_handle_events(s_host.client, pdMS_TO_TICKS(USB_CLIENT_POLL_MS));
+    if (s_host.close_pending && s_host.dev_open) {
+      s_host.close_pending = false;
+      close_device();
+    }
+    if (s_host.pending_addr != 0 && !s_host.dev_open) {
+      const uint8_t addr = s_host.pending_addr;
+      s_host.pending_addr = 0;
+      open_device(addr);
+    }
     if (!s_host.dev_open) {
       continue;
     }
@@ -448,6 +477,8 @@ esp_err_t usb_host_stop(void)
     return ESP_OK;
   }
   s_host.running = false;
+  s_host.pending_addr = 0;
+  s_host.close_pending = false;
   for (int i = 0; i < 50 && s_host.client_task != NULL; i++) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }

@@ -14,8 +14,9 @@ const CENTER_X: f32 = 120.0;
 const SLOT_PITCH: f32 = 200.0;
 /// 轮播带静止时卡面原点在屏幕 (-8, -24)。
 const BAND_REST_X: f32 = -8.0;
-/// 调试页槽号：dev 构建的页表在末尾追加它（固件侧的页数见 ui/slint_ui/src/host.rs 的 PAGE_COUNT）。
-const DEBUG_PAGE: i32 = 7;
+/// 调试页槽号：dev 构建的页表在末尾追加它（release 末位是无线调试页；
+/// 固件侧的页数见 ui/slint_ui/src/host.rs 的 PAGE_COUNT）。
+const DEBUG_PAGE: i32 = 8;
 /// USB 模式页槽号：页面槽位顺序见 ui/src/app.slint 的页表。
 const USB_PAGE: i32 = 4;
 /// 模式页卡片的内容内边距：ui/src/pages.slint 里两卡的 padding-left / padding-right。

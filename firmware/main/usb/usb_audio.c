@@ -152,10 +152,15 @@ void usb_audio_detach(void)
     return;
   }
   s_aud.running = false;
-  /* 在途传输收尾：flush 强制完成（CANCELED），回调据此停发。 */
+  /* 在途传输收尾：flush 强制完成（CANCELED），回调据此停发。完成事件要靠泵
+   * handle_events 才会被处理，因此本函数只能在事件回调之外调用（回调里盲等
+   * 等不到、超时强删在途传输就是释放后使用）。 */
   usb_host_endpoint_flush(s_aud.dev, s_aud.ep);
   for (int i = 0; i < USB_AUDIO_DETACH_TIMEOUT_MS / 2 && s_aud.inflight > 0; i++) {
-    vTaskDelay(pdMS_TO_TICKS(2));
+    usb_host_client_handle_events(s_aud.client, pdMS_TO_TICKS(2));
+  }
+  if (s_aud.inflight > 0) {
+    ESP_LOGW(TAG, "audio detach timeout with %u inflight", (unsigned)s_aud.inflight);
   }
   for (int i = 0; i < USB_AUDIO_XFER_COUNT; i++) {
     if (s_aud.xfer[i] != NULL) {

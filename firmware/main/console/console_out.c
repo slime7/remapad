@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "driver/uart.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,6 +26,20 @@ static const char *TAG = "remapad_console";
 static bool s_uart_active;
 static volatile bool s_rx_stop;
 static TaskHandle_t s_rx_task;
+static console_out_sink_t s_sink;
+
+void console_out_set_sink(console_out_sink_t sink)
+{
+  s_sink = sink;
+}
+
+/** 汇点抄送：netlog 之类调试出口注册后，日志与 CLI 输出都经这里多走一份。 */
+static void sink_write(const char *text, size_t len)
+{
+  if (s_sink != NULL) {
+    s_sink(text, len);
+  }
+}
 
 /** 日志出口：格式化到栈上缓冲后写 UART0，绝不阻塞调用任务。 */
 static int uart_vprintf(const char *fmt, va_list args)
@@ -36,9 +51,32 @@ static int uart_vprintf(const char *fmt, va_list args)
     if (len >= sizeof(line)) {
       len = sizeof(line) - 1;
     }
+    sink_write(line, len);
     uart_write_bytes(CONSOLE_UART_NUM, line, len);
   }
   return n;
+}
+
+/** USJ 出口的日志 vprintf：与默认同样写 stdout，另抄送汇点（截断口径同 UART0）。 */
+static int usj_vprintf(const char *fmt, va_list args)
+{
+  char line[192];
+  const int n = vsnprintf(line, sizeof(line), fmt, args);
+  if (n > 0) {
+    size_t len = (size_t)n;
+    if (len >= sizeof(line)) {
+      len = sizeof(line) - 1;
+    }
+    sink_write(line, len);
+    fwrite(line, 1, len, stdout);
+    fflush(stdout);
+  }
+  return n;
+}
+
+void console_out_init(void)
+{
+  esp_log_set_vprintf(usj_vprintf);
 }
 
 static void console_rx_task(void *param)
@@ -60,6 +98,11 @@ esp_err_t console_out_use_uart0(void)
   if (s_uart_active) {
     return ESP_OK;
   }
+  /* 8K 收任务栈是安装链上最深的一笔：内部最大连续块拿不出就直接拒绝，
+   * 不做「装了再拆」——拆装窗口里并发日志可能正好在写 UART，会踩坏堆。 */
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < CONSOLE_RX_TASK_STACK + 512) {
+    return ESP_ERR_NO_MEM;
+  }
   const uart_config_t config = {
     .baud_rate = CONSOLE_UART_BAUD,
     .data_bits = UART_DATA_8_BITS,
@@ -80,7 +123,7 @@ esp_err_t console_out_use_uart0(void)
   s_rx_stop = false;
   if (xTaskCreate(console_rx_task, "remapad-uart", CONSOLE_RX_TASK_STACK, NULL, CONSOLE_RX_TASK_PRIO, &s_rx_task) !=
       pdPASS) {
-    esp_log_set_vprintf(NULL);
+    esp_log_set_vprintf(usj_vprintf);
     uart_driver_delete(CONSOLE_UART_NUM);
     return ESP_ERR_NO_MEM;
   }
@@ -104,7 +147,7 @@ void console_out_use_usj(void)
     vTaskDelete(s_rx_task);
     s_rx_task = NULL;
   }
-  esp_log_set_vprintf(NULL);
+  esp_log_set_vprintf(usj_vprintf);
   uart_driver_delete(CONSOLE_UART_NUM);
   s_uart_active = false;
 }
@@ -121,9 +164,11 @@ void console_out_write(const char *text, size_t len)
   }
   if (s_uart_active) {
     uart_write_bytes(CONSOLE_UART_NUM, text, len);
+    sink_write(text, len);
     return;
   }
   /* 未切 UART0：stdout 就是 USJ 的非阻塞 vfs，未连接时丢弃。 */
   fwrite(text, 1, len, stdout);
   fflush(stdout);
+  sink_write(text, len);
 }

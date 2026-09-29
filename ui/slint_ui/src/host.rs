@@ -31,7 +31,7 @@ const BREATH_STEPS: i32 = 24;
 const SPIN_STEPS: i32 = 8;
 const SPIN_STEP_TICKS: i32 = 2;
 /// 页面数量：ui/src/app.slint 的页表；开发构建末位追加调试页（未指定 release 即开发构建）。
-const PAGE_COUNT: i32 = if crate::platform::UI_DEV { 8 } else { 7 };
+const PAGE_COUNT: i32 = if crate::platform::UI_DEV { 9 } else { 8 };
 /// 事件循环意外退出后的兜底休眠（毫秒）。
 const IDLE_FALLBACK_MS: u32 = 1000;
 
@@ -190,6 +190,9 @@ fn apply_state(glue: &Glue, ui: &App, state: &UiState) {
   ui.set_psram_text(boundary::read_text(state.psram_text, "-"));
   ui.set_battery_text(boundary::read_text(state.battery_text, "-"));
   ui.set_debug_flash(state.debug_flash);
+  ui.set_netlog_state(state.netlog_state);
+  ui.set_netlog_addr(boundary::read_text(state.netlog_addr, "--"));
+  ui.set_netlog_rssi(state.netlog_rssi);
   ui.set_dialog(state.dialog);
   ui.set_powering_off(state.powering_off);
   ui.set_rebooting(state.rebooting);

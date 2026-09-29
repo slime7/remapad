@@ -7,7 +7,9 @@ import { DragArea, Icon, IconBox, Switch } from "components.slint";
 // 转圈用的盲文点阵：素材字体里只有这一份覆盖 U+28xx。
 import "../assets/fonts/seguisym.ttf";
 
-/** 角钮：64 圆形，常规底色 secondary-container，破坏性动作用 error 语义色。 */
+/** 角钮：64 圆形，常规底色 secondary-container；会话在位、按下即停止时挂 danger
+ *  换 error 语义色（与配对页的「停止 / 断开」同口径），不用 primary-container
+ *  ——卡面底图就是这个色，当底色会整块融进叶瓣。 */
 component CornerButton inherits Rectangle {
     in property <bool> danger: false;
     in property <bool> focused: false;
@@ -636,6 +638,78 @@ export component SystemInfoPage inherits Rectangle {
                 font-size: Theme.text-xs;
                 color: Theme.on-primary-container;
             }
+        }
+    }
+}
+
+/** 无线调试页：WiFi 会话开关在右上角（同时接通网络手柄与日志），正文显示会话状态与信号强度。
+ *  会话状态由固件写入：0 关、1 连接中、2 已连接（正文是设备自己的 ip:port）、3 无凭据。 */
+export component NetworkPage inherits Rectangle {
+    in property <int> netlog-state: 0;
+    in property <string> netlog-addr: "--";
+    in property <int> netlog-rssi: 0;
+    in property <int> focus-index: -1;
+    in property <bool> interactive: true;
+    callback toggle();
+
+    width: 256px;
+    height: 256px;
+    background: transparent;
+
+    property <bool> netlog-on: root.netlog-state == 1 || root.netlog-state == 2;
+
+    VerticalLayout {
+        x: 50px;
+        y: 78px;
+        width: 156px;
+        height: 170px;
+        alignment: center;
+        padding: 8px;
+        spacing: 8px;
+
+        Text {
+            text: "无线调试";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            color: Theme.on-primary-container;
+            horizontal-alignment: center;
+        }
+
+        status-line := Text {
+            text: root.netlog-state == 2 ? root.netlog-addr
+                : (root.netlog-state == 1 ? "连接中…" : (root.netlog-state == 3 ? "未配置" : "未连接"));
+            font-family: "Noto Sans SC";
+            font-size: root.netlog-on ? Theme.text-sm : Theme.text-base;
+            font-weight: 700;
+            color: Theme.on-primary-container;
+            horizontal-alignment: center;
+        }
+
+        if root.netlog-state == 2 && root.netlog-rssi != 0: rssi-line := Text {
+            text: "信号 \{root.netlog-rssi} dBm";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-xs;
+            color: Theme.on-primary-fixed-variant;
+            horizontal-alignment: center;
+        }
+    }
+
+    wifi-btn := CornerButton {
+        x: 142px;
+        y: 50px;
+        danger: root.netlog-on;
+        focused: root.focus-index == 0;
+        interactive: root.interactive;
+        pressed => { root.toggle(); }
+        Text {
+            text: root.netlog-on ? "断开" : "WiFi";
+            font-family: "Noto Sans SC";
+            font-size: Theme.text-sm;
+            font-weight: 700;
+            color: root.netlog-on ? Theme.on-error-container : Theme.on-secondary-container;
+            horizontal-alignment: center;
+            vertical-alignment: center;
         }
     }
 }

@@ -30,6 +30,9 @@
 #include "pad_device.h"
 #include "usb_input.h"
 #include "usb_role.h"
+#ifdef REMAPAD_NETLOG
+#include "netlog.h"
+#endif
 
 static const char *TAG = "remapad_ui";
 
@@ -60,6 +63,7 @@ static struct {
   char psram_text[32];
   char battery_text[32];
   char controller_address[20];
+  char netlog_addr[24];
 } s_ui;
 
 /** UI 六态配对模型：与 bridge 的 real_pairing_state 同口径（见 js_bridge.c）。 */
@@ -208,6 +212,21 @@ void ui_service_fill_state(remapad_ui_state_t *state)
   state->screen_on = config->screen_on;
   /* 省电档由 BLE 栈的开关决定：栈关着（未连接也未广播）就降节拍。 */
   state->power_save = dp_power_save_active(ble_controller_running());
+#ifdef REMAPAD_NETLOG
+  if (netlog_running()) {
+    state->netlog_state = netlog_connected() ? 2 : 1;
+    netlog_addr_text(s_ui.netlog_addr, sizeof(s_ui.netlog_addr));
+  } else {
+    state->netlog_state = config->wifi_ssid[0] != '\0' ? 0 : 3;
+    snprintf(s_ui.netlog_addr, sizeof(s_ui.netlog_addr), "--");
+  }
+  state->netlog_addr = s_ui.netlog_addr;
+  state->netlog_rssi = netlog_rssi();
+#else
+  state->netlog_state = 0;
+  state->netlog_addr = "--";
+  state->netlog_rssi = 0;
+#endif
 }
 
 /** 亮度档位：与亮度页的 5 档一致（20/40/60/80/100）。 */
@@ -303,6 +322,19 @@ void ui_service_handle_action(const char *name, int value)
     (void)js_bridge_submit_command(command);
     s_ui.debug_flash = value;
     s_ui.debug_flash_until_us = esp_timer_get_time() + REMAPAD_DEBUG_FLASH_US;
+#ifdef REMAPAD_NETLOG
+  } else if (strcmp(name, "netlog-toggle") == 0) {
+    /* 屏幕开关同时接通网络手柄与日志（同一个会话）：开着就停，关着且有凭据就连。 */
+    if (netlog_running()) {
+      netlog_stop();
+      ESP_LOGI(TAG, "netlog off from screen");
+    } else if (config->wifi_ssid[0] != '\0') {
+      const esp_err_t err = netlog_start(config->wifi_ssid, config->wifi_pass, NULL, 0);
+      if (err != ESP_OK) {
+        ESP_LOGW(TAG, "netlog start from screen failed: %s", esp_err_to_name(err));
+      }
+    }
+#endif
   } else if (strcmp(name, "page") == 0) {
     s_ui.page = value;
   }
