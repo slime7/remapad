@@ -97,9 +97,8 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 - **I2C 地址冲突**：板内已占用 `0x15`（触摸）、`0x6B`（IMU）、`0x51`（RTC）。外接 I2C 设备必须避开这三个地址。
 - **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志与 USB 设备共用同一个物理口。
   复位后默认以 `USB-Serial/JTAG` 模式枚举，复用机制见「USB 控制器复用」。
-- **Type-C 座子是纯 UFP 接线**：CC1 / CC2 各只接一颗 5.1 kΩ 下拉到地、没有 Rp 上拉，CC 也不连 ESP32（V2.1 原理图核对）。
-  host 模式用 C-to-C 线直连手柄时，手柄在 CC 上看不到主机角色，VBUS 到位也只亮充电灯、数据不建立（实机已复现）；
-  直插手柄要用的线序见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「USB 手柄直插（host 模式）」。
+- **Type-C 座子是纯 UFP 接线**（V2.1 原理图核对）：host 直插手柄用普通 C-to-C 数据线即可、无需转接头（实机核对通过），
+  操作口径见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「USB 手柄直插（host 模式）」。
 - **数据脚两排并联**：A6/B6 并为 USB_P（D+，经 22 Ω 进 GPIO20）、A7/B7 并为 USB_N（D-，经 22 Ω 进 GPIO19），插头方向不影响数据通路（V2.1 原理图核对）。
 - **VBUS 只进不出**：座子 VBUS 直连充电 IC（ETA6098）与系统电源路径（经 D4 进 LDO），板上没有对外的 VBUS 输出开关；
   host 模式要给手柄供电需从 TP1（GPIO 端子的「5V」脚，通 VBUS 网络）注入 5V，手柄看不到 VBUS 不会接通数据脚。

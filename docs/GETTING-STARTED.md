@@ -18,7 +18,7 @@ Remapad 的最终产品链路是 USB 输入→NS2 手柄报告→BLE 输出，�
 | 硬件 | 微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8） | 16 MB Flash、8 MB Octal PSRAM、240 × 280 ST7789V2 触摸屏；细节见 [hardware.md](hardware.md) |
 
 目标 NS2 手柄型号和 BLE 天线/射频属于最终硬件范围。
-两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）都已落地并实机核对通过；直插的线序与供电前提见该节（VBUS 需从 TP1 外部注入 5V）。
+两条输入路径（PC 桥接见 [pc/README.md](../pc/README.md)，手柄插板卡的 USB host 直插见「USB 手柄直插」一节）都已落地并实机核对通过；直插用普通 C-to-C 数据线加 TP1 外灌 5V，操作口径见该节。
 不要因为 PC 预览能看界面就认为真实 BLE 链路已经可用：预览只画排版，动作要连到固件才生效。
 
 板卡已知信息都记录在 [hardware.md](hardware.md)：
@@ -376,9 +376,8 @@ UDP 会丢包：截图与 OTA 仍只走串口（网络上发这些帧设备端�
   切回时固件把内部 PHY 显式交还 USB-Serial/JTAG，COM 口随之回来；这一步失败时只有复位能恢复，
   界面因此在切回后询问是否立刻重启。
 - 识别结果看 `pad`（家族、VID:PID、命中的布局行、兜底标记、是否透传）与 `usb`（枚举到的设备、报告与写回计数）；未登记的 VID/PID 回落 XInput 形态布局并打兜底标记。
-- 线序：Type-C 座子没有 Rp 上拉、CC 只有 5.1 kΩ 下拉（见 [hardware.md](hardware.md)），C-to-C 线直连手柄只亮充电灯、不枚举（实机已复现）；
-  直插须用 C 公转 A 母转接加 A-to-C 数据线——A-to-C 线的 C 头自带 Rp，手柄侧才认得到主机；转接头与线都必须能过数据。
-  板上数据脚两排并联（A6/B6→D+、A7/B7→D-），插头方向不影响数据通路，枚举失败不要在插头方向上找原因。
+- 线材：直插就是普通 C-to-C 数据线，不需要任何转接头；板上数据脚两排并联（A6/B6→D+、A7/B7→D-），
+  插头方向不影响数据通路，枚举失败不要在插头方向上找原因（板卡事实见 [hardware.md](hardware.md)）。
 - 供电：host 模式要给插入的手柄供 VBUS 5V，板上 VBUS 只进不出（直连充电 IC 与系统电源路径，无对外输出开关），需从
   GPIO 端子的「5V」脚（即 TP1，通座子 VBUS 网络）注入 5V、GND 就近共地（见 [hardware.md](hardware.md)）；
   手柄看不到 VBUS 就不接通数据脚，所以先灌电再插手柄。实测该链路下 DualSense Edge（054c:0df2）识别为 PS 家族，输入与反馈链路全通。
