@@ -139,7 +139,7 @@ flowchart TB
   充电状态没有可测量的引脚，按电压趋势推断。
 - **设备对外只模拟一台 Pro Controller 2**：
   身份枚举 `ns2_identity_t` 只有 `NS2_ID_PRO`，单身份、单连接、单广播实例，
-  报告格式固定 `0x09`（USB 模式 `0x05`），专用输入通道只注册 Pro 那一条（主机按自家型号查特征值 UUID 才决定订阅），会话往主机订阅的句柄发通知。
+  报告格式固定 `0x09`（真机 USB 模式为 `0x05`），专用输入通道只注册 Pro 那一条（主机按自家型号查特征值 UUID 才决定订阅），会话往主机订阅的句柄发通知。
   主机只接受 public 地址的广播（本机派生的静态随机地址只留作串口 `advaddr` 对账），一台控制器只有一个 public 地址，左右分槽的 JoyCon 形态因此被移除；
   协议事实留在 [controller-switch2.md](controller-switch2.md) 的 GATT 属性表与广播过滤各节备查。
   配对凭证按 `ns2_identity_t` 分槽持久化（`ble_creds`，NVS v2 格式，旧单表记录迁移进 Pro 槽），分槽结构保留以备将来再加型号。

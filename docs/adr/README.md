@@ -94,6 +94,7 @@
 | [0056](0056-ble-controller-off-power-save-cadence.md) | active | 完全静默（无连接、无广播窗口、不在配对流程）持续够久后关闭整个 BLE 栈（控制器断电，射频不再发热），连接键 / HOME / 配对新主机按起栈意图重新带起来；省电档（BLE 栈未运行）把数据面与界面节拍降到 12 fps 等效，屏幕不熄灭、不做空闲自动息屏 |
 | [0057](0057-single-uv-project-at-repo-root.md) | active | Python 依赖统一到仓库根一个 uv 工程：pc/ 的 hidapi / customtkinter / av / sounddevice 并入根 pyproject.toml，删除 pc/pyproject.toml 与 pc/uv.lock，命令一律写成 uv run python pc/<工具>.py，remapadctl 的默认镜像路径改按脚本位置解析；0040 里「依赖写进 pc/pyproject.toml」一句随本次调整作废 |
 | [0058](0058-clover-carousel-band-page-slide.md) | active | 上部分改成按一页步距平移的四叶草轮播带：底图烘成一个步距里的周期图平铺（仍是整幅不透明的拷贝路径），页面内容按槽位摆放，切页整条带滑行、静止时两侧各露一条邻页花瓣边；拖动跟手封顶在切页阈值、往回滑取消换页；部分取代 0050 的「切页瞬时完成」 |
+| [0059](0059-no-usb-device-output.md) | active | 输出通路只保留 BLE，不实现 USB 有线手柄输出；延伸 0039 的边界，协议文档的 USB 形态规范仅作协议记录 |
 
 ## 创建 ADR 脚本用法
 
