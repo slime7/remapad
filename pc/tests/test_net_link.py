@@ -39,6 +39,24 @@ class ParseEndpointTest(unittest.TestCase):
             link.parse_endpoint("   ")
 
 
+class UdpLinkContextTest(unittest.TestCase):
+    """会话主体用 `with conn:` 统一持有串口与 UDP 链路，UdpLink 缺协议会在
+    进入网络会话的第一行就崩（TypeError: does not support the context
+    manager protocol）。"""
+
+    def test_with_block_closes_the_link(self) -> None:
+        conn = link.UdpLink("127.0.0.1", link.NETLOG_PORT_DEFAULT)
+        with conn:
+            pass
+        with self.assertRaises(OSError):
+            conn.write(b"x")
+
+    def test_exit_is_idempotent_like_close(self) -> None:
+        conn = link.UdpLink("127.0.0.1", link.NETLOG_PORT_DEFAULT)
+        conn.__exit__(None, None, None)
+        conn.close()  # 关过的链路再关一次不许抛
+
+
 class NetlogReplyTest(unittest.TestCase):
     """设备 netlog 状态行的回读解析（设置页摘要跟着它走）。"""
 

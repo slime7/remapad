@@ -283,7 +283,7 @@ flowchart LR
     Tool["pc/remapadctl.py --upgrade<br/>校验镜像头与应用描述符<br/>串口 -p COMx / WiFi -n IP:端口"]
     Link["input/input_link.c<br/>USJ 唯一读取者"]
     Net["netlog/netlog.c<br/>UDP 收帧（同一帧解码）"]
-    Adapt["ota/ota_link.c<br/>桥接帧 ↔ 会话消息<br/>ACK 按在位通道双路回发"]
+    Adapt["ota/ota_link.c<br/>桥接帧 ↔ 会话消息<br/>ACK 跟进帧通道回发"]
     Session["ota/ota_session.c<br/>传输无关会话核心<br/>队列 + 内部 RAM 栈任务"]
     Proto["ota/ota_proto.c<br/>序号 / 窗口 / 4 KB 聚合 / 超时<br/>BEGIN、END 幂等应答"]
     Flash["esp_ota API<br/>非运行分区 → otadata"]
@@ -296,7 +296,7 @@ flowchart LR
     Adapt --> Session
     Session --> Proto
     Proto -->|"4 KB 块"| Flash
-    Adapt -->|"ACK 帧（串口 / UDP 双路）"| Tool
+    Adapt -->|"ACK 帧（沿进帧通道）"| Tool
     Health -->|esp_ota_mark_app_valid_cancel_rollback| Flash
 ```
 
@@ -306,8 +306,8 @@ flowchart LR
   `0x32` END 与设备回发的 `0x33` ACK（状态 + 错误码 + 期望序号 + 已收字节；BEGIN 的应答在末尾附 16 字节运行版本）。解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验。
 - **流控**：PC 每 16 帧（约 3.2 KB）为一个窗口，收到 ACK 才发下一窗。窗口末帧在帧头 `slot` 字段带上标记（末尾不足一窗同样标记），设备收到即应答，不必等固定帧数或超时。ACK 的「期望序号」就是重发起点：
   设备丢弃重复序号、不重复写 flash，同一期望序号的重复应答按最小间隔（50 ms）限流，既不淹掉后续应答，也不会把被日志挤掉的那次永久压制。失败一律整包重发，不做断点续传。
-- **UDP 丢包容忍**：WiFi 入口与串口跑同一个 PC 状态机，按「链路会丢包」设计——BEGIN 与 END 按 2.5 秒周期静默重发（设备端对同尺寸 BEGIN 与收完后的 END 按幂等应答，会话核心只补发 ACK、不重入预擦与校验），窗口应答等待缩到 1.2 秒以便重发赶在设备 5 秒空闲作废窗内到达，设备侧超时作废（TIMEOUT）后 PC 自动从头重来（限 3 次）；PC 对迟到的旧应答只前进不回卷。UDP 报文按 ≤1 KB 分片发送避免 IP 分片。收尾应答彻底没等到（设备大概率已在重启）时，UDP 按不确定完成收场、交给 `--wait` 或重连后的 `version` 确认，串口维持硬失败。
-- **应答可靠性**：发送环与日志共用，NimBLE 的 INFO 日志会把它填满，因此 ACK 与 PING 应答走「分片重试写 + 等发送完成」的路径（上限 200 ms，超时放弃）；数据面反馈仍是非阻塞写、可丢。WiFi 在位时 ACK 同时抄送 UDP（重复应答对发送端幂等），串口未连接时不写 USJ。
+- **UDP 丢包容忍**：WiFi 入口与串口跑同一个 PC 状态机，按「链路会丢包」设计——BEGIN 与 END 按 2.5 秒周期静默重发（设备端对同尺寸 BEGIN 与收完后的 END 按幂等应答，会话核心只补发 ACK、不重入预擦与校验），窗口应答等待收紧到 0.3 秒以便重发赶在设备 5 秒空闲作废窗内到达，设备侧超时作废（TIMEOUT）后 PC 自动从头重来（限 3 次）；PC 对迟到的旧应答只前进不回卷。UDP 报文按 ≤1 KB 分片发送避免 IP 分片。收尾应答彻底没等到（设备大概率已在重启）时，UDP 按不确定完成收场、交给 `--wait` 或重连后的 `version` 确认，串口维持硬失败。
+- **应答可靠性**：ACK 跟进帧通道单路回发（0061）——从哪个口收到的升级帧就从哪个口应答，出口不在位（串口线插着但 COM 口没人打开）时直接丢弃，由 PC 端窗口重发兜住；串口侧仍走「分片重试写 + 等发送完成」路径（上限 200 ms，超时放弃），数据面反馈维持非阻塞写、可丢。netlog 会话期间 WiFi 省电关闭（`WIFI_PS_NONE`），无线电不按 AP 的 DTIM 节拍睡眠。
 - **写入**：
   `esp_ota_get_next_update_partition()` 选非运行分区，`esp_ota_begin(镜像大小)` 预擦，4 KB 对齐的 `esp_ota_write` 写数据。
   BEGIN 的应答在预擦之后才发（3.6 MB 的预擦可达数秒），设备侧的 5 秒空闲超时从应答时刻起算，不把预擦算进接收窗口。

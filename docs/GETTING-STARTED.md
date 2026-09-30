@@ -361,6 +361,7 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
   认证方式由驱动按 AP 广播自动协商（WPA2/WPA3 均可连）。
   发射功率默认压在 15dBm（`netlog power` 回读、`netlog power <0-84>` 运行时改，0.25dBm 单位）：
   本板裸片功放在 20dBm 满档发射失真、任何 AP 都解不出认证帧，17.5dBm 起临界，勿调回满档；
+  会话期间 WiFi 省电关闭（`WIFI_PS_NONE`），无线电不按 AP 的 DTIM 节拍睡眠，停会话随驱动一起卸下；
   `netlog reconnect` 主动重走一轮认证-关联，`netlog phyreset` 擦掉 NVS 里的射频校准数据并重启（现场修复用）。
   屏幕上也有同一开关：
   「无线调试」页（release 页表末位）右上角的 WiFi 角钮（会话在位换红色「断开」），左上角信号图标

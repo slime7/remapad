@@ -126,7 +126,7 @@ class ConsoleReporter(Reporter):
     """默认实现：保持工具原来的标准输出与标准错误行为。"""
 
     def line(self, text: str) -> None:
-        print(text, flush=True)
+        print(link.mask_secrets(text), flush=True)
 
     def error(self, text: str) -> None:
         print(text, file=sys.stderr, flush=True)
@@ -623,7 +623,7 @@ class OtaJob:
 
     BEGIN_ACK_TIMEOUT_S = 20.0  # BEGIN 总窗：设备预擦目标分区可达数秒
     BEGIN_RETRY_S = 2.0  # BEGIN 重发间隔（设备端同尺寸幂等）
-    ACK_TIMEOUT_S = 1.2  # 窗口应答等待：重发要赶在设备 5 秒空闲作废窗内到达
+    ACK_TIMEOUT_S = 0.3  # 窗口应答等待：重发要赶在设备 5 秒空闲作废窗内到达
     END_ACK_TIMEOUT_S = 30.0  # END 总窗：设备校验镜像 + 重启
     END_RETRY_S = 2.5  # END 重发间隔：设备 5 秒空闲作废窗内必须再到达一次
     MAX_WINDOW_RETRIES = 12

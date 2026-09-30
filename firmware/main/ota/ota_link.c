@@ -14,6 +14,10 @@ static const char *TAG = "remapad_ota";
 /** ACK 等发送环的上限：串口日志会挤占发送环，升级应答不能像数据面那样随手丢。 */
 #define OTA_LINK_ACK_TX_TIMEOUT_MS 200u
 
+/** 最近进帧的通道：单发送端场景下 ACK 就该发回去的那条路。串口与 netlog 收
+ *  任务都会写，bool 写在 Xtensa 上天然原子；升级中只有一个发送端，不追多端竞争。 */
+static volatile bool s_ack_via_net;
+
 static const char *phase_name(ota_session_phase_t phase)
 {
   switch (phase) {
@@ -45,24 +49,23 @@ static void post_progress(ota_session_phase_t phase, uint32_t received, uint32_t
   }
 }
 
-/** ACK 双路出口：OTA 帧从串口或 WiFi 进来共用一个会话核心，应答按在位的通道
- *  走——UDP 桥接在位投 UDP，串口已连接走 USJ，两边都在就都发（重复应答对
- *  发送端幂等；少发才让发送端干等）。两条路都不通返回错误，会话照常推进。 */
+/** ACK 单路出口：跟最近进帧的通道走——对端在哪个口发升级帧就在哪个口收应答。
+ *  之前两条路都发：WiFi 升级时串口线插着但没人打开 COM 口，每条应答都在 USJ
+ *  发送环上白等满超时，往返延迟被抬高到把 PC 的窗口超时打穿。出口不在位时
+ *  丢弃（PC 端按窗口超时重发兜住），会话照常推进。 */
 static esp_err_t send_ack(const uint8_t *payload, size_t len, void *user)
 {
   (void)user;
-  bool sent = false;
-  if (input_link_send_frame_net(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len)) {
-    sent = true;
-  }
-  if (input_link_pc_connected()) {
-    const esp_err_t serial_err =
-        input_link_send_frame_wait(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len, OTA_LINK_ACK_TX_TIMEOUT_MS);
-    if (serial_err == ESP_OK) {
-      sent = true;
+  if (s_ack_via_net) {
+    if (!input_link_send_frame_net(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len)) {
+      return ESP_ERR_INVALID_STATE;
     }
+    return ESP_OK;
   }
-  return sent ? ESP_OK : ESP_ERR_INVALID_STATE;
+  if (!input_link_pc_connected()) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  return input_link_send_frame_wait(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len, OTA_LINK_ACK_TX_TIMEOUT_MS);
 }
 
 bool ota_link_is_frame_type(uint8_t type)
@@ -70,11 +73,12 @@ bool ota_link_is_frame_type(uint8_t type)
   return type == INPUT_FRAME_TYPE_OTA_BEGIN || type == INPUT_FRAME_TYPE_OTA_DATA || type == INPUT_FRAME_TYPE_OTA_END;
 }
 
-void ota_link_handle_frame(const input_frame_view_t *frame)
+void ota_link_handle_frame(const input_frame_view_t *frame, bool from_net)
 {
   if (frame == NULL) {
     return;
   }
+  s_ack_via_net = from_net;
   ota_session_msg_t msg = OTA_SESSION_MSG_END;
   if (frame->type == INPUT_FRAME_TYPE_OTA_BEGIN) {
     msg = OTA_SESSION_MSG_BEGIN;

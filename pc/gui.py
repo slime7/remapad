@@ -1176,7 +1176,8 @@ class ConsoleWindow(ctk.CTk):
         self._append_text(f"日志已导出：{path}", tag="event")
 
     def _append_text(self, text: str, tag: str | None = None) -> None:
-        """写入日志区（只由 Tk 主线程调用）。"""
+        """写入日志区（只由 Tk 主线程调用）：先脱敏，导出走同一份内容。"""
+        text = link.mask_secrets(text)
         stamp = f"[{time.strftime('%H:%M:%S')}] " if self.stamp_var.get() else ""
         self.log_box.configure(state="normal")
         if tag is None:

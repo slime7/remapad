@@ -200,7 +200,7 @@ static void on_net_frame(const input_frame_view_t *frame, void *user)
   }
   s_frames++;
   if (ota_link_is_frame_type(frame->type)) {
-    ota_link_handle_frame(frame);
+    ota_link_handle_frame(frame, true);
     return;
   }
   if (amiibo_session_is_frame_type(frame->type)) {
@@ -368,6 +368,12 @@ esp_err_t netlog_start(const char *ssid, const char *password, const char *host,
   s_wifi_started = true;
   /* 功率上限要在 start 后设置才生效。 */
   esp_wifi_set_max_tx_power(NETLOG_TX_POWER_QUARTER_DBM);
+  /* 调试通道按最大性能工作：STA 默认 MIN_MODEM 省电会让无线电按 AP 的 DTIM
+     * 节拍醒来，OTA 窗口与 CLI 往返每回多付一拍唤醒延迟，会话期间固定关掉。 */
+  const esp_err_t ps_err = esp_wifi_set_ps(WIFI_PS_NONE);
+  if (ps_err != ESP_OK) {
+    ESP_LOGW(TAG, "esp_wifi_set_ps(WIFI_PS_NONE) failed: %s", esp_err_to_name(ps_err));
+  }
   /* start 只是起驱动，关联要显式发起；断线重连在 WiFi 事件里补。 */
   esp_wifi_connect();
   ESP_LOGI(TAG, "netlog session ssid=%s port=%u (dest %s)", s_ssid, (unsigned)s_port, s_dest_set ? "set" : "learn");

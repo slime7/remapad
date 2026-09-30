@@ -20,6 +20,7 @@ CRC-16/CCITT-FALSE 覆盖除末尾两字节外的整帧（含同步字）。
 from __future__ import annotations
 
 import ctypes
+import re
 import socket
 import struct
 import sys
@@ -637,6 +638,24 @@ class SerialLink:
 #: 设备端 UDP 调试通道（netlog）的默认端口：桥接帧、CLI 文本与日志同一端口。
 NETLOG_PORT_DEFAULT = 9999
 
+#: 日志脱敏的替换词：只隐 WiFi 密码，SSID 与会话状态保持可读。
+SECRET_MASK = "***"
+
+# 凭据回读行（ok netlog cred ssid=x pass=y）里的密码段；pass=- 表示未配置，保持原样。
+_CRED_PASS_RE = re.compile(r"(netlog cred ssid=\S+ pass=)(\S+)")
+# 发送回显（GUI 给发出的命令统一加「> 」前缀，设备行不会有）：保存与直连两种
+# 命令形态都在前缀之后匹配，避免把 netlog 开头的固件日志词当 SSID 误伤。
+_SAVE_PASS_RE = re.compile(r"(^\s*>\s*netlog save \S+ )(\S+)", re.MULTILINE)
+_CONNECT_PASS_RE = re.compile(
+    r"(^\s*>\s*netlog (?!save\b|cred\b|scan\b|scanlist\b|phyreset\b|power\b|reconnect\b|off\b|state=)(?![\[<])\S+ )(\S+)",
+    re.MULTILINE)
+
+
+def mask_secrets(text: str) -> str:
+    """一行日志展示前的脱敏：netlog 命令与凭据回读里的 WiFi 密码换成 ***，其余原样。"""
+    text = _CRED_PASS_RE.sub(lambda m: m.group(1) + (m.group(2) if m.group(2) == "-" else SECRET_MASK), text)
+    return _CONNECT_PASS_RE.sub(rf"\g<1>{SECRET_MASK}", _SAVE_PASS_RE.sub(rf"\g<1>{SECRET_MASK}", text))
+
 
 def parse_endpoint(text: str, default_port: int = NETLOG_PORT_DEFAULT) -> tuple[str, int]:
     """网络连接地址 "ip[:port]" → (ip, port)；端口缺省给 default_port，格式不对抛 ValueError。"""
@@ -711,6 +730,12 @@ class UdpLink:
         if self._sock is not None:
             self._sock.close()
             self._sock = None
+
+    def __enter__(self) -> "UdpLink":
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
 
 
 def open_port(port: str, baud: int = 115200) -> SerialLink:

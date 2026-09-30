@@ -95,7 +95,8 @@
 | [0057](0057-single-uv-project-at-repo-root.md) | active | Python 依赖统一到仓库根一个 uv 工程：pc/ 的 hidapi / customtkinter / av / sounddevice 并入根 pyproject.toml，删除 pc/pyproject.toml 与 pc/uv.lock，命令一律写成 uv run python pc/<工具>.py，remapadctl 的默认镜像路径改按脚本位置解析；0040 里「依赖写进 pc/pyproject.toml」一句随本次调整作废 |
 | [0058](0058-clover-carousel-band-page-slide.md) | active | 上部分改成按一页步距平移的四叶草轮播带：底图烘成一个步距里的周期图平铺（仍是整幅不透明的拷贝路径），页面内容按槽位摆放，切页整条带滑行、静止时两侧各露一条邻页花瓣边；拖动跟手封顶在切页阈值、往回滑取消换页；部分取代 0050 的「切页瞬时完成」 |
 | [0059](0059-no-usb-device-output.md) | active | 输出通路只保留 BLE，不实现 USB 有线手柄输出；延伸 0039 的边界，协议文档的 USB 形态规范仅作协议记录 |
-| [0060](0060-ota-dual-channel-unified.md) | active | OTA 升级统一为串口与 WiFi（netlog UDP）双通道：同一套协议帧、PC 状态机与固件会话核心，BEGIN/END 幂等加窗口重发兜住 UDP 丢包，ACK 按在位通道双路回发；截图与 amiibo 上传仍只走串口 |
+| [0060](0060-ota-dual-channel-unified.md) | active | OTA 升级统一为串口与 WiFi（netlog UDP）双通道：同一套协议帧、PC 状态机与固件会话核心，BEGIN/END 幂等加窗口重发兜住 UDP 丢包；截图与 amiibo 上传仍只走串口（ACK 回发口径随 0061 修订） |
+| [0061](0061-ota-ack-follows-ingress-channel.md) | active | OTA ACK 改为跟进帧通道单路回发（修订 0060 的双路回发）：从哪个口收升级帧就从哪个口应答，出口不在位丢弃由窗口重发兜住；配套 netlog 会话期关 WiFi 省电、PC 端窗口应答超时收紧 |
 
 ## 创建 ADR 脚本用法
 

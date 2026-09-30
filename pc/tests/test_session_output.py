@@ -48,6 +48,44 @@ class ConsoleReporterTest(unittest.TestCase):
         self.assertEqual(out.getvalue(), "普通行\n")
         self.assertEqual(err.getvalue(), "错误行\n")
 
+    def test_line_masks_wifi_passwords(self):
+        out = io.StringIO()
+        reporter = remapadctl.ConsoleReporter()
+        with contextlib.redirect_stdout(out):
+            reporter.line("ok netlog cred ssid=slime_nest pass=hunter2")
+        self.assertEqual(out.getvalue(), "ok netlog cred ssid=slime_nest pass=***\n")
+
+
+class MaskSecretsTest(unittest.TestCase):
+    """日志脱敏：netlog 的 WiFi 密码换 ***，其余内容（含 SSID）保持原样。"""
+
+    def test_save_command_with_echo_prefix(self):
+        self.assertEqual(link.mask_secrets("> netlog save slime_nest ssssssss"),
+                         "> netlog save slime_nest ***")
+
+    def test_direct_connect_command_masks_password_keeps_ip_and_port(self):
+        self.assertEqual(link.mask_secrets("> netlog slime_nest hunter2 192.168.1.5 9999"),
+                         "> netlog slime_nest *** 192.168.1.5 9999")
+        self.assertEqual(link.mask_secrets("> netlog slime_nest hunter2"),
+                         "> netlog slime_nest ***")
+        # 没有回显前缀的行是设备侧输出而非发出的命令，不碰（固件日志不会回显命令）。
+        self.assertEqual(link.mask_secrets("netlog slime_nest hunter2 192.168.1.5 9999"),
+                         "netlog slime_nest hunter2 192.168.1.5 9999")
+
+    def test_cred_reply_masks_password_keeps_unset_dash(self):
+        self.assertEqual(link.mask_secrets("ok netlog cred ssid=slime_nest pass=hunter2"),
+                         "ok netlog cred ssid=slime_nest pass=***")
+        self.assertEqual(link.mask_secrets("ok netlog cred ssid=- pass=-"),
+                         "ok netlog cred ssid=- pass=-")
+
+    def test_subcommands_status_and_usage_lines_stay_untouched(self):
+        for line in ("netlog cred", "netlog off", "netlog scan",
+                     "netlog state=connected ssid=slime_nest dest=192.168.1.5:9999",
+                     "netlog session ssid=slime_nest port=9999 (dest learn)",
+                     "err usage: netlog [save <ssid> <password> | cred | scan | scanlist | off]",
+                     "ok wifi saved", "ok netlog stopped"):
+            self.assertEqual(link.mask_secrets(line), line, line)
+
 
 class QueueReporterTest(unittest.TestCase):
     def test_records_keep_kind_and_fields(self):

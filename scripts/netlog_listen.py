@@ -70,7 +70,7 @@ def main() -> None:
                 continue
             text = data.decode("utf-8", "replace").rstrip("\r\n")
             if text:
-                print(f"[{stamp}] {text}", flush=True)
+                print(f"[{stamp}] {link.mask_secrets(text)}", flush=True)
 
     decoder = link.FrameDecoder()
     threading.Thread(target=receive, daemon=True).start()
