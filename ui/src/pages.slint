@@ -642,8 +642,8 @@ export component SystemInfoPage inherits Rectangle {
     }
 }
 
-/** 无线调试页：WiFi 会话开关在右上角（同时接通网络手柄与日志），正文显示会话状态与信号强度。
- *  会话状态由固件写入：0 关、1 连接中、2 已连接（正文是设备自己的 ip:port）、3 无凭据。 */
+/** 无线调试页：WiFi 会话开关在右上角（同时接通网络手柄与日志），左上角信号图标按 RSSI 分档，
+ *  正文显示会话状态（0 关、1 连接中、2 已连接即设备自己的 ip:port、3 无凭据）。 */
 export component NetworkPage inherits Rectangle {
     in property <int> netlog-state: 0;
     in property <string> netlog-addr: "--";
@@ -657,6 +657,24 @@ export component NetworkPage inherits Rectangle {
     background: transparent;
 
     property <bool> netlog-on: root.netlog-state == 1 || root.netlog-state == 2;
+
+    /** 信号字形：已连接且读得到 RSSI 时按档位画弧（-55 / -66 / -77 为界，更低也是一格），
+     *  连接中、断开与读不到 RSSI 都画关闭字形。 */
+    pure function wifi-glyph(state: int, rssi: int) -> string {
+        if (state != 2 || rssi == 0) {
+            return "\u{e1da}";
+        }
+        if (rssi >= -55) {
+            return "\u{e1d8}";
+        }
+        if (rssi >= -66) {
+            return "\u{ebe1}";
+        }
+        if (rssi >= -77) {
+            return "\u{ebd6}";
+        }
+        return "\u{ebe4}";
+    }
 
     VerticalLayout {
         x: 50px;
@@ -685,14 +703,15 @@ export component NetworkPage inherits Rectangle {
             color: Theme.on-primary-container;
             horizontal-alignment: center;
         }
+    }
 
-        if root.netlog-state == 2 && root.netlog-rssi != 0: rssi-line := Text {
-            text: "信号 \{root.netlog-rssi} dBm";
-            font-family: "Noto Sans SC";
-            font-size: Theme.text-xs;
-            color: Theme.on-primary-fixed-variant;
-            horizontal-alignment: center;
-        }
+    // 信号图标：与角钮同一瓣心（卡片 82, 82），字号取烘过的最大档保证弧线清晰。
+    wifi-icon := Icon {
+        x: 70px;
+        y: 70px;
+        size: Theme.text-2xl;
+        tint: Theme.on-primary-fixed-variant;
+        glyph: root.wifi-glyph(root.netlog-state, root.netlog-rssi);
     }
 
     wifi-btn := CornerButton {

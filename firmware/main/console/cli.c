@@ -1041,7 +1041,7 @@ static void cli_netlog(const char *arg)
       cli_print(line);
       return;
     }
-    cli_print(netlog_running() ? "ok wifi saved and connecting" : "ok wifi saved");
+    cli_print("ok wifi saved");
     return;
   }
   char ssid[NETLOG_SSID_MAX] = { 0 };

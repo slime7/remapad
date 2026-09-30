@@ -57,7 +57,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
   - `bridge/`：控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入。
   - `config/`：NVS 用户设置持久化；setter 只置内存表脏标记，提交任务每 1 分钟检查一次，确有改动才写一次 NVS。
   - `console/`：串口 CLI 与控制台出口切换；切到 USB host 后日志与 CLI 走 UART0。
-  - `netlog/`：局域网调试会话（`REMAPAD_NETLOG=OFF` 才裁掉，默认编入）：WiFi STA 连 AP 后在单个 UDP 端口上承载与串口同一模型的数据——日志与 CLI 回复抄送、UDP 收桥接帧当网络手柄；凭据存 NVS、连接由界面或 CLI 手动开关（开机不自动连），目标 IP 由收到的第一个报文自学习。
+  - `netlog/`：局域网调试会话（`REMAPAD_NETLOG=OFF` 才裁掉，默认编入）：WiFi STA 连 AP 后在单个 UDP 端口上承载与串口同一模型的数据——日志与 CLI 回复抄送、UDP 收桥接帧当网络手柄；凭据存 NVS、连接由界面或 CLI 手动开关（开机不自动连），断线按 3 秒 → 30 秒退避重试、累计 10 次失败自动关闭会话，目标 IP 由收到的第一个报文自学习。
   - `dp/`：数据面任务、输入源抽象与组合键捕获屏幕。
   - `input/`：输入通路接收段：桥接帧协议、USB-Serial/JTAG 唯一读取者、桥接输入源。
   - `usb/`：USB host 直插：枚举与 HID 收发、输入源、运行时角色切换；DualSense 的音频触觉通道也挂在这一层

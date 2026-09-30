@@ -23,6 +23,7 @@
 #include "input_frame.h"
 #include "input_link.h"
 #include "input_source.h"
+#include "netlog_retry.h"
 #include "ota_link.h"
 
 static const char *TAG = "remapad_netlog";
@@ -71,13 +72,21 @@ static wifi_ap_record_t s_scan_records[NETLOG_SCAN_MAX];
 static int s_scan_count;
 
 static esp_timer_handle_t s_reconnect_timer;
+static volatile int s_fail_count;
 
 static void reconnect_timer_cb(void *arg)
 {
   (void)arg;
-  if (s_running && !s_scan_hold) {
-    esp_wifi_connect();
+  if (!s_running || s_scan_hold) {
+    return;
   }
+  /* 连不上就不再扫射：整段关闭（射频断电），要再连只能手动开。 */
+  if (netlog_retry_give_up(s_fail_count)) {
+    ESP_LOGW(TAG, "giving up after %d failed connects, session closed", (int)s_fail_count);
+    netlog_stop();
+    return;
+  }
+  esp_wifi_connect();
 }
 
 static const char *state_name(void)
@@ -92,7 +101,8 @@ static const char *state_name(void)
   }
 }
 
-/** WiFi 事件：断线自动重连（会话开着才算，扫描期间压住），拿到 IP 才置连通。 */
+/** WiFi 事件：断线自动重连（会话开着才算，扫描期间压住）——按失败次数退避，
+ *  累计 10 次失败转关闭；拿到 IP 才置连通并把失败计数清零。 */
 static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
   (void)arg;
@@ -101,17 +111,20 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
       return;
     }
     s_state = NETLOG_STATE_CONNECTING;
+    s_fail_count++;
     const wifi_event_sta_disconnected_t *disconnected = data;
-    ESP_LOGW(TAG, "wifi disconnected reason=%u rssi=%d, reconnect in 3s", (unsigned)disconnected->reason,
-             (int)disconnected->rssi);
+    const int64_t delay_us = netlog_retry_delay_us(s_fail_count);
+    ESP_LOGW(TAG, "wifi disconnected reason=%u rssi=%d, retry %d/%d in %ds", (unsigned)disconnected->reason,
+             (int)disconnected->rssi, (int)s_fail_count, NETLOG_FAIL_GIVE_UP, (int)(delay_us / 1000000LL));
     if (s_reconnect_timer != NULL) {
       esp_timer_stop(s_reconnect_timer);
-      esp_timer_start_once(s_reconnect_timer, 3LL * 1000000LL);
+      esp_timer_start_once(s_reconnect_timer, (uint64_t)delay_us);
     }
   } else if (base == WIFI_EVENT && id == WIFI_EVENT_SCAN_DONE) {
     s_scan_done = true;
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
     const ip_event_got_ip_t *event = data;
+    s_fail_count = 0;
     s_state = NETLOG_STATE_CONNECTED;
     const uint32_t ip = ntohl(event->ip_info.ip.addr);
     snprintf(s_addr_text, sizeof(s_addr_text), "%u.%u.%u.%u:%u", (unsigned)((ip >> 24) & 0xFFu),
@@ -328,6 +341,7 @@ esp_err_t netlog_start(const char *ssid, const char *password, const char *host,
   s_dropped = 0;
   s_frames = 0;
   s_last_rx_us = 0;
+  s_fail_count = 0;
   input_frame_rx_reset(&s_frame_rx);
   s_state = NETLOG_STATE_CONNECTING;
   s_running = true;
@@ -406,14 +420,8 @@ esp_err_t netlog_reconnect(void)
 
 esp_err_t netlog_save_wifi(const char *ssid, const char *password)
 {
-  const esp_err_t err = app_config_set_wifi(ssid, password);
-  if (err != ESP_OK) {
-    return err;
-  }
-  if (s_running) {
-    netlog_stop();
-  }
-  return netlog_start(ssid, password, NULL, 0);
+  /* 只落盘不连接：会话由界面开关或 CLI 手动起，保存不惊动在跑的会话。 */
+  return app_config_set_wifi(ssid, password);
 }
 
 static const char *authmode_name(wifi_auth_mode_t mode)

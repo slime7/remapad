@@ -83,11 +83,15 @@ endif()
 
 # 局域网调试会话（netlog：UDP 日志/CLI 抄送 + 网络手柄）：默认编入，
 # `idf.py -DREMAPAD_NETLOG=OFF build` 整体裁掉（换入空实现，CLI 命令同步裁剪）。
+# 源选择与宏定义必须同一判定：编入时才给组件定义 REMAPAD_NETLOG=1，cli / ui_service
+# 的 #ifdef 靠它裁剪——漏定义会让源码白编、屏幕开关与 CLI 命令一起静默消失。
 if(NOT DEFINED REMAPAD_NETLOG OR REMAPAD_NETLOG)
-    list(APPEND remapad_srcs "netlog/netlog.c")
+    list(APPEND remapad_srcs "netlog/netlog.c" "netlog/netlog_retry.c")
     list(APPEND remapad_requires esp_wifi esp_netif esp_event)
+    set(remapad_netlog_enabled ON)
 else()
     list(APPEND remapad_srcs "netlog/netlog_stub.c")
+    set(remapad_netlog_enabled OFF)
 endif()
 
 idf_component_register(
@@ -112,6 +116,6 @@ idf_component_register(
     REQUIRES ${remapad_requires} spiffs
 )
 
-if(REMAPAD_NETLOG)
+if(remapad_netlog_enabled)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE REMAPAD_NETLOG=1)
 endif()

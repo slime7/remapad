@@ -349,19 +349,22 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 单个 UDP 端口（默认 9999）承载与串口同一模型的数据——日志与 CLI 回复抄送到 PC、UDP 上收桥接帧当
 网络手柄、行命令远程敲，`mode host` 之后照常工作。用法两条路：
 
-- 串口上敲 `netlog save <ssid> <password>`：凭据写入 NVS（立即落盘）并立即连上；开机不自动连，
+- 串口上敲 `netlog save <ssid> <password>`：凭据写入 NVS（立即落盘），不自动连接、也不影响在跑的
+  会话；开机不自动连，
   会话由屏幕开关（读存好的凭据，无凭据时页面提示「未配置」）或 `netlog <ssid> <password>` 手动起。
   再敲一次 `netlog save` 或用 GUI 设置页的「WiFi（局域网调试）」改凭据。凭据不落盘的临时会话用
   `netlog <ssid> <password> [ip] [port]`，`netlog off` 停止，无参看状态；`netlog scan` 后台扫一圈周围 AP
   （ssid/BSSID/信道/信号/加密模式，约 2-15 秒后打进日志，`netlog scanlist` 随时重印——连不上时先看这里，
-  以及断开日志里的 reason 与 RSSI）。断线按 3 秒定时重连，认证方式由驱动按 AP 广播自动协商（WPA2/WPA3 均可连）。
+  以及断开日志里的 reason 与 RSSI）。断线按失败次数退避重连（前 4 次每 3 秒、第 5 次起每 30 秒），
+  累计 10 次失败自动关闭整个会话（日志里有放弃记录，要再连只能手动开；连上一次计数即清零），
+  认证方式由驱动按 AP 广播自动协商（WPA2/WPA3 均可连）。
   发射功率默认压在 15dBm（`netlog power` 回读、`netlog power <0-84>` 运行时改，0.25dBm 单位）：
   本板裸片功放在 20dBm 满档发射失真、任何 AP 都解不出认证帧，17.5dBm 起临界，勿调回满档；
   `netlog reconnect` 主动重走一轮认证-关联，`netlog phyreset` 擦掉 NVS 里的射频校准数据并重启（现场修复用）。
   屏幕上也有同一开关：
-  「无线调试」页（release 页表末位）右上角的 WiFi 角钮（会话在位换红色「断开」），正文显示
-  「未连接 / 连接中… / 设备的 ip:port」与信号强度（已连接时）；开关同时接通网络手柄与日志，
-  屏幕开关开机不记忆。
+  「无线调试」页（release 页表末位）右上角的 WiFi 角钮（会话在位换红色「断开」），左上角信号图标
+  按 RSSI 分档（未连接与连接中画关闭字形），正文显示「未连接 / 连接中… / 设备的 ip:port」；
+  开关同时接通网络手柄与日志，屏幕开关开机不记忆。
 - PC 侧接收：`uv run python scripts/netlog_listen.py`（收日志 + 回发命令），或 GUI 工具栏「网络」栏
   填 `设备IP:9999` 连接（手柄转发照常）。设备不知道 PC 的 IP：PC 先说话（listener 的广播 hello、
   GUI 的连接）即完成目标自学习，`netlog` 状态行里能看到设备自己拿到的 IP。

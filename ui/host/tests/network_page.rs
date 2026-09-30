@@ -1,4 +1,5 @@
-//! 无线调试页用例：WiFi 开关在右上角、正文随会话状态切换；开关同时接通网络手柄与日志。
+//! 无线调试页用例：WiFi 开关在右上角、信号图标在左上角随 RSSI 分档，正文随会话状态切换；
+//! 开关同时接通网络手柄与日志。
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -39,17 +40,54 @@ fn 无线调试页的开关在右上角且点按发出开关动作() {
   );
 }
 
-/// 正文随会话状态切换：关闭时是「未连接」、没有信号行；连上后换成 ip:port 并显示信号，开关底色也换挡。
+/// 左上角信号图标与右上角开关同瓣心镜像：已连接按 RSSI 分四档逐档变满，
+/// 连着但读不到 RSSI 与断开都画关闭字形，且与最弱一格形状不同。
+#[test]
+fn 无线调试页信号图标在左上角且随信号分档() {
+  let app = ui::new_app();
+  app.set_page(NETWORK_PAGE);
+  ui::settle(&app);
+
+  let icon = ui::rect(&app, "NetworkPage::wifi-icon");
+  let button = ui::rect(&app, "NetworkPage::wifi-btn");
+  assert!(
+    (icon.center_y() - button.center_y()).abs() < 0.5 && (button.center_x() - icon.center_x() - 92.0).abs() < 0.5,
+    "信号图标不在左上角瓣心（开关中心左移 92）：{icon:?} 对 {button:?}"
+  );
+
+  app.set_netlog_state(2);
+  app.set_netlog_addr("192.168.1.5:9999".into());
+  let levels = [-80, -70, -60, -40];
+  let mut ink = Vec::new();
+  for rssi in levels {
+    app.set_netlog_rssi(rssi);
+    ink.push(ui::frame(&app).ink(icon).len());
+  }
+  for (index, pair) in ink.windows(2).enumerate() {
+    assert!(
+      pair[1] > pair[0],
+      "RSSI {} dBm 与 {} dBm 画出的信号格一样满：墨迹 {ink:?}",
+      levels[index],
+      levels[index + 1]
+    );
+  }
+
+  let weak = ink[0];
+  app.set_netlog_rssi(0);
+  let unknown = ui::frame(&app).ink(icon).len();
+  assert_ne!(unknown, weak, "已连接但读不到 RSSI 时没有换成关闭字形");
+  app.set_netlog_state(0);
+  let off = ui::frame(&app).ink(icon).len();
+  assert_eq!(off, unknown, "断开后信号图标与关闭字形不一致");
+}
+
+/// 正文随会话状态切换：关闭时是「未连接」，连上后换成 ip:port，开关底色也换挡。
 #[test]
 fn 无线调试页正文随会话状态切换() {
   let app = ui::new_app();
   app.set_page(NETWORK_PAGE);
   ui::settle(&app);
 
-  assert!(
-    ui::element_or_none(&app, "NetworkPage::rssi-line").is_none(),
-    "未连接时不该有信号行"
-  );
   let status = ui::rect(&app, "NetworkPage::status-line");
   let idle_width = match ui::frame(&app).ink_bounds(status) {
     Some((x0, _y0, x1, _y1)) => (x1 - x0) as f32,
@@ -58,12 +96,9 @@ fn 无线调试页正文随会话状态切换() {
 
   app.set_netlog_state(2);
   app.set_netlog_addr("192.168.1.5:9999".into());
-  app.set_netlog_rssi(-58);
   ui::settle(&app);
 
-  let rssi = ui::rect(&app, "NetworkPage::rssi-line");
   let frame = ui::frame(&app);
-  assert!(frame.ink_bounds(rssi).is_some(), "已连接时信号行没有墨迹");
   let addr_width = match frame.ink_bounds(status) {
     Some((x0, _y0, x1, _y1)) => (x1 - x0) as f32,
     None => panic!("已连接时正文没有墨迹"),
@@ -81,10 +116,6 @@ fn 无线调试页正文随会话状态切换() {
 
   app.set_netlog_state(0);
   ui::settle(&app);
-  assert!(
-    ui::element_or_none(&app, "NetworkPage::rssi-line").is_none(),
-    "关闭后信号行还在"
-  );
   let frame = ui::frame(&app);
   assert!(
     frame.count_color(button, OFF_BG, 8) * 2 > (button.w * button.h) as usize,

@@ -328,7 +328,7 @@ class ConsoleWindow(ctk.CTk):
     def _build_toolbar(self) -> None:
         bar = ctk.CTkFrame(self, corner_radius=0)
         bar.grid(row=0, column=0, sticky="ew")
-        bar.grid_columnconfigure(7, weight=1)
+        bar.grid_columnconfigure(8, weight=1)
 
         ctk.CTkLabel(bar, text="串口", font=self.font_ui).grid(
             row=0, column=0, padx=(12, 4), pady=10)
@@ -338,23 +338,27 @@ class ConsoleWindow(ctk.CTk):
         self.port_box.set(self.args.port)
         self.port_box.bind("<KeyRelease>", self.on_port_picked)
         self.port_box.grid(row=0, column=1, padx=(0, 4), pady=10)
+        # 连接按钮各归各输入后面：串口按钮贴着串口下拉，网络按钮贴着「网络」框。
+        self.serial_button = ctk.CTkButton(bar, text="串口连接", width=90, font=self.font_bold,
+                                           command=self.toggle_serial)
+        self.serial_button.grid(row=0, column=2, padx=(0, 4), pady=10)
         ctk.CTkButton(bar, text="刷新", width=60, font=self.font_ui,
-                      command=self.refresh_ports).grid(row=0, column=2, padx=(0, 12), pady=10)
+                      command=self.refresh_ports).grid(row=0, column=3, padx=(0, 16), pady=10)
         ctk.CTkLabel(bar, text="网络", font=self.font_ui).grid(
-            row=0, column=3, padx=(0, 4), pady=10)
-        # 网络地址填了就走 UDP（设备 netlog 通道），不填按串口连。
+            row=0, column=4, padx=(0, 4), pady=10)
+        # 网络地址给「网络连接」用：设备 netlog 通道（UDP），不影响串口连接。
         self.net_var = ctk.StringVar()
         self.net_entry = ctk.CTkEntry(bar, width=150, textvariable=self.net_var, font=self.font_ui,
                                       placeholder_text=f"设备IP:端口（默认 {NETLOG_PORT_DEFAULT}）")
-        self.net_entry.grid(row=0, column=4, padx=(0, 12), pady=10)
-        self.connect_button = ctk.CTkButton(bar, text="连接", width=90, font=self.font_bold,
-                                            command=self.toggle_connection)
-        self.connect_button.grid(row=0, column=5, padx=(0, 12), pady=10)
+        self.net_entry.grid(row=0, column=5, padx=(0, 4), pady=10)
+        self.net_button = ctk.CTkButton(bar, text="网络连接", width=90, font=self.font_bold,
+                                        command=self.toggle_net)
+        self.net_button.grid(row=0, column=6, padx=(0, 12), pady=10)
         self.state_light = ctk.CTkLabel(bar, text="● 未连接", text_color="#8a8a8a",
                                         font=self.font_bold)
-        self.state_light.grid(row=0, column=6, padx=(0, 12), pady=10)
+        self.state_light.grid(row=0, column=7, padx=(0, 12), pady=10)
         self.pad_summary = ctk.CTkLabel(bar, text="手柄：未接入", anchor="e", font=self.font_ui)
-        self.pad_summary.grid(row=0, column=7, sticky="e", padx=(0, 12), pady=10)
+        self.pad_summary.grid(row=0, column=8, sticky="e", padx=(0, 12), pady=10)
 
     def _build_tabs(self) -> None:
         self.tabs = ctk.CTkTabview(self)
@@ -622,19 +626,19 @@ class ConsoleWindow(ctk.CTk):
         row_frame = ctk.CTkFrame(frame, fg_color="transparent")
         row_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=12, pady=(6, 2))
         row_frame.grid_columnconfigure(1, weight=1)
-        self.wifi_save_button = ctk.CTkButton(row_frame, text="保存并连接", width=100, height=28,
+        self.wifi_save_button = ctk.CTkButton(row_frame, text="保存", width=100, height=28,
                                               font=self.font_ui, command=self.save_wifi)
         self.wifi_save_button.grid(row=0, column=0, sticky="w")
         self.net_summary = ctk.CTkLabel(row_frame, text="设备：未读取", anchor="w", font=self.font_ui)
         self.net_summary.grid(row=0, column=1, sticky="w", padx=(10, 0))
-        self._section_hint(frame, 4, "保存即写入设备并立即连上 WiFi，开机不自动连（在设备\n"
-                                     "「无线调试」页手动开）；SSID 与密码暂不支持空格，凭据\n"
-                                     "明文存在设备上。连接后工具栏「网络」填设备IP:9999 即可\n"
-                                     "远程转发手柄与看日志（2.4G 网络）。")
+        self._section_hint(frame, 4, "保存只写入设备、不自动连接，也不影响在跑的会话；连接在\n"
+                                     "设备「无线调试」页手动开。SSID 与密码暂不支持空格，凭据\n"
+                                     "明文存在设备上。连接后工具栏「网络」填设备IP:9999 点「网\n"
+                                     "络连接」即可远程转发手柄与看日志（2.4G 网络）。")
         self.session_widgets += [self.wifi_ssid_entry, self.wifi_pass_entry, self.wifi_save_button]
 
     def save_wifi(self) -> None:
-        """把 WiFi 凭据发给设备（netlog save）：立即落盘并连上，回读行刷新摘要。"""
+        """把 WiFi 凭据发给设备（netlog save）：只落盘不连接，回读行刷新摘要。"""
         ssid = self.wifi_ssid_var.get().strip()
         password = self.wifi_pass_var.get()
         if not ssid or not password:
@@ -835,23 +839,25 @@ class ConsoleWindow(ctk.CTk):
 
     # --- 连接与断开 ------------------------------------------------
 
-    def toggle_connection(self) -> None:
-        if self.session is None:
-            self.connect()
-        else:
+    def toggle_serial(self) -> None:
+        if self.session is not None and self.net_session is None:
             self.disconnect()
+        else:
+            self.connect_serial()
 
-    def connect(self) -> None:
-        """手动连接：网络地址填了走 UDP，否则打开串口；建会话、起工作线程。"""
+    def toggle_net(self) -> None:
+        if self.session is not None and self.net_session is not None:
+            self.disconnect()
+        else:
+            self.connect_net()
+
+    def connect_serial(self) -> None:
+        """串口连接：打开 COM 口建会话（截图与 OTA 只有串口能做）。"""
         if self.session is not None:
-            return
-        net_target = self.net_var.get().strip()
-        if net_target:
-            self._connect_udp(net_target)
             return
         port = self.port_box.get().strip()
         if not port:
-            self._append_text("先选一个串口（或填网络地址）再连接", tag="error")
+            self._append_text("先选一个串口再连接", tag="error")
             return
         self._set_state("connecting", f"正在打开 {port}")
         try:
@@ -863,6 +869,16 @@ class ConsoleWindow(ctk.CTk):
             self._set_state("disconnected", "未连接")
             return
         self._start_session(ser, f"{port}")
+
+    def connect_net(self) -> None:
+        """网络连接：按「网络」框里的 设备IP:端口 走设备 netlog 通道（UDP）。"""
+        if self.session is not None:
+            return
+        net_target = self.net_var.get().strip()
+        if not net_target:
+            self._append_text("先填 设备IP:端口 再网络连接（串口连接不需要它）", tag="error")
+            return
+        self._connect_udp(net_target)
 
     def _connect_udp(self, target: str) -> None:
         """网络连接：设备 netlog 通道（UDP，桥接帧 + CLI 文本 + 日志同一端口）。"""
@@ -1207,12 +1223,12 @@ class ConsoleWindow(ctk.CTk):
             self.progress_label.configure(text="升级完成" if record["ok"] else "升级失败")
             self.pending_ota_wait = bool(record["ok"] and self.wait_var.get())
             if record["ok"] and not self.pending_ota_wait:
-                self._append_text("设备重启后点「连接」重新连上", tag="event")
+                self._append_text("设备重启后点「串口连接」重新连上", tag="event")
         elif name == "session_closed":
             self.on_session_closed(int(record.get("code", 1)))
         elif name == "device_back":
             self._append_text("设备已回到串口，正在重新连接", tag="event")
-            self.connect()
+            self.connect_serial()
         elif name == "link_error":
             self.last_error = record["message"]
         elif name == "pad_attached":
@@ -1239,8 +1255,14 @@ class ConsoleWindow(ctk.CTk):
     def _apply_state(self) -> None:
         connected = self.session is not None
         busy = self.session_state == "connecting"
-        self.connect_button.configure(text="断开" if connected else "连接",
-                                      state="disabled" if busy else "normal")
+        net_session = self.net_session is not None
+        # 两个连接按钮各管一条链路：会话在位的那条显示「断开」，另一条置灰（同时只允许一个会话）。
+        self.serial_button.configure(
+            text="断开" if connected and not net_session else "串口连接",
+            state="disabled" if busy or (connected and net_session) else "normal")
+        self.net_button.configure(
+            text="断开" if connected and net_session else "网络连接",
+            state="disabled" if busy or (connected and not net_session) else "normal")
         for button in self.action_buttons:
             button.configure(state="normal" if connected else "disabled")
         for widget in self.session_widgets:

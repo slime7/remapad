@@ -42,6 +42,7 @@ cargo test --manifest-path ui/Cargo.toml --test bottom_bar 底栏    # 只跑匹
 | [ui/host/tests/bands.rs](../ui/host/tests/bands.rs) | 行带计划：整屏按 48 行切分与末段余数、不满宽与越界矩形的裁剪、逐行取像素的步长（真源码在 ui/render-plan，固件平台层跑同一份） |
 | [ui/host/tests/gestures.rs](../ui/host/tests/gestures.rs) | 拖动时条带到切页阈值就定住、越过阈值抬手翻到上一页并接着整页滑行、没过阈值不翻页并回弹、单步甩动即翻页、往回滑取消换页、滑行期间拖动让位 |
 | [ui/host/tests/dialogs.rs](../ui/host/tests/dialogs.rs) | 弹窗遮罩盖住整屏并压暗、弹窗期间页面控件收不到点按、页面焦点环让位给弹窗、重启与关机等待画面盖住整屏 |
+| [ui/host/tests/network_page.rs](../ui/host/tests/network_page.rs) | 无线调试页 WiFi 开关在右上角且点按发出开关动作、左上角信号图标随 RSSI 分档（关闭字形兜底）、正文随会话状态切换 |
 
 ## 用例纪律
 
@@ -79,6 +80,7 @@ ESP-IDF 自带的 Unity 要烧到真板上、经串口收结果，改一行也�
 | `main/dp/dp_power.c` | 省电档判据与节拍换算错了会表现为「BLE 已关闭却还按 5 ms 采样」或上报分频为 0 而永远不发报告；BLE 栈关闭即省电档、83 ms 节拍与分频下限在这里钉住 |
 | `main/target/ns2/ns2_adv.c` | 广播载荷与策略错了会表现为主机发现不了、唤不醒或回连不上；三种形态的字节、窗口决策与「完全静默才允许关 BLE 控制器」的判据在这里钉住 |
 | `main/ui/ui_service.c` | UI 契约的动作映射与状态装配错了会表现为「按钮按了没反应」「提示语不对」或系统页读数错；亮度档位、动作到控制面命令的 JSON、提示/弹窗流转与快照逐字段映射在这里钉住（状态源走替身） |
+| `main/netlog/netlog_retry.c` | 重连节奏的退避与放弃线错了会表现为「连不上就永远 3 秒扫一次」发热不停、或「该退避时不退避」；快/慢档切分与 10 次失败转关闭在这里钉住 |
 
 不在这套测试里：面板/触摸/背光驱动、BLE 与 NVS（含 BLE 栈的起停：控制器关断与重新起栈）、USB host、
 桥接链路的串口驱动与接收任务、启动画面与 UI 任务调度——它们依赖真实硬件时序与协议栈，只能在真机上验证。

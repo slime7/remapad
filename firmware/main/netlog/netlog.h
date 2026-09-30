@@ -15,7 +15,9 @@ extern "C" {
  * AP 后，单个 UDP 端口（默认 9999）承载与串口同一模型的数据——桥接帧（UDP
  * 网络手柄）与 CLI 文本靠帧同步字区分，日志与 CLI 回复抄送到最后说话的 PC。
  * host 模式下 USJ 让给手柄、UART0 没接适配器时，这是唯一的远端观测与输入
- * 通道。凭据可保存进 NVS 并开机自连；目标 IP 不落盘，由收到的第一个报文自学。
+ * 通道。凭据可保存进 NVS 供界面与 CLI 手动起会话（开机不自动连）；断线按
+ * 退避节奏重试（3 秒 → 30 秒），累计 10 次失败自动关闭会话（节奏见
+ * netlog_retry.h）。目标 IP 不落盘，由收到的第一个报文自学。
  */
 
 #define NETLOG_PORT_DEFAULT 9999
@@ -30,7 +32,7 @@ esp_err_t netlog_start(const char *ssid, const char *password, const char *host,
 /** 停止会话并关掉 WiFi 射频；可在 UDP 收任务自身上下文里调用（netlog off）。 */
 void netlog_stop(void);
 
-/** 把 WiFi 凭据写进用户设置并立即落盘；会话没开时顺带用新凭据连上。 */
+/** 把 WiFi 凭据写进用户设置并立即落盘；不碰在跑的会话，连接由界面或 CLI 手动开。 */
 esp_err_t netlog_save_wifi(const char *ssid, const char *password);
 
 /** 起后台任务扫一圈周围 AP（约 2-15 秒）：结果按 RSSI 降序存进模块并逐条打进日志，
@@ -50,7 +52,7 @@ esp_err_t netlog_phy_reset(void);
 esp_err_t netlog_get_tx_power(int8_t *quarter_dbm);
 esp_err_t netlog_set_tx_power(int8_t quarter_dbm);
 
-/** 主动断开触发一轮新的认证-关联（断线事件照常走 3 秒重连）；会话未运行返回 INVALID_STATE。 */
+/** 主动断开触发一轮新的认证-关联（再失败回到退避节奏，连上即清零失败计数）；会话未运行返回 INVALID_STATE。 */
 esp_err_t netlog_reconnect(void);
 
 /** 会话是否开着（含 WiFi 连接中）。 */
