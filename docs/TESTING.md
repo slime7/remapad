@@ -138,5 +138,5 @@ uv run python -m unittest discover -s pc/tests -t pc -v  # 加 -v 看每条用�
 ```
 
 用例跑的是 `pc/` 下的真源码（`import remapadctl` / `import link`），不复制被测逻辑，也不创建窗口：
-界面本身靠实机与隐藏窗口的手工走查，只有它的队列接收器（`remapadgui.QueueReporter`）与输入框取值、时长格式这类纯函数进用例。
+界面本身靠实机与隐藏窗口的手工走查，只有它的队列接收器（`gui.QueueReporter`）与输入框取值、时长格式这类纯函数进用例。
 新增用例直接放进 `pc/tests/`，文件名以 `test_` 开头。

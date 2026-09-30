@@ -101,9 +101,9 @@ static void cli_help(void)
   cli_print("                      manual sample byte; audio = PC drives DS5 haptics");
   cli_print("  capture [on|off]    raw host output tap -> PC bridge frames (default off)");
 #ifdef REMAPAD_NETLOG
-  cli_print("  netlog [save <ssid> <password> | scan | scanlist | phyreset | power [0-84] | reconnect | <ssid> "
-            "<password> [ip] [port] | off]");
-  cli_print("                      wifi udp session: logs/cli + network pad (no arg = state)");
+  cli_print("  netlog [save <ssid> <password> | cred | scan | scanlist | phyreset | power [0-84] | reconnect | "
+            "<ssid> <password> [ip] [port] | off]");
+  cli_print("                      wifi udp session: logs/cli + network pad (no arg = state, cred = saved)");
 #endif
   cli_print("  amiibo [list|select <n>|select off|del <n>|poll on|off]");
   cli_print("                      amiibo slots and NFC tag emulation (no arg = state)");
@@ -947,6 +947,14 @@ static void cli_netlog(const char *arg)
     cli_print(line);
     return;
   }
+  if (strcmp(arg, "cred") == 0) {
+    /* 凭据本就明文存 NVS，回读给 PC 设置页在连接后填回输入框；未配置按 "-" 报。 */
+    const app_config_t *cfg = app_config_get();
+    snprintf(line, sizeof(line), "ok netlog cred ssid=%s pass=%s", cfg->wifi_ssid[0] != '\0' ? cfg->wifi_ssid : "-",
+             cfg->wifi_pass[0] != '\0' ? cfg->wifi_pass : "-");
+    cli_print(line);
+    return;
+  }
   if (strcmp(arg, "off") == 0) {
     netlog_stop();
     cli_print("ok netlog stopped");
@@ -1050,8 +1058,9 @@ static void cli_netlog(const char *arg)
   char port_text[8] = { 0 };
   const int fields = sscanf(arg, "%32s %64s %39s %7s", ssid, password, host, port_text);
   if (fields < 2) {
-    cli_print("err usage: netlog [save <ssid> <password> | scan | scanlist | phyreset | power [0-84] | reconnect | "
-              "<ssid> <password> [ip] [port] | off]");
+    cli_print(
+        "err usage: netlog [save <ssid> <password> | cred | scan | scanlist | phyreset | power [0-84] | reconnect | "
+        "<ssid> <password> [ip] [port] | off]");
     return;
   }
   uint16_t port = NETLOG_PORT_DEFAULT;

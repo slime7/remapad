@@ -10,20 +10,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import remapadgui  # noqa: E402  （先把 pc/ 放进来再导入；导入不会建窗口）
+import gui  # noqa: E402  （先把 pc/ 放进来再导入；导入不会建窗口）
 
 
 class DeviceFactsLineTest(unittest.TestCase):
     def test_heap_uses_the_device_screen_used_over_total(self):
-        text = remapadgui.format_device_facts({"heap": 88064, "heap_total": 327680})
+        text = gui.format_device_facts({"heap": 88064, "heap_total": 327680})
         self.assertEqual(text, "堆内存 234 / 320 KB")
 
     def test_heap_without_total_falls_back_to_free(self):
-        text = remapadgui.format_device_facts({"heap": 88064})
+        text = gui.format_device_facts({"heap": 88064})
         self.assertEqual(text, "堆内存 空闲 86 KB")
 
     def test_full_line_keeps_the_existing_segments(self):
-        text = remapadgui.format_device_facts({
+        text = gui.format_device_facts({
             "firmware": "e04fd8c", "partition": "ota_0", "image": "confirmed",
             "ota_state": "idle", "battery_mv": 4160, "battery_percent": 100,
             "uptime_s": 9153, "pairing": "paired", "role": "device",
@@ -34,7 +34,7 @@ class DeviceFactsLineTest(unittest.TestCase):
         ])
 
     def test_empty_facts_says_so(self):
-        self.assertEqual(remapadgui.format_device_facts({}), "设备没有回可读的状态")
+        self.assertEqual(gui.format_device_facts({}), "设备没有回可读的状态")
 
 
 if __name__ == "__main__":

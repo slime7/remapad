@@ -222,6 +222,20 @@ esp_err_t input_link_send_frame_wait(uint8_t type, uint8_t slot, const uint8_t *
   return send_encoded_wait(frame, len, timeout_ms);
 }
 
+bool input_link_send_frame_net(uint8_t type, uint8_t slot, const uint8_t *payload, size_t payload_len)
+{
+  if (s_net_tx == NULL || !input_link_net_active()) {
+    return false;
+  }
+  uint8_t frame[INPUT_FRAME_MAX_LEN];
+  const size_t len = encode_frame(frame, type, slot, payload, payload_len);
+  if (len == 0) {
+    return false;
+  }
+  s_net_tx(frame, len);
+  return true;
+}
+
 esp_err_t input_link_send_image_info(uint16_t width, uint16_t height, uint32_t timeout_ms)
 {
   if (!s_running) {

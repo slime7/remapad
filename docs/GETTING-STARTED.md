@@ -193,7 +193,7 @@ uv run python scripts/clang_tidy.py pad usb         # 按路径片段过滤，�
 
 固件在唯一的 Type-C（USB-Serial/JTAG，主控制台）上提供行命令 CLI，验收时可以不碰屏幕。与 `idf.py monitor` 共用端口，二者不要同时打开。
 项目自带 [pc/remapadctl.py](../pc/remapadctl.py)（桥接转发、命令行、实机截图与 OTA 都在同一个进程里），串口与帧编解码实现在 [pc/link.py](../pc/link.py)。
-同一套会话还有图形入口 [pc/remapadgui.py](../pc/remapadgui.py)（`uv run python pc/remapadgui.py`：选口连接、转发开关、日志、命令行、屏幕设置、截图与升级），
+同一套会话还有图形入口 [pc/gui.py](../pc/gui.py)（`uv run python pc/gui.py`：选口连接、转发开关、日志、命令行、屏幕设置、截图与升级），
 界面与命令行不要同时连同一个口；调试动作（连接键、屏幕操控、状态回读）在「命令」页，界面上不放它们的按钮。
 依赖由 uv 管理（仓库根的 `pyproject.toml` + `uv.lock`，从仓库任意目录都能跑，见 [pc/README.md](../pc/README.md)）：
 
@@ -321,7 +321,7 @@ uv run python pc/remapadctl.py -p COM3 --upgrade --verbose  # 同时透传设备
   涵盖按键构建报告、结构化反馈、电池与 amiibo 预置。
 - [pc/remapadctl.py](../pc/remapadctl.py) 与 [pc/link.py](../pc/link.py)：
   PC 侧单工具（hidapi 读手柄 → 桥接帧、串口命令行、实机截图与 OTA 在同一个进程里；`--dump` 核对家族表偏移；依赖与运行方式见 [pc/README.md](../pc/README.md)）。
-- [pc/remapadgui.py](../pc/remapadgui.py)：同一套会话的图形界面（CustomTkinter；输出走可注入的 Reporter、命令由按钮与输入框投递）；
+- [pc/gui.py](../pc/gui.py)：同一套会话的图形界面（CustomTkinter；输出走可注入的 Reporter、命令由按钮与输入框投递）；
   「设置」页把设备屏幕上的可改项搬到 PC（读写都走固件 CLI，控件值来自回读行）。
 - [firmware/main/ota/](../firmware/main/ota)：OTA 升级会话与协议（分区回写、窗口流控、回滚健康门槛），PC 端入口是 `remapadctl.py --upgrade`。
 - [firmware/sdkconfig.defaults](../firmware/sdkconfig.defaults)：Flash/PSRAM、CPU 频率、FreeRTOS 与主控制台（USJ）预设。
@@ -352,7 +352,8 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
 - 串口上敲 `netlog save <ssid> <password>`：凭据写入 NVS（立即落盘），不自动连接、也不影响在跑的
   会话；开机不自动连，
   会话由屏幕开关（读存好的凭据，无凭据时页面提示「未配置」）或 `netlog <ssid> <password>` 手动起。
-  再敲一次 `netlog save` 或用 GUI 设置页的「WiFi（局域网调试）」改凭据。凭据不落盘的临时会话用
+  再敲一次 `netlog save` 或用 GUI 设置页的「WiFi（局域网调试）」改凭据（`netlog cred` 回读已存的
+  SSID 与密码，GUI 连上设备会自动读一遍填进输入框）。凭据不落盘的临时会话用
   `netlog <ssid> <password> [ip] [port]`，`netlog off` 停止，无参看状态；`netlog scan` 后台扫一圈周围 AP
   （ssid/BSSID/信道/信号/加密模式，约 2-15 秒后打进日志，`netlog scanlist` 随时重印——连不上时先看这里，
   以及断开日志里的 reason 与 RSSI）。断线按失败次数退避重连（前 4 次每 3 秒、第 5 次起每 30 秒），
@@ -366,10 +367,14 @@ host 模式下的排查只有一条通道：板卡只有一根 Type-C，进了 h
   按 RSSI 分档（未连接与连接中画关闭字形），正文显示「未连接 / 连接中… / 设备的 ip:port」；
   开关同时接通网络手柄与日志，屏幕开关开机不记忆。
 - PC 侧接收：`uv run python scripts/netlog_listen.py`（收日志 + 回发命令），或 GUI 工具栏「网络」栏
-  填 `设备IP:9999` 连接（手柄转发照常）。设备不知道 PC 的 IP：PC 先说话（listener 的广播 hello、
+  填 `设备IP:9999` 连接（手柄转发照常）；固件 OTA 也能走这条通道：
+  `uv run python pc/remapadctl.py -n 设备IP --upgrade`（丢包靠窗口重发兜住，速度比串口慢，
+  升级完成设备重启、netlog 会话随之关闭要重开）。
+  设备不知道 PC 的 IP：PC 先说话（listener 的广播 hello、
   GUI 的连接）即完成目标自学习，`netlog` 状态行里能看到设备自己拿到的 IP。
 
-UDP 会丢包：截图与 OTA 仍只走串口（网络上发这些帧设备端直接忽略）；凭据与该通道都是局域网内
+UDP 会丢包：截图仍只走串口（图像帧没有重传，网络上发也被设备忽略）；amiibo 上传同样只走串口；
+凭据与该通道都是局域网内
 明文、无鉴权，只在可信网络里用。
 
 没有适配器、也不开 netlog 时的替代只有三条：看屏幕（系统信息页、底栏手柄状态、模式页选中的角色）、整机复位（复用开关默认接 USB-Serial/JTAG，COM 口与烧录链路天然回来）、

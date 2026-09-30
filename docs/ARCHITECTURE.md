@@ -90,7 +90,7 @@ flowchart TB
     Root["remapad/"]
     Root --> RootFiles["AGENTS.md / .editorconfig / .gitignore"]
     Root --> Scripts["scripts/：create_adr.py / firmware-test.py / setup-rust-toolchain.py / ui-preview.py"]
-    Root --> PC["pc/：PC 侧工具 remapadctl（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）与图形入口 remapadgui"]
+    Root --> PC["pc/：PC 侧工具 remapadctl（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）与图形入口 gui.py"]
     Root --> Docs["docs/：VISION / ARCHITECTURE / ABSTRACTIONS / GETTING-STARTED / controller-switch2 / controller-ps / hardware / adr/"]
     Root --> UI["ui/：屏幕 UI 工作区（界面源码、固件界面组件与宿主用例）"]
     Root --> Firmware["firmware/：ESP-IDF 固件核心工作区"]
@@ -276,35 +276,38 @@ device 角色下「PC 接没接」直接取 USB-Serial/JTAG 的 SOF 接入状态
 
 ## OTA 升级通路
 
-现场升级整包应用镜像（界面已编在应用里）走唯一 Type-C 的 USB-Serial/JTAG，通道与固件日志、串口 CLI、桥接输入帧同一条字节流，**不切 USB mux**。
-因此升级期间设备照常作为手柄工作，NVS 设置与 BLE 配对凭证不受影响。
+现场升级整包应用镜像（界面已编在应用里）有两条同构入口：USB-Serial/JTAG（唯一 Type-C，与固件日志、串口 CLI、桥接输入帧同一条字节流，**不切 USB mux**）或 WiFi（netlog 的 UDP 通道，`remapadctl.py -n 设备IP:端口`）。两条入口共用同一套协议帧、状态机与会话核心，串口升级期间设备照常作为手柄工作，NVS 设置与 BLE 配对凭证不受影响。
 
 ```mermaid
 flowchart LR
-    Tool["pc/remapadctl.py --upgrade<br/>校验镜像头与应用描述符"]
+    Tool["pc/remapadctl.py --upgrade<br/>校验镜像头与应用描述符<br/>串口 -p COMx / WiFi -n IP:端口"]
     Link["input/input_link.c<br/>USJ 唯一读取者"]
-    Adapt["ota/ota_link.c<br/>桥接帧 ↔ 会话消息<br/>ACK 回发 + 进度事件"]
+    Net["netlog/netlog.c<br/>UDP 收帧（同一帧解码）"]
+    Adapt["ota/ota_link.c<br/>桥接帧 ↔ 会话消息<br/>ACK 按在位通道双路回发"]
     Session["ota/ota_session.c<br/>传输无关会话核心<br/>队列 + 内部 RAM 栈任务"]
-    Proto["ota/ota_proto.c<br/>序号 / 窗口 / 4 KB 聚合 / 超时"]
+    Proto["ota/ota_proto.c<br/>序号 / 窗口 / 4 KB 聚合 / 超时<br/>BEGIN、END 幂等应答"]
     Flash["esp_ota API<br/>非运行分区 → otadata"]
     Health["回滚健康门槛<br/>应用就绪 + 开机 30 秒"]
 
     Tool -->|"OTA 帧 0x30-0x33（桥接帧格式）"| Link
+    Tool -->|"OTA 帧（UDP，丢包靠重发兜住）"| Net
     Link -->|OTA 帧| Adapt
+    Net -->|OTA 帧| Adapt
     Adapt --> Session
     Session --> Proto
     Proto -->|"4 KB 块"| Flash
-    Adapt -->|"ACK 帧"| Tool
+    Adapt -->|"ACK 帧（串口 / UDP 双路）"| Tool
     Health -->|esp_ota_mark_app_valid_cancel_rollback| Flash
 ```
 
-- **组件边界**：升级通道按「纯协议 + 传输无关核心 + 装配适配」三层拆分，方便同板不同功能的固件复用同一机制互刷（OTA 只写应用槽，分区表与 bootloader 不动）：`ota_proto` 是纯逻辑可主机端测试；`ota_session` 经 `ota_session_port_t` 注入 ACK 发送与进度广播出口，回滚健康门槛的「应用就绪」信号也由装配方定义；本工程的桥接帧装配在 `ota_link`，换传输或换业务只重写这一层。
+- **组件边界**：升级通道按「纯协议 + 传输无关核心 + 装配适配」三层拆分，方便同板不同功能的固件复用同一机制互刷（OTA 只写应用槽，分区表与 bootloader 不动）：`ota_proto` 是纯逻辑可主机端测试；`ota_session` 经 `ota_session_port_t` 注入 ACK 发送与进度广播出口，回滚健康门槛的「应用就绪」信号也由装配方定义；本工程的桥接帧装配在 `ota_link`，串口与 WiFi 共用这一个适配层，换传输或换业务只重写这一层。
 - **协议**：沿用桥接帧（`A5 5A` + ver/type/slot/seq/len + 载荷 + CRC16）。
   新增 `0x30` BEGIN（`ROM1` + 镜像字节数）、`0x31` DATA（块序号 + 最多 200 字节）、
   `0x32` END 与设备回发的 `0x33` ACK（状态 + 错误码 + 期望序号 + 已收字节；BEGIN 的应答在末尾附 16 字节运行版本）。解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验。
 - **流控**：PC 每 16 帧（约 3.2 KB）为一个窗口，收到 ACK 才发下一窗。窗口末帧在帧头 `slot` 字段带上标记（末尾不足一窗同样标记），设备收到即应答，不必等固定帧数或超时。ACK 的「期望序号」就是重发起点：
   设备丢弃重复序号、不重复写 flash，同一期望序号的重复应答按最小间隔（50 ms）限流，既不淹掉后续应答，也不会把被日志挤掉的那次永久压制。失败一律整包重发，不做断点续传。
-- **应答可靠性**：发送环与日志共用，NimBLE 的 INFO 日志会把它填满，因此 ACK 与 PING 应答走「分片重试写 + 等发送完成」的路径（上限 200 ms，超时放弃）；数据面反馈仍是非阻塞写、可丢。
+- **UDP 丢包容忍**：WiFi 入口与串口跑同一个 PC 状态机，按「链路会丢包」设计——BEGIN 与 END 按 2.5 秒周期静默重发（设备端对同尺寸 BEGIN 与收完后的 END 按幂等应答，会话核心只补发 ACK、不重入预擦与校验），窗口应答等待缩到 1.2 秒以便重发赶在设备 5 秒空闲作废窗内到达，设备侧超时作废（TIMEOUT）后 PC 自动从头重来（限 3 次）；PC 对迟到的旧应答只前进不回卷。UDP 报文按 ≤1 KB 分片发送避免 IP 分片。收尾应答彻底没等到（设备大概率已在重启）时，UDP 按不确定完成收场、交给 `--wait` 或重连后的 `version` 确认，串口维持硬失败。
+- **应答可靠性**：发送环与日志共用，NimBLE 的 INFO 日志会把它填满，因此 ACK 与 PING 应答走「分片重试写 + 等发送完成」的路径（上限 200 ms，超时放弃）；数据面反馈仍是非阻塞写、可丢。WiFi 在位时 ACK 同时抄送 UDP（重复应答对发送端幂等），串口未连接时不写 USJ。
 - **写入**：
   `esp_ota_get_next_update_partition()` 选非运行分区，`esp_ota_begin(镜像大小)` 预擦，4 KB 对齐的 `esp_ota_write` 写数据。
   BEGIN 的应答在预擦之后才发（3.6 MB 的预擦可达数秒），设备侧的 5 秒空闲超时从应答时刻起算，不把预擦算进接收窗口。

@@ -189,8 +189,9 @@ static void net_send_frame(const uint8_t *frame, size_t len)
   }
 }
 
-/** 网络帧回调：升级与 amiibo 上传只走串口（UDP 会丢包，写 flash 的会话不容错），
- *  PING 在这里直接应答，其余交给桥接输入源。 */
+/** 网络帧回调：OTA 升级帧与串口同一条路进会话核心（ota_link 双通道适配，
+ *  丢包由 PC 端窗口重发兜住）；amiibo 上传只走串口（UDP 会丢包，NVS 写入
+ *  会话不容错）；PING 在这里直接应答，其余交给桥接输入源。 */
 static void on_net_frame(const input_frame_view_t *frame, void *user)
 {
   (void)user;
@@ -198,11 +199,15 @@ static void on_net_frame(const input_frame_view_t *frame, void *user)
     return;
   }
   s_frames++;
-  if (ota_link_is_frame_type(frame->type) || amiibo_session_is_frame_type(frame->type)) {
+  if (ota_link_is_frame_type(frame->type)) {
+    ota_link_handle_frame(frame);
+    return;
+  }
+  if (amiibo_session_is_frame_type(frame->type)) {
     static bool warned;
     if (!warned) {
       warned = true;
-      ESP_LOGW(TAG, "frame 0x%02x over wifi ignored (serial only)", frame->type);
+      ESP_LOGW(TAG, "amiibo frame 0x%02x over wifi ignored (serial only)", frame->type);
     }
     return;
   }
@@ -315,8 +320,13 @@ esp_err_t netlog_start(const char *ssid, const char *password, const char *host,
   esp_wifi_set_storage(WIFI_STORAGE_RAM);
   esp_wifi_set_mode(WIFI_MODE_STA);
   wifi_config_t sta = { 0 };
-  strlcpy((char *)sta.sta.ssid, s_ssid, sizeof(sta.sta.ssid));
-  strlcpy((char *)sta.sta.password, s_pass, sizeof(sta.sta.password));
+  /* SSID / 密码字段是定长 32 / 64 字节且允许满长不带 NUL：多字节 UTF-8 命名的
+     * 热点（emoji SSID）恰好 32 字节时 strlcpy 会截掉最后一字节，永远 NO_AP_FOUND，
+     * 因此按字节原样 memcpy，零初始化兜住剩余位。 */
+  const size_t ssid_len = strnlen(s_ssid, sizeof(sta.sta.ssid));
+  memcpy(sta.sta.ssid, s_ssid, ssid_len);
+  const size_t pass_len = strnlen(s_pass, sizeof(sta.sta.password));
+  memcpy(sta.sta.password, s_pass, pass_len);
   sta.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
   sta.sta.pmf_cfg.capable = false;
   sta.sta.pmf_cfg.required = false;

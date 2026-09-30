@@ -45,11 +45,24 @@ static void post_progress(ota_session_phase_t phase, uint32_t received, uint32_t
   }
 }
 
-/** ACK 走等待式发送：日志刷屏时环会满，200 ms 内重试推进，仍失败就放弃（PC 会超时重问）。 */
+/** ACK 双路出口：OTA 帧从串口或 WiFi 进来共用一个会话核心，应答按在位的通道
+ *  走——UDP 桥接在位投 UDP，串口已连接走 USJ，两边都在就都发（重复应答对
+ *  发送端幂等；少发才让发送端干等）。两条路都不通返回错误，会话照常推进。 */
 static esp_err_t send_ack(const uint8_t *payload, size_t len, void *user)
 {
   (void)user;
-  return input_link_send_frame_wait(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len, OTA_LINK_ACK_TX_TIMEOUT_MS);
+  bool sent = false;
+  if (input_link_send_frame_net(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len)) {
+    sent = true;
+  }
+  if (input_link_pc_connected()) {
+    const esp_err_t serial_err =
+        input_link_send_frame_wait(INPUT_FRAME_TYPE_OTA_ACK, 0, payload, len, OTA_LINK_ACK_TX_TIMEOUT_MS);
+    if (serial_err == ESP_OK) {
+      sent = true;
+    }
+  }
+  return sent ? ESP_OK : ESP_ERR_INVALID_STATE;
 }
 
 bool ota_link_is_frame_type(uint8_t type)
@@ -80,7 +93,7 @@ esp_err_t ota_link_start(void)
   };
   const esp_err_t err = ota_session_start(&port);
   if (err == ESP_OK) {
-    ESP_LOGI(TAG, "ota link ready (frames 0x30-0x32 on USB-Serial/JTAG)");
+    ESP_LOGI(TAG, "ota link ready (frames 0x30-0x32 on serial / wifi)");
   }
   return err;
 }

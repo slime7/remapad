@@ -7,8 +7,9 @@
 链路或协议逻辑；串口仍然只有一个持有者，因此界面与命令行不要同时连同一个口。
 
 连接走两条路：串口（工具栏选 COM 口）或网络（工具栏「网络」栏填 设备IP:端口，走
-WiFi 的 UDP 调试通道——同一套桥接帧与 CLI，手柄转发照常；截图与 OTA 要完整字节流，
-仍走串口）。网络会话的设备端固件由 netlog 模块承载（设置页可保存 WiFi 凭据）。
+WiFi 的 UDP 调试通道——同一套桥接帧与 CLI，手柄转发照常；截图要完整字节流仍走
+串口，升级有窗口重发、网络会话也能推）。网络会话的设备端固件由 netlog 模块承载
+（设置页可保存并回读 WiFi 凭据）。
 
 页面按用途分四页：**会话**放转发开关、输入手柄与链路动作，**设置**把设备屏幕上的可改项
 （亮度与息屏、手柄配色、DS4/DS5 行为、电源、设备信息）搬到 PC，没有屏幕也能改；
@@ -17,7 +18,7 @@ WiFi 的 UDP 调试通道——同一套桥接帧与 CLI，手柄转发照常；
 设备是唯一事实源，界面不自己记状态。
 
 用法（在仓库根执行，仅 Windows）：
-    uv run python pc/remapadgui.py
+    uv run python pc/gui.py
 
 键盘：命令输入框回车发送，↑ / ↓ 取历史；其余操作都在按钮与下拉里。
 连接由用户手动发起：界面不做自动连接，也不写配置文件。
@@ -102,8 +103,9 @@ COLOR_FIELDS = ("机身", "按键", "高光", "握把")
 #: 出厂占位配色：没读过设备前填在自定义输入框里（与固件默认值一致）。
 DEFAULT_COLORS = (0x232323, 0xA0A0A0, 0xE6E6E6, 0x323232)
 
-#: 读设置的回读命令：连上设备与点「读取当前设置」时各发一遍，回读行喂给设置控件。
-SETTINGS_READ_COMMANDS = ("status", "version", "ctrl", "ds")
+#: 读设置的回读命令：连上设备与点「读取当前设置」时各发一遍，回读行喂给设置控件；
+#: netlog 两拍分别刷会话状态摘要与已存 WiFi 凭据（串口、网络会话都读）。
+SETTINGS_READ_COMMANDS = ("status", "version", "ctrl", "ds", "netlog", "netlog cred")
 
 #: 设备端 UDP 调试通道的默认端口（netlog）：桥接帧、CLI 文本与日志同一端口。
 NETLOG_PORT_DEFAULT = link.NETLOG_PORT_DEFAULT
@@ -610,7 +612,7 @@ class ConsoleWindow(ctk.CTk):
         self.session_widgets += [self.ds_touchpad_switch, self.ds_capture_switch]
 
     def _build_net_section(self, parent, row: int) -> None:
-        """WiFi 凭据（设备端 netlog 会话）：串口连着时填写保存，连接由设备端手动开关。"""
+        """WiFi 凭据（设备端 netlog 会话）：连上设备自动回读，保存只落盘不连接。"""
         frame = self._section(parent, "WiFi（局域网调试）", row)
         self.wifi_ssid_var = ctk.StringVar()
         self.wifi_pass_var = ctk.StringVar()
@@ -631,10 +633,11 @@ class ConsoleWindow(ctk.CTk):
         self.wifi_save_button.grid(row=0, column=0, sticky="w")
         self.net_summary = ctk.CTkLabel(row_frame, text="设备：未读取", anchor="w", font=self.font_ui)
         self.net_summary.grid(row=0, column=1, sticky="w", padx=(10, 0))
-        self._section_hint(frame, 4, "保存只写入设备、不自动连接，也不影响在跑的会话；连接在\n"
-                                     "设备「无线调试」页手动开。SSID 与密码暂不支持空格，凭据\n"
-                                     "明文存在设备上。连接后工具栏「网络」填设备IP:9999 点「网\n"
-                                     "络连接」即可远程转发手柄与看日志（2.4G 网络）。")
+        self._section_hint(frame, 4, "连上设备会自动回读设备上保存的 SSID 与密码；保存只写入\n"
+                                     "设备、不自动连接，也不影响在跑的会话，连接在设备「无线调\n"
+                                     "试」页手动开。SSID 与密码暂不支持空格，凭据明文存在设备上。\n"
+                                     "连接后工具栏「网络」填设备IP:9999 点「网络连接」即可远程转\n"
+                                     "发手柄与看日志（2.4G 网络）。")
         self.session_widgets += [self.wifi_ssid_entry, self.wifi_pass_entry, self.wifi_save_button]
 
     def save_wifi(self) -> None:
@@ -681,7 +684,8 @@ class ConsoleWindow(ctk.CTk):
         hint = "\n".join((
             "升级写进非运行分区，校验通过后设备自动重启，首次启动处于「待验证」状态；",
             "重启会让当前会话结束（链路断开是正常现象），勾选上面的开关会自动等设备回到串口。",
-            "同一进程里转发与命令照常，升级期间不要关闭窗口。",
+            "串口与网络会话都能升级：WiFi（UDP）靠窗口重发兜丢包、速度比串口慢，重启后",
+            "netlog 会话要重新打开；截图仍只走串口。升级期间不要关闭窗口。",
         ))
         ctk.CTkLabel(parent, text=hint, anchor="w", justify="left", font=self.font_ui).grid(
             row=6, column=0, sticky="w", padx=12, pady=(4, 12))
@@ -852,7 +856,7 @@ class ConsoleWindow(ctk.CTk):
             self.connect_net()
 
     def connect_serial(self) -> None:
-        """串口连接：打开 COM 口建会话（截图与 OTA 只有串口能做）。"""
+        """串口连接：打开 COM 口建会话（截图只有串口能做）。"""
         if self.session is not None:
             return
         port = self.port_box.get().strip()
@@ -899,13 +903,12 @@ class ConsoleWindow(ctk.CTk):
         self._start_session(udp, f"{host}:{port}（网络）")
 
     def _start_session(self, conn: link.SerialLink | link.UdpLink, description: str) -> None:
-        """两种传输共用的会话装配：先读一遍设置（网络会话顺带读 netlog 状态）。"""
+        """两种传输共用的会话装配：先读一遍设置（含 netlog 状态与已存 WiFi 凭据）。"""
         self.args.pad_path = self.selected_pad_path()
         session = remapadctl.Session(self.args, self.hid, conn, reporter=self.reporter)
         for command in SETTINGS_READ_COMMANDS:
             session.commands.put(command)
         if isinstance(conn, link.UdpLink):
-            session.commands.put("netlog")
             self.net_session = conn.address
         else:
             self.net_session = None
@@ -918,7 +921,7 @@ class ConsoleWindow(ctk.CTk):
         self.worker.start()
         self.forward_var.set(True)
         self._set_state("connected", f"已连接 {description}")
-        mode = "网络（截图与 OTA 仍需串口）" if isinstance(conn, link.UdpLink) else "串口"
+        mode = "网络（截图仍需串口）" if isinstance(conn, link.UdpLink) else "串口"
         self._append_text(f"会话已建立：{description}（{mode}，转发手柄默认开启）", tag="event")
 
     def disconnect(self) -> None:
@@ -1000,9 +1003,9 @@ class ConsoleWindow(ctk.CTk):
         command = command.strip()
         if not command:
             return
-        # 截图与 OTA 要完整字节流，UDP 上不做（固件也不在网络上收这些帧）。
-        if self.net_session is not None and command.split()[0] in (":shot", ":ota", "shot"):
-            self._append_text("截图与 OTA 只走串口：请用 COM 口连接后再试", tag="error")
+        # 截图要完整字节流（图像帧无重传），UDP 上不做；OTA 有窗口重发，网络会话照常。
+        if self.net_session is not None and command.split()[0] in (":shot", "shot"):
+            self._append_text("截图只走串口（图像帧没有重传）：请用 COM 口连接后再试", tag="error")
             return
         session = self.session
         if session is None:
@@ -1108,6 +1111,9 @@ class ConsoleWindow(ctk.CTk):
         elif channel == "device":
             self.device_facts.update(fields)
             self._render_device_facts()
+        elif channel == "netlog_cred":
+            self.wifi_ssid_var.set(fields["ssid"])
+            self.wifi_pass_var.set(fields["pass"])
         elif channel == "netlog":
             self.net_summary.configure(
                 text=f"设备：{fields.get('state', '-')} · {fields.get('ssid', '-')} · {fields.get('dest', '-')}")
@@ -1221,6 +1227,12 @@ class ConsoleWindow(ctk.CTk):
         elif name == "ota_finished":
             self.progress.set(1.0 if record["ok"] else 0.0)
             self.progress_label.configure(text="升级完成" if record["ok"] else "升级失败")
+            # 网络升级后设备重启、netlog 会话随之关闭，「等设备回来」只对串口成立。
+            if self.net_session is not None and record["ok"]:
+                self.pending_ota_wait = False
+                self._append_text("设备重启后 netlog 会话已关：在设备「无线调试」页重开会话，"
+                                  "再点「网络连接」；在跑版本用命令页的 version 确认", tag="event")
+                return
             self.pending_ota_wait = bool(record["ok"] and self.wait_var.get())
             if record["ok"] and not self.pending_ota_wait:
                 self._append_text("设备重启后点「串口连接」重新连上", tag="event")
@@ -1267,9 +1279,8 @@ class ConsoleWindow(ctk.CTk):
             button.configure(state="normal" if connected else "disabled")
         for widget in self.session_widgets:
             widget.configure(state="normal" if connected else "disabled")
-        # 升级走串口字节流：网络会话里禁用，防误推。
-        self.upgrade_button.configure(
-            state="normal" if connected and self.net_session is None else "disabled")
+        # 网络会话也能升级（UDP 丢包由窗口重发兜住），只有截图保持串口专属。
+        self.upgrade_button.configure(state="normal" if connected else "disabled")
         self.send_button.configure(state="normal" if connected else "disabled")
         hid_ready = self.hid is not None
         self.forward_switch.configure(state="normal" if hid_ready else "disabled")

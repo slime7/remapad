@@ -3,13 +3,13 @@
 [project]
 name = "remapad-tools"
 version = "0.1.0"
-description = "Remapad 仓库脚本与 PC 侧工具（界面预览、固件主机端测试、Rust 工具链安装、ADR 新建、remapadctl/remapadgui）"
+description = "Remapad 仓库脚本与 PC 侧工具（界面预览、固件主机端测试、Rust 工具链安装、ADR 新建、remapadctl/gui）"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     # DS5 蓝牙触觉的 Opus 编码（pc/ds5_haptics.py）
     "av>=14.0.0",
-    # 图形界面入口 pc/remapadgui.py
+    # 图形界面入口 pc/gui.py
     "customtkinter>=6.0.0",
     # 读写手柄 HID 报告（pc/remapadctl.py 与 pc/tests/samples/pad_replay.py）
     "hidapi>=0.14.0",

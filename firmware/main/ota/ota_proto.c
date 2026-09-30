@@ -50,9 +50,14 @@ bool ota_proto_parse_begin(const uint8_t *payload, size_t len, uint32_t *image_s
 
 ota_proto_result_t ota_proto_begin(ota_proto_t *proto, uint32_t image_size, uint32_t max_image_size, int64_t now_us)
 {
-  /* 接收中或刚收完（等待校验）时拒绝新的 BEGIN：旧会话要么超时收尾、要么
-     * 走完重启，PC 端据 BUSY 决定重试时机。 */
-  if (proto->state == OTA_STATE_RECEIVING || proto->state == OTA_STATE_DONE) {
+  /* 接收中的重复 BEGIN 是应答丢失后的重发（UDP 上常态）：同一镜像尺寸按幂等
+     * 处理重发原应答，PC 收到即继续；不同尺寸说明另一头要起新会话，回 BUSY。
+     * 刚收完（等待校验）时一律 BUSY：旧会话要么超时收尾、要么走完重启。 */
+  if (proto->state == OTA_STATE_RECEIVING) {
+    proto->code = image_size == proto->image_size ? OTA_CODE_OK : OTA_CODE_BUSY;
+    return result_from(proto, true);
+  }
+  if (proto->state == OTA_STATE_DONE) {
     proto->code = OTA_CODE_BUSY;
     return result_from(proto, true);
   }
@@ -140,7 +145,19 @@ ota_proto_result_t ota_proto_data(ota_proto_t *proto, const uint8_t *payload, si
 
 ota_proto_result_t ota_proto_end(ota_proto_t *proto, int64_t now_us, ota_flush_fn flush, void *user)
 {
-  if (proto->state != OTA_STATE_RECEIVING || proto->finished) {
+  /* 收完之后（校验中、或 done 应答丢失后 PC 重发 END）的重复收尾按幂等处理：
+     * 直接给 done 应答，上层据此只补发应答、不再重入校验。 */
+  if (proto->finished || proto->state == OTA_STATE_DONE) {
+    proto->code = OTA_CODE_OK;
+    const ota_proto_result_t result = { .state = OTA_STATE_DONE,
+                                        .code = OTA_CODE_OK,
+                                        .next_seq = proto->next_seq,
+                                        .received = proto->received,
+                                        .reply = true,
+                                        .finished = false };
+    return result;
+  }
+  if (proto->state != OTA_STATE_RECEIVING) {
     proto->code = OTA_CODE_BAD_HEADER;
     return result_from(proto, true);
   }

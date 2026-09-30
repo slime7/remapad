@@ -6,9 +6,11 @@
 固件侧 input/input_link.c 按帧头分流，非帧字节交给 CLI 解析。
 
 用法、交互命令与桥接帧格式见 pc/README.md 与 --help；常用入口：--list（枚举手柄）、
---dump（抓原始报告）、-p COMx（桥接 + 交互命令行）、--shot（实机截图）、--upgrade（OTA）、
---amiibo <bin>（上传镜像）。`:` 开头的是本工具命令（:help 看全表），其余行按固件 CLI 原样发送；
-手柄转发默认只在交互模式里开，--pad / --no-pad 控制。图形界面入口见 remapadgui.py，
+--dump（抓原始报告）、-p COMx（桥接 + 交互命令行）、-n 设备IP:端口（走 WiFi 的
+netlog 通道：桥接、命令行与 OTA，截图仍要串口）、--shot（实机截图）、--upgrade（OTA）、
+--amiibo <bin>（上传镜像，只走串口）。`:` 开头的是本工具命令（:help 看全表），
+其余行按固件 CLI 原样发送；
+手柄转发默认只在交互模式里开，--pad / --no-pad 控制。图形界面入口见 gui.py，
 两边不要同时打开同一个串口。
 """
 
@@ -25,6 +27,7 @@ import zlib
 from ctypes import wintypes
 from pathlib import Path
 
+import link
 from link import (
     AMIIBO_DATA_MAX,
     AMIIBO_NAME_MAX,
@@ -148,6 +151,8 @@ DEFAULT_IMAGE = str(Path(__file__).resolve().parent.parent / "firmware" / "build
 OTA_STATE_RECEIVING = 1
 OTA_STATE_DONE = 2
 OTA_STATE_FAILED = 3
+#: 设备侧 5 秒无数据作废会话时回的错误码（固件 ota_proto.h 的 ota_code_t）。
+OTA_CODE_TIMEOUT = 7
 
 AMIIBO_STATE_RECEIVING = 1
 AMIIBO_STATE_DONE = 2
@@ -607,33 +612,52 @@ def describe_ack(ack: dict) -> str:
 
 
 class OtaJob:
-    """升级窗口状态机：由会话主循环 tick 驱动，桥接转发同时照跑。"""
+    """升级窗口状态机：由会话主循环 tick 驱动，桥接转发同时照跑。
 
-    BEGIN_ACK_TIMEOUT_S = 20.0
-    ACK_TIMEOUT_S = 5.0
-    END_ACK_TIMEOUT_S = 30.0
-    MAX_WINDOW_RETRIES = 5
+    串口与 WiFi（UDP）共用这一个状态机与同一套协议帧，按「链路会丢包」假设
+    设计：BEGIN 与 END 周期重发（设备端按幂等应答），窗口应答超时就整窗重发、
+    从设备 ACK 的 next_seq 续传，设备侧 5 秒空闲作废（TIMEOUT）后自动从头
+    重来。串口不丢包，这些重发永远不触发，节奏与原先一致；lossy 只决定
+    「收尾应答彻底没等到」时按不确定完成还是失败收场。
+    """
 
-    def __init__(self, image: bytes, version: str, send, reporter: Reporter) -> None:
+    BEGIN_ACK_TIMEOUT_S = 20.0  # BEGIN 总窗：设备预擦目标分区可达数秒
+    BEGIN_RETRY_S = 2.0  # BEGIN 重发间隔（设备端同尺寸幂等）
+    ACK_TIMEOUT_S = 1.2  # 窗口应答等待：重发要赶在设备 5 秒空闲作废窗内到达
+    END_ACK_TIMEOUT_S = 30.0  # END 总窗：设备校验镜像 + 重启
+    END_RETRY_S = 2.5  # END 重发间隔：设备 5 秒空闲作废窗内必须再到达一次
+    MAX_WINDOW_RETRIES = 12
+    MAX_SESSION_RESTARTS = 3  # 设备侧超时作废后从头重来的次数上限
+
+    def __init__(self, image: bytes, version: str, send, reporter: Reporter, lossy: bool = False) -> None:
         self.image = image
         self.version = version
         self._send = send
         self.reporter = reporter
+        #: lossy（UDP）：收尾应答彻底没等到时按「不确定完成」收场（exit 0），
+        #: 交给 --wait / 重连后的 version 确认；串口维持硬失败。
+        self.lossy = lossy
         self.confirmed = 0
         self.next_seq = 0
         self.retries = 0
+        self.restarts = 0
         self.phase = "begin"
         self.deadline = 0.0
+        self.retry_deadline = 0.0
         self.printed_pct = -1
         self.finished = False
         self.exit_code = 1
 
     def start(self, now: float) -> None:
         self.reporter.line(f"写入 {len(self.image)} 字节（镜像版本 {self.version}）")
+        self.deadline = now + self.BEGIN_ACK_TIMEOUT_S
+        self._send_begin(now)
+
+    def _send_begin(self, now: float) -> None:
         self._send(encode(TYPE_OTA_BEGIN, 0, 0, ota_begin_payload(len(self.image)),
                           max_payload=WIRE_MAX_PAYLOAD))
         self.phase = "begin"
-        self.deadline = now + self.BEGIN_ACK_TIMEOUT_S
+        self.retry_deadline = now + self.BEGIN_RETRY_S
 
     def _send_window(self, now: float) -> None:
         offset = self.confirmed
@@ -654,13 +678,21 @@ class OtaJob:
         self.deadline = now + self.ACK_TIMEOUT_S
 
     def tick(self, now: float) -> None:
-        if self.finished or now < self.deadline:
+        if self.finished:
             return
         if self.phase == "begin":
-            self._fail(f"设备没有在 {self.BEGIN_ACK_TIMEOUT_S:.0f} 秒内回应 BEGIN；"
-                       "确认 COM 口没被别的程序占用、设备不是 host 模式")
+            # deadline 是放弃时刻（总窗），retry_deadline 才是重发节拍。
+            if now >= self.deadline:
+                self._fail(f"设备没有在 {self.BEGIN_ACK_TIMEOUT_S:.0f} 秒内回应 BEGIN；"
+                           "确认设备可达（串口没被占用 / WiFi 会话开着且目标已学习）")
+                return
+            if now >= self.retry_deadline:
+                self._send_begin(now)
             return
         if self.phase == "data":
+            # 这里 deadline 是本窗应答的等待时刻（到了就整窗重发）。
+            if now < self.deadline:
+                return
             self.retries += 1
             if self.retries > self.MAX_WINDOW_RETRIES:
                 self._fail(f"连续 {self.retries} 个窗口没有应答，升级中止；"
@@ -670,7 +702,13 @@ class OtaJob:
             self._send_window(now)
             return
         if self.phase == "end":
-            self._fail(f"设备没有在 {self.END_ACK_TIMEOUT_S:.0f} 秒内确认收尾")
+            if now >= self.deadline:
+                self._finish_uncertain()
+                return
+            # done 应答丢失而设备已在重启时，重发的 END 不会有回应，静默补发即可。
+            if now >= self.retry_deadline:
+                self._send(encode(TYPE_OTA_END, 0, 0))
+                self.retry_deadline = now + self.END_RETRY_S
 
     def on_ack(self, ack: dict) -> None:
         if self.finished:
@@ -686,7 +724,11 @@ class OtaJob:
             return
         if self.phase == "data":
             if ack["state_id"] == OTA_STATE_FAILED:
-                self._fail(f"设备中止升级（{describe_ack(ack)}），已收到 {ack['received']} 字节")
+                self._restart_or_fail(ack)
+                return
+            if ack["received"] <= self.confirmed:
+                # 无进展的应答（设备写 flash 停顿触发的整窗重发、其序号错误应答，
+                # 或迟到的旧应答）：只前进不回卷、也不重复驱动窗口。
                 return
             self.retries = 0
             self.confirmed = ack["received"]
@@ -702,6 +744,7 @@ class OtaJob:
                 self.phase = "end"
                 self._send(encode(TYPE_OTA_END, 0, 0))
                 self.deadline = now + self.END_ACK_TIMEOUT_S
+                self.retry_deadline = now + self.END_RETRY_S
                 self.reporter.line("数据传输完成，等待设备校验镜像")
                 return
             self._send_window(now)
@@ -713,8 +756,43 @@ class OtaJob:
                 self.reporter.line(
                     "升级完成：设备切到新分区并重启，首次启动会先处于「待验证」状态")
                 self.reporter.event("ota_finished", ok=True, message="")
-            else:
-                self._fail(f"升级失败（{describe_ack(ack)}）；设备仍从旧镜像启动")
+                return
+            if ack["state_id"] != OTA_STATE_FAILED:
+                # 设备校验镜像期间迟到的数据面应答（整窗重发的序号错误应答等）：
+                # 真正的收尾失败只会以 FAILED 报上来，其余等 DONE 或超时。
+                return
+            self._fail(f"升级失败（{describe_ack(ack)}）；设备仍从旧镜像启动")
+
+    def _restart_or_fail(self, ack: dict) -> None:
+        """data 阶段收到 FAILED：只有设备侧空闲超时作废可自动从头重来（镜像没写坏，
+        重走 BEGIN 会开新会话），其余错误码终止。"""
+        if ack["code_id"] != OTA_CODE_TIMEOUT or self.restarts >= self.MAX_SESSION_RESTARTS:
+            self._fail(f"设备中止升级（{describe_ack(ack)}），已收到 {ack['received']} 字节")
+            return
+        self.restarts += 1
+        self.reporter.line(f"设备侧接收超时作废，从头重来（第 {self.restarts} 次）")
+        self.confirmed = 0
+        self.next_seq = 0
+        self.retries = 0
+        self.printed_pct = -1
+        now = time.monotonic()
+        self.deadline = now + self.BEGIN_ACK_TIMEOUT_S
+        self._send_begin(now)
+
+    def _finish_uncertain(self) -> None:
+        """END 总窗内没有任何应答：串口上按失败收场；UDP 上多半是 done 应答丢失、
+        设备已在重启（后续重发的 END 无人接收），按不确定完成收场，交给
+        --wait 或重连后的 version 确认实际版本。"""
+        self.finished = True
+        if not self.lossy:
+            self.reporter.error(f"设备没有在 {self.END_ACK_TIMEOUT_S:.0f} 秒内确认收尾")
+            self.reporter.event("ota_finished", ok=False, message="end ack timeout")
+            self.exit_code = 1
+            return
+        self.exit_code = 0
+        self.reporter.line("总窗内没等到收尾应答（应答丢失或设备已在重启）；"
+                           "请用 --wait 或重新连接后敲 version 确认在跑的版本")
+        self.reporter.event("ota_finished", ok=True, message="end ack lost; verify version after reboot")
 
     def _fail(self, message: str) -> None:
         self.reporter.error(message)
@@ -943,6 +1021,7 @@ def parse_device_reply(line: str) -> tuple[str, dict] | None:
     - `ctrl`：`ok ctrl body=0x… button=0x… accent=0x… grip=0x…` → 四段 `0xRRGGBB`；
     - `ds`：`ds touchpad=on|off capture=on|off` → `touchpad_plus_minus` / `capture_key`；
     - `netlog`：`netlog state=… ssid=… dest=…` → 会话状态（state / ssid / dest）；
+    - `netlog_cred`：`netlog cred ssid=… pass=…` → 已存凭据回读（未配置时两个都是空串）；
     - `device`：`status` 与 `version` 的一行回读 → 版本、分区、电池、堆与配对等事实，
       固件字段名收敛成 `firmware` / `partition` / `image` / `ota_state` /
       `pairing` / `role` / `pad` / `light` / `screen_on` / `battery_mv` /
@@ -980,6 +1059,12 @@ def parse_device_reply(line: str) -> tuple[str, dict] | None:
             return "ds", {"touchpad_plus_minus": touchpad == "on",
                           "capture_key": capture == "on"}
         return None
+    if words[0] == "netlog" and len(words) > 1 and words[1] == "cred":
+        # netlog cred ssid=slime_nest pass=hunter2（未配置时固件报 ssid=- pass=-，换成空串）
+        if "ssid" not in fields:
+            return None
+        return "netlog_cred", {"ssid": "" if fields["ssid"] == "-" else fields["ssid"],
+                               "pass": "" if fields.get("pass", "-") == "-" else fields["pass"]}
     if words[0] == "netlog":
         # netlog state=connected ssid=slime_nest dest=192.168.1.5:9999 …
         state = fields.get("state")
@@ -1501,7 +1586,11 @@ class Session:
         image, version = load_image(path)
         self.reporter.line(f"镜像 {path}：{len(image)} 字节，版本 {version}")
         self.reporter.event("ota_started", path=str(path), size=len(image), version=version)
-        self.ota = OtaJob(image, version, self.link.write, self.reporter)
+        lossy = isinstance(self.link, link.UdpLink)
+        if lossy:
+            self.reporter.line("链路是 WiFi（UDP）：丢包靠窗口重发兜住，速度比串口慢；"
+                               "设备重启后 netlog 会话要重新打开")
+        self.ota = OtaJob(image, version, self.link.write, self.reporter, lossy=lossy)
         self.ota.start(time.monotonic())
 
     def request_amiibo_upload(self, amiibo_path: str) -> None:
@@ -1712,6 +1801,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Remapad PC 侧单工具：桥接转发 + 串口命令行 + 实机截图 + OTA")
     parser.add_argument("-p", "--port", default="COM3", help="串口名（默认 COM3）")
+    parser.add_argument("-n", "--net", metavar="HOST[:PORT]",
+                        help="走设备 netlog 的 UDP 通道（WiFi）而不是串口：桥接、命令行与 "
+                             "OTA 可用，截图不行；与 -p 二选一，给了它 -p 只留给 --wait")
     parser.add_argument("--baud", type=int, default=115200, help="波特率（USJ 忽略）")
     parser.add_argument("--vid", type=lambda value: int(value, 0), help="只挑该厂商 ID")
     parser.add_argument("--pid", type=lambda value: int(value, 0), help="只挑该产品 ID")
@@ -1803,8 +1895,14 @@ def _run(args, command) -> int:
         return run_dump(args, load_hid())
 
     hid = None if args.no_pad else load_hid()
-    with open_port(args.port, args.baud) as ser:
-        session = Session(args, hid, ser)
+    if args.net:
+        host, port = link.parse_endpoint(args.net)
+        conn = link.UdpLink(host, port)
+        print(f"网络会话 {host}:{port}（UDP，netlog 通道）")
+    else:
+        conn = open_port(args.port, args.baud)
+    with conn:
+        session = Session(args, hid, conn)
         try:
             if args.upgrade:
                 code = session.run_upgrade()
@@ -1830,6 +1928,9 @@ def _run(args, command) -> int:
             session.detach_pad()
     if code != 0 or not args.wait or not args.upgrade:
         return code
+    if args.net:
+        print("--wait 只等串口：WiFi 升级后 netlog 会话随重启关闭，"
+              "请在设备上重开「无线调试」后再连", file=sys.stderr)
     return wait_for_version(args.port, args.baud)
 
 

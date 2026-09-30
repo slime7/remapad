@@ -361,7 +361,8 @@ classDiagram
 
 解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验（8 字节设备标识 + 最多 64 字节报告），
 输出报告帧按 78 字节校验（DualSense / DualShock 4 的蓝牙输出报告长度）。
-OTA 帧由 `input_link` 经 `ota/ota_link` 适配交给 `ota/ota_session` 核心，amiibo 上传帧交给 `amiibo/amiibo_session`（逐帧回 ACK，
+OTA 帧由 `input_link`（串口）与 `netlog`（WiFi UDP）经 `ota/ota_link` 同一个适配交给 `ota/ota_session` 核心，
+ACK 按在位的通道双路回发；amiibo 上传帧只走串口、交给 `amiibo/amiibo_session`（逐帧回 ACK，
 收齐后经 `amiibo_store` 落 storage 分区 SPIFFS 槽位），PING 由 `input_link` 直接应答，其余交给 `input_source`；
 升级协议、流控与回滚门槛见 [ARCHITECTURE.md](ARCHITECTURE.md) 的「OTA 升级通路」。
 

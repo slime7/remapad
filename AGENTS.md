@@ -57,7 +57,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
   - `bridge/`：控制面命令/事件，PWR 按键与串口 CLI 经外部队列汇入。
   - `config/`：NVS 用户设置持久化；setter 只置内存表脏标记，提交任务每 1 分钟检查一次，确有改动才写一次 NVS。
   - `console/`：串口 CLI 与控制台出口切换；切到 USB host 后日志与 CLI 走 UART0。
-  - `netlog/`：局域网调试会话（`REMAPAD_NETLOG=OFF` 才裁掉，默认编入）：WiFi STA 连 AP 后在单个 UDP 端口上承载与串口同一模型的数据——日志与 CLI 回复抄送、UDP 收桥接帧当网络手柄；凭据存 NVS、连接由界面或 CLI 手动开关（开机不自动连），断线按 3 秒 → 30 秒退避重试、累计 10 次失败自动关闭会话，目标 IP 由收到的第一个报文自学习。
+  - `netlog/`：局域网调试会话（`REMAPAD_NETLOG=OFF` 才裁掉，默认编入）：WiFi STA 连 AP 后在单个 UDP 端口上承载与串口同一模型的数据——日志与 CLI 回复抄送、UDP 收桥接帧当网络手柄与 OTA 升级（amiibo 上传仍只走串口）；凭据存 NVS、连接由界面或 CLI 手动开关（开机不自动连），断线按 3 秒 → 30 秒退避重试、累计 10 次失败自动关闭会话，目标 IP 由收到的第一个报文自学习。
   - `dp/`：数据面任务、输入源抽象与组合键捕获屏幕。
   - `input/`：输入通路接收段：桥接帧协议、USB-Serial/JTAG 唯一读取者、桥接输入源。
   - `usb/`：USB host 直插：枚举与 HID 收发、输入源、运行时角色切换；DualSense 的音频触觉通道也挂在这一层
@@ -73,7 +73,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
   - `ui/`：屏幕 UI 契约的 core 侧实现——状态快照装配与动作分发（无 UI 构建另有空实现 stub）。
   - 顶层 `main.c`：启动装配（控制面服务任务与界面提供者都由它拉起）。
   - PC 侧程序在 `pc/`（`remapadctl.py`：转发 + 命令行 + 实机截图 + OTA + DS5 音频触觉合成 `ds5_haptics.py`；
-    `remapadgui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
+    `gui.py`：同一套会话的图形界面），见 [pc/README.md](pc/README.md)。
   - Python 侧只有仓库根一个 uv 工程（`pyproject.toml` + `uv.lock` + 根目录 `.venv`）：`scripts/` 的脚本与 `pc/` 的工具共用它，
     从任意目录执行 `uv run python <路径>` 都落到同一个环境。
   - 新增输入设备按 `dp/dp_source.h` 的输入源接口注册，不要绕过它直连编码器。
@@ -92,9 +92,9 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入串口监视器；禁止对已写入用户数据的设备执行 `erase-flash`（会清空 NVS 设置/配对与 `storage` 分区） |
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅重写应用分区（`ota_0` @ 0x10000）；改动 bootloader/分区表后仍需完整烧录 |
 | **固件 C 格式化与静态检查** | `clang-format -i <改动的 .c/.h>` | C 口径在仓库根 `.clang-format`（2 空格缩进、120 列）与 `.clang-tidy`，工具来自 esp-clang；不要对 `firmware/components` 运行格式化；静态检查 `uv run python scripts/clang_tidy.py`（配置见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)） |
-| **固件 OTA 升级** | `uv run python pc/remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（界面已编进应用）到非运行分区，校验通过后自动重启；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
+| **固件 OTA 升级** | `uv run python pc/remapadctl.py -p COMx --upgrade` | 经 USB-Serial/JTAG 推送 `firmware/build/remapad_firmware.bin`（界面已编进应用）到非运行分区，校验通过后自动重启；`-n 设备IP:端口 --upgrade` 走 WiFi 的 netlog 通道（丢包靠窗口重发兜住，重启后 netlog 会话要重开）；`--dry-run` 只校验镜像、`--wait` 等设备回来后打印版本；从 `ota_1` 启动后继续开发要先 `idf.py erase-otadata` |
 | **PC 手柄桥接** | `uv run python pc/remapadctl.py -p COMx` | 读 PC 手柄原始报告按桥接帧转发给设备，同进程提供串口命令行、实机截图与 OTA；`--list` 枚举手柄、`--dump` 抓原始报告核对家族表偏移；转发默认只在交互模式开，`--pad` / `--no-pad` 控制 |
-| **PC 连接控制台** | `uv run python pc/remapadgui.py` | 同一套会话的图形界面：选串口、连接/断开、手柄转发开关、实时日志、命令输入、屏幕设置（亮度、手柄配色、DS4/DS5、电源）、实机截图与 OTA；调试动作只在「命令」页；与命令行不要同时连同一个口 |
+| **PC 连接控制台** | `uv run python pc/gui.py` | 同一套会话的图形界面：选串口、连接/断开、手柄转发开关、实时日志、命令输入、屏幕设置（亮度、手柄配色、DS4/DS5、电源）、实机截图与 OTA；调试动作只在「命令」页；与命令行不要同时连同一个口 |
 | **串口 CLI** | `uv run python pc/remapadctl.py -p COMx status` | 行命令控制台：位置参数透传设备命令、`--log` 只读日志、交互模式 `:help` 看工具命令；常用设备命令有 `link`、`headset`、`shot`、`key ui` 与 `ui on\|off`、`capture on\|off`、`ds touchpad\|capture on\|off`、`amiibo list\|select\|del\|poll`、`version`、`rollback`；屏幕重绘诊断用 `trace [frames]`（每帧一行渲染耗时、提交耗时、damage 像素数与矩形条数） |
 | **局域网日志收听** | `uv run python scripts/netlog_listen.py [--port 9999]` | 收设备 netlog 会话抄送的 UDP 日志并远程敲 CLI 命令；host 模式下无 UART 适配器时的观测通道，用法见 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) 的「USB 手柄直插（host 模式）」 |
 | **主机输出原始采集** | `uv run python pc/remapadctl.py -p COMx --capture host-raw.log` | 抓主机写进输出特征值的原始字节（震动/玩家灯/指令，解析与布局转换之前）落盘成文本；桥接帧 `0x12`（HOST_RAW）承载，串口 `capture on\|off` 开关，交互模式 `:capture <路径>\|off` 同能力，`--pad` 可与手柄转发同时进行 |

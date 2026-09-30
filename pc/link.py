@@ -661,8 +661,13 @@ class UdpLink:
     """设备的 UDP 桥接链路：与串口同一模型——桥接帧与 CLI 文本共用一条字节流，靠帧同步字区分。
 
     read/write/flush/close 与 SerialLink 同签名，可直接交给 remapadctl.Session。
-    UDP 报文不可靠：输入报告与命令丢一拍无感，OTA/截图这类要完整性的会话仍走串口。
+    UDP 报文不可靠：输入报告与命令丢一拍无感；OTA 的窗口重发能兜住丢包（设备端
+    BEGIN/END 幂等、序号续传），截图这类无重传的大块会话仍走串口。
     """
+
+    #: 单个报文的上限：OTA 一窗 16 帧约 3.6 KB，整段 send 会走到 IP 分片，
+    #: 丢一片就废整窗；按 ≤1 KB 切开逐个发送，常见 MTU 下都免分片。
+    DATAGRAM_MAX = 1024
 
     def __init__(self, host: str, port: int) -> None:
         self.address = (host, port)
@@ -687,16 +692,20 @@ class UdpLink:
         return data
 
     def write(self, data: bytes) -> None:
-        # UDP 不分片：桥接帧最长 264 字节、命令行几十字节，一个报文放得下。
+        # 大于一个报文的写入（OTA 的整窗帧）按 DATAGRAM_MAX 切开逐个发送，避免 IP 分片。
         if self._sock is None:
             raise OSError("UDP 链路已关闭")
         try:
-            self._sock.send(data)
+            for offset in range(0, len(data), self.DATAGRAM_MAX):
+                self._sock.send(data[offset:offset + self.DATAGRAM_MAX])
         except OSError as exc:
             raise OSError(f"发送 UDP 失败：{exc}") from exc
 
     def flush(self) -> None:
         """UDP 没有发送缓冲可等，与串口同签名即可。"""
+
+    def purge_input(self) -> None:
+        """UDP 没有驱动接收缓冲可清，与串口同签名即可（旧报文本来就收不到）。"""
 
     def close(self) -> None:
         if self._sock is not None:

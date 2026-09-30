@@ -102,7 +102,8 @@ bool ota_proto_parse_begin(const uint8_t *payload, size_t len, uint32_t *image_s
 
 /**
  * 接受 BEGIN：image_size 是声明的镜像大小，max_image_size 是目标分区容量。
- * 尺寸为 0 或超出分区即拒绝并回 BAD_HEADER，不进入接收态。
+ * 尺寸为 0 或超出分区即拒绝并回 BAD_HEADER，不进入接收态。接收中的重复
+ * BEGIN（应答丢失后的重发）按幂等处理：同一尺寸重发原应答，不同尺寸回 BUSY。
  */
 ota_proto_result_t ota_proto_begin(ota_proto_t *proto, uint32_t image_size, uint32_t max_image_size, int64_t now_us);
 
@@ -120,7 +121,8 @@ void ota_proto_note_rx(ota_proto_t *proto, int64_t now_us);
 ota_proto_result_t ota_proto_data(ota_proto_t *proto, const uint8_t *payload, size_t len, bool window_end,
                                   int64_t now_us, ota_flush_fn flush, void *user);
 
-/** 声明数据发完：字节数与声明不符即失败，否则把剩余数据交付上层并置 finished。 */
+/** 声明数据发完：字节数与声明不符即失败，否则把剩余数据交付上层并置 finished。
+ *  收完之后的重复 END（done 应答丢失后的重发）幂等回 done 应答（finished=false）。 */
 ota_proto_result_t ota_proto_end(ota_proto_t *proto, int64_t now_us, ota_flush_fn flush, void *user);
 
 /** 周期调用：接收中空闲超时即作废会话并回 TIMEOUT。 */

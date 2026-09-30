@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import remapadctl  # noqa: E402  （先把 pc/ 放进来再导入）
-import remapadgui  # noqa: E402
+import gui  # noqa: E402
 
 # 固件 cli_status 的一行回读：pad 字段带空格（输入设备的型号描述）。
 STATUS_LINE = ("state pairing=idle role=device backlight=60 screen=1 uptime=1234s "
@@ -98,22 +98,22 @@ class ColorInputTest(unittest.TestCase):
     """配色输入框的取值规则：写错不许发出去（错了会让设备报 err 或写错颜色）。"""
 
     def test_accepts_with_and_without_prefix(self):
-        self.assertEqual(remapadgui.parse_color("0x232323"), 0x232323)
-        self.assertEqual(remapadgui.parse_color(" 232323 "), 0x232323)
-        self.assertEqual(remapadgui.parse_color("0X1E3B2A"), 0x1E3B2A)
+        self.assertEqual(gui.parse_color("0x232323"), 0x232323)
+        self.assertEqual(gui.parse_color(" 232323 "), 0x232323)
+        self.assertEqual(gui.parse_color("0X1E3B2A"), 0x1E3B2A)
 
     def test_rejects_junk(self):
         for text in ("", "0x", "1234567", "0xGGGGGG", "黑"):
-            self.assertIsNone(remapadgui.parse_color(text), text)
+            self.assertIsNone(gui.parse_color(text), text)
 
     def test_swatch_colors_pick_readable_text(self):
-        self.assertEqual(remapadgui.css_color(0x1E3B2A), "#1e3b2a")
-        self.assertEqual(remapadgui.readable_on(0xB9BEC4), "#000000")   # 银灰是亮底
-        self.assertEqual(remapadgui.readable_on(0x232323), "#ffffff")   # 标准黑是暗底
+        self.assertEqual(gui.css_color(0x1E3B2A), "#1e3b2a")
+        self.assertEqual(gui.readable_on(0xB9BEC4), "#000000")   # 银灰是亮底
+        self.assertEqual(gui.readable_on(0x232323), "#ffffff")   # 标准黑是暗底
 
     def test_uptime_text_keeps_two_digit_fields(self):
-        self.assertEqual(remapadgui.format_uptime(65), "01:05")
-        self.assertEqual(remapadgui.format_uptime(3725), "1:02:05")
+        self.assertEqual(gui.format_uptime(65), "01:05")
+        self.assertEqual(gui.format_uptime(3725), "1:02:05")
 
 
 if __name__ == "__main__":

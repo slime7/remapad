@@ -214,6 +214,12 @@ static void handle_begin(const uint8_t *payload, size_t len)
              (unsigned)image_size, target->label, (unsigned)target->size);
     return;
   }
+  if (s_ota.handle_open) {
+    /* 接收中的重复 BEGIN（应答丢失后的重发）：协议层已按幂等放行，这里只补发
+     * 应答——flash 句柄还开着，重入 esp_ota_begin 会立刻 ALREADY_IN_PROGRESS。 */
+    reply(&result, true);
+    return;
+  }
 
   esp_ota_handle_t handle = 0;
   /* esp_ota_begin 会按声明大小预擦目标分区，耗时可达数秒，应答落在这之后。 */
@@ -265,6 +271,11 @@ static void handle_data(const uint8_t *payload, size_t len, bool window_end)
 static void handle_end(void)
 {
   ota_proto_result_t result = ota_proto_end(&s_ota.proto, esp_timer_get_time(), ota_flash_write, NULL);
+  if (!result.finished && result.state == OTA_STATE_DONE) {
+    /* 重复 END（done 应答丢失后的重发）：只补发应答，校验与重启不重入。 */
+    reply(&result, false);
+    return;
+  }
   if (result.state == OTA_STATE_FAILED || !result.finished) {
     reply(&result, false);
     abort_flash_session();

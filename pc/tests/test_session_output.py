@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import link  # noqa: E402  （先把 pc/ 放进来再导入）
 import remapadctl  # noqa: E402
-import remapadgui  # noqa: E402  （界面侧的队列接收器在这里，导入不会建窗口）
+import gui  # noqa: E402  （界面侧的队列接收器在这里，导入不会建窗口）
 
 
 class FakeLink:
@@ -52,7 +52,7 @@ class ConsoleReporterTest(unittest.TestCase):
 class QueueReporterTest(unittest.TestCase):
     def test_records_keep_kind_and_fields(self):
         sink: queue.Queue = queue.Queue()
-        reporter = remapadgui.QueueReporter(sink)
+        reporter = gui.QueueReporter(sink)
         reporter.line("普通行")
         reporter.error("错误行")
         reporter.event("shot_saved", path="a.png", chunks=3)
@@ -64,7 +64,7 @@ class QueueReporterTest(unittest.TestCase):
 
     def test_session_writes_device_lines_into_the_queue(self):
         sink: queue.Queue = queue.Queue()
-        session_obj, _link = session(remapadgui.QueueReporter(sink))
+        session_obj, _link = session(gui.QueueReporter(sink))
         session_obj.handle_text("ok key injected\r\n".encode())
         session_obj.handle_text("state pairing=paired\n\n".encode())
         records = [sink.get_nowait() for _ in range(sink.qsize())]
@@ -73,7 +73,7 @@ class QueueReporterTest(unittest.TestCase):
 
     def test_partial_line_waits_for_the_newline(self):
         sink: queue.Queue = queue.Queue()
-        session_obj, _link = session(remapadgui.QueueReporter(sink))
+        session_obj, _link = session(gui.QueueReporter(sink))
         session_obj.handle_text(b"ok half")
         self.assertTrue(sink.empty())
         session_obj.handle_text(b" line\n")
@@ -99,7 +99,7 @@ class FeedbackWriteBackTest(unittest.TestCase):
 
     def _session_with_pad(self, written):
         sink: queue.Queue = queue.Queue()
-        session_obj, _link = session(remapadgui.QueueReporter(sink))
+        session_obj, _link = session(gui.QueueReporter(sink))
         session_obj.pad = self.FakePad(written)
         return session_obj, sink
 
@@ -138,7 +138,7 @@ class LocalCommandTest(unittest.TestCase):
 
     def test_help_lists_local_commands(self):
         sink: queue.Queue = queue.Queue()
-        session_obj, _link = session(remapadgui.QueueReporter(sink))
+        session_obj, _link = session(gui.QueueReporter(sink))
         session_obj.run_local("help")
         text = "\n".join(sink.get_nowait()["text"] for _ in range(sink.qsize()))
         self.assertIn("本工具命令", text)
@@ -146,7 +146,7 @@ class LocalCommandTest(unittest.TestCase):
 
     def test_unknown_local_command_reports_error(self):
         sink: queue.Queue = queue.Queue()
-        session_obj, _link = session(remapadgui.QueueReporter(sink))
+        session_obj, _link = session(gui.QueueReporter(sink))
         session_obj.run_local("nope")
         self.assertEqual(sink.get_nowait()["kind"], "error")
 

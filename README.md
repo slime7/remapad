@@ -135,7 +135,7 @@ idf.py -p COMx flash monitor
 # 运行命令行桥接控制台（PC 侧工具与 scripts/ 共用仓库根的 uv 工程）
 uv run python pc/remapadctl.py -p COMx
 # 运行图形化操作界面
-uv run python pc/remapadgui.py
+uv run python pc/gui.py
 ```
 
 更多环境搭建、调试排错与详细开发流程参见 [新手上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)。

@@ -107,18 +107,26 @@ static void begin_validates_magic_and_size(void)
   CHECK(ota_proto_busy(&proto));
 }
 
-static void begin_refuses_second_session(void)
+static void begin_repeats_are_idempotent_by_size(void)
 {
   ota_proto_t proto;
   ota_proto_init(&proto);
   CHECK(!ota_proto_busy(&proto));
   REQUIRE(ota_proto_begin(&proto, 1024, 4096, 0).state == OTA_STATE_RECEIVING);
 
-  /* 接收中再收到 BEGIN：回 BUSY，不改动当前会话。 */
-  const ota_proto_result_t result = ota_proto_begin(&proto, 2048, 4096, 1000);
-  CHECK_EQ(result.state, OTA_STATE_RECEIVING);
-  CHECK_EQ(result.code, OTA_CODE_BUSY);
-  CHECK(result.reply);
+  /* 接收中重复 BEGIN（BEGIN 应答丢失后的重发）：同一尺寸幂等重发原应答，会话不动。 */
+  const ota_proto_result_t same = ota_proto_begin(&proto, 1024, 4096, 1000);
+  CHECK_EQ(same.state, OTA_STATE_RECEIVING);
+  CHECK_EQ(same.code, OTA_CODE_OK);
+  CHECK(same.reply);
+  CHECK_EQ(proto.next_seq, 0);
+  CHECK_EQ(proto.image_size, 1024);
+
+  /* 不同尺寸说明另一头要起新会话：回 BUSY，当前会话仍不动。 */
+  const ota_proto_result_t other = ota_proto_begin(&proto, 2048, 4096, 2000);
+  CHECK_EQ(other.state, OTA_STATE_RECEIVING);
+  CHECK_EQ(other.code, OTA_CODE_BUSY);
+  CHECK(other.reply);
   CHECK_EQ(proto.image_size, 1024);
 }
 
@@ -418,8 +426,36 @@ static void done_reports_success_once(void)
   CHECK(!ota_proto_busy(&proto));
 }
 
+static void repeated_end_replies_done_idempotently(void)
+{
+  ota_proto_t proto;
+  sink_t sink;
+  memset(&sink, 0, sizeof(sink));
+  ota_proto_init(&proto);
+  REQUIRE(ota_proto_begin(&proto, 100, 1048576, 0).state == OTA_STATE_RECEIVING);
+  feed_image(&proto, 100, 0, 100, &sink);
+  REQUIRE(ota_proto_end(&proto, 0, sink_flush, &sink).finished);
+
+  /* done 应答丢失后 PC 重发 END（收完待校验窗口）：幂等回 done 应答，
+     * 尾块不重复交付，上层据此不再重入校验。 */
+  const ota_proto_result_t again = ota_proto_end(&proto, 1000, sink_flush, &sink);
+  CHECK_EQ(again.state, OTA_STATE_DONE);
+  CHECK_EQ(again.code, OTA_CODE_OK);
+  CHECK(again.reply);
+  CHECK(!again.finished);
+  CHECK_EQ(sink.calls, 1);
+
+  /* 上层校验通过（DONE 态，重启延迟窗内）的重复 END 同样幂等。 */
+  REQUIRE(ota_proto_done(&proto).state == OTA_STATE_DONE);
+  const ota_proto_result_t after_done = ota_proto_end(&proto, 2000, sink_flush, &sink);
+  CHECK_EQ(after_done.state, OTA_STATE_DONE);
+  CHECK_EQ(after_done.code, OTA_CODE_OK);
+  CHECK(after_done.reply);
+  CHECK_EQ(sink.calls, 1);
+}
+
 HOST_TEST_SUITE(suite_ota_proto, "ota_proto", { "BEGIN 校验 magic 与镜像尺寸边界", begin_validates_magic_and_size },
-                { "接收中再次 BEGIN 只回 BUSY", begin_refuses_second_session },
+                { "接收中重复 BEGIN 按尺寸幂等，异尺寸回 BUSY", begin_repeats_are_idempotent_by_size },
                 { "序号连续、重发与跳号都从期望序号续传", data_tracks_sequence_and_resend },
                 { "每收满一个窗口回一次 ACK", data_acks_every_window },
                 { "窗口末帧标记立刻应答（末尾不足一窗）", window_end_marker_acks_at_once },
@@ -431,4 +467,5 @@ HOST_TEST_SUITE(suite_ota_proto, "ota_proto", { "BEGIN 校验 magic 与镜像尺
                 { "空闲超时作废会话，收完则不再计时", idle_session_times_out },
                 { "BEGIN 应答前的分区预擦不计入空闲超时", begin_restamps_the_idle_timer },
                 { "ACK 载荷黄金字节与版本尾巴", ack_payload_is_a_golden_byte_sequence },
-                { "完成与失败结论各回一次", done_reports_success_once });
+                { "完成与失败结论各回一次", done_reports_success_once },
+                { "收完后的重复 END 幂等回 done 应答", repeated_end_replies_done_idempotently });

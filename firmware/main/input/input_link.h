@@ -29,13 +29,19 @@ bool input_link_active(void);
 /**
  * 注册网络桥接的帧出口（netlog 的 UDP 通道）：注册后反馈 / 输出报告 /
  * 原始采集帧在网络在位时改投 UDP（谁在喂输入就回给谁），否则照旧走串口。
- * tx 收到已编码的整帧；传 NULL/NULL 撤销注册。截图与 OTA/amiibo 应答不受
- * 影响（UDP 不可靠，这些会话仍只走串口）。
+ * tx 收到已编码的整帧；传 NULL/NULL 撤销注册。截图应答不受影响（UDP
+ * 不可靠，这个会话仍只走串口）。
  */
 void input_link_set_net_tx(void (*tx)(const uint8_t *frame, size_t len), bool (*active)(void));
 
 /** 网络桥接是否在位（netlog 会话注册且最近仍有数据往来）。 */
 bool input_link_net_active(void);
+
+/**
+ * 往 UDP 桥接发一帧（OTA 应答的双路出口之一）：网络在位才发并返回 true，
+ * 会话没开或桥接不在位时不动、返回 false，由调用方落到串口。
+ */
+bool input_link_send_frame_net(uint8_t type, uint8_t slot, const uint8_t *payload, size_t payload_len);
 
 /** PC 是否连在串口上：USB-Serial/JTAG 在收主机的 SOF 包（插充电宝不算）。
  *  状态由 IDF 的 USJ 连接监视器维护，控制台选 USJ 时随驱动一并链接。 */

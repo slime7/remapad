@@ -12,7 +12,7 @@ flowchart LR
     CLI["命令行与交互命令"] --> Session
     Shot["实机截图（--shot）"] --> Session
     OTA["固件 OTA（--upgrade）"] --> Session
-    GUI["remapadgui.py（CustomTkinter）"] --> Session
+    GUI["gui.py（CustomTkinter）"] --> Session
     Session -->|"CLI 文本行"| Dev
 ```
 
@@ -23,7 +23,7 @@ flowchart LR
 - `link.py`：桥接帧编解码、会话线程与免复位的 Win32 串口打开，是 PC 侧唯一的串口实现（含串口枚举与打开失败的提示文案）。
 - `remapadctl.py`：桥接转发（读手柄、发桥接帧、把主机的震动与玩家灯写回手柄）、
   串口命令行、实机截图、固件 OTA 与交互式工具命令。
-- `remapadgui.py`：上面这套会话的图形入口（CustomTkinter），与命令行共用同一份
+- `gui.py`：上面这套会话的图形入口（CustomTkinter），与命令行共用同一份
   `Session` 与串口实现，只是把输出接到日志区、把控制做成按钮与输入框。
 
 ## 依赖
@@ -59,6 +59,8 @@ uv run python pc/remapadctl.py -p COM3 --log --reset --seconds 25
 uv run python pc/remapadctl.py -p COM3 --capture host-raw.log --seconds 30
                                              # 抓 30 秒主机原始输出（布局转换前）后退出
 uv run python pc/remapadctl.py -p COM3 --upgrade --wait
+uv run python pc/remapadctl.py -n 192.168.1.5 --upgrade
+                                             # 走 WiFi 的 netlog 通道推 OTA（会话开着才行；截图不能走网络）
 uv run python pc/remapadctl.py -p COM3 --amiibo Alm.bin   # 上传 amiibo 镜像后退出
 uv run python pc/remapadctl.py -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --no-rumble
 uv run python pc/remapadctl.py -p COM3 --logs            # 桥接的同时打印设备日志
@@ -69,12 +71,12 @@ report / ui / adv / headset / fwver / fwack / fwpost / fwapply / ctrl / backligh
 screen / relay / motion / ltk / rumble / lamp / haptic），数据全部由固件现场读取——
 不经过 UI 层，UI 冻结（截图期间、页面门控不取数）不影响实时性。
 
-## 图形界面（remapadgui.py）
+## 图形界面（gui.py）
 
-`remapadgui.py` 是同一套会话的图形入口，适合长时间挂着看日志、按固定动作做验收：
+`gui.py` 是同一套会话的图形入口，适合长时间挂着看日志、按固定动作做验收：
 
 ```powershell
-uv run python pc/remapadgui.py
+uv run python pc/gui.py
 ```
 
 - 顶部工具条：选串口（下拉列出注册表里的 COM 口，默认落在本机第一个口上，只选中不自动连接；
@@ -87,17 +89,19 @@ uv run python pc/remapadgui.py
   实机截图这些链路动作按钮。
 - 「设置」页：把设备屏幕上的可改项搬到 PC，没有屏幕的设备也能改——亮度滑条与息屏开关
   （`backlight` / `screen`）、手柄配色四款预设与四段自定义 `0xRRGGBB`（`ctrl`）、
-  DS4/DS5 的触摸板加减与截图键（`ds touchpad|capture`）、WiFi 凭据（`netlog save`，保存只写入
-  设备 NVS、不自动连接也不影响在跑的会话）、重启与关机（`reboot` / `poweroff`），
+  DS4/DS5 的触摸板加减与截图键（`ds touchpad|capture`）、WiFi 凭据（`netlog save` 保存、
+  `netlog cred` 回读已存的 SSID 与密码，保存只写入设备 NVS、不自动连接也不影响在跑的会话）、
+  重启与关机（`reboot` / `poweroff`），
   外加一行设备信息（版本、分区、镜像、升级状态、电量、堆内存、运行时长、配对与角色）；
   堆内存与设备屏幕的系统信息页同口径，是内部堆的已用 / 总量。
-  控件值全部来自固件回读行：连接后自动读一次（status / version / ctrl / ds），
+  控件值全部来自固件回读行：连接后自动读一次（status / version / ctrl / ds / netlog / netlog cred），
   「读取当前设置」按钮可以随时重读；界面不自己记状态。
 - 「命令」页：调试口。输入框回车发送命令（↑ / ↓ 取历史），下面的按钮按输入注入 / 屏幕与连接 /
   诊断与状态分组，只把命令填进输入框、回车才发。连接键、屏幕操控、状态回读这些调试动作都在这里，
   界面上不给它们单独开按钮。
 - 「升级」页：镜像路径与浏览、本地校验（同 `--dry-run`）、开始升级、进度条，以及
-  「升级完成后等设备回来并重新连接」（等价于 `--upgrade --wait`）。
+  「升级完成后等设备回来并重新连接」（等价于 `--upgrade --wait`）。串口与网络会话都能升级：
+  WiFi（UDP）靠窗口重发兜丢包、速度比串口慢，升级完成设备重启后 netlog 会话要重新打开。
 - 日志区：设备输出与工具提示逐行滚动，错误标红、发出去的整行命令带 `>` 前缀；
   可开关时间戳与自动滚动，可清空、导出成文本；输入框回车发送命令，↑ / ↓ 取历史，
   上方按钮把常用命令填进输入框。
@@ -117,8 +121,10 @@ uv run python pc/remapadgui.py
 界面工具栏「网络」栏填 `设备IP:9999` 再点「网络连接」，`Session` 挂到 `link.UdpLink` 上，手柄转发、
 命令、设置读写照常工作——host 模式下 COM 口消失时的远程通道。
 
-两条固件约束：UDP 会丢包，**截图与 OTA 不走网络**（界面在网络会话里禁用升级、拦下截图命令），
-OTA/amiibo 帧设备端直接忽略；反馈帧（震动写回、原始采集）跟随最近在发输入的一端（串口或 UDP）。
+两条固件约束：UDP 会丢包，**截图不走网络**（图像帧没有重传，界面在网络会话里拦下截图命令）；
+OTA 走网络时由窗口重发兜住丢包（设备端 BEGIN/END 幂等、序号续传，会话核心与串口升级共用同一套），
+速度比串口慢、升级完成后设备重启、netlog 会话随之关闭要重新打开；
+反馈帧（震动写回、原始采集）跟随最近在发输入的一端（串口或 UDP）。
 设备不知道 PC 的 IP：PC 先说话（连接即发命令，或 `scripts/netlog_listen.py` 的广播 hello）即完成
 目标自学习。凭据在设置页保存进设备 NVS（明文），调试通道本身也是局域网内无鉴权的明文协议，
 只在可信网络里用。
