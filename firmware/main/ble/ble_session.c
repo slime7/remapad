@@ -1000,7 +1000,8 @@ static size_t handle_init_cmd(session_slot_t *ses, const uint8_t *req, size_t le
   }
 }
 
-/** Command 0x09 玩家 LED。 */
+/** Command 0x09 玩家 LED：玩家号子命令按真机形态落成「前 N 颗全亮」的逐灯掩码，
+ *  屏幕指示灯与输入设备的玩家灯都按这份掩码逐灯点亮。 */
 static size_t handle_led_cmd(session_slot_t *ses, const uint8_t *req, size_t len, uint8_t subcmd)
 {
   switch (subcmd) {
@@ -1008,13 +1009,13 @@ static size_t handle_led_cmd(session_slot_t *ses, const uint8_t *req, size_t len
     ses->player_leds = 0x01;
     break;
   case 0x02:
-    ses->player_leds = 0x02;
+    ses->player_leds = 0x03;
     break;
   case 0x03:
-    ses->player_leds = 0x04;
+    ses->player_leds = 0x07;
     break;
   case 0x04:
-    ses->player_leds = 0x08;
+    ses->player_leds = 0x0F;
     break;
   case 0x05:
     ses->player_leds = 0x0F;

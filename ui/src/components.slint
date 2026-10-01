@@ -293,7 +293,8 @@ export component IconBox inherits Rectangle {
 }
 
 /** 微型玩家指示灯一行（单格 8 × 8，间距 3）：整行在本格内水平居中；
- *  行高取标签文字的高度，中格的图标才会与左右两格落在同一条中线上。 */
+ *  行高取标签文字的高度，中格的图标才会与左右两格落在同一条中线上。
+ *  mask 是逐灯位图（bit i = 第 i 颗），玩家号在固件侧已落成「前 N 颗全亮」的掩码。 */
 export component PlayerLeds inherits Rectangle {
     in property <int> mask: 0;
 
@@ -316,7 +317,7 @@ export component PlayerLeds inherits Rectangle {
         return index == 0 ? 1 : (index == 1 ? 2 : (index == 2 ? 4 : 8));
     }
     pure function led-on(mask: int, bit: int) -> bool {
-        return Math.mod(mask / bit, 2) == 1;
+        return Math.mod(Math.floor(mask / bit), 2) == 1;
     }
 }
 

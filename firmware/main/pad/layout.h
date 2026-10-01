@@ -174,7 +174,7 @@ typedef struct {
   uint8_t frame; /**< pad_out_frame_t。 */
   /** PS 蓝牙形态的序号字节偏移（高半字节逐报递增、低半字节 tag 保持 0）；0 表示没有序号字节。 */
   uint8_t seq_off;
-  /** 玩家灯落地值：四项依次对应主机掩码 bit0-3（1P-4P），0 表示原样写主机掩码。 */
+  /** 玩家灯落地值：四项依次为 1P-4P 的整组灯位模式，按主机掩码的置位个数取项；0 表示原样写主机掩码。 */
   uint8_t led_mask_map[4];
 } pad_output_layout_t;
 

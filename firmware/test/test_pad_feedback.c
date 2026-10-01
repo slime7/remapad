@@ -66,7 +66,7 @@ static void ds4_usb_encodes_rumble_and_lightbar(void)
   pad_feedback_t feedback = feedback_default();
   feedback.rumble_on[PAD_TRIGGER_L2] = true;
   feedback.rumble_strength[PAD_TRIGGER_L2] = 64;
-  feedback.player_led = 0x02; /* bit1 → 红 */
+  feedback.player_led = 0x03; /* 2P 掩码（前 2 颗全亮）→ 红 */
 
   uint8_t out[PAD_OUTPUT_MAX];
   const size_t len = pad_feedback_encode(PAD_CONN_USB, 0x054C, 0x09CC, &feedback, out, sizeof(out));
@@ -392,11 +392,12 @@ static void dualsense_usb_row_marks_audio_haptic(void)
 }
 
 /** 玩家指示灯按设备自己的灯位模式点亮：DualSense 的五颗灯是一组固定模式，
- *  直写主机掩码会点错灯（2P 该是中间加外两颗，不是 bit1）。 */
+ *  直写主机掩码会点错灯（2P 该是中间加外两颗）；玩家号按掩码置位个数取，
+ *  NS2 侧落成的「前 N 颗全亮」掩码（2P = 0x03）正好对应 2P 档。 */
 static void dualsense_player_led_follows_pattern(void)
 {
   pad_feedback_t feedback = feedback_default();
-  feedback.player_led = 0x02;
+  feedback.player_led = 0x03;
 
   uint8_t out[PAD_OUTPUT_MAX];
   pad_feedback_bt_seq_reset();
@@ -406,6 +407,12 @@ static void dualsense_player_led_follows_pattern(void)
   CHECK_EQ(out[48], 0x00);
   CHECK_EQ(out[49], 0x00);
   CHECK_BYTES(&out[74], s_crc_ds5_2p, sizeof(s_crc_ds5_2p));
+
+  /* 4P 全亮掩码落到整组模式的最后一档。 */
+  feedback.player_led = 0x0F;
+  pad_feedback_bt_seq_reset();
+  pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x0DF2, &feedback, out, sizeof(out));
+  CHECK_EQ(out[46], 0x1B);
 
   /* 没有分配玩家号时五颗全灭。 */
   feedback.player_led = 0x00;
@@ -498,7 +505,7 @@ static void ds4_bt_encodes_framed_report(void)
   pad_feedback_t feedback = feedback_default();
   feedback.rumble_on[PAD_TRIGGER_L2] = true;
   feedback.rumble_strength[PAD_TRIGGER_L2] = 64;
-  feedback.player_led = 0x02;
+  feedback.player_led = 0x03; /* 2P 掩码 → 红灯条 */
 
   uint8_t out[PAD_OUTPUT_MAX];
   const size_t len = pad_feedback_encode(PAD_CONN_BT, 0x054C, 0x09CC, &feedback, out, sizeof(out));
@@ -522,9 +529,9 @@ static void held_feedback_keeps_steady_state(void)
   pad_feedback_t event = feedback_default();
   uint8_t out[PAD_OUTPUT_MAX];
 
-  event.player_led = 0x02;
+  event.player_led = 0x03; /* 2P 掩码 */
   pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_PLAYER_LED, &event);
-  CHECK_EQ(held.player_led, 0x02);
+  CHECK_EQ(held.player_led, 0x03);
 
   /* 采样事件不再驱动马达；载波包不清它——蜂鸣节奏要靠持续帧撑住。 */
   event = feedback_default();
@@ -555,7 +562,7 @@ static void held_feedback_keeps_steady_state(void)
   event.rumble_on[PAD_TRIGGER_L2] = true;
   event.rumble_strength[PAD_TRIGGER_L2] = 64;
   pad_feedback_apply(&held, PAD_FEEDBACK_FIELD_RUMBLE, &event);
-  CHECK_EQ(held.player_led, 0x02);
+  CHECK_EQ(held.player_led, 0x03);
   CHECK_EQ(held.rumble_strength[PAD_TRIGGER_L2], 64);
 
   /* 编码出来的帧里玩家灯还在：灯不会被随后的震动帧写灭。 */

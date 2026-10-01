@@ -191,6 +191,37 @@ fn 电池图标随电量逐档变满() {
   }
 }
 
+/// 玩家灯按逐灯掩码点亮：真机玩家号是「前 N 颗全亮」（2 号亮前 2 颗、4 号全亮），
+/// 掩码由固件落成，这里锁住 UI 对掩码的渲染——亮色与灭色都整格涂满，按格内取色判别。
+#[test]
+fn 玩家灯按掩码逐颗点亮() {
+  let app = ui::new_app();
+  let row = ui::rect(&app, "BottomBar::host-leds");
+  const LIT: [u8; 3] = [0xa6, 0xc8, 0xff]; // Theme.primary-container
+  const UNLIT: [u8; 3] = [0x00, 0x26, 0x13]; // Theme.on-tertiary
+  for (mask, lit_count) in [(0x01, 1usize), (0x03, 2), (0x07, 3), (0x0F, 4)] {
+    app.set_player_led(mask);
+    let frame = ui::frame(&app);
+    // 四颗 8px 灯、间距 3px 共 41px，在格内水平居中；单颗在 15px 行高里竖直居中。
+    let start = row.x + (row.w - 41.0) / 2.0;
+    for index in 0..4usize {
+      let cell = Rect {
+        x: start + 11.0 * index as f32,
+        y: row.y + 3.5,
+        w: 8.0,
+        h: 8.0,
+      };
+      let expected = if index < lit_count { LIT } else { UNLIT };
+      assert!(
+        frame.count_color(cell, expected, 8) >= 40,
+        "掩码 0x{mask:02x} 下第 {} 颗灯没有{}",
+        index + 1,
+        if index < lit_count { "点亮" } else { "熄灭" },
+      );
+    }
+  }
+}
+
 /// 量墨迹用的行内区域：裁到格内，避开底栏两端弧线露出的深色底板。
 fn band(center_x: f32, y: f32, height: f32) -> Rect {
   Rect {

@@ -286,17 +286,27 @@ void pad_feedback_fold_pulse_motors(pad_feedback_t *feedback, uint8_t amp)
 
 static const pad_layout_t *s_last_layout;
 
-/** 玩家灯落地值：行里给了映射表就按最低置位取表——DualSense 的五颗灯是一组
+/** 玩家号取自掩码低半字的置位个数：NS2 侧玩家号已落成「前 N 颗全亮」掩码，
+ *  返回 1-4 为玩家号，0 表示没有分配玩家号。 */
+static size_t led_player_slot(uint8_t mask)
+{
+  size_t slot = 0;
+  for (mask &= 0x0Fu; mask != 0; mask >>= 1) {
+    slot += mask & 1u;
+  }
+  return slot;
+}
+
+/** 玩家灯落地值：行里给了映射表就按玩家号取表——DualSense 的五颗灯是一组
  *  固定模式（1P 只有中灯、2P 中灯加外灯），直写主机掩码会点错灯；没给表的
  *  行原样写主机掩码。没有分配玩家号（掩码 0）时写 0，五颗全灭。 */
 static uint8_t led_mask_value(const pad_output_layout_t *desc, uint8_t mask)
 {
-  for (size_t i = 0; i < 4; i++) {
-    if ((mask & (uint8_t)(1u << i)) != 0) {
-      return desc->led_mask_map[i] != 0 ? desc->led_mask_map[i] : mask;
-    }
+  const size_t slot = led_player_slot(mask);
+  if (slot == 0) {
+    return 0;
   }
-  return 0;
+  return desc->led_mask_map[slot - 1] != 0 ? desc->led_mask_map[slot - 1] : mask;
 }
 
 /** CRC32（反射多项式 0xEDB88320、初值 0xFFFFFFFF），与 Linux 的 crc32_le
@@ -336,26 +346,25 @@ static bool off_set(uint8_t off)
   return off != PAD_OFF_NONE && off != 0;
 }
 
-/** 玩家灯掩码换算成灯条颜色：取最低置位，四种颜色循环。 */
+/** 玩家灯掩码换算成灯条颜色：按玩家号（置位个数）取色，四种颜色循环。 */
 static void led_color(uint8_t mask, uint8_t *rgb)
 {
   static const uint8_t palette[4][3] = {
-    { 0x00, 0x00, 0xFF }, /* bit0 蓝 */
-    { 0xFF, 0x00, 0x00 }, /* bit1 红 */
-    { 0x00, 0xFF, 0x00 }, /* bit2 绿 */
-    { 0xFF, 0x00, 0xFF }, /* bit3 品红 */
+    { 0x00, 0x00, 0xFF }, /* 1P 蓝 */
+    { 0xFF, 0x00, 0x00 }, /* 2P 红 */
+    { 0x00, 0xFF, 0x00 }, /* 3P 绿 */
+    { 0xFF, 0x00, 0xFF }, /* 4P 品红 */
   };
   rgb[0] = 0;
   rgb[1] = 0;
   rgb[2] = 0;
-  for (size_t i = 0; i < 4; i++) {
-    if ((mask & (uint8_t)(1u << i)) != 0) {
-      rgb[0] = palette[i][0];
-      rgb[1] = palette[i][1];
-      rgb[2] = palette[i][2];
-      return;
-    }
+  const size_t slot = led_player_slot(mask);
+  if (slot == 0) {
+    return;
   }
+  rgb[0] = palette[slot - 1][0];
+  rgb[1] = palette[slot - 1][1];
+  rgb[2] = palette[slot - 1][2];
 }
 
 const pad_layout_t *pad_feedback_last_layout(void)
