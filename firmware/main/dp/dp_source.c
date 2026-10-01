@@ -34,7 +34,8 @@ static volatile uint16_t s_inject_stick[PAD_AXIS_COUNT] = {
 /** 已设定过的摇杆轴（bit0-3 对应 LX/LY/RX/RY）：未设定的轴沿用输入源的值。 */
 static volatile uint8_t s_inject_stick_mask;
 
-/** 调试按键名表：CLI 与用例共用，默认保持时长按操作节奏给（组合键更久）。 */
+/** 调试按键名表：CLI 与用例共用，键名即私有格式的按键位名（pad_state.h），
+ *  默认保持时长按操作节奏给（组合键更久）。 */
 typedef struct {
   const char *name;
   uint32_t mask;
@@ -42,30 +43,27 @@ typedef struct {
 } debug_key_t;
 
 static const debug_key_t s_debug_keys[] = {
-  /* 键名沿用 Nintendo 侧叫法（目标主机是 NS2），掩码写私有格式的键名：
-       面键按 PS 的位置（a 在右、b 在下、x 在上、y 在左），plus 与 minus 走
-       选项与触摸板位，home 与 capture 走主页与分享位，c 走静音位。 */
-  { "a", PAD_BTN_CIRCLE, 250 },
-  { "b", PAD_BTN_CROSS, 250 },
-  { "x", PAD_BTN_TRIANGLE, 250 },
-  { "y", PAD_BTN_SQUARE, 250 },
-  { "plus", PAD_BTN_OPT, 250 },
-  { "minus", PAD_BTN_TOUCHPAD, 250 },
+  /* 键名对齐 pad_state.h 的位置语义键（Triangle 上、Circle 右、Cross 下、
+     Square 左），目标侧语义由 target/ 编码器决定。 */
+  { "circle", PAD_BTN_CIRCLE, 250 },
+  { "cross", PAD_BTN_CROSS, 250 },
+  { "triangle", PAD_BTN_TRIANGLE, 250 },
+  { "square", PAD_BTN_SQUARE, 250 },
+  { "opt", PAD_BTN_OPT, 250 },
+  { "touchpad", PAD_BTN_TOUCHPAD, 250 },
   { "home", PAD_BTN_HOME, 250 },
-  { "capture", PAD_BTN_SHARE, 250 },
-  { "c", PAD_BTN_MUTE, 250 },
-  { "l", PAD_BTN_L1, 250 },
-  { "r", PAD_BTN_R1, 250 },
-  { "zl", PAD_BTN_L4, 250 },
-  { "zr", PAD_BTN_R4, 250 },
-  { "ls", PAD_BTN_L3, 250 },
-  { "rs", PAD_BTN_R3, 250 },
+  { "share", PAD_BTN_SHARE, 250 },
+  { "mute", PAD_BTN_MUTE, 250 },
+  { "l1", PAD_BTN_L1, 250 },
+  { "r1", PAD_BTN_R1, 250 },
+  { "l4", PAD_BTN_L4, 250 },
+  { "r4", PAD_BTN_R4, 250 },
+  { "l3", PAD_BTN_L3, 250 },
+  { "r3", PAD_BTN_R3, 250 },
   { "up", PAD_BTN_DPAD_UP, 250 },
   { "down", PAD_BTN_DPAD_DOWN, 250 },
   { "left", PAD_BTN_DPAD_LEFT, 250 },
   { "right", PAD_BTN_DPAD_RIGHT, 250 },
-  { "gl", PAD_BTN_L4, 250 },
-  { "gr", PAD_BTN_R4, 250 },
   /* 手柄操控 UI 的组合键：保持时长要盖过 dp_ui 的翻转阈值（300ms），
      * 注入一次就等价于按下组合键并松开，不插手柄也能验证整条 UI 操控链路。 */
   { "ui", DP_UI_COMBO_MASK, 500 },

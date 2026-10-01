@@ -141,6 +141,7 @@ uv run python scripts/firmware-test.py
 | `pc/tests/test_pick_device.py` | 手柄接口过滤与设备匹配 |
 | `pc/tests/test_session_output.py` | 输出分流与命令行解析 |
 | `pc/tests/test_settings_reply.py` | 设备状态回读格式解析 |
+| `pc/tests/test_mcp_pad.py` | MCP 按键服务：键位表、快照报文合成、引擎帧输出与脚本时间线 |
 
 ```powershell
 uv run python -m unittest discover -s pc/tests -t pc     # 在仓库根执行

@@ -242,21 +242,21 @@ static void debug_key_lookup(void)
   uint32_t mask = 0;
   uint32_t hold_ms = 0;
 
-  /* 键名是 NS2 的 a（右侧），掩码落到私有格式的 ○。 */
-  CHECK(dp_source_key_lookup("a", 1, &mask, &hold_ms));
+  /* 键名即私有格式的按键位名：circle 落 ○ 位。 */
+  CHECK(dp_source_key_lookup("circle", 6, &mask, &hold_ms));
   CHECK_EQ(mask, PAD_BTN_CIRCLE);
   CHECK_EQ(hold_ms, 250);
 
   CHECK(dp_source_key_lookup("up", 2, &mask, &hold_ms));
   CHECK_EQ(mask, PAD_BTN_DPAD_UP);
 
-  CHECK(dp_source_key_lookup("ls", 2, &mask, &hold_ms));
+  CHECK(dp_source_key_lookup("l3", 2, &mask, &hold_ms));
   CHECK_EQ(mask, PAD_BTN_L3);
-  /* 键名 c 是 NS2 的 C 键，掩码落到私有格式的静音位（PS 的静音键）。 */
-  CHECK(dp_source_key_lookup("c", 1, &mask, &hold_ms));
+  /* 键名 mute 落私有格式的静音位（目标侧作 C 键）。 */
+  CHECK(dp_source_key_lookup("mute", 4, &mask, &hold_ms));
   CHECK_EQ(mask, PAD_BTN_MUTE);
-  /* Nintendo 叫法落到私有格式的位置语义键上。 */
-  CHECK(dp_source_key_lookup("gl", 2, &mask, &hold_ms));
+  /* 扩展位背键直接按内部值名注入。 */
+  CHECK(dp_source_key_lookup("l4", 2, &mask, &hold_ms));
   CHECK_EQ(mask, PAD_BTN_L4);
   CHECK(dp_source_key_lookup("home", 4, &mask, &hold_ms));
   CHECK_EQ(mask, PAD_BTN_HOME);

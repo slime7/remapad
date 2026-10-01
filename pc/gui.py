@@ -82,7 +82,7 @@ QUICK_ACTIONS = (
 #: 命令页的分组：(分组标题, （命令…))。点击只填进输入框，回车才发送——
 #: 调试动作都走这条路，界面上不再给它们单独开按钮。
 COMMAND_GROUPS = (
-    ("输入注入", ("key a 200", "key release", "stick reset", "rumble off", "lamp 0xF",
+    ("输入注入", ("key circle 200", "key release", "stick reset", "rumble off", "lamp 0xF",
                   "haptic 0x10")),
     ("屏幕与连接", ("connect", "ui on", "ui off", "backlight 60", "screen off", "beep")),
     ("诊断与状态", ("status", ":all", "pad", "link", "mode host", "rollback", ":log 15",

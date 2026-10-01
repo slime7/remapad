@@ -77,6 +77,7 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
 | **固件 OTA 升级** | `uv run python pc/ctrl.py -p COMx --upgrade` | 执行固件 OTA 升级（支持串口与 -n 网络模式） |
 | **PC 手柄桥接** | `uv run python pc/ctrl.py -p COMx` | 运行 PC 手柄桥接服务与 CLI 控制台 |
 | **PC 连接控制台** | `uv run python pc/gui.py` | 启动 PC 图形管理控制台 |
+| **MCP 按键服务** | `uv run python pc/mcp_server.py -p COMx` | 启动按键注入 MCP 服务供 agent 调用（`-n HOST[:PORT]` 走 WiFi） |
 | **串口 CLI** | `uv run python pc/ctrl.py -p COMx status` | 执行单条设备 CLI 命令 |
 | **局域网日志收听** | `uv run python scripts/netlog_listen.py [--port 9999]` | 监听设备 UDP 调试日志并发送命令 |
 | **主机输出原始采集** | `uv run python pc/ctrl.py -p COMx --capture host-raw.log` | 抓取主机输出原始数据包 |

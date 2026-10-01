@@ -72,14 +72,63 @@ uv run python pc/gui.py
 
 通过设备 UDP 调试端口（默认 9999）进行网络通信。支持手柄转发、CLI 与 OTA，不支持截图。
 
+## 按键注入 MCP 服务（mcp_server.py）
+
+把「PC → 设备 → NS2 主机」的按键注入包成 stdio MCP 服务供 agent 调用：
+
+```powershell
+uv run python pc/mcp_server.py                 # 启动后不碰设备，连接由 remapad_connect 完成
+uv run python pc/mcp_server.py -p COM3         # -p / -n 只是 remapad_connect 无参时的默认目标
+```
+
+调用模型是显式连接：先 `remapad_connect`（串口或 WiFi 二选一）建链，之后按键工具才可用，
+结束 `remapad_disconnect` 断链（key release 全松、释放串口）。
+
+```mermaid
+flowchart LR
+    Agent["Agent（MCP 客户端）"] -->|"stdio"| Svc["mcp_server.py"]
+    Svc -->|"connect / disconnect"| Link["串口或 netlog UDP 链路"]
+    Svc -->|"状态变更 / 续期"| Engine["按键状态引擎（自持按下表）"]
+    Engine -->|"key / stick CLI 命令"| Session["ctrl.Session（串口唯一写者）"]
+    Session -->|"调试注入"| DP["dp_source 叠加"]
+    Session -->|"CLI 文本行"| Dev["设备"]
+    Dev -->|"NS2 报告"| Host["NS2 主机"]
+```
+
+按键编排落在 PC 侧按键状态引擎（[ADR 0063](../docs/adr/0063-mcp-cli-key-injection-engine.md)）：
+注入走固件调试 CLI，无周期心跳流量，与实体手柄转发可并存（按键按位叠加）。tap 在无按住键时直发一条 `key`（固件到点自动松开）；
+按住键由引擎维护按下表并以滚动期限看门狗续期；固件没有单键松开，子集松开是
+「key release 全松 + 重发存活键」，存活键在边界上有至多一个 dp 拍（5ms）的瞬断，
+时值精度按 ±10ms 量级理解。UDP 通道空闲时服务发 PING 保活 2 秒桥接窗口。工具面：
+
+| 工具 | 语义 |
+| :--- | :--- |
+| `remapad_connect` | 连接设备：`port`（串口号）或 `net`（IP[:端口]，WiFi netlog）二选一，无参用启动默认 |
+| `remapad_disconnect` | 断开设备链路：key release 全松、回中并释放串口/网络 |
+| `remapad_status` | 链路状态与引擎按键状态；已连接时附设备回执（status/pad/link 原始行） |
+| `remapad_pair` / `remapad_drop` | 连接键动作（开连接窗口）/ 断开与主机的 BLE 连接 |
+| `remapad_tap` | 单键/组合键，hold_ms 后松开（同起同落，阻塞到松开） |
+| `remapad_hold` | 按住/松开不限时长，可长按期间做别的调用 |
+| `remapad_stick` / `remapad_stick_reset` | 摇杆电平 0-4095（2048 中位，y 向上为正）/ 回中 |
+| `remapad_script` | 时间线脚本：t + down/up/tap/stick 任选、loop 循环，结束自动全松回中 |
+| `remapad_release_all` | 全部松开并回中（逃生口） |
+| `remapad_screenshot` | 实机截图（仅串口会话） |
+
+键名即固件调试注入的按键位名（`pad_state.h` 内部值，PS 位置语义）：
+`triangle circle cross square l1 r1 l4 r4 l3 r3 up down left right opt touchpad home share mute`；
+主机侧语义由固件布局映射（circle/cross/triangle/square→A/B/X/Y、opt→+、touchpad→-、
+home→HOME、share→capture、mute→C、l4/r4→GL/GR 背键、l1/l3/r1/r3→L/LS/R/RS）。
+模拟扳机（ZL/ZR 的模拟量）不在 CLI 注入面里，需要真手柄转发。
+注意：服务独占链路，与 ctrl.py / gui.py 不能同开一个串口。
+
 ## 串口命令面（完整控制手柄）
 
 交互模式里不是 `:` 开头的行按固件 CLI 原样发送，手柄功能的完整控制面都在固件 CLI 里
 （设备侧敲 `help` 有全表）：
 
 ```text
-key a 200        注入按键（a b x y plus minus home capture c l r zl zr ls rs
-                 up down left right gl gr ui），key release 全部松开
+key circle 200   注入按键（键名即内部值：circle cross triangle square opt touchpad home share mute
+                 l1 r1 l4 r4 l3 r3 up down left right ui），key release 全部松开
 stick l 2048 2048  设摇杆电平 0-4095（stick reset 回中）
 ctrl             手柄配色（ctrl 0x232323 0xa0a0a0 0xe6e6e6 0x323232，四段依次是
                  机身 按键 高光 握把，0xRRGGBB，持久化；无参回读）

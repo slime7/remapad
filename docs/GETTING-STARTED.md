@@ -76,8 +76,8 @@ clang-format -i <改动的 .c/.h>                      # C 格式化（不要对
 
 ```powershell
 uv run python pc/ctrl.py -p COM3 status          # 配对/角色/背光/息屏/运行时长/电池/版本/升级状态
-uv run python pc/ctrl.py -p COM3 key a           # 注入 A 键（键名见下方说明）
-uv run python pc/ctrl.py -p COM3 key l 800       # 注入 L 键并保持 800 ms
+uv run python pc/ctrl.py -p COM3 key circle      # 注入 circle（○）键（键名即内部值）
+uv run python pc/ctrl.py -p COM3 key l1 800      # 注入 L1 键并保持 800 ms
 uv run python pc/ctrl.py -p COM3 key release     # 立即释放注入的按键
 uv run python pc/ctrl.py -p COM3 ui on           # 手动进出屏幕操控模式（on / off，不带参数看状态）
 uv run python pc/ctrl.py -p COM3 stick l 4095 2048   # 左摇杆推满右（0-4095 或 center）

@@ -14,6 +14,7 @@ dependencies = [
     # 读写手柄 HID 报告（pc/ctrl.py 与 pc/tests/samples/pad_replay.py）
     "hidapi>=0.14.0",
     # 音频触觉回放与样本回放（pc/ds5_haptics.py）
+    "mcp>=2.2.0",
     "sounddevice>=0.4.6",
 ]
 
