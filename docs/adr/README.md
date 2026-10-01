@@ -99,6 +99,7 @@
 | [0061](0061-ota-ack-follows-ingress-channel.md) | active | OTA ACK 改为跟进帧通道单路回发（修订 0060 的双路回发）：从哪个口收升级帧就从哪个口应答，出口不在位丢弃由窗口重发兜住；配套 netlog 会话期关 WiFi 省电、PC 端窗口应答超时收紧 |
 | [0062](0062-wasm-ui-preview-and-playwright-e2e.md) | active | 屏幕 UI 的预览与回归统一到 WASM：存盘自动重编刷新的浏览器预览加 Playwright 端到端用例，模拟状态与结算收进 ui/preview/preview-core.slint，PC 交互预览（slint-viewer）退役 |
 | [0063](0063-mcp-cli-key-injection-engine.md) | active | MCP 按键注入服务采用固件 CLI 自持状态引擎：显式连接，自持按下状态表，tap 直发、按住键滚动续期、子集松开全松加重发；与实体手柄转发可并存 |
+| [0064](0064-mcp-key-replay.md) | active | MCP 按键回放采用 TAS 式逐帧记录与单任务打断模型：文件后台回放、进度进 status，回放期按键工具一律拒绝、打断只走 remapad_replay_stop |
 
 ## 创建 ADR 脚本用法
 

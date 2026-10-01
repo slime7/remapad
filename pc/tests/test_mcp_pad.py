@@ -270,7 +270,7 @@ class BridgeGuardTest(unittest.TestCase):
     """连接守卫：未建链时设备类工具报错而不是隐式开串口。"""
 
     def test_device_tools_refuse_before_connect(self):
-        bridge = mcp_server.PadBridge(ctrl.parse_args(["--no-pad"]), 60000, 1.0)
+        bridge = mcp_server.PadBridge(ctrl.parse_args(["--no-pad"]), 60000, 600000, ping_period_s=1.0)
         with self.assertRaises(mcp_server.McpError):
             bridge.query("status")
         with self.assertRaises(mcp_server.McpError):
@@ -288,7 +288,7 @@ class ToolSurfaceTest(unittest.TestCase):
         expected = {
             "remapad_connect", "remapad_disconnect", "remapad_status", "remapad_pair", "remapad_drop",
             "remapad_tap", "remapad_hold", "remapad_stick", "remapad_stick_reset", "remapad_script",
-            "remapad_release_all", "remapad_screenshot",
+            "remapad_release_all", "remapad_screenshot", "remapad_replay", "remapad_replay_stop",
         }
         self.assertEqual(set(tools), expected)
         tap_schema = tools["remapad_tap"].input_schema

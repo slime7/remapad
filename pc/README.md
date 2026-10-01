@@ -111,7 +111,9 @@ flowchart LR
 | `remapad_hold` | 按住/松开不限时长，可长按期间做别的调用 |
 | `remapad_stick` / `remapad_stick_reset` | 摇杆电平 0-4095（2048 中位，y 向上为正）/ 回中 |
 | `remapad_script` | 时间线脚本：t + down/up/tap/stick 任选、loop 循环，结束自动全松回中 |
-| `remapad_release_all` | 全部松开并回中（逃生口） |
+| `remapad_replay` | 回放按键记录文件（TAS 式逐帧）：后台执行、立即返回，期间按键工具被拒绝 |
+| `remapad_replay_stop` | 打断进行中的回放（全松回中）；没有回放时幂等成功 |
+| `remapad_release_all` | 全部松开并回中（逃生口；回放进行中被拒绝） |
 | `remapad_screenshot` | 实机截图（仅串口会话） |
 
 键名即固件调试注入的按键位名（`pad_state.h` 内部值，PS 位置语义）：
@@ -120,6 +122,35 @@ flowchart LR
 home→HOME、share→capture、mute→C、l4/r4→GL/GR 背键、l1/l3/r1/r3→L/LS/R/RS）。
 模拟扳机（ZL/ZR 的模拟量）不在 CLI 注入面里，需要真手柄转发。
 注意：服务独占链路，与 ctrl.py / gui.py 不能同开一个串口。
+
+### 按键回放（remapad_replay）
+
+把提前录制或程序生成的按键记录文件（TAS 式逐帧输入表，决策见 [ADR 0064](../docs/adr/0064-mcp-key-replay.md)）
+交给服务后台回放：立即返回，同一时刻只有一条回放任务，进度随 `remapad_status` 常态回报。
+回放进行中 `remapad_tap` / `remapad_hold` / `remapad_stick` / `remapad_stick_reset` /
+`remapad_script` / `remapad_release_all` / `remapad_replay` 一律被拒绝，错误信息带当前帧进度，
+防止误发按键或误打断；打断只走 `remapad_replay_stop`（`remapad_disconnect` 兜底打断），
+结束、打断与循环边界都会全松按键并回中摇杆。规模上限：文件 4 MiB、展开事件 65536、
+总时长 `--replay-max-ms`（默认 10 分钟）；时间刻度按帧长换算，时值精度与注入同为 ±10ms 量级。
+
+记录是 UTF-8 文本（LF / CRLF 均可），`#` 开头是注释；头部 `key = value` 定时间刻度：
+`frame_ms=每帧毫秒` 或 `fps=帧率`（缺省 15ms，即 NS2 上报节奏）；帧行一行一条：
+
+```text
+|帧号|按键+按键|左摇杆x,y|右摇杆x,y|
+```
+
+帧行表示「从该帧起的输入状态」并保持到下一帧行，帧号必须逐行递增、中间缺的帧就是保持拍；
+按键字段 `.` 或空 = 无按键，多个键用 `+` 连接（键名同工具面）；摇杆 `x,y` 取 0-4095（2048 中位），
+`.` 或空 = 保持上一拍。示例（60fps，开局按住 circle+cross 推左摇杆，半秒后全放，一秒处回中）：
+
+```text
+# 开场压制
+fps = 60
+|0|circle+cross|4095,2048|
+|30||.|
+|60|.|2048,2048|
+```
 
 ## 串口命令面（完整控制手柄）
 
