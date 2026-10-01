@@ -7,7 +7,7 @@
 import unittest
 
 import link
-import remapadctl
+import ctrl
 
 
 class ParseEndpointTest(unittest.TestCase):
@@ -61,7 +61,7 @@ class NetlogReplyTest(unittest.TestCase):
     """设备 netlog 状态行的回读解析（设置页摘要跟着它走）。"""
 
     def test_status_line_parsed(self) -> None:
-        channel, fields = remapadctl.parse_device_reply(
+        channel, fields = ctrl.parse_device_reply(
             "netlog state=connected ssid=slime_nest dest=192.168.1.5:9999 frames=10 sent=20 dropped=0")
         self.assertEqual(channel, "netlog")
         self.assertEqual(fields["state"], "connected")
@@ -69,30 +69,30 @@ class NetlogReplyTest(unittest.TestCase):
         self.assertEqual(fields["dest"], "192.168.1.5:9999")
 
     def test_off_state_parsed(self) -> None:
-        channel, fields = remapadctl.parse_device_reply(
+        channel, fields = ctrl.parse_device_reply(
             "netlog state=off ssid=- dest=- frames=0 sent=0 dropped=0")
         self.assertEqual(channel, "netlog")
         self.assertEqual(fields["state"], "off")
 
     def test_line_without_state_ignored(self) -> None:
-        self.assertIsNone(remapadctl.parse_device_reply("netlog session stopped unexpectedly"))
+        self.assertIsNone(ctrl.parse_device_reply("netlog session stopped unexpectedly"))
 
 
 class NetlogCredReplyTest(unittest.TestCase):
     """`netlog cred` 凭据回读行的解析（设置页 WiFi 输入框跟着它走）。"""
 
     def test_saved_credentials_parsed(self) -> None:
-        channel, fields = remapadctl.parse_device_reply("ok netlog cred ssid=slime_nest pass=hunter2")
+        channel, fields = ctrl.parse_device_reply("ok netlog cred ssid=slime_nest pass=hunter2")
         self.assertEqual(channel, "netlog_cred")
         self.assertEqual(fields, {"ssid": "slime_nest", "pass": "hunter2"})
 
     def test_unconfigured_credentials_become_empty(self) -> None:
-        channel, fields = remapadctl.parse_device_reply("ok netlog cred ssid=- pass=-")
+        channel, fields = ctrl.parse_device_reply("ok netlog cred ssid=- pass=-")
         self.assertEqual(channel, "netlog_cred")
         self.assertEqual(fields, {"ssid": "", "pass": ""})
 
     def test_cred_line_not_misparsed_as_status(self) -> None:
-        channel, _ = remapadctl.parse_device_reply("ok netlog cred ssid=slime_nest pass=hunter2")
+        channel, _ = ctrl.parse_device_reply("ok netlog cred ssid=slime_nest pass=hunter2")
         self.assertNotEqual(channel, "netlog")
 
 

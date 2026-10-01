@@ -1,13 +1,6 @@
 # Xbox 家族手柄数据规范（Xbox One S / Series X|S / 精英手柄 2）
 
-本规范记录 Xbox 家族手柄在蓝牙下的 HID 报告（Report ID `0x01`）与输出报告（Report ID `0x03`），
-作为家族布局表（[pad/layouts/xbox.c](../firmware/main/pad/layouts/xbox.c)）与反馈编码的数据依据；
-说 Xbox 360 报文的 XInput 形态见 [controller-xinput.md](controller-xinput.md)，Switch 一代见
-[controller-ns1.md](controller-ns1.md)，PS 家族见 [controller-ps.md](controller-ps.md)。
-字段偏移取自公开实现，落地前用 `pc/remapadctl.py --dump` 抓原始报告核对，核对状态见文末。
-
-USB 直连的 Xbox One / Series 手柄走厂商接口（GIP / XUSB），不是 HID 报告，本设备的 USB host
-只吃 HID 手柄接口，因此这一族只在蓝牙（或 PC 桥接转发蓝牙报告）下接入；厂商接口的报文体只作记录。
+本规范记录 Xbox 系列手柄蓝牙 HID 输入报告与震动输出报告规范。
 
 ## 型号与标识
 
@@ -82,35 +75,6 @@ flowchart TB
 | `0x04` / `0x05` | 左主马达（低频带）/ 右主马达（高频带） |
 | `0x06`-`0x08` | 时长 `0xFF`、起始延迟 `0x00`、循环数 |
 
-两处公开实现在使能掩码与主马达位置上一致，循环数取值不同（`0x01` 与 `0xEB`）：本设备取 `0x01`
-（播一次，随下一份报告更新），持续震动由主机连续下发维持。玩家灯不走这份报文。
+循环数取 `0x01`（单次触发，由主机持续帧维持），玩家灯不走此报文。
 
 ## USB（厂商接口）形态：只作协议记录
-
-| 形态 | 报文长度 | 字段 |
-| :--- | :--- | :--- |
-| Xbox One S | 14 字节 | 按键在 `0x04` 起，扳机与四轴随后 |
-| 精英手柄 1 | 29 字节 | 背键在 `0x1C`（bit0 P3、bit1 P1、bit2 P4、bit3 P2） |
-| 精英手柄 2 | 34 / 46 / 47 字节 | 背键在 `0x0E` 或 `0x12`（bit0-3 是 P1-P4），配置档在紧随的字节 |
-
-这些报文来自厂商接口，本设备的 HID 输入通路收不到，因此不登记；PC 桥接若要转发这类报文，
-需要另开一条厂商接口通道。
-
-## 核对状态与实测记录
-
-| 数据 | 状态 |
-| :--- | :--- |
-| 蓝牙报告 0x01 的四轴、扳机、帽子与按键偏移 | 取自公开实现的 HID 手柄驱动，未实机核对 |
-| 精英手柄 2 的三份报文长度与背键位 | 取自公开实现的报文长度分支，未实机核对 |
-| 背键位到 L4/R4/L5/R5 的物理对应（P1-P4 的编号顺序） | 取自公开实现的按钮顺序，待实机核对 |
-| 输出报告 0x03 的字段与尾参数 | 两处公开实现一致，循环数取值不同；未实机核对 |
-| 厂商接口（GIP / XUSB）报文体 | 只作协议记录，未登记 |
-
-## 参考资料
-
-- SDL 的 `SDL_hidapi_xboxone.c`：蓝牙报告 0x01 的字段偏移、按键位、帽子编号、
-  精英手柄三份报文长度下的背键位与配置档判定、输出报告 0x03 的字节布局。
-- Chromium 的 `device/gamepad/xbox_hid_controller.cc`：带震动能力的 Microsoft 型号清单与
-  输出报告 0x03 的取值。
-- Linux 的 `drivers/hid/bpf/progs/Microsoft__Xbox-Elite-2.bpf.c`：蓝牙下背键位是描述符里的
-  四位字段（Consumer 页的 Assign Selection），不能按固定报告偏移解析。

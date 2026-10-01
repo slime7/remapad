@@ -1,0 +1,61 @@
+// WASM 预览入口：设备画面 240 × 280，与固件侧的 App 窗口同尺寸，canvas 元素与面板 1:1；
+// 物理屏外观全部在页面 CSS 上——玻璃面 248 × 280（画布外左右各 4px 黑边）、
+// 画布 40px 圆角、外框 48px 圆角，见 index.html。
+// 模拟状态与动作结算在同目录 preview-core.slint；
+// 窗口层的别名把核心状态暴露成 wasm 接口用的属性面，控制台（HTML）只发动作与写模拟状态。
+
+import { PreviewCore } from "preview-core.slint";
+
+export component WasmApp inherits Window {
+    width: 240px;
+    height: 280px;
+    background: #000000;
+    title: "Remapad 预览";
+
+    // ---- 状态别名：核心的模拟状态原样暴露给 wasm 接口 ----
+    in-out property <int> page <=> core.page;
+    in-out property <int> page-count <=> core.page-count;
+    in-out property <int> focus-index <=> core.focus-index;
+    in-out property <bool> pad-active <=> core.pad-active;
+    in-out property <int> backlight <=> core.backlight;
+    in-out property <int> battery-percent <=> core.battery-percent;
+    in-out property <int> pairing <=> core.pairing;
+    in-out property <int> notice <=> core.notice;
+    in-out property <int> tick <=> core.tick;
+    in-out property <int> usb-role <=> core.usb-role;
+    in-out property <bool> pc-link <=> core.pc-link;
+    in-out property <bool> pad-attached <=> core.pad-attached;
+    in-out property <int> pad-family <=> core.pad-family;
+    in-out property <int> player-led <=> core.player-led;
+    in-out property <int> ota-percent <=> core.ota-percent;
+    in-out property <int> selected-colorway <=> core.selected-colorway;
+    in-out property <bool> ds-touchpad-plus-minus <=> core.ds-touchpad-plus-minus;
+    in-out property <bool> ds-capture-key <=> core.ds-capture-key;
+    in-out property <int> debug-flash <=> core.debug-flash;
+    in-out property <int> dialog <=> core.dialog;
+    in-out property <int> dialog-focus <=> core.dialog-focus;
+    in-out property <bool> rebooting <=> core.rebooting;
+    in-out property <bool> powering-off <=> core.powering-off;
+    in-out property <int> netlog-state <=> core.netlog-state;
+    in-out property <string> netlog-addr <=> core.netlog-addr;
+    in-out property <int> netlog-rssi <=> core.netlog-rssi;
+    in-out property <string> log <=> core.log;
+    /** 当前页的可聚焦项数：焦点循环按它回绕。 */
+    out property <int> focus-count: core.focus-count;
+
+    /** 动作回调：HTML 控制台与端到端用例都走这一条（与固件的 action 同名同参），核心里结算。 */
+    callback action(string, int);
+    /** 确认键：转发给设备画面里的焦点分发（实机上圆圈键 / 回车也是这一步）。 */
+    callback activate-focused();
+    /** 焦点步进（实机上是上下键）：到底再按回到另一端，与固件侧 step_focus 的循环一致。 */
+    callback focus-step(int);
+
+    action(name, value) => { core.action(name, value); }
+    activate-focused => { core.activate-focused(); }
+    focus-step(delta) => { core.focus-step(delta); }
+
+    core := PreviewCore {
+        x: 0px;
+        y: 0px;
+    }
+}

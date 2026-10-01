@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import link  # noqa: E402  （先把 pc/ 放进来再导入）
-from remapadctl import HostCaptureSink  # noqa: E402
+from ctrl import HostCaptureSink  # noqa: E402
 
 
 def rumble_payload() -> bytes:

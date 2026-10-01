@@ -75,16 +75,11 @@ typedef enum {
 typedef enum {
   /** 每颗马达一个强度字节，按 rumble_max 缩放（PS、Xbox、XInput 都走这条）。 */
   PAD_RUMBLE_SCALAR = 0,
-  /** Switch 一代：每侧 4 字节，高频与低频各带频率与振幅，直接吃主机的
-     *  LRA 波形（频率与振幅各自编码，见 docs/controller-ns1.md）。 */
+  /** Switch 一代：每侧 4 字节，高频与低频各带频率与振幅，直接接收 LRA 波形。 */
   PAD_RUMBLE_NS1_WAVE,
 } pad_rumble_style_t;
 
-/**
- * HD 触觉波形映射规则（布局行声明，映射在布局内完成）：NS 的震动是波形描述
- * （每侧最多 3 个时序子帧），按这份规则重整为目标设备的 PCM；频率已解成 Hz，
- * 落地时夹进各带的 [min, max]，0 回落缺省。完整规则与承载通路见 docs/controller-ps.md。
- */
+/** HD 触觉波形映射规则：将主机振动波形重整为目标设备的 PCM 序列。 */
 typedef struct {
   uint8_t ops;       /**< 参与合成的时序子帧数上限（NS2 波形规则为 3）；0 = 无 HD 通路。 */
   uint16_t rate_hz;  /**< 承载 PCM 的采样率（USB UAC 为 48000；蓝牙私有流 3000）。 */
@@ -159,8 +154,7 @@ typedef struct {
      *  字段偏移从报文体首字节起算，编码结果原样写 OUT 端点。 */
   bool no_report_id;
   uint8_t presets[PAD_OUT_PRESET_MAX][2];
-  /** 音频触觉让位期间的预置字节（与 presets 同格式；首槽偏移为 0 表示未声明，回落 presets）。
-     *  音频接手时写回的报告只该带玩家灯，位段语义见 docs/controller-ps.md。 */
+  /** 音频触觉让位期间的预置字节（首槽偏移为 0 表示未声明，回落 presets）。 */
   uint8_t quiet_presets[PAD_OUT_PRESET_MAX][2];
   uint8_t rumble_off[PAD_TRIGGER_COUNT];
   uint8_t rumble_max[PAD_TRIGGER_COUNT];
@@ -185,13 +179,8 @@ typedef struct {
 } pad_output_layout_t;
 
 /**
- * 家族布局表的一行：按（家族, Report ID, 连接方式, PID, 报告长度）定位字段偏移，
- * 偏移一律从报告首字节起算（含 Report ID）。同一组合下多个型号报同一 Report ID 时按
- * PID 分行，布局相同的多个 PID 写在同一行，pids 为空表示该组合共用这行；
- * 报告未带 PID 时取最先匹配的行，因此限定长度的行排在通用的行前面。
- * 各系列的行放在 pad/layouts/ 下，一族一个文件，加一个系列再加一行登记。
- * 字段偏移的来源与核对状态见 docs/controller-xbox.md / controller-xinput.md /
- * controller-ns1.md / controller-ps.md。
+ * 家族布局表：按家族、连接方式与 PID 匹配字段偏移与映射规则。
+ * 各输入设备规范与核对状态见 docs/controller-*.md。
  */
 typedef struct {
   pad_family_t family;

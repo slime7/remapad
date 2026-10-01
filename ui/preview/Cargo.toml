@@ -1,0 +1,38 @@
+[package]
+name = "remapad-ui-wasm"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+# 浏览器预览与端到端用例的界面入口：把 ui/preview/wasm.slint（预览核心 preview-core.slint 的窗口壳）编成
+# wasm32，挂在 Slint 的 winit web 后端上；对 JS 只暴露启动、动作注入、模拟状态读写与快照。
+# 构建口径（风格 / 字号表 / 字体）与固件组件、宿主用例共用 build-support；构建与运行见 ui/README.md。
+
+[lints]
+workspace = true
+
+[lib]
+name = "remapad_ui_wasm"
+crate-type = ["cdylib"]
+
+[dependencies]
+# 与固件、宿主同一套语言口径；web 目标走 winit 后端 + 软件渲染器（出图到 canvas 2D）。
+slint = { version = "1.18", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-software",
+] }
+# 直接依赖 winit 后端只为开 with_spawn_event_loop：web 上必须走 spawn 通路，
+# run() 的异常控制流会在启动栈里触发 winit runner 的重入 panic。
+i-slint-backend-winit = { version = "1.18", default-features = false }
+wasm-bindgen = "0.2"
+# 快照与状态补丁经 serde 直接换成 JS 对象，e2e 用例不解析字符串。
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+# wasm 里 panic 默认静默；挂上 hook 让错误落到浏览器控制台，e2e 失败才看得到原因。
+console_error_panic_hook = "0.1"
+
+[build-dependencies]
+build-support = { path = "../build-support" }

@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import link  # noqa: E402
-import remapadctl  # noqa: E402
+import ctrl  # noqa: E402
 
 
 def make_dump() -> bytes:
@@ -28,7 +28,7 @@ class FakeLink:
         self.written += data
 
 
-class RecordingReporter(remapadctl.Reporter):
+class RecordingReporter(ctrl.Reporter):
     def __init__(self) -> None:
         self.lines: list[str] = []
         self.errors: list[str] = []
@@ -91,27 +91,27 @@ class LoadAmiiboTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "Alm.bin"
             path.write_bytes(b"\x00" * 512)
-            with self.assertRaises(remapadctl.AmiiboError):
-                remapadctl.load_amiibo(path)
+            with self.assertRaises(ctrl.AmiiboError):
+                ctrl.load_amiibo(path)
 
     def test_accepts_dump_with_signature(self):
         # 572 字节（镜像 + 厂商签名）原样上传：签名段进设备读缓冲头区。
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "Bokoblin.bin"
             path.write_bytes(make_dump_with_sig())
-            name, data = remapadctl.load_amiibo(path)
+            name, data = ctrl.load_amiibo(path)
             self.assertEqual(name, "Bokoblin")
             self.assertEqual(data, make_dump_with_sig())
 
     def test_rejects_missing_file(self):
-        with self.assertRaises(remapadctl.AmiiboError):
-            remapadctl.load_amiibo(Path("Z:/definitely/not/here.bin"))
+        with self.assertRaises(ctrl.AmiiboError):
+            ctrl.load_amiibo(Path("Z:/definitely/not/here.bin"))
 
     def test_name_comes_from_stem_and_stays_within_limit(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "Samus_Aran.bin"
             path.write_bytes(make_dump())
-            name, data = remapadctl.load_amiibo(path)
+            name, data = ctrl.load_amiibo(path)
             self.assertEqual(name, "Samus_Aran")
             self.assertEqual(data, make_dump())
 
@@ -119,7 +119,7 @@ class LoadAmiiboTest(unittest.TestCase):
             long_name = "火" * 20
             path = Path(tmp) / f"{long_name}.bin"
             path.write_bytes(make_dump())
-            name, _data = remapadctl.load_amiibo(path)
+            name, _data = ctrl.load_amiibo(path)
             self.assertLessEqual(len(name.encode("utf-8")), link.AMIIBO_NAME_MAX)
             self.assertEqual(name, "火" * 10)
 
@@ -128,7 +128,7 @@ class AmiiboJobTest(unittest.TestCase):
     def setUp(self) -> None:
         self.link = FakeLink()
         self.reporter = RecordingReporter()
-        self.job = remapadctl.AmiiboJob("Alm", make_dump(), self.link.write, self.reporter)
+        self.job = ctrl.AmiiboJob("Alm", make_dump(), self.link.write, self.reporter)
 
     def frames(self):
         frames, _text = link.FrameDecoder().feed(self.link.written)
@@ -152,7 +152,7 @@ class AmiiboJobTest(unittest.TestCase):
         self.assertEqual(frames[0][0], link.TYPE_AMIIBO_BEGIN)
         self.assertEqual(frames[0][3], link.amiibo_begin_payload("Alm", 540))
 
-        self.ack(remapadctl.AMIIBO_STATE_RECEIVING, 0, 0)
+        self.ack(ctrl.AMIIBO_STATE_RECEIVING, 0, 0)
         frames = self.frames()
         data_frames = [item for item in frames if item[0] == link.TYPE_AMIIBO_DATA]
         self.assertEqual([item[3][:2] for item in data_frames],
@@ -164,21 +164,21 @@ class AmiiboJobTest(unittest.TestCase):
 
         # 中途的 ACK 不触发重发（三帧已经全在途）。
         self.link.written = b""
-        self.ack(remapadctl.AMIIBO_STATE_RECEIVING, 0, 200)
+        self.ack(ctrl.AMIIBO_STATE_RECEIVING, 0, 200)
         self.assertEqual([item[0] for item in self.frames()], [])
 
         # 收满即发 END；设备回 DONE 后任务收口并带出槽位号。
-        self.ack(remapadctl.AMIIBO_STATE_RECEIVING, 0, 540)
+        self.ack(ctrl.AMIIBO_STATE_RECEIVING, 0, 540)
         frames = self.frames()
         self.assertEqual([item[0] for item in frames], [link.TYPE_AMIIBO_END])
-        self.ack(remapadctl.AMIIBO_STATE_DONE, 0, 540, slot=2)
+        self.ack(ctrl.AMIIBO_STATE_DONE, 0, 540, slot=2)
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 0)
         self.assertIn("槽位 2", " ".join(self.reporter.lines))
 
     def test_timeout_resends_from_last_confirmed_byte(self):
         self.job.start(0.0)
-        self.ack(remapadctl.AMIIBO_STATE_RECEIVING, 0, 0)
+        self.ack(ctrl.AMIIBO_STATE_RECEIVING, 0, 0)
         sent_all = len(self.frames())
 
         self.job.received = 200
@@ -190,16 +190,16 @@ class AmiiboJobTest(unittest.TestCase):
 
     def test_begin_refusal_fails_the_job(self):
         self.job.start(0.0)
-        self.ack(remapadctl.AMIIBO_STATE_FAILED, link.AMIIBO_CODE_BAD_HEADER, 0)
+        self.ack(ctrl.AMIIBO_STATE_FAILED, link.AMIIBO_CODE_BAD_HEADER, 0)
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 1)
         self.assertTrue(self.reporter.errors)
 
     def test_store_failure_at_end_fails_the_job(self):
         self.job.start(0.0)
-        self.ack(remapadctl.AMIIBO_STATE_RECEIVING, 0, 0)
-        self.ack(remapadctl.AMIIBO_STATE_RECEIVING, 0, 540)
-        self.ack(remapadctl.AMIIBO_STATE_FAILED, link.AMIIBO_CODE_STORE_ERROR, 540)
+        self.ack(ctrl.AMIIBO_STATE_RECEIVING, 0, 0)
+        self.ack(ctrl.AMIIBO_STATE_RECEIVING, 0, 540)
+        self.ack(ctrl.AMIIBO_STATE_FAILED, link.AMIIBO_CODE_STORE_ERROR, 540)
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 1)
 

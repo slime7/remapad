@@ -10,12 +10,6 @@ mod device {
 }
 pub use device::*;
 
-/// 预览窗：ui/preview.slint 的生成代码（设备画面 + 控制条，见该文件头部说明）。
-mod preview {
-  include!(concat!(env!("OUT_DIR"), "/preview.rs"));
-}
-pub use preview::PreviewApp;
-
 pub use i_slint_backend_testing::{ElementHandle, ElementQuery};
 pub use slint::platform::{PointerEventButton, WindowEvent};
 pub use slint::{ComponentHandle, LogicalPosition, PhysicalSize, Rgba8Pixel, SharedPixelBuffer};
@@ -23,9 +17,6 @@ pub use slint::{ComponentHandle, LogicalPosition, PhysicalSize, Rgba8Pixel, Shar
 /// 面板尺寸（逻辑像素）：与硬件视口一致。
 pub const SCREEN_WIDTH: u32 = 240;
 pub const SCREEN_HEIGHT: u32 = 280;
-/// 预览窗尺寸：设备画面（240 × 280）加下方控制条（与 ui/preview.slint 的窗口同高）。
-pub const PREVIEW_WIDTH: u32 = 240;
-pub const PREVIEW_HEIGHT: u32 = 600;
 
 /// 区域内算作墨迹的判据：与底色每通道的差都超过这个值。
 const INK_TOLERANCE: u8 = 32;
@@ -208,17 +199,6 @@ pub fn new_app() -> App {
   app.show().unwrap();
   app.window().set_size(PhysicalSize::new(SCREEN_WIDTH, SCREEN_HEIGHT));
   app
-}
-
-/// 建 PC 预览窗：上半是设备画面，下半是控制条；动作由 PreviewApp 自己结算（见 ui/preview.slint）。
-pub fn new_preview() -> PreviewApp {
-  init_backend();
-  let preview = PreviewApp::new().unwrap();
-  preview.show().unwrap();
-  preview
-    .window()
-    .set_size(PhysicalSize::new(PREVIEW_WIDTH, PREVIEW_HEIGHT));
-  preview
 }
 
 /// 按限定 id 取元素，id 写法是「组件名::id」，例如 BottomBar::battery-text。

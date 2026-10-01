@@ -1,5 +1,4 @@
-//! C ABI 类型：与 include/slint_ui.h 一一对应。
-//! 布局断言按 xtensa（32 位）手算的偏移核对，改头文件里的字段顺序会在这里编译失败。
+//! C ABI 类型定义与内存布局映射，与 include/slint_ui.h 保持一致。
 
 use core::ffi::{c_char, c_void};
 

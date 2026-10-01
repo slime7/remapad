@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Remapad 连接控制台：pc/remapadctl.py 会话的图形界面入口。
+"""Remapad 连接控制台：pc/ctrl.py 会话的图形界面入口。
 
 窗口只负责四件事：选串口连上设备、把会话输出显示出来、把按钮与输入框里的命令送进
 同一个会话队列、把结构化事件（截图落盘、升级进度、链路断开）反映到界面上。
-转发、截图、升级与命令处理的实现都在 remapadctl.py 与 link.py 里，界面不复制任何
+转发、截图、升级与命令处理的实现都在 ctrl.py 与 link.py 里，界面不复制任何
 链路或协议逻辑；串口仍然只有一个持有者，因此界面与命令行不要同时连同一个口。
 
 连接走两条路：串口（工具栏选 COM 口）或网络（工具栏「网络」栏填 设备IP:端口，走
@@ -14,7 +14,7 @@ WiFi 的 UDP 调试通道——同一套桥接帧与 CLI，手柄转发照常；
 页面按用途分四页：**会话**放转发开关、输入手柄与链路动作，**设置**把设备屏幕上的可改项
 （亮度与息屏、手柄配色、DS4/DS5 行为、电源、设备信息）搬到 PC，没有屏幕也能改；
 **命令**是调试口，常用命令按分组列成填词按钮（点了只填进输入框，回车才发），
-**升级**推固件镜像。设置页的控件值一律来自固件回读行（remapadctl.parse_device_reply），
+**升级**推固件镜像。设置页的控件值一律来自固件回读行（ctrl.parse_device_reply），
 设备是唯一事实源，界面不自己记状态。
 
 用法（在仓库根执行，仅 Windows）：
@@ -38,7 +38,7 @@ import tkinter
 from tkinter import filedialog, messagebox
 
 import link
-import remapadctl
+import ctrl
 
 # 仓库统一 UTF-8：界面里的中文与导出的日志都按这个编码走。
 for _stream in (sys.stdout, sys.stderr):
@@ -60,7 +60,7 @@ JOIN_TIMEOUT_S = 2.0
 #: 工具条里手柄摘要的显示上限：完整描述留给「会话」页的下拉（长名字会顶掉工具条）。
 PAD_SUMMARY_CHARS = 26
 #: 升级镜像默认路径：与命令行共用同一份（按脚本位置解析，不受启动目录影响）。
-DEFAULT_IMAGE = remapadctl.DEFAULT_IMAGE
+DEFAULT_IMAGE = ctrl.DEFAULT_IMAGE
 
 #: 状态灯文案与颜色：未连接 / 正在开关 / 已连接 / 链路断开。
 STATE_STYLE = {
@@ -141,7 +141,7 @@ IMAGE_TEXT = {"confirmed": "已确认", "pending-verify": "待验证"}
 ROLE_TEXT = {"device": "串口", "host": "USB 主机"}
 
 
-class QueueReporter(remapadctl.Reporter):
+class QueueReporter(ctrl.Reporter):
     """会话输出 → 队列：工作线程只放记录，控件一律由 Tk 主线程碰。"""
 
     def __init__(self, sink: "queue.Queue[dict]") -> None:
@@ -278,7 +278,7 @@ class ConsoleWindow(ctk.CTk):
         self.font_log = ctk.CTkFont(family=FONT_FAMILY, size=12)
 
         # 会话参数：默认值全部来自命令行入口，界面只覆盖串口与手柄两项。
-        self.args = remapadctl.parse_args([])
+        self.args = ctrl.parse_args([])
         self.args.image = DEFAULT_IMAGE
 
         self.records: queue.Queue = queue.Queue()
@@ -287,7 +287,7 @@ class ConsoleWindow(ctk.CTk):
         self.hid = None
         self.hid_problem = ""
         self.pad_entries: list[dict] = []
-        self.session: remapadctl.Session | None = None
+        self.session: ctrl.Session | None = None
         self.worker: threading.Thread | None = None
         self.port_link: link.SerialLink | link.UdpLink | None = None
         #: 网络会话的设备地址（None = 当前是串口会话）。
@@ -801,9 +801,9 @@ class ConsoleWindow(ctk.CTk):
         """列候选输入手柄：与命令行 --list 用的是同一份枚举。"""
         if self.hid is None:
             try:
-                self.hid = remapadctl.load_hid()
+                self.hid = ctrl.load_hid()
                 self.hid_problem = ""
-            except remapadctl.HidUnavailable as exc:
+            except ctrl.HidUnavailable as exc:
                 self.hid_problem = str(exc)
                 self._append_text(self.hid_problem, tag="error")
                 self._append_text("手柄转发相关控件不可用，串口命令与截图照常")
@@ -812,12 +812,12 @@ class ConsoleWindow(ctk.CTk):
                 self._apply_state()
                 return
         try:
-            candidates = remapadctl.list_candidates(self.hid)
+            candidates = ctrl.list_candidates(self.hid)
         except Exception as exc:  # hidapi 枚举硬件时可能抛任意 OSError
             self._append_text(f"枚举手柄失败：{exc}", tag="error")
             return
         self.pad_entries = candidates
-        values = [remapadctl.describe(info) for info in candidates] or ["未发现手柄"]
+        values = [ctrl.describe(info) for info in candidates] or ["未发现手柄"]
         current = self.pad_box.get()
         self.pad_box.configure(values=values)
         # 先把控件状态摆好再写文本：disabled 状态下 CustomTkinter 的下拉写不进内容。
@@ -831,7 +831,7 @@ class ConsoleWindow(ctk.CTk):
             self._append_text(self.hid_problem or "hidapi 不可用", tag="error")
             return
         try:
-            candidates = remapadctl.list_candidates(self.hid)
+            candidates = ctrl.list_candidates(self.hid)
         except Exception as exc:
             self._append_text(f"枚举手柄失败：{exc}", tag="error")
             return
@@ -839,7 +839,7 @@ class ConsoleWindow(ctk.CTk):
             self._append_text("没有找到手柄接口")
             return
         for info in candidates:
-            self._append_text(remapadctl.describe(info))
+            self._append_text(ctrl.describe(info))
 
     # --- 连接与断开 ------------------------------------------------
 
@@ -905,7 +905,7 @@ class ConsoleWindow(ctk.CTk):
     def _start_session(self, conn: link.SerialLink | link.UdpLink, description: str) -> None:
         """两种传输共用的会话装配：先读一遍设置（含 netlog 状态与已存 WiFi 凭据）。"""
         self.args.pad_path = self.selected_pad_path()
-        session = remapadctl.Session(self.args, self.hid, conn, reporter=self.reporter)
+        session = ctrl.Session(self.args, self.hid, conn, reporter=self.reporter)
         for command in SETTINGS_READ_COMMANDS:
             session.commands.put(command)
         if isinstance(conn, link.UdpLink):
@@ -932,7 +932,7 @@ class ConsoleWindow(ctk.CTk):
         self._set_state("connecting", "正在断开")
         session.stop = True
 
-    def _run_session(self, session: remapadctl.Session, ser: link.SerialLink) -> None:
+    def _run_session(self, session: ctrl.Session, ser: link.SerialLink) -> None:
         """工作线程：会话主循环 + 收尾（发 DETACH、关端口、报结束）。"""
         code = 1
         try:
@@ -965,7 +965,7 @@ class ConsoleWindow(ctk.CTk):
 
     def _wait_device_back(self) -> None:
         """升级后的等待：与命令行 --wait 同一实现，成功后请求界面重连。"""
-        code = remapadctl.wait_for_version(self.args.port, self.args.baud, self.reporter)
+        code = ctrl.wait_for_version(self.args.port, self.args.baud, self.reporter)
         if code == 0:
             self.records.put({"kind": "event", "name": "device_back"})
 
@@ -975,7 +975,7 @@ class ConsoleWindow(ctk.CTk):
         """下拉里选中的手柄对应的 HID 接口路径；未选中返回 None（由固件/工具挑第一只）。"""
         text = self.pad_box.get()
         for info in self.pad_entries:
-            if remapadctl.describe(info) == text:
+            if ctrl.describe(info) == text:
                 return info["path"]
         return None
 
@@ -1089,7 +1089,7 @@ class ConsoleWindow(ctk.CTk):
 
     def _absorb_reply(self, text: str) -> None:
         """设备回读行 → 设置控件：固件是唯一事实源，界面只跟着回读走。"""
-        parsed = remapadctl.parse_device_reply(text)
+        parsed = ctrl.parse_device_reply(text)
         if parsed is None:
             return
         channel, fields = parsed
@@ -1134,8 +1134,8 @@ class ConsoleWindow(ctk.CTk):
         """本地校验镜像：与 --dry-run 同一份检查，不接设备。"""
         path = Path(self.image_var.get().strip())
         try:
-            image, version = remapadctl.load_image(path)
-        except remapadctl.ImageError as exc:
+            image, version = ctrl.load_image(path)
+        except ctrl.ImageError as exc:
             self.last_error = str(exc)
             self._append_text(str(exc), tag="error")
             self.progress_label.configure(text="镜像不合法")
@@ -1293,7 +1293,7 @@ class ConsoleWindow(ctk.CTk):
         session = self.session
         parts = [self.state_text]
         if session is not None:
-            pad = remapadctl.describe(session.pad_info) if session.pad_info else "未接入"
+            pad = ctrl.describe(session.pad_info) if session.pad_info else "未接入"
             self.pad_summary.configure(text=f"手柄：{short_pad_name(pad)}")
             self.counters_label.configure(
                 text=(f"转发 {session.reports} ｜ 设备帧 {session.frames}"

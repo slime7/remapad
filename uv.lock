@@ -313,6 +313,9 @@ requires-dist = [
     { name = "sounddevice", specifier = ">=0.4.6" },
 ]
 
+[package.metadata.requires-dev]
+dev = []
+
 [[package]]
 name = "sounddevice"
 version = "0.5.6"

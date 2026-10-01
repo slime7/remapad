@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import remapadctl  # noqa: E402  （先把 pc/ 放进来再导入）
+import ctrl  # noqa: E402  （先把 pc/ 放进来再导入）
 import gui  # noqa: E402
 
 # 固件 cli_status 的一行回读：pad 字段带空格（输入设备的型号描述）。
@@ -22,40 +22,40 @@ STATUS_LINE = ("state pairing=idle role=device backlight=60 screen=1 uptime=1234
 
 class DeviceReplyTest(unittest.TestCase):
     def test_backlight_reply_carries_percent(self):
-        self.assertEqual(remapadctl.parse_device_reply("backlight 60"),
+        self.assertEqual(ctrl.parse_device_reply("backlight 60"),
                          ("backlight", {"light": 60}))
 
     def test_backlight_reply_rejects_junk(self):
         for line in ("err backlight 0-100", "backlight 101", "backlight"):
-            self.assertIsNone(remapadctl.parse_device_reply(line), line)
+            self.assertIsNone(ctrl.parse_device_reply(line), line)
 
     def test_screen_reply_maps_on_and_off(self):
-        self.assertEqual(remapadctl.parse_device_reply("screen on"),
+        self.assertEqual(ctrl.parse_device_reply("screen on"),
                          ("screen", {"screen_on": True}))
-        self.assertEqual(remapadctl.parse_device_reply("screen off"),
+        self.assertEqual(ctrl.parse_device_reply("screen off"),
                          ("screen", {"screen_on": False}))
-        self.assertIsNone(remapadctl.parse_device_reply("err usage: screen [on|off]"))
+        self.assertIsNone(ctrl.parse_device_reply("err usage: screen [on|off]"))
 
     def test_ctrl_reply_carries_the_four_color_segments(self):
-        channel, fields = remapadctl.parse_device_reply(
+        channel, fields = ctrl.parse_device_reply(
             "ok ctrl body=0x1e3b2a button=0xc8a24a accent=0xc8a24a grip=0x16301f")
         self.assertEqual(channel, "ctrl")
         self.assertEqual(fields, {"body": 0x1E3B2A, "button": 0xC8A24A,
                                   "accent": 0xC8A24A, "grip": 0x16301F})
 
     def test_ctrl_reply_needs_all_four_segments(self):
-        self.assertIsNone(remapadctl.parse_device_reply("ctrl body=0x232323"))
-        self.assertIsNone(remapadctl.parse_device_reply("err colors are 0xRRGGBB"))
+        self.assertIsNone(ctrl.parse_device_reply("ctrl body=0x232323"))
+        self.assertIsNone(ctrl.parse_device_reply("err colors are 0xRRGGBB"))
 
     def test_ds_reply_carries_both_switches(self):
         for line in ("ds touchpad=off capture=on",
                      "ds touchpad=off capture=on (persisted)"):
-            self.assertEqual(remapadctl.parse_device_reply(line),
+            self.assertEqual(ctrl.parse_device_reply(line),
                              ("ds", {"touchpad_plus_minus": False, "capture_key": True}), line)
-        self.assertIsNone(remapadctl.parse_device_reply("err usage: ds touchpad|capture [on|off]"))
+        self.assertIsNone(ctrl.parse_device_reply("err usage: ds touchpad|capture [on|off]"))
 
     def test_status_reply_carries_device_facts(self):
-        channel, fields = remapadctl.parse_device_reply(STATUS_LINE)
+        channel, fields = ctrl.parse_device_reply(STATUS_LINE)
         self.assertEqual(channel, "device")
         self.assertEqual(fields["firmware"], "v0.4.0-12-gabcdef")
         self.assertEqual(fields["partition"], "ota_0")
@@ -73,7 +73,7 @@ class DeviceReplyTest(unittest.TestCase):
         self.assertEqual(fields["pad"], "DualSense")
 
     def test_status_reply_from_an_older_firmware_keeps_free_only(self):
-        channel, fields = remapadctl.parse_device_reply(
+        channel, fields = ctrl.parse_device_reply(
             "state pairing=idle role=device backlight=60 screen=1 uptime=1234s "
             "heap=458752 batt=3971mV/85% chg=0 fw=v0.4.0-12-gabcdef part=ota_0 ota=idle")
         self.assertEqual(channel, "device")
@@ -81,7 +81,7 @@ class DeviceReplyTest(unittest.TestCase):
         self.assertNotIn("heap_total", fields)
 
     def test_version_reply_carries_image_state(self):
-        channel, fields = remapadctl.parse_device_reply(
+        channel, fields = ctrl.parse_device_reply(
             "fw=v0.4.0-12-gabcdef part=ota_1 image=pending-verify ota=idle")
         self.assertEqual(channel, "device")
         self.assertEqual(fields["partition"], "ota_1")
@@ -91,7 +91,7 @@ class DeviceReplyTest(unittest.TestCase):
         for line in ("", "   ", "ok key injected", "ok mem report queued (printed next frame)",
                      "I (1234) remapad_cli: cli ready (type help)",
                      "pad ui mode on (dpad moves, circle confirms)"):
-            self.assertIsNone(remapadctl.parse_device_reply(line), line)
+            self.assertIsNone(ctrl.parse_device_reply(line), line)
 
 
 class ColorInputTest(unittest.TestCase):

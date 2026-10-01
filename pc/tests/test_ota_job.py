@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import link  # noqa: E402
-import remapadctl  # noqa: E402
+import ctrl  # noqa: E402
 
 #: 1000 字节镜像 = 5 个数据帧，一窗（16 帧）装得下。
 IMAGE = bytes((index * 7) % 256 for index in range(1000))
@@ -27,7 +27,7 @@ class FakeLink:
         self.written += data
 
 
-class RecordingReporter(remapadctl.Reporter):
+class RecordingReporter(ctrl.Reporter):
     def __init__(self) -> None:
         self.lines: list[str] = []
         self.errors: list[str] = []
@@ -93,7 +93,7 @@ class OtaJobTest(unittest.TestCase):
     def setUp(self) -> None:
         self.link = FakeLink()
         self.reporter = RecordingReporter()
-        self.job = remapadctl.OtaJob(IMAGE, "v-test", self.link.write, self.reporter)
+        self.job = ctrl.OtaJob(IMAGE, "v-test", self.link.write, self.reporter)
 
     def frames(self):
         frames, _text = link.FrameDecoder().feed(self.link.written)
@@ -112,14 +112,14 @@ class OtaJobTest(unittest.TestCase):
         self.job.start(0.0)
         self.assertEqual(self.frame_types(), [link.TYPE_OTA_BEGIN])
         self.drop_written()
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0, version="old"))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0, version="old"))
         data = self.data_frames()
         self.assertEqual(len(data), 5)
         self.assertEqual(data[-1][1], link.OTA_SLOT_WINDOW_END)  # 末帧带窗口末标记
         self.drop_written()
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 5, 1000))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 5, 1000))
         self.assertEqual(self.frame_types(), [link.TYPE_OTA_END])
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_DONE, 0, 5, 1000))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_DONE, 0, 5, 1000))
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 0)
 
@@ -130,19 +130,19 @@ class OtaJobTest(unittest.TestCase):
         self.assertEqual(self.frames(), [])
         self.job.tick(2.5)  # BEGIN_RETRY_S 到：重发（设备端同尺寸幂等应答）
         self.assertEqual(self.frame_types(), [link.TYPE_OTA_BEGIN])
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
         self.assertEqual(len(self.data_frames()), 5)
 
     def test_begin_total_timeout_fails(self):
         self.job.start(0.0)
-        self.job.tick(remapadctl.OtaJob.BEGIN_ACK_TIMEOUT_S + 1.0)
+        self.job.tick(ctrl.OtaJob.BEGIN_ACK_TIMEOUT_S + 1.0)
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 1)
         self.assertTrue(self.reporter.errors)
 
     def test_window_loss_resends_whole_window_then_resumes(self):
         self.job.start(0.0)
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
         self.drop_written()
         self.job.deadline = 0.0  # 强制窗口应答超时
         self.job.tick(time.monotonic())
@@ -151,76 +151,76 @@ class OtaJobTest(unittest.TestCase):
         self.assertEqual(resent[0][3][:2], (0).to_bytes(2, "little"))
         # 设备只认到第 2 帧：ACK 的 next_seq 是续传起点
         self.drop_written()
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 2, 400))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 2, 400))
         resumed = self.data_frames()
         self.assertEqual(len(resumed), 3)
         self.assertEqual(resumed[0][3][:2], (2).to_bytes(2, "little"))
 
     def test_stale_ack_does_not_rollback_progress(self):
         self.job.start(0.0)
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
         self.drop_written()
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 2, 400))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 2, 400))
         self.assertEqual(self.job.confirmed, 400)
         self.assertEqual(len(self.data_frames()), 3)
         self.drop_written()
         # 迟到的旧应答（重复 BEGIN 的幂等应答 / 重发窗口的旧 ACK）：不回卷、不重发
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
         self.assertEqual(self.job.confirmed, 400)
         self.assertEqual(self.frames(), [])
         # 无进展的重复应答（设备写 flash 停顿触发的整窗重发，其序号错误应答）
         # 同样不触发窗口重发——否则与设备的限流应答互相放大。
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 3, 2, 400))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 3, 2, 400))
         self.assertEqual(self.frames(), [])
 
     def test_device_idle_timeout_restarts_from_scratch(self):
         self.job.start(0.0)
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 2, 400))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 2, 400))
         # 设备侧 5 秒空闲作废（FAILED + TIMEOUT）：自动重发 BEGIN、进度归零
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_FAILED, remapadctl.OTA_CODE_TIMEOUT, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_FAILED, ctrl.OTA_CODE_TIMEOUT, 0, 0))
         self.assertFalse(self.job.finished)
         self.assertEqual(self.job.phase, "begin")
         self.assertEqual(self.job.confirmed, 0)
         self.assertEqual(self.frame_types()[-1], link.TYPE_OTA_BEGIN)
         # 重来有上限：到次数后同样的超时改为终止
-        for _ in range(remapadctl.OtaJob.MAX_SESSION_RESTARTS):
-            self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
-            self.job.on_ack(make_ack(remapadctl.OTA_STATE_FAILED, remapadctl.OTA_CODE_TIMEOUT, 0, 0))
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_FAILED, remapadctl.OTA_CODE_TIMEOUT, 0, 0))
+        for _ in range(ctrl.OtaJob.MAX_SESSION_RESTARTS):
+            self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
+            self.job.on_ack(make_ack(ctrl.OTA_STATE_FAILED, ctrl.OTA_CODE_TIMEOUT, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_FAILED, ctrl.OTA_CODE_TIMEOUT, 0, 0))
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 1)
 
     def test_device_hard_failure_terminates(self):
         self.job.start(0.0)
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_FAILED, 4, 0, 0))  # FLASH_ERROR
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_FAILED, 4, 0, 0))  # FLASH_ERROR
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 1)
 
     def test_end_ignores_straggler_data_acks(self):
         """设备校验镜像期间，整窗重发的迟到序号错误应答不能误判成升级失败。"""
         self.job.start(0.0)
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 5, 1000))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 5, 1000))
         self.drop_written()
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 3, 5, 1000))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 3, 5, 1000))
         self.assertFalse(self.job.finished)  # 迟到应答被忽略，仍在等 DONE
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_DONE, 0, 5, 1000))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_DONE, 0, 5, 1000))
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 0)
 
     def test_end_retries_until_done_ack(self):
         self.job.start(0.0)
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 5, 1000))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 5, 1000))
         self.assertEqual(self.frame_types()[-1], link.TYPE_OTA_END)
         self.drop_written()
         self.job.retry_deadline = 0.0  # 强制 END 重发窗口到期（总窗未到）
         self.job.tick(time.monotonic() + 1)
         self.assertEqual(self.frame_types(), [link.TYPE_OTA_END])
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_DONE, 0, 5, 1000))
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_DONE, 0, 5, 1000))
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 0)
 
@@ -228,10 +228,10 @@ class OtaJobTest(unittest.TestCase):
         for lossy, expected in ((False, 1), (True, 0)):
             with self.subTest(lossy=lossy):
                 reporter = RecordingReporter()
-                job = remapadctl.OtaJob(IMAGE, "v-test", FakeLink().write, reporter, lossy=lossy)
+                job = ctrl.OtaJob(IMAGE, "v-test", FakeLink().write, reporter, lossy=lossy)
                 job.start(0.0)
-                job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 0, 0))
-                job.on_ack(make_ack(remapadctl.OTA_STATE_RECEIVING, 0, 5, 1000))
+                job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 0, 0))
+                job.on_ack(make_ack(ctrl.OTA_STATE_RECEIVING, 0, 5, 1000))
                 job.deadline = 0.0  # 强制 END 总窗超时（无任何应答）
                 job.tick(time.monotonic())
                 self.assertTrue(job.finished)
@@ -241,7 +241,7 @@ class OtaJobTest(unittest.TestCase):
 
     def test_begin_refusal_fails_the_job(self):
         self.job.start(0.0)
-        self.job.on_ack(make_ack(remapadctl.OTA_STATE_FAILED, 1, 0, 0))  # BUSY
+        self.job.on_ack(make_ack(ctrl.OTA_STATE_FAILED, 1, 0, 0))  # BUSY
         self.assertTrue(self.job.finished)
         self.assertEqual(self.job.exit_code, 1)
 

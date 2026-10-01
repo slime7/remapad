@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import remapadctl  # noqa: E402  （先把 pc/ 放进来再导入）
+import ctrl  # noqa: E402  （先把 pc/ 放进来再导入）
 
 
 def feedback_payload(strength: int) -> bytes:
@@ -18,7 +18,7 @@ def feedback_payload(strength: int) -> bytes:
 
 class FeedbackThrottleTest(unittest.TestCase):
     def test_first_frame_passes_and_burst_merges_with_count(self):
-        gate = remapadctl.FeedbackThrottle(window_s=1.0)
+        gate = ctrl.FeedbackThrottle(window_s=1.0)
         first = gate.feed(feedback_payload(15), now=100.0)
         self.assertIn("强度 15/15", first)
         self.assertNotIn("合并", first)
@@ -34,7 +34,7 @@ class FeedbackThrottleTest(unittest.TestCase):
         self.assertIn("强度 9/9", merged)
 
     def test_merged_counter_resets_after_each_release(self):
-        gate = remapadctl.FeedbackThrottle(window_s=1.0)
+        gate = ctrl.FeedbackThrottle(window_s=1.0)
         gate.feed(feedback_payload(15), now=0.0)
         gate.feed(feedback_payload(9), now=0.1)
         gate.feed(feedback_payload(9), now=0.2)
@@ -45,7 +45,7 @@ class FeedbackThrottleTest(unittest.TestCase):
         self.assertNotIn("合并", again)
 
     def test_payload_format_includes_high_band(self):
-        line = remapadctl.format_feedback(feedback_payload(9))
+        line = ctrl.format_feedback(feedback_payload(9))
         self.assertIn("强度 9/9", line)
         self.assertIn("高频 9/9", line)
 

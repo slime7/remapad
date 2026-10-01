@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import link  # noqa: E402  （先把 pc/ 放进来再导入）
-import remapadctl  # noqa: E402
+import ctrl  # noqa: E402
 import gui  # noqa: E402  （界面侧的队列接收器在这里，导入不会建窗口）
 
 
@@ -32,15 +32,15 @@ class FakeLink:
 
 
 def session(reporter=None):
-    args = remapadctl.parse_args([])
+    args = ctrl.parse_args([])
     fake = FakeLink()
-    return remapadctl.Session(args, None, fake, reporter=reporter), fake
+    return ctrl.Session(args, None, fake, reporter=reporter), fake
 
 
 class ConsoleReporterTest(unittest.TestCase):
     def test_line_goes_to_stdout_and_error_to_stderr(self):
         out, err = io.StringIO(), io.StringIO()
-        reporter = remapadctl.ConsoleReporter()
+        reporter = ctrl.ConsoleReporter()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             reporter.line("普通行")
             reporter.error("错误行")
@@ -50,7 +50,7 @@ class ConsoleReporterTest(unittest.TestCase):
 
     def test_line_masks_wifi_passwords(self):
         out = io.StringIO()
-        reporter = remapadctl.ConsoleReporter()
+        reporter = ctrl.ConsoleReporter()
         with contextlib.redirect_stdout(out):
             reporter.line("ok netlog cred ssid=slime_nest pass=hunter2")
         self.assertEqual(out.getvalue(), "ok netlog cred ssid=slime_nest pass=***\n")
@@ -165,11 +165,11 @@ class LocalCommandTest(unittest.TestCase):
 
     def test_default_image_path_comes_from_the_cli_defaults(self):
         session_obj, _link = session()
-        self.assertEqual(session_obj.args.image, remapadctl.DEFAULT_IMAGE)
+        self.assertEqual(session_obj.args.image, ctrl.DEFAULT_IMAGE)
 
     def test_bad_image_path_raises_instead_of_exiting(self):
         session_obj, _link = session()
-        with self.assertRaises(remapadctl.ImageError) as caught:
+        with self.assertRaises(ctrl.ImageError) as caught:
             # 镜像不合法时抛异常：命令行映射成退出码 2，界面把它标红，都不许直接结束进程。
             session_obj.run_local("ota Z:\\nope\\image.bin")
         self.assertIn("读不到镜像", str(caught.exception))

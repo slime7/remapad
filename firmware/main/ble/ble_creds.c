@@ -20,8 +20,7 @@ static const char *TAG = "remapad_blcred";
  * 每条 6B MAC + 16B LTK），各段顺排。v1 为单表（1B 条数 + 记录），仅读入
  * 迁移到 Pro 槽。 */
 #define CREDS_SLOT_LEN (1 + NS2_CREDS_MAX * (NS2_CREDS_MAC_LEN + NS2_CREDS_LTK_LEN))
-/** 落盘固定写满历史最长格式（三个身份段）：本设备只用第 0 段（Pro），余下补零。
- * 长度不变，新旧固件互相读回都不会把整张表当成损坏（读回按实际长度解析）。 */
+/** 凭据存储格式预留三段槽位；当前仅使用第 0 段（Pro），余下补零。 */
 #define CREDS_SLOTS_STORED 3
 #define CREDS_BLOB_LEN (CREDS_SLOTS_STORED * CREDS_SLOT_LEN)
 #define CREDS_HOST_LEN (CREDS_SLOTS_STORED * NS2_CREDS_MAC_LEN)
@@ -117,8 +116,7 @@ static void serialize_locked(uint8_t blob[CREDS_BLOB_LEN])
 static void load_slot_locked(ns2_identity_t identity, const uint8_t *slot)
 {
   size_t count = slot[0] > NS2_CREDS_MAX ? NS2_CREDS_MAX : slot[0];
-  /* 历史写入曾出现「计数 4、只有前 2 条有内容」的表：尾部全零记录不是有效
-     * 凭证，按计数取最近一条会拿到全零主机地址，回连/唤醒广播因此作废。 */
+  /* 剔除末尾全零的无效凭证条目。 */
   while (count > 0) {
     const uint8_t *rec = &slot[1 + (count - 1) * (NS2_CREDS_MAC_LEN + NS2_CREDS_LTK_LEN)];
     bool all_zero = true;
@@ -169,7 +167,7 @@ esp_err_t ble_creds_init(void)
   if (err != ESP_OK) {
     return err;
   }
-  /* 缓冲区按历史最长格式开，读回时按实际长度只解析第一段（Pro 槽）。 */
+  /* 读回时按实际长度解析第一段（Pro 槽）。 */
   uint8_t blob[CREDS_BLOB_LEN_MAX];
   size_t len = sizeof(blob);
   const esp_err_t get = nvs_get_blob(handle, CREDS_KEY_V2, blob, &len);
@@ -198,7 +196,7 @@ esp_err_t ble_creds_init(void)
   /* 连接时记录的主机地址优先于凭证推断值：它一定是主机当前在用的地址。 */
   uint8_t host[CREDS_HOST_LEN];
   len = sizeof(host);
-  /* 长度下限只按第一条记录算：盘上可能是历史上的短格式，前 6 字节总是 Pro 的。 */
+  /* 读取有效的主机 MAC（Pro 槽）。 */
   if (nvs_get_blob(handle, CREDS_KEY_HOST, host, &len) == ESP_OK && len >= NS2_CREDS_MAC_LEN) {
     memcpy(s_creds.host_mac[NS2_ID_PRO], host, NS2_CREDS_MAC_LEN);
     s_creds.host_valid[NS2_ID_PRO] = true;
@@ -300,7 +298,7 @@ void ble_creds_note_host_mac(ns2_identity_t identity, const uint8_t mac[NS2_CRED
     memcpy(s_creds.host_mac[identity], mac, NS2_CREDS_MAC_LEN);
     s_creds.host_valid[identity] = true;
     uint8_t host[CREDS_HOST_LEN];
-    /* 盘上按历史长度（三身份段）写；本设备只有第 0 段有效，其余补零。 */
+    /* 固定写满三段长度，仅第 0 段填入有效地址。 */
     memset(host, 0, sizeof(host));
     memcpy(host, s_creds.host_mac[identity], NS2_CREDS_MAC_LEN);
     xSemaphoreGive(s_lock);

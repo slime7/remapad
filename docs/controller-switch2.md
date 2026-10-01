@@ -1,9 +1,6 @@
 # Switch 2 手柄通信协议与数据交互技术规范
 
-本规范整理自开源逆向工程项目与协议分析资料，记录任天堂 Switch 2 官方手柄（Joy-Con 2、Pro Controller 2 与 NSO GameCube 手柄）
-在 Bluetooth LE 与 USB 模式下的广播、GATT 属性表、HID 报告、自定义配对、指令集、存储布局与 NFC 通路。
-本文只记协议事实与主机侧对账结论；本工程的结构与实现见 [ARCHITECTURE.md](ARCHITECTURE.md) 与 [ABSTRACTIONS.md](ABSTRACTIONS.md)，
-PS 家族手柄的数据见 [controller-ps.md](controller-ps.md)。逆向结论必须用真实设备抓包与互操作测试验证后才能作为实现依据。
+本规范记录 Switch 2 官方手柄在 Bluetooth LE 与 USB 模式下的广播、GATT 属性表、HID 报告、自定义配对、指令集、存储布局与 NFC 协议规范。
 
 ---
 
@@ -843,32 +840,9 @@ flowchart TB
     Search -.->|"未配对身份"| Discovery["发现广播：等主机搜索与配对"]
 ```
 
-窗口内已配对身份按上表分时发唤醒与回连形态，未配对身份一律发发现广播等主机搜索；
-设备不被请求时不发信号——常驻广播会让模拟手柄始终占用 1P，用户没有把它换到 2P 的余地。
-静默（没有连接、没有窗口、不在配对流程）持续够久即关闭整个 BLE 栈：控制器关闭并反初始化，射频与 modem 断电，空闲不再发热；
-连接键、未连接时按 HOME、配对新主机都会重新起栈并广播，用户不必按第二次。
-
-**配对状态的注册判据**：主机的配对记录按控制器地址存（见「广播过滤与配对记录」），模拟设备的地址固定不变，对同一台主机按「配对 新主机」不会重走 0x15；
-主机自己换了随机地址再连回来时，对端地址也对不上旧凭证——只看「连接时地址命中凭证」会把正在正常收发的链路一直判成等待态（屏幕停在「配对中…」）。
-注册判据因此是三条任一：连接时地址命中凭证、配对握手走完、**主机在当前链路上启用特性（0x0C/0x04）**——只有真主机会发这条命令；
-「已订阅但没启用特性」不算注册（快捷回连正是这个形态）。
-
-**本工程只实现 Pro Controller 2 一种形态**：单身份、单连接、单广播实例，报告格式固定 `0x09`（真机 USB 模式为 `0x05`），PDU 形态默认 legacy。
-PDU 与广播形态的实机对账见「Bluetooth LE 广播帧规范」。
-JoyCon 形态在实机对账后移除，原因见下节；协议细节（专用通道 UUID、0x07 / 0x08 报文体、导轨键确认）留在「核心 GATT 服务映射表」/「专用输入报告」备查。
-
-**实机结论（主机 23.0.0 对账）：主机只接受 public 地址的广播，两只 Joy-Con 同时在线不可行。**
-广播载荷逐字节符合「Bluetooth LE 广播帧规范」时，随机地址在主机界面完全不可见，改用 public 地址后主机立即连接并跑完整初始化与 0x15 配对（见「广播过滤与配对记录」）。
-单只 Joy-Con 形态随后虽已配通（`0x0C/0x02` 掩码 `0x37`、初始化末段多 `0x13/0x01`、报文体 `0x07`、导轨键在按键位图第二字节的 bit7/bit6——见「核心指令集详解」与「专用输入报告」），
-产品面收敛为 Pro。
-顺带证实：已配对的手柄不需要停在握把页，开着连接窗口就会自己连回来（与 Pro 的回连行为一致）。
-
-**多路输出的硬限制是地址类型**：主机只接受 public 地址的广播，而一台控制器只有一个 public 地址，
-第二台「设备」无法在同一块板上各自寻址——一对 Joy-Con 必须两块板各扮一只。
-- 连接由用户发起：设备开机静默，按连接键（屏幕「连接」或 PWR 长按）才广播——已配对身份发回连形态、未配对身份进配对流程，主机的配对记录在首次连接握手时完成；
-  屏幕配对页用于观察状态、按连接键、配新主机与解除配对，主机的 Grip / 手柄顺序界面只用于调整顺序
-  （想把设备挪到 2P 就先按「断开」，让主机在顺序页把它当新连上的手柄重新分配序号）。
-  静默期间 BLE 栈整体关闭（控制器断电），因此静默时主机既看不到广播也连不上，只能由本机重新起栈后主动发信号。
+- **手柄形态**：模拟 Pro Controller 2 单身份，固定使用 Public MAC 地址，报告格式固定为 `0x09`，PDU 为 Legacy 模式。
+- **通信就绪判据**：连接建立后，以主机下发 0x0C/0x04 启用特性作为链路正式生效的判据。
+- **空闲省电**：广播窗口到期或长时间无连接即关闭 BLE 栈断电休眠，连接键/唤醒操作触发重新起栈。
 
 ---
 
@@ -938,22 +912,3 @@ sequenceDiagram
 - **MAC 地址一致性**：广播地址必须与配对存储区里的主机地址对应，否则主机不采纳这条广播。
 - **字节序反转**：配对数据（MAC、AES 挑战码、LTK）与广播里的主机 MAC 字段一律用**反向字节序**。
 - **GATT 特征值写类型**：Output Report 与 Command 写入都采用 `WRITE_WITHOUT_RESPONSE`，不需要 ATT 应答。
-
----
-
-## 资料来源与参考项目（References）
-
-本规范基于开源社区与安全研究人员对 Switch 2 硬件及通信协议的逆向分析成果整理而成，主要参考以下项目与研究资料：
-
-- [ndeadly/switch2_controller_research](https://github.com/ndeadly/switch2_controller_research)：
-  Switch 2 手柄蓝牙接口规范、GATT 属性表、HID 报告定义、命令集架构（包括 Command 0x01 NFC 及 Command 0x15 配对）、安全模式及 2MB Flash 存储布局的权威公开资料。
-- [alexvnesta/switch2controller](https://github.com/alexvnesta/switch2controller)：
-  Switch 2 休眠唤醒广播包（31 字节）逆向工程、ESP32 唤醒发射端实现、广播包第 16 字节状态标志位验证及 BlueRetro 桥接研究。
-- [tv/switch2-wake-up](https://github.com/tv/switch2-wake-up)：Switch 2 蓝牙低功耗（BLE）唤醒信标的首个开源 ESP32 与 Flipper Zero 实现。
-- [Minkelxy/xiaoai_switch2_wake_up](https://github.com/Minkelxy/xiaoai_switch2_wake_up)：
-  基于 ESP32 与巴法云实现的小爱同学语音唤醒 Switch 2 开源实现。
-- [darthcloud/BlueRetro](https://github.com/darthcloud/BlueRetro)：多平台经典蓝牙与 BLE 控制器蓝牙协议栈及手柄模拟核心架构。
-- [mfro/switch-controller-testing](https://github.com/mfro/switch-controller-testing)：
-  任天堂 Switch 手柄 HID 仿真与 SPI Flash 固件逆向反汇编分析。
-- [dekuNukem/Nintendo_Switch_Reverse_Engineering](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering)：
-  初代 Switch 手柄 HID 协议与基础硬件接口逆向分析。

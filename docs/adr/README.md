@@ -97,6 +97,7 @@
 | [0059](0059-no-usb-device-output.md) | active | 输出通路只保留 BLE，不实现 USB 有线手柄输出；延伸 0039 的边界，协议文档的 USB 形态规范仅作协议记录 |
 | [0060](0060-ota-dual-channel-unified.md) | active | OTA 升级统一为串口与 WiFi（netlog UDP）双通道：同一套协议帧、PC 状态机与固件会话核心，BEGIN/END 幂等加窗口重发兜住 UDP 丢包；截图与 amiibo 上传仍只走串口（ACK 回发口径随 0061 修订） |
 | [0061](0061-ota-ack-follows-ingress-channel.md) | active | OTA ACK 改为跟进帧通道单路回发（修订 0060 的双路回发）：从哪个口收升级帧就从哪个口应答，出口不在位丢弃由窗口重发兜住；配套 netlog 会话期关 WiFi 省电、PC 端窗口应答超时收紧 |
+| [0062](0062-wasm-ui-preview-and-playwright-e2e.md) | active | 屏幕 UI 的预览与回归统一到 WASM：存盘自动重编刷新的浏览器预览加 Playwright 端到端用例，模拟状态与结算收进 ui/preview/preview-core.slint，PC 交互预览（slint-viewer）退役 |
 
 ## 创建 ADR 脚本用法
 

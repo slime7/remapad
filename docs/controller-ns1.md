@@ -1,10 +1,6 @@
 # Switch 一代手柄数据规范（Pro Controller / Joy-Con）
 
-本规范记录 Switch 一代手柄（Pro Controller、Joy-Con L / R）的输入报告布局与输出报告（震动）数据，
-作为家族布局表（[pad/layouts/ns.c](../firmware/main/pad/layouts/ns.c) 的 NS1 行）与反馈编码的数据依据；
-NS2 主机协议见 [controller-switch2.md](controller-switch2.md)，Xbox 家族见 [controller-xbox.md](controller-xbox.md)，
-XInput 形态见 [controller-xinput.md](controller-xinput.md)，PS 家族见 [controller-ps.md](controller-ps.md)。
-字段偏移与编码规则取自公开的逆向工程资料，落地前用 `pc/remapadctl.py --dump` 抓原始报告核对，核对状态见文末。
+本规范记录 Switch 一代手柄（Pro Controller / Joy-Con）输入与输出报告格式。
 
 ## 型号与标识
 
@@ -126,22 +122,3 @@ flowchart LR
 
 协议没给频率时按该带缺省频率补足（低频 160Hz、高频 320Hz，取自静置形态），振幅为 0 的一侧
 整块回落成静置形态——手柄不会停在上一段震动上。
-
-## 核对状态与实测记录
-
-| 数据 | 状态 |
-| :--- | :--- |
-| `0x30` 的按键、12 位摇杆、电量与 6 轴偏移 | 取自公开的逆向工程资料，未实机核对 |
-| 6 轴样本的刻度（4096 计数/g、14247 计数每 1000 °/s） | 标称值取自 Linux `hid-nintendo.c` 的常量，未实机核对 |
-| `0x3F` 的按键分侧与摇杆槽位 | 左手柄与共用字节按资料登记；右手柄首字节按标准报文的右手柄表推断，待实机核对 |
-| `0x3F` 的报文长度与尾部区段（红外 / 磁力计） | 未登记；运动与电量都不解析 |
-| 震动编码（频率码、振幅码两段曲线、安全档 100） | 公式取自公开资料，落地值待实机与听感核对 |
-| 缺省频率（低频 160Hz、高频 320Hz） | 取自静置形态的公开说明 |
-| 玩家灯与控制灯 | 未登记 |
-
-## 参考资料
-
-- dekuNukem 的 Nintendo_Switch_Reverse_Engineering：`bluetooth_hid_notes.md`（`0x3F` 与
-  `0x30` 报文体、OUTPUT `0x10` 的形态、静置震动值）、`rumble_data_table.md`
-  （频率与振幅的编码公式、两张取值表与安全档说明）。
-- Linux 内核 `drivers/hid/hid-nintendo.c`：Joy-Con 的按键位定义、频率与振幅的查表实现。

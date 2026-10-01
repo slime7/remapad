@@ -2,7 +2,7 @@
 // 页面槽位顺序：亮度 / 手柄 / 配对 / 电源 / USB 模式 / DS 设置 / 系统信息 / 无线调试，
 // dev 构建在末位追加调试页；切页时整条带划过一整页，静止时两侧各露一条邻页花瓣边。
 // 所有状态由固件侧写入，动作经 action 回调交回固件。
-// 主体是 AppContent（设备与 PC 预览共用同一棵树），设备侧入口 App 只把它包进 240 × 280 窗口。
+// 主体是 AppContent（设备与 WASM 预览共用同一棵树），设备侧入口 App 只把它包进 240 × 280 窗口。
 
 import { Theme } from "theme.slint";
 import { BottomBar, ConfirmDialog, Drag, DragArea } from "components.slint";

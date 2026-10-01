@@ -1,0 +1,332 @@
+<!doctype html>
+<!-- Remapad 屏幕界面的浏览器预览页：
+     设备画面是 id 为 canvas 的画布（Slint 的 winit web 后端找它），240 × 280 与面板 1:1，
+     40px 圆角模拟屏幕物理圆角；外面 .bezel 是 8px 黑色玻璃边、48px 外框圆角。
+     控制台是预览之外的 HTML 面板，只发固件同名动作与写模拟状态，结算在 wasm 核心里。
+     宽屏时预览在左、控制台在右，窄屏时上下排。
+     remapad 对象把 wasm 接口挂到 window 上，控制台与端到端用例都从这里进出。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remapad UI 预览</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #060e1b;
+      }
+      body {
+        color: #9bacca;
+        font-family: system-ui, sans-serif;
+      }
+      .stage {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 32px;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 24px;
+      }
+      .bezel {
+        background: #000;
+        border-radius: 48px;
+        padding: 8px;
+        width: fit-content;
+      }
+      canvas#canvas {
+        display: block;
+        width: 240px;
+        height: 280px;
+        border-radius: 40px;
+        background: #000;
+      }
+      .console {
+        width: min(320px, calc(100vw - 48px));
+        box-sizing: border-box;
+        padding: 12px 16px 16px;
+        border: 1px solid #384962;
+        border-radius: 12px;
+      }
+      .console h2 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #d9e6ff;
+        text-align: center;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .row button {
+        flex: 1;
+        padding: 4px 0;
+        font-size: 12px;
+        color: #d9e6ff;
+        background: #15263e;
+        border: 1px solid #384962;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .row button.active {
+        background: #5476a8;
+      }
+      .readout {
+        margin-top: 12px;
+        font-size: 12px;
+      }
+      .log {
+        margin-top: 6px;
+        min-height: 2.6em;
+        font-size: 12px;
+        color: #d9e6ff;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <div class="bezel">
+        <canvas id="canvas" width="240" height="280"></canvas>
+      </div>
+      <section class="console" aria-label="预览控制台">
+        <h2>预览控制（不属于设备画面）</h2>
+        <div class="row">
+          <button id="btn-prev-page" title="上一页">‹ 上页</button>
+          <button id="btn-next-page" title="下一页">下页 ›</button>
+          <button id="btn-pad-active">手柄操控</button>
+        </div>
+        <div class="row">
+          <button id="btn-focus-down">焦点 −</button>
+          <button id="btn-focus-up">焦点 ＋</button>
+          <button id="btn-activate">确认键</button>
+        </div>
+        <div class="row">
+          <button id="btn-pairing-cycle">配对 +1</button>
+          <button id="btn-usb-role">USB 串口</button>
+          <button id="btn-pad-attached">已插手柄</button>
+        </div>
+        <div class="row">
+          <button id="btn-ask-reboot">重启确认</button>
+          <button id="btn-ask-power-off">关机确认</button>
+          <button id="btn-ask-usb-host">切手柄</button>
+        </div>
+        <div class="row">
+          <button id="btn-battery-down">电量 −</button>
+          <button id="btn-battery-up">电量 ＋</button>
+          <button id="btn-ota">OTA +10%</button>
+        </div>
+        <div class="row">
+          <button id="btn-dialog-cancel">清弹窗</button>
+          <button id="btn-notice-cycle">通知 +1</button>
+          <button id="btn-family-cycle">家族 PS</button>
+        </div>
+        <div class="row">
+          <button id="btn-pc-link">PC 已连</button>
+          <button id="btn-player-led">灯 3</button>
+          <button id="btn-debug-flash">注入 +1</button>
+        </div>
+        <div class="row">
+          <button id="btn-netlog">WiFi 关</button>
+        </div>
+        <div class="readout" id="console-readout"></div>
+        <div class="log" id="console-log"></div>
+      </section>
+    </main>
+    <script>
+      // 预览固定按 1:1 逻辑像素渲染（与设备面板同一口径）：
+      // 把 devicePixelRatio 钉在 1，winit 的缩放因子、Slint 的渲染目标与画布后备缓冲就都等于
+      // CSS 像素，Windows 125% 这类小数缩放不会再触发软件渲染器的缓冲 panic。
+      Object.defineProperty(window, "devicePixelRatio", { get: () => 1, configurable: true });
+      // wasm 侧启动完成后回调：端到端用例等 window.__remapadReady 变真再开始断言。
+      window.setRemapadReady = (ready) => {
+        window.__remapadReady = ready;
+      };
+      // 开发热更新（serve.mjs --watch）：重编完成整页刷新，构建失败把日志尾顶到右下角浮层；
+      // 端点不在（纯静态托管、用例环境）时 EventSource 静默重试，不影响页面。
+      let buildStatus;
+      new EventSource("/__reload").onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.type === "reload") {
+          location.reload();
+          return;
+        }
+        if (!buildStatus) {
+          buildStatus = document.createElement("pre");
+          buildStatus.style.cssText =
+            "position:fixed;right:16px;bottom:16px;max-width:520px;max-height:45vh;overflow:auto;margin:0;"
+            + "padding:10px 14px;font:12px/1.6 system-ui,sans-serif;white-space:pre-wrap;"
+            + "background:#15263e;border:1px solid #384962;border-radius:8px;color:#d9e6ff;z-index:99";
+          document.body.append(buildStatus);
+        }
+        buildStatus.textContent = message.type === "building" ? "重编中…" : `构建失败\n${message.message}`;
+      };
+    </script>
+    <script type="module">
+      import init, {
+        remapad_start,
+        remapad_action,
+        remapad_focus_step,
+        remapad_activate_focused,
+        remapad_set_state,
+        remapad_snapshot,
+      } from "./remapad_ui_wasm.js";
+
+      window.remapad = {
+        action: remapad_action,
+        focusStep: remapad_focus_step,
+        activateFocused: remapad_activate_focused,
+        setState: remapad_set_state,
+        snapshot: remapad_snapshot,
+      };
+
+      await init();
+      remapad_start();
+
+      // ---- 控制台：只发动作与写模拟状态，结算在 wasm 核心里（与 PC 控制条同一套语义） ----
+      const button = (id) => document.getElementById(id);
+      const familyLabel = (index) =>
+        index === 1 ? "PS" : index === 2 ? "XBOX" : index === 3 ? "NS" : index === 4 ? "STEAM" : "PAD";
+      const mod = (value, n) => ((value % n) + n) % n;
+
+      async function apply(patch) {
+        remapad.setState(patch);
+        await refresh();
+      }
+
+      async function runAction(name, value = 0) {
+        remapad.action(name, value);
+        await refresh();
+      }
+
+      async function togglePadActive() {
+        const state = await remapad.snapshot();
+        await apply({
+          padActive: !state.padActive,
+          focusIndex: state.padActive ? -1 : 0,
+          log: "手柄操控 = " + (!state.padActive ? "开" : "关"),
+        });
+      }
+
+      async function cyclePairing() {
+        const state = await remapad.snapshot();
+        await apply({ pairing: mod(state.pairing + 1, 6), notice: 0, log: "配对状态 = " + mod(state.pairing + 1, 6) });
+      }
+
+      async function togglePadAttached() {
+        const state = await remapad.snapshot();
+        await apply({ padAttached: !state.padAttached, log: "手柄接入 = " + (!state.padAttached ? "已插" : "未插") });
+      }
+
+      async function stepBattery(delta) {
+        const state = await remapad.snapshot();
+        const next = Math.max(0, Math.min(100, state.batteryPercent + delta));
+        await apply({ batteryPercent: next, log: "电量 = " + next + "%" });
+      }
+
+      async function stepOta() {
+        const state = await remapad.snapshot();
+        const next = state.otaPercent >= 100 ? 0 : state.otaPercent + 10;
+        await apply({ otaPercent: next, log: "OTA 进度 = " + next + "%" });
+      }
+
+      async function cycleNotice() {
+        const state = await remapad.snapshot();
+        const next = mod(state.notice + 1, 5);
+        await apply({ notice: next, log: "命令提示 = " + next });
+      }
+
+      async function cycleFamily() {
+        const state = await remapad.snapshot();
+        const next = mod(state.padFamily + 1, 5);
+        await apply({ padFamily: next, log: "手柄家族 = " + familyLabel(next) });
+      }
+
+      async function togglePcLink() {
+        const state = await remapad.snapshot();
+        await apply({ pcLink: !state.pcLink, log: "PC 连接 = " + (!state.pcLink ? "已连" : "未连") });
+      }
+
+      async function cyclePlayerLed() {
+        const state = await remapad.snapshot();
+        const next = mod(state.playerLed + 1, 16);
+        await apply({ playerLed: next, log: "玩家灯 = " + next });
+      }
+
+      async function stepDebugFlash() {
+        const state = await remapad.snapshot();
+        const next = mod(state.debugFlash + 2, 4);
+        await apply({ debugFlash: next, log: "调试页注入高亮 = " + next });
+      }
+
+      async function toggleUsbRole() {
+        const state = await remapad.snapshot();
+        await runAction(state.usbRole === 0 ? "usb-host" : "usb-device");
+      }
+
+      // 开关类按钮的标签与高亮随快照刷新，读数与 log 也从快照回填。
+      async function refresh() {
+        const state = await remapad.snapshot();
+        const on = (id, active) => button(id).classList.toggle("active", active);
+        on("btn-pad-active", state.padActive);
+        on("btn-usb-role", state.usbRole === 1);
+        on("btn-pad-attached", !state.padAttached);
+        on("btn-pc-link", state.pcLink);
+        on("btn-netlog", state.netlogState !== 0);
+        button("btn-usb-role").textContent = state.usbRole === 0 ? "USB 串口" : "USB 手柄";
+        button("btn-pad-attached").textContent = state.padAttached ? "已插手柄" : "未插手柄";
+        button("btn-family-cycle").textContent = "家族 " + familyLabel(state.padFamily);
+        button("btn-pc-link").textContent = state.pcLink ? "PC 已连" : "PC 未连";
+        button("btn-player-led").textContent = "灯 " + state.playerLed;
+        button("btn-netlog").textContent = state.netlogState === 0 ? "WiFi 关" : "WiFi 开";
+        document.getElementById("console-readout").textContent =
+          "弹窗 " + state.dialog + " · 焦点 " + state.focusIndex + " · 配对 " + state.pairing + " · 灯 " + state.playerLed;
+        document.getElementById("console-log").textContent = state.log;
+      }
+
+      const onClick = (id, handler) => button(id).addEventListener("click", () => handler());
+      onClick("btn-prev-page", () => runAction("prev-page"));
+      onClick("btn-next-page", () => runAction("next-page"));
+      onClick("btn-pad-active", togglePadActive);
+      onClick("btn-focus-down", () => {
+        remapad.focusStep(-1);
+        refresh();
+      });
+      onClick("btn-focus-up", () => {
+        remapad.focusStep(1);
+        refresh();
+      });
+      onClick("btn-activate", () => {
+        remapad.activateFocused();
+        refresh();
+      });
+      onClick("btn-pairing-cycle", cyclePairing);
+      onClick("btn-usb-role", toggleUsbRole);
+      onClick("btn-pad-attached", togglePadAttached);
+      onClick("btn-ask-reboot", () => runAction("ask-reboot"));
+      onClick("btn-ask-power-off", () => runAction("ask-power-off"));
+      onClick("btn-ask-usb-host", () => runAction("ask-usb-host"));
+      onClick("btn-battery-down", () => stepBattery(-10));
+      onClick("btn-battery-up", () => stepBattery(10));
+      onClick("btn-ota", stepOta);
+      onClick("btn-dialog-cancel", () => runAction("dialog-cancel"));
+      onClick("btn-notice-cycle", cycleNotice);
+      onClick("btn-family-cycle", cycleFamily);
+      onClick("btn-pc-link", togglePcLink);
+      onClick("btn-player-led", cyclePlayerLed);
+      onClick("btn-debug-flash", stepDebugFlash);
+      onClick("btn-netlog", () => runAction("netlog-toggle"));
+
+      await refresh();
+      // 设备画面上的点按也会改状态：定时回读快照，读数与 log 不靠按钮点击才刷新。
+      setInterval(refresh, 200);
+    </script>
+  </body>
+</html>

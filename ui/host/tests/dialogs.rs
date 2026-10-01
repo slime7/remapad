@@ -1,6 +1,9 @@
 //! 弹窗与全屏等待画面的用例：遮罩盖住当前页、页面控件不再响应点按、焦点环让位给弹窗。
 //! 弹窗是 ConfirmDialog（ui/src/components.slint），整屏遮罩写在 ui/src/app.slint。
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use remapad_ui as ui;
 
 /// 角钮的常规底色（theme.slint 的 secondary-container）。
@@ -66,27 +69,29 @@ fn 弹窗打开时遮罩盖住整屏() {
   );
 }
 
-/// 弹窗打开时页面控件收不到点按：同一处点按只落在弹窗上。
+/// 弹窗打开时页面控件收不到点按：同一处点按，没有弹窗时发出动作，弹窗盖上后不再发出。
 #[test]
 fn 弹窗打开时页面控件不再响应点按() {
-  let preview = ui::new_preview();
-  preview.set_page(0);
-  ui::settle(&preview);
-  let plus = ui::rect(&preview, "BrightnessPage::plus");
-  let start = preview.get_backlight();
+  let app = ui::new_app();
+  let actions: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+  let sink = actions.clone();
+  app.on_action(move |name, _| sink.borrow_mut().push(name.to_string()));
+  app.set_page(0);
+  ui::settle(&app);
+  let plus = ui::rect(&app, "BrightnessPage::plus");
 
-  ui::tap(&preview, plus.center_x(), plus.center_y());
-  assert_eq!(preview.get_backlight(), start + 20, "没有弹窗时点亮度加应生效");
-
-  preview.invoke_action("ask-reboot".into(), 0);
-  assert_eq!(preview.get_dialog(), 1, "先弹重启确认");
-  ui::frame(&preview);
-  ui::tap(&preview, plus.center_x(), plus.center_y());
+  ui::tap(&app, plus.center_x(), plus.center_y());
   assert_eq!(
-    preview.get_backlight(),
-    start + 20,
-    "弹窗盖住页面后同一处点按不该改背光"
+    actions.borrow().last().map(String::as_str),
+    Some("brightness-up"),
+    "没有弹窗时点亮度加应发出动作"
   );
+
+  actions.borrow_mut().clear();
+  app.set_dialog(1);
+  ui::frame(&app);
+  ui::tap(&app, plus.center_x(), plus.center_y());
+  assert!(actions.borrow().is_empty(), "弹窗盖住页面后同一处点按不该再发出动作");
 }
 
 /// 弹窗打开时页面不再画焦点环：焦点已经交给弹窗，页面上留一个亮环会误导。

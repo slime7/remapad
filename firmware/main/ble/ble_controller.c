@@ -96,8 +96,7 @@ static struct {
 /** 并发连接槽：一台主机一条链路；第二槽给主机换地址重连等过渡情形留余量。 */
 #define BLE_CTL_CONN_MAX 2
 
-/** 广播实例：设备只发一台 Pro 的广播（默认 legacy PDU，见
- *  ble_controller_adv_start）；两个实例是历史遗留的接法余量。 */
+/** 广播实例编号定义。 */
 #define ADV_INSTANCE_EXT 0
 #define ADV_INSTANCE_LEGACY 1
 #define ADV_INSTANCE_MAX 2

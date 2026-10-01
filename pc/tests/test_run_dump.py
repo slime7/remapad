@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import remapadctl  # noqa: E402  （先把 pc/ 放进来再导入）
+import ctrl  # noqa: E402  （先把 pc/ 放进来再导入）
 
 
 class FakeDevice:
@@ -64,20 +64,20 @@ def args(**overrides):
 class RunDumpTest(unittest.TestCase):
     def test_opens_the_vid_pid_filtered_interface(self):
         hid = FakeHid([device(path="ps"), device(path="xbox", vid=0x045E, pid=0x0B13)])
-        code = remapadctl.run_dump(args(vid=0x045E, pid=0x0B13), hid)
+        code = ctrl.run_dump(args(vid=0x045E, pid=0x0B13), hid)
         self.assertEqual(code, 0)
         self.assertEqual(hid.dev.opened, "xbox")
 
     def test_keeps_first_interface_without_filter(self):
         hid = FakeHid([device(path="ps"), device(path="xbox", vid=0x045E, pid=0x0B13)])
-        code = remapadctl.run_dump(args(), hid)
+        code = ctrl.run_dump(args(), hid)
         self.assertEqual(code, 0)
         self.assertEqual(hid.dev.opened, "ps")
 
     def test_fails_with_hint_when_filter_matches_nothing(self):
         hid = FakeHid([device(path="ps")])
         with redirect_stderr(io.StringIO()) as err:
-            code = remapadctl.run_dump(args(vid=0x1234), hid)
+            code = ctrl.run_dump(args(vid=0x1234), hid)
         self.assertEqual(code, 1)
         self.assertIn("--vid/--pid", err.getvalue())
 
@@ -85,7 +85,7 @@ class RunDumpTest(unittest.TestCase):
         hid = FakeHid([device(path="ps"), device(path="xbox", vid=0x045E, pid=0x0B13,
                                                 product="Xbox Pad")])
         with redirect_stdout(io.StringIO()) as out:
-            code = remapadctl.run_dump(args(vid=0x045E), hid)
+            code = ctrl.run_dump(args(vid=0x045E), hid)
         self.assertEqual(code, 0)
         self.assertIn("Xbox Pad", out.getvalue())
 

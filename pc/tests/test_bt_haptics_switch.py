@@ -3,21 +3,21 @@
 喇叭），要关得显式给 --no-bt-haptics（回落 0x31 两带震动）。"""
 import unittest
 
-import remapadctl
+import ctrl
 
 
 class BtHapticsSwitchTest(unittest.TestCase):
     def test_bt_private_stream_is_on_by_default(self):
-        args = remapadctl.parse_args([])
-        self.assertTrue(remapadctl.bt_haptics_wanted(args))
+        args = ctrl.parse_args([])
+        self.assertTrue(ctrl.bt_haptics_wanted(args))
 
     def test_no_bt_haptics_opts_out(self):
-        args = remapadctl.parse_args(["--no-bt-haptics"])
-        self.assertFalse(remapadctl.bt_haptics_wanted(args))
+        args = ctrl.parse_args(["--no-bt-haptics"])
+        self.assertFalse(ctrl.bt_haptics_wanted(args))
 
     def test_explicit_on_flag_still_parses(self):
-        args = remapadctl.parse_args(["--bt-haptics"])
-        self.assertTrue(remapadctl.bt_haptics_wanted(args))
+        args = ctrl.parse_args(["--bt-haptics"])
+        self.assertTrue(ctrl.bt_haptics_wanted(args))
 
 
 class HapticsYieldGateTest(unittest.TestCase):
@@ -48,9 +48,9 @@ class HapticsYieldGateTest(unittest.TestCase):
             pass
 
     def _session(self):
-        args = remapadctl.parse_args([])
+        args = ctrl.parse_args([])
         link = self.FakeLink()
-        return remapadctl.Session(args, None, link), link
+        return ctrl.Session(args, None, link), link
 
     def test_yield_waits_for_the_stream_to_engage(self):
         session, link = self._session()

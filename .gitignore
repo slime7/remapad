@@ -14,11 +14,14 @@ compile_commands.json
 # Python 脚本（scripts/ 与 pc/）运行后产生的字节码缓存
 __pycache__/
 *.pyc
-# pnpm 时代的遗留依赖目录（Node 已移除，本目录可以直接删掉）
+# Node 依赖目录（ui/preview 的 pnpm 工程与 pnpm 时代的历史遗留）
 node_modules/
+# 屏幕 UI 浏览器端到端用例的产物（ui/preview 下 pnpm test 生成）
+test-results/
+playwright-report/
 # uv 建的虚拟环境：仓库根一份，覆盖 scripts/ 与 pc/ 的工具（uv.lock 需要提交）
 .venv/
-# remapadctl --shot 落地的实机截图（调试产物，不进仓库）
+# ctrl --shot 落地的实机截图（调试产物，不进仓库）
 pc/shots/
 # 代理与调试的临时文件（脚本、抓包输出、截图、日志；见 AGENTS.md）
 agent-temp/*
@@ -26,6 +29,8 @@ agent-temp/*
 
 # Rust 编译产物（屏幕 UI 组件与宿主用例）
 target/
+# 浏览器预览产物（wasm-bindgen 生成，构建脚本全自动重建）
+ui/preview/dist/
 # 固件目标编码目录与 Rust 产物同名，这里显式取消忽略
 !firmware/main/target/
 

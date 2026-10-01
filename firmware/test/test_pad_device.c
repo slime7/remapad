@@ -1,6 +1,6 @@
 /**
  * 私有格式解析（pad_device.c）主机端用例：按家族表偏移构造报告，钉住各家族的按键位置映射、
- * 量程归一、死区与兜底行为；样本与 pc/remapadctl.py --dump 的结果对账。
+ * 量程归一、死区与兜底行为；样本与 pc/ctrl.py --dump 的结果对账。
  */
 #include "host_test.h"
 
@@ -495,7 +495,7 @@ static void dualsense_usb_parses_by_pid(void)
 }
 
 /**
- * DualSense 蓝牙（Report ID 0x31）空闲帧样本（取自 pc/remapadctl.py --dump）：
+ * DualSense 蓝牙（Report ID 0x31）空闲帧样本（取自 pc/ctrl.py --dump）：
  * 第 9 字节读作 0x08，正是方向键帽子开关的松开值、面键位全为 0，
  * 因此按键位图从第 9 字节起、四轴从第 2 字节起。
  */

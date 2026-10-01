@@ -1,0 +1,15 @@
+{
+  "name": "@remapad/ui-wasm-preview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Remapad 屏幕 UI 的 WASM 预览与浏览器端到端用例（pnpm 工具链）",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "node tools/serve.mjs --watch",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

@@ -220,7 +220,7 @@ def find_pad(conn: str):
 
     连接方式看 HID 的 bus_type（1 = USB、2 = 蓝牙），不看 PID：0x0DF2 既是
     DualSense 的蓝牙 PID，也是 DualSense Edge 的有线 PID（同一个号），按 PID
-    猜会把直插的 Edge 判成蓝牙——产品侧 remapadctl.conn_for 用的也是 bus_type。
+    猜会把直插的 Edge 判成蓝牙——产品侧 ctrl.conn_for 用的也是 bus_type。
     bus_type 缺失（旧 hidapi）时才退回 PID 判据。
     """
     import hid

@@ -1,11 +1,7 @@
 # Remapad
 
 Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统：
-接收 USB 手柄输入（手柄可经 OTG 直插板卡，也可由 PC 桥接转发），转换为 NS2 控制器报告，并通过 BLE 对外提供手柄服务，同时在板载屏幕上呈现运行状态与交互 UI。
-
-屏幕 UI 用 Rust 承载：界面在构建期编译进固件，运行期用软件渲染器画到面板；
-固件核心运行于 ESP-IDF，在原生任务与队列中承载控制器数据面，对界面只认 `ui_service.h` 一份 C 契约
-（界面组件按 `REMAPAD_UI` 开关可选编入，关闭时纯 C 也能出固件）。
+接收 USB 手柄输入（支持 OTG 直插或 PC 桥接转发），转换为 NS2 协议并通过 BLE 提供手柄服务，在板载屏幕呈现状态与交互 UI。
 
 本项目仅为娱乐用途，实现类似功能不需要 ESP32 带有屏幕。
 
@@ -37,8 +33,6 @@ Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控�
 | 触摸面板 | CST816T 电容式触摸芯片（I2C `0x15`） |
 | 板载外设 | PWR 按键、蜂鸣器、锂电池充放电管理、RTC 时钟与陀螺仪 |
 
-完整引脚分配、外设地址及供电细节参见 [目标硬件参考 (docs/hardware.md)](docs/hardware.md)。
-
 ## 无完整硬件时的运行说明
 
 固件对板载外设只操作片上外设（GPIO / LEDC / ADC），不做在位探测：缺少 PWR 按键电路或蜂鸣器不会报错，程序照常运行。
@@ -49,34 +43,10 @@ Remapad 是面向微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控�
 | 电源锁存（SYS_EN） | GPIO41，输出，启动即拉高锁存系统供电 | 引脚空置即可，USB 供电无影响；电池供电缺它则松开 PWR 键即断电 |
 | 蜂鸣器（Buzz） | GPIO42，无源器件，LEDC tone 输出 | 提示音无声，鸣叫调用为空操作 |
 
-屏幕与触摸缺失时初始化失败只记一条日志、不阻断启动，无 UI 构建（`REMAPAD_UI=OFF`）则完全不初始化它们；电池采样走片上 ADC，缺电池只是电量读数无意义。
-完整引脚分配与电气细节见 [目标硬件技术参考 (docs/hardware.md)](docs/hardware.md)。
-
 ## 系统架构
-
-```mermaid
-flowchart LR
-    UI[ui/：界面源码] --> Compile[构建期编译]
-    Compile --> Lib[界面静态库]
-    Lib --> CMake[ESP-IDF CMake]
-    CMake --> Renderer[软件渲染器]
-    Renderer --> BSP[屏幕与触摸驱动]
-    USB[USB 输入] --> DataPlane[控制器数据面]
-    DataPlane --> NS2[NS2 报告编码]
-    NS2 --> BLE[BLE 手柄服务]
-    DataPlane -.状态同步.-> Bridge[Bridge 控制面]
-    Bridge -.状态轮询.-> Host[firmware/main/ui/ui_service.c]
-    Host -.界面状态与动作.-> Renderer
-```
-
-系统核心分工与边界：
-
-- 屏幕 UI 工作区（`ui/`）是界面源码、固件界面组件与宿主用例：界面在构建期编成 Rust 静态库链进固件，界面行为由宿主用例断言。
-- 固件工作区（`firmware/`）承载原生数据面：
-  高频控制器接收、规范化、协议编码及 BLE 广播/GATT 状态机均在 ESP-IDF 原生任务中运行；
-  Bridge 控制面仅用于传递低频设备状态和交互指令，屏幕状态由固件核心的 `ui_service` 装配进界面、动作交回同处分发。
-- 主机协议细节见 [Switch 2 手柄协议规范 (docs/controller-switch2.md)](docs/controller-switch2.md)；
-  输入设备数据见 [PS 家族手柄数据规范 (docs/controller-ps.md)](docs/controller-ps.md)。
+- **UI 工作区 (`ui/`)**：负责屏幕界面、页面状态与交互逻辑。
+- **固件核心 (`firmware/`)**：负责 USB 输入解析、NS2 编码、BLE 通信以及底层外设驱动。
+- **控制面 (`bridge`)**：负责在数据面与屏幕界面之间同步低频状态与分发控制指令。
 
 ## 目录结构
 
@@ -87,58 +57,48 @@ remapad/
 │   ├── assets/                  # 字体与底图（卡片、底栏）
 │   ├── host/                    # 宿主用例包：注入状态后按元素几何与像素断言
 │   ├── slint_ui/                # 固件界面组件（Rust 静态库与平台层，ESP-IDF 组件）
+│   ├── preview/                 # 浏览器 WASM 预览与 Playwright 端到端用例
 │   └── build-support/           # 两份 build.rs 共用的编译口径
 ├── firmware/                    # 固件工作区：ESP-IDF 嵌入式工程
 │   ├── main/                    # 固件核心业务源码（UI 契约、控制器数据面、驱动等）
 │   ├── sdkconfig.defaults       # 芯片架构、CPU 频率、Flash/PSRAM 预设
 │   └── partitions.csv           # 双应用 OTA 与存储分区表
 ├── pc/                          # PC 侧辅助工具（USB 桥接、命令行控制台、实机截图、OTA）
-├── scripts/                     # 环境准备、界面预览与测试脚本（Python）
+├── scripts/                     # 环境准备与测试脚本（Python）
 └── docs/                        # 项目设计、技术抽象与开发文档
 ```
 
 ## 开发快速上手
 
-环境要求：ESP-IDF（>=6.0,<6.2）、Python 3.10+ 与 uv、Rust（宿主 stable + Xtensa 工具链，见 [ui/README.md](ui/README.md)）。
+环境要求：ESP-IDF（>=6.0,<6.2）、Python 3.10+ 与 uv、Rust。
 
 ### 1. 屏幕 UI
 
 ```powershell
-# PC 交互预览：设备画面 240 × 280 + 控制条，动作在预览里结算，存盘即刷新（脚本经 uv 跑）
-uv run python scripts/ui-preview.py
+# 屏幕 UI 预览（存盘自动重编并刷新）
+cd ui/preview ; pnpm dev
 
-# 界面行为的宿主用例：在开发机上跑真实界面产物
+# 宿主测试
 cargo test --locked --manifest-path ui/Cargo.toml
-
-# 改完 ui/src 下的界面源码，编固件时一起编译进应用（首次构建需要 xtensa Rust 工具链）
-cd firmware ; idf.py build
 ```
-
-界面改完要在真机上验收时用 OTA 推送（见下面的固件编译与烧录、以及 [pc/README.md](pc/README.md)）。
-工具链安装与换机步骤见 [ui/README.md](ui/README.md)。
 
 ### 2. 固件编译与烧录
 
 ```powershell
-# 进入固件目录并构建
 cd firmware
 idf.py set-target esp32s3
 idf.py build
-
-# 烧录并打开串口监视器
 idf.py -p COMx flash monitor
 ```
 
 ### 3. PC 侧辅助工具
 
 ```powershell
-# 运行命令行桥接控制台（PC 侧工具与 scripts/ 共用仓库根的 uv 工程）
-uv run python pc/remapadctl.py -p COMx
-# 运行图形化操作界面
+# 命令行桥接控制台
+uv run python pc/ctrl.py -p COMx
+# 图形化操作界面
 uv run python pc/gui.py
 ```
-
-更多环境搭建、调试排错与详细开发流程参见 [新手上手指南 (docs/GETTING-STARTED.md)](docs/GETTING-STARTED.md)。
 
 ## 文档索引
 

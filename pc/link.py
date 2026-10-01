@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remapad 桥接链路的 PC 侧：免复位串口打开 + 桥接帧编解码。
 
-串口打开是全仓库 PC 侧工具的唯一实现（remapadctl.py 的转发、命令行、截图与 OTA 共用）：
+串口打开是全仓库 PC 侧工具的唯一实现（ctrl.py 的转发、命令行、截图与 OTA 共用）：
 直接用 Win32 API，并在打开前后把 DTR/RTS 固定为低电平——USB-Serial/JTAG 的
 片内状态机把这两条线当复位控制线解释（RTS 拉高即复位），普通串口库默认会在
 打开端口时拉起它们。
@@ -679,7 +679,7 @@ def parse_endpoint(text: str, default_port: int = NETLOG_PORT_DEFAULT) -> tuple[
 class UdpLink:
     """设备的 UDP 桥接链路：与串口同一模型——桥接帧与 CLI 文本共用一条字节流，靠帧同步字区分。
 
-    read/write/flush/close 与 SerialLink 同签名，可直接交给 remapadctl.Session。
+    read/write/flush/close 与 SerialLink 同签名，可直接交给 ctrl.Session。
     UDP 报文不可靠：输入报告与命令丢一拍无感；OTA 的窗口重发能兜住丢包（设备端
     BEGIN/END 幂等、序号续传），截图这类无重传的大块会话仍走串口。
     """

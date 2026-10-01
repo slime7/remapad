@@ -1,5 +1,4 @@
-//! 界面编译口径:风格、字号表与字体路径只在这一处声明,host 与 fw 的 build.rs 都经它编译,
-//! PC 预览用同名环境变量对齐(见 scripts/ui-preview.py)。
+//! 界面编译口径:风格、字号表与字体路径只在这一处声明,host 与 fw 的 build.rs 都经它编译。
 
 use std::path::{Path, PathBuf};
 

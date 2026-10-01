@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from remapadctl import WriteBackGate  # noqa: E402  （先把 pc/ 放进来再导入）
+from ctrl import WriteBackGate  # noqa: E402  （先把 pc/ 放进来再导入）
 
 
 class WriteBackGateTest(unittest.TestCase):

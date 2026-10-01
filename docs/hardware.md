@@ -1,11 +1,6 @@
 # Remapad 目标硬件参考
 
-本文档只记录目标板卡与 SoC 的硬件事实：SoC 与存储、屏幕与触摸、其他板载外设、GPIO 分配、USB 控制器与供电路径、板级约束。
-固件如何驱动这些器件、链路上跑什么协议，见 [ARCHITECTURE.md](ARCHITECTURE.md) 与 [ABSTRACTIONS.md](ABSTRACTIONS.md)。
-操作、命令与排错见 [GETTING-STARTED.md](GETTING-STARTED.md)。
-
-板卡为微雪 (Waveshare) **ESP32-S3-Touch-LCD-1.69**，SKU 27350；
-本文档的规格、引脚与地址来自微雪官方文档 <https://docs.waveshare.net/ESP32-S3-Touch-LCD-1.69>，标注「实机」的条目由本板启动日志与原理图核对。
+目标板卡为微雪 ESP32-S3-Touch-LCD-1.69（SKU 27350）。
 
 ## SoC 与存储
 
@@ -48,9 +43,6 @@ PSRAM 是叠封在 SoC 内的 Octal 件（实机枚举为 `Embedded PSRAM`、ven
 | 3.3 V LDO | ME6217C33M5G | 电源 | 系统 3.3 V | VCC3V3 |
 | USB Type-C | ESP32-S3 原生 USB | USB | 片内 USB，复位后默认接 USB-Serial/JTAG | USB_N=GPIO19, USB_P=GPIO20 |
 | UART0 | 默认串口 | UART | 调试 / 扩展焊盘 | U0TXD=GPIO43, U0RXD=GPIO44 |
-
-IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `INT1=GPIO38`，GPIO 分配表写 `GPIO38 = QMI_INT2`（`INT2`）。两条记录指向同一个 GPIO，但中断编号不同。
-接入 IMU 中断前应以原理图或实机读寄存器确认，不要直接照抄。
 
 ## GPIO 分配
 
@@ -97,9 +89,7 @@ IMU 中断脚在微雪文档内部存在一处不一致：外设速查表写 `IN
 - **I2C 地址冲突**：板内已占用 `0x15`（触摸）、`0x6B`（IMU）、`0x51`（RTC）。外接 I2C 设备必须避开这三个地址。
 - **USB 口只有一个**：Type-C 直接连在 ESP32-S3 原生 USB（GPIO19/20）上，烧录、日志与 USB 设备共用同一个物理口。
   复位后默认以 `USB-Serial/JTAG` 模式枚举，复用机制见「USB 控制器复用」。
-- **Type-C 座子是纯 UFP 接线**（V2.1 原理图核对）：host 直插手柄用普通 C-to-C 数据线即可、无需转接头（实机核对通过），
-  操作口径见 [GETTING-STARTED.md](GETTING-STARTED.md) 的「USB 手柄直插（host 模式）」。
-- **数据脚两排并联**：A6/B6 并为 USB_P（D+，经 22 Ω 进 GPIO20）、A7/B7 并为 USB_N（D-，经 22 Ω 进 GPIO19），插头方向不影响数据通路（V2.1 原理图核对）。
+- **Type-C 座子为 UFP 接线**：支持使用标准 C-to-C 线缆直连手柄。数据脚并联（A6/B6→D+，A7/B7→D-），正反插均可。
 - **VBUS 只进不出**：座子 VBUS 直连充电 IC（ETA6098）与系统电源路径（经 D4 进 LDO），板上没有对外的 VBUS 输出开关；
   host 模式要给手柄供电需从 TP1（GPIO 端子的「5V」脚，通 VBUS 网络）注入 5V，手柄看不到 VBUS 不会接通数据脚。
 - **`GPIO19` / `GPIO20`** 已接 Type-C，不要当普通 GPIO 使用。

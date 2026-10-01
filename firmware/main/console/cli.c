@@ -658,7 +658,7 @@ static void cli_motion(const char *arg)
 
 /**
  * 实机截图：请求交给 UI 提供者在下一轮状态轮询里把当前帧缓冲回传，
- * 像素经桥接图像帧发出；PC 侧（pc/remapadctl.py 的 shot）落地成 PNG。
+ * 像素经桥接图像帧发出；PC 侧（pc/ctrl.py 的 shot）落地成 PNG。
  * 这里只置标志，不等回传，回复 ok 表示请求已入队（无 UI 构建里由空实现回绝）。
  */
 static void cli_shot(void)
@@ -1243,7 +1243,7 @@ static void cli_amiibo_uid(const uint8_t *image, char *out, size_t cap)
 }
 
 /**
- * amiibo 槽位与 NFC 标签模拟：镜像由 PC 侧（remapadctl --amiibo 或界面）经
+ * amiibo 槽位与 NFC 标签模拟：镜像由 PC 侧（ctrl.py --amiibo 或界面）经
  * 桥接帧上传落库；select 把镜像预置进 NFC 模拟层（主机开轮询后即感应到卡）。
  * poll 是串口验证开关——没有主机在场时让标签手动入场/离场。
  */

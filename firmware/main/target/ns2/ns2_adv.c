@@ -69,8 +69,7 @@ bool ns2_adv_stack_idle(bool connected, bool pairing, bool window_active)
   return !connected && !pairing && !window_active;
 }
 
-/** 地址是否可用：全零地址写进唤醒广播等于没带地址——主机既不会回连也不会被
- *  唤醒（NVS 里存在计数虚高、尾部记录全零的历史表）。 */
+/** 检查地址是否非空且非全零有效 MAC。 */
 static bool mac_usable(const uint8_t mac[6])
 {
   if (mac == NULL) {
