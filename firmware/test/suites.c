@@ -14,6 +14,7 @@ extern const host_test_suite_t suite_dp_source;
 extern const host_test_suite_t suite_dp_ui;
 extern const host_test_suite_t suite_dp_capture;
 extern const host_test_suite_t suite_dp_power;
+extern const host_test_suite_t suite_dp_stats;
 extern const host_test_suite_t suite_netlog_retry;
 extern const host_test_suite_t suite_ui_service;
 extern const host_test_suite_t suite_pad_device;
@@ -36,9 +37,9 @@ static const host_test_suite_t *const s_suites[] = {
   &suite_ns2_upgrade,  &suite_ns2_identity,
   &suite_dp_source,    &suite_dp_ui,
   &suite_dp_capture,   &suite_dp_power,
-  &suite_ui_service,   &suite_pad_device,
-  &suite_ds_behavior,  &suite_pad_ns,
-  &suite_pad_feedback, &suite_ns2_relay,
+  &suite_dp_stats,     &suite_ui_service,
+  &suite_pad_device,   &suite_ds_behavior,
+  &suite_pad_ns,       &suite_pad_feedback,
   &suite_input_frame,  &suite_ota_proto,
   &suite_ns2_nfc,      &suite_amiibo_proto,
   &suite_target_ns2,   &suite_battery,

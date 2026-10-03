@@ -4,10 +4,12 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 
 #include "dp_source.h"
+#include "dp_stats.h"
 #include "pad_device.h"
 
 static const char *TAG = "remapad_input_src";
@@ -87,6 +89,8 @@ static void handle_report(const input_frame_view_t *frame)
   }
   const size_t body_len = frame->payload_len - INPUT_DEVICE_ID_LEN;
   const size_t copy_len = body_len < PAD_REPORT_MAX ? body_len : PAD_REPORT_MAX;
+  /* 到达打点在临界区外取时（先后差一拍不影响速率语义）。 */
+  dp_stats_note_input_us(esp_timer_get_time());
   portENTER_CRITICAL(&s_in.mux);
   parse_device_id(frame->payload, frame->payload_len, &s_in.report);
   s_in.report.len = (uint8_t)copy_len;

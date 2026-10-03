@@ -4,10 +4,12 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 
 #include "dp_source.h"
+#include "dp_stats.h"
 #include "pad_device.h"
 #include "usb_audio.h"
 #include "usb_transport.h"
@@ -68,6 +70,8 @@ void usb_input_submit_report(const uint8_t *data, size_t len)
   if (data == NULL || len == 0 || len > PAD_REPORT_MAX) {
     return;
   }
+  /* 到达打点在临界区外取时（读寄存器，先后差一拍不影响速率语义）。 */
+  dp_stats_note_input_us(esp_timer_get_time());
   portENTER_CRITICAL(&s_usb.mux);
   if (!s_usb.attached) {
     /* 没收到接入事件就来了报告（部分设备不上报枚举完成）：按已接入处理。 */

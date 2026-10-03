@@ -193,6 +193,8 @@ fn apply_state(glue: &Glue, ui: &App, state: &UiState) {
   ui.set_netlog_state(state.netlog_state);
   ui.set_netlog_addr(boundary::read_text(state.netlog_addr, "--"));
   ui.set_netlog_rssi(state.netlog_rssi);
+  ui.set_input_hz(state.input_hz);
+  ui.set_input_latency_ms(state.input_latency_ms);
   ui.set_dialog(state.dialog);
   ui.set_powering_off(state.powering_off);
   ui.set_rebooting(state.rebooting);

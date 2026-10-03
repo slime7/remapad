@@ -11,28 +11,18 @@ const ICON_CENTER_Y: f32 = 232.0;
 const LABEL_CENTER_Y: f32 = 254.5;
 
 /// 状态格里的图标与标签都居中：三格按整屏均分，格心落在 40 / 120 / 200。
+/// 速率格没有图标（两个读数竖直居中），它的读数行在后面的用例里单独断言。
 #[test]
 fn 底栏三格按整屏均分且图标与标签同轴居中() {
   let app = ui::new_app();
   app.set_pc_link(true);
   app.set_player_led(0b1111);
-  app.set_battery_percent(90);
+  app.set_input_hz(1000);
+  app.set_input_latency_ms(12);
 
-  let cells = [
-    "BottomBar::mode-cell",
-    "BottomBar::host-cell",
-    "BottomBar::battery-cell",
-  ];
-  let icons = [
-    "BottomBar::mode-icon",
-    "BottomBar::host-icon",
-    "BottomBar::battery-icon",
-  ];
-  let labels = [
-    "BottomBar::mode-text",
-    "BottomBar::host-leds",
-    "BottomBar::battery-text",
-  ];
+  let cells = ["BottomBar::mode-cell", "BottomBar::host-cell", "BottomBar::rate-cell"];
+  let icons = ["BottomBar::mode-icon", "BottomBar::host-icon"];
+  let labels = ["BottomBar::mode-text", "BottomBar::host-leds"];
   for (index, id) in cells.iter().enumerate() {
     let cell = ui::rect(&app, id);
     let center = CELL_CENTERS[index];
@@ -45,42 +35,56 @@ fn 底栏三格按整屏均分且图标与标签同轴居中() {
       "{id} 的格心 {:.1} 不在 {center}",
       cell.center_x()
     );
-    for child in [icons[index], labels[index]] {
-      let child_box = ui::rect(&app, child);
-      assert!((child_box.center_x() - center).abs() < 0.5, "{child} 没有按格心居中");
-    }
   }
+  for (index, id) in icons.iter().enumerate() {
+    let child_box = ui::rect(&app, id);
+    assert!(
+      (child_box.center_x() - CELL_CENTERS[index]).abs() < 0.5,
+      "{id} 没有按格心居中"
+    );
+  }
+  for (index, id) in labels.iter().enumerate() {
+    let child_box = ui::rect(&app, id);
+    assert!(
+      (child_box.center_x() - CELL_CENTERS[index]).abs() < 0.5,
+      "{id} 没有按格心居中"
+    );
+  }
+  let rate_box = ui::rect(&app, "BottomBar::rate-text");
+  assert!(
+    (rate_box.center_x() - CELL_CENTERS[2]).abs() < 0.5,
+    "速率读数没有按格心居中"
+  );
 
   let frame = ui::frame(&app);
-  for index in 0..cells.len() {
+  for (index, id) in icons.iter().enumerate() {
     let center = CELL_CENTERS[index];
-    let icon_band = band(center, 220.0, 22.0);
-    let label_band = band(center, 246.0, 14.0);
-    let icon = ink_center(&frame, icon_band, icons[index]);
-    let label = ink_center(&frame, label_band, labels[index]);
+    let icon = ink_center(&frame, band(center, 220.0, 22.0), id);
     assert!(
       (icon.0 - center).abs() < 1.5,
-      "{} 的图标墨迹中线 {:.1} 不在格心 {center}",
-      icons[index],
+      "{id} 的图标墨迹中线 {:.1} 不在格心 {center}",
       icon.0
     );
-    assert!(
-      (icon.1 - ICON_CENTER_Y).abs() < 1.5,
-      "{} 的图标没落在这条中线上",
-      icons[index]
-    );
+    assert!((icon.1 - ICON_CENTER_Y).abs() < 1.5, "{id} 的图标没落在这条中线上");
+  }
+  for (index, id) in labels.iter().enumerate() {
+    let center = CELL_CENTERS[index];
+    let label = ink_center(&frame, band(center, 246.0, 14.0), id);
     assert!(
       (label.0 - center).abs() < 1.5,
-      "{} 的标签墨迹中线 {:.1} 不在格心 {center}",
-      labels[index],
+      "{id} 的标签墨迹中线 {:.1} 不在格心 {center}",
       label.0
     );
-    assert!(
-      (label.1 - LABEL_CENTER_Y).abs() < 1.5,
-      "{} 的标签没落在这条中线上",
-      labels[index]
-    );
+    assert!((label.1 - LABEL_CENTER_Y).abs() < 1.5, "{id} 的标签没落在这条中线上");
   }
+  // 速率格的两个读数作为一组竖直居中：量整格（避开圆角外的深底）的中线。
+  let reading = ink_center(&frame, band(CELL_CENTERS[2], 212.0, 48.0), "BottomBar::rate-text");
+  assert!(
+    (reading.0 - CELL_CENTERS[2]).abs() < 1.5,
+    "速率读数墨迹中线 {:.1} 不在格心 {}",
+    reading.0,
+    CELL_CENTERS[2]
+  );
 }
 
 /// 手柄操控提示行：图标与同一行的文字共用一条中线，整行在底栏里居中。
@@ -170,25 +174,37 @@ fn ota进度条居中且从条槽左端起填充() {
   );
 }
 
-/// 电量分档的字形：图标里的填充随电量一档一档变多，不是只有低电 / 满电两种形态。
+/// 速率格的读数与占位：有输入流时主读数显示到达率、延迟读数在下一行，
+/// 停流整格让给占位符（字符集锚点漏 Hz / m 会直接红在这里）。
 #[test]
-fn 电池图标随电量逐档变满() {
+fn 速率格有读数显示读数停流显示占位符() {
   let app = ui::new_app();
-  let icon = ui::rect(&app, "BottomBar::battery-icon");
-  let percents = [0, 20, 40, 55, 70, 85, 95, 100];
-  let mut ink = Vec::new();
-  for percent in percents {
-    app.set_battery_percent(percent);
-    ink.push(ui::frame(&app).ink(icon).len());
-  }
-  for (index, pair) in ink.windows(2).enumerate() {
-    assert!(
-      pair[1] > pair[0],
-      "电量 {}% 与 {}% 画出的电量格一样满：墨迹 {ink:?}",
-      percents[index],
-      percents[index + 1]
-    );
-  }
+  let label = ui::rect(&app, "BottomBar::rate-text");
+  // 延迟读数断言只取文字落点的中央条带：元素框横跨整格，格底两侧有
+  // 底栏圆角外的深色背景，整框量墨迹分不清「没画字」和「背景本身深」。
+  let latency_box = ui::rect(&app, "BottomBar::latency-text");
+  let latency = Rect {
+    x: latency_box.center_x() - 20.0,
+    y: latency_box.y,
+    w: 40.0,
+    h: latency_box.h,
+  };
+  app.set_input_hz(1000);
+  app.set_input_latency_ms(12);
+  let frame = ui::frame(&app);
+  let with_reading = frame.ink(label).len();
+  assert!(with_reading > 0, "有读数时速率格没有画出文本");
+  assert!(frame.ink(latency).len() > 0, "有读数时延迟读数没有画出来");
+  app.set_input_hz(0);
+  app.set_input_latency_ms(0);
+  let frame = ui::frame(&app);
+  let placeholder = frame.ink(label).len();
+  assert!(placeholder > 0, "停流时速率格没有画出占位符");
+  assert!(
+    with_reading > placeholder,
+    "读数与占位符的墨迹一样多：{with_reading} vs {placeholder}"
+  );
+  assert!(frame.ink(latency).len() == 0, "停流时延迟读数还挂着");
 }
 
 /// 玩家灯按逐灯掩码点亮：真机玩家号是「前 N 颗全亮」（2 号亮前 2 颗、4 号全亮），

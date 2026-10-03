@@ -20,6 +20,7 @@
 #include "dp_capture.h"
 #include "dp_power.h"
 #include "dp_source.h"
+#include "dp_stats.h"
 #include "dp_ui.h"
 #include "ds_behavior.h"
 #include "feedback.h"
@@ -626,6 +627,9 @@ static void dp_task(void *param)
                  * 健康，整段停发会让它把手柄判成离线；玩家输入一点不上行。 */
         send_neutral_report(&pad);
       } else {
+        /* 延迟读数记「最新输入数据 → 交给 BLE 通知」的间隔；中性帧与停发
+                 * 期的发送不带新输入，不打点。 */
+        dp_stats_note_output_us(esp_timer_get_time());
         target_send_pad(&pad);
       }
     }

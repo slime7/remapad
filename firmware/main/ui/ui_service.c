@@ -23,6 +23,7 @@
 #include "bridge/js_bridge.h"
 #include "console_out.h"
 #include "dp_power.h"
+#include "dp_stats.h"
 #include "dp_ui.h"
 #include "input_link.h"
 #include "ns2_identity.h"
@@ -212,6 +213,8 @@ void ui_service_fill_state(remapad_ui_state_t *state)
   state->screen_on = config->screen_on;
   /* 省电档由 BLE 栈的开关决定：栈关着（未连接也未广播）就降节拍。 */
   state->power_save = dp_power_save_active(ble_controller_running());
+  state->input_hz = dp_stats_input_hz();
+  state->input_latency_ms = dp_stats_latency_ms();
 #ifdef REMAPAD_NETLOG
   if (netlog_running()) {
     state->netlog_state = netlog_connected() ? 2 : 1;

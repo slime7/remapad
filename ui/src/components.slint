@@ -329,41 +329,15 @@ export component BottomBar inherits Rectangle {
     in property <int> pad-family: 0;
     in property <int> pairing: 0;
     in property <int> player-led: 0;
-    in property <int> battery-percent: 0;
+    /** 输入报文到达率与发出延迟：0 表示无读数，速率格整格让给占位符。 */
+    in property <int> input-hz: 0;
+    in property <int> input-latency-ms: 0;
     in property <int> ota-phase: 0;
     in property <int> ota-percent: 0;
     in property <bool> pad-ui-mode: false;
     /** 广播中主机图标的呼吸相位（0.25-1.0），由固件侧按帧写入。 */
     in property <float> breath: 1;
     callback host-clicked();
-
-    /** 电量字形：Material Symbols 的 battery_android_0..6 七档加满格，共八个字形；
-     *  每 15% 一档，100% 给满格。 */
-    pure function battery-glyph(percent: int) -> string {
-        return percent >= 100 ? "\u{f304}" : battery-stage-glyph(min(6, max(0, percent / 15)));
-    }
-
-    pure function battery-stage-glyph(stage: int) -> string {
-        if (stage <= 0) {
-            return "\u{f30d}";
-        }
-        if (stage == 1) {
-            return "\u{f30c}";
-        }
-        if (stage == 2) {
-            return "\u{f30b}";
-        }
-        if (stage == 3) {
-            return "\u{f30a}";
-        }
-        if (stage == 4) {
-            return "\u{f309}";
-        }
-        if (stage == 5) {
-            return "\u{f308}";
-        }
-        return "\u{f307}";
-    }
 
     x: 8px;
     y: 208px;
@@ -479,7 +453,7 @@ export component BottomBar inherits Rectangle {
         }
     }
 
-    // 优先级 3：三等分状态（左 USB 模式 / 中主机连接 / 右电量）。
+    // 优先级 3：三等分状态（左 USB 模式 / 中主机连接 / 右输入速率）。
     // 设计稿把三格按整屏 240 均分（格心 40 / 120 / 200），底栏元素比整屏窄 8px，
     // 所以这一行向左右各外扩 8px 再等分：格宽 80 取整，格内落点都在整数像素上。
     if root.ota-phase != 1 && !root.pad-ui-mode: Rectangle {
@@ -533,20 +507,23 @@ export component BottomBar inherits Rectangle {
                     host-touch := TouchArea { clicked => { root.host-clicked(); } }
                 }
 
-                battery-cell := Rectangle {
+                rate-cell := Rectangle {
                     width: parent.width / 3;
                     height: parent.height;
+                    /* 两个读数竖直居中：左中两格「图标 + 单标签」的语法只装得下
+                     * 一个读数，标签线右侧还撞底栏圆角外的深底，塞两个值放不下。 */
                     VerticalLayout {
                         alignment: center;
                         spacing: 1px;
-                        /* 电池是横向字形（battery_android 一族，设计稿的形态）：
-                         * 0..6 七档填充加满格共八个字形，15% 以下整体转成错误色。 */
-                        battery-icon := CellIcon {
-                            glyph: battery-glyph(root.battery-percent);
-                            tint: root.battery-percent <= 15 ? Theme.on-error : Theme.on-tertiary;
+                        rate-text := Text {
+                            text: root.input-hz > 0 ? "\{root.input-hz}Hz" : "--";
+                            font-family: "Noto Sans SC";
+                            font-size: Theme.text-xs;
+                            color: Theme.on-tertiary;
+                            horizontal-alignment: center;
                         }
-                        battery-text := Text {
-                            text: "\{root.battery-percent}%";
+                        latency-text := Text {
+                            text: root.input-hz > 0 && root.input-latency-ms > 0 ? "\{root.input-latency-ms}ms" : "";
                             font-family: "Noto Sans SC";
                             font-size: Theme.text-xs;
                             color: Theme.on-tertiary;

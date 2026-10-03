@@ -25,6 +25,9 @@ export component PreviewCore inherits Rectangle {
     in-out property <int> pad-family: 1;
     in-out property <int> player-led: 3;
     in-out property <int> ota-percent: 0;
+    /** 输入链路读数的模拟值：底栏速率格显示用，给一组典型有线手柄的读数。 */
+    in-out property <int> input-hz: 250;
+    in-out property <int> input-latency-ms: 9;
     in-out property <int> selected-colorway: 1;
     in-out property <bool> ds-touchpad-plus-minus: false;
     in-out property <bool> ds-capture-key: true;
@@ -108,6 +111,8 @@ export component PreviewCore inherits Rectangle {
         player-led: root.player-led;
         pad-ui-mode: root.pad-active;
         breath: root.breath;
+        input-hz: root.input-hz;
+        input-latency-ms: root.input-latency-ms;
         ota-phase: root.ota-phase;
         ota-percent: root.ota-percent;
         selected-colorway: root.selected-colorway;

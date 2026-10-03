@@ -30,8 +30,13 @@ class DeviceFactsLineTest(unittest.TestCase):
         })
         self.assertEqual(text.split("\n"), [
             "固件 e04fd8c ｜ 分区 ota_0 ｜ 镜像 已确认 ｜ 升级 idle",
-            "电量 100% · 4.16V ｜ 运行 2:32:33 ｜ 配对 已配对 ｜ 角色 串口",
+            "运行 2:32:33 ｜ 配对 已配对 ｜ 角色 串口",
         ])
+
+    def test_battery_facts_are_read_but_not_displayed(self):
+        """电量与端电压只留在事实数据里：设备已放弃自带电源管理，不上屏。"""
+        text = gui.format_device_facts({"battery_mv": 4160, "battery_percent": 100, "charging": True})
+        self.assertEqual(text, "设备没有回可读的状态")
 
     def test_empty_facts_says_so(self):
         self.assertEqual(gui.format_device_facts({}), "设备没有回可读的状态")

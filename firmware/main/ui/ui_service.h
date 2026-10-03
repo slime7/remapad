@@ -73,6 +73,10 @@ typedef struct {
   const char *netlog_addr;
   /** WiFi 信号强度（dBm，负值），未知为 0。 */
   int netlog_rssi;
+  /** 输入报文到达率（Hz，1 秒窗差分；0 = 无输入流）与输入数据发出延迟
+   *  （毫秒 EMA；0 = 无读数），取值见 dp/dp_stats.h。 */
+  int input_hz;
+  int input_latency_ms;
 } remapad_ui_state_t;
 
 /** trace 命令不带帧数时的追踪长度。 */

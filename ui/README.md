@@ -97,7 +97,6 @@ idf.py -p COMx app-flash    # 仅烧录应用分区
   | U+E338 / U+E500 | videogame_asset / videogame_asset_off | 底栏 USB 模式格（手柄已插 / 未插）、模式页手柄卡片 |
   | U+E701 | missing_controller | 底栏主机连接格 |
   | U+E1D8 U+EBE1 U+EBD6 U+EBE4 / U+E1DA | signal_wifi_4_bar、network_wifi_3/2/1_bar / signal_wifi_off | 无线调试页左上角信号图标：已连接按 RSSI 分四档（-55 / -66 / -77 为界），连接中、断开与读不到 RSSI 画关闭 |
-  | U+F30D U+F30C U+F30B U+F30A U+F309 U+F308 U+F307 U+F304 | battery_android_0 … _6 与 full | 底栏电量格：每 15% 一档，100% 给满格（15% 以下整体转错误色） |
   | U+EECB U+EECA U+EEDE U+EEDB | gamepad 方向与肩键 | 底栏手柄提示行的「翻页」 |
   | U+EEC9 U+EECC | gamepad 上下 | 底栏手柄提示行的「选择」 |
   | U+EECE / U+EED0 | gamepad_circle_right / _down | 底栏手柄提示行的「确认 / 退出」 |

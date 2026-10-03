@@ -93,6 +93,10 @@ pub struct UiState {
   pub netlog_addr: *const c_char,
   /// WiFi 信号强度（dBm，负值），未知为 0。
   pub netlog_rssi: i32,
+  /// 输入报文到达率（Hz，1 秒窗差分；0 = 无输入流）。
+  pub input_hz: i32,
+  /// 输入数据发出延迟（毫秒 EMA；0 = 无读数）。
+  pub input_latency_ms: i32,
 }
 
 /// 逐帧渲染统计：面板提交耗时与渲染耗时分开记。
@@ -112,7 +116,7 @@ pub struct Stats {
 const _: () = {
   assert!(core::mem::size_of::<Touch>() == 4);
   assert!(core::mem::size_of::<Hooks>() == 8);
-  assert!(core::mem::size_of::<UiState>() == 100);
+  assert!(core::mem::size_of::<UiState>() == 108);
   assert!(core::mem::align_of::<UiState>() == 4);
   assert!(core::mem::offset_of!(UiState, usb_role) == 16);
   assert!(core::mem::offset_of!(UiState, pad_family) == 24);
@@ -131,6 +135,8 @@ const _: () = {
   assert!(core::mem::offset_of!(UiState, netlog_state) == 88);
   assert!(core::mem::offset_of!(UiState, netlog_addr) == 92);
   assert!(core::mem::offset_of!(UiState, netlog_rssi) == 96);
+  assert!(core::mem::offset_of!(UiState, input_hz) == 100);
+  assert!(core::mem::offset_of!(UiState, input_latency_ms) == 104);
   assert!(core::mem::size_of::<Stats>() == 40);
   assert!(core::mem::align_of::<Stats>() == 8);
   assert!(core::mem::offset_of!(Stats, window_render_us) == 8);

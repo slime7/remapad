@@ -66,6 +66,7 @@ set(remapad_srcs
     "dp/dp_plane.c"
     "dp/dp_capture.c"
     "dp/dp_source.c"
+    "dp/dp_stats.c"
     "dp/dp_ui.c"
     "dp/dp_power.c"
     "usb/usb_input.c"

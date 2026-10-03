@@ -34,6 +34,9 @@ export component AppContent inherits Rectangle {
     in-out property <float> breath: 1;
     in-out property <int> ota-phase: 0;
     in-out property <int> ota-percent: 0;
+    /** 输入链路读数（底栏速率格）：到达率 0 表示无输入流，延迟 0 表示无读数。 */
+    in-out property <int> input-hz: 0;
+    in-out property <int> input-latency-ms: 0;
     in-out property <int> selected-colorway: 0;
     in-out property <string> controller-address: "--";
     in-out property <bool> ds-touchpad-plus-minus: false;
@@ -111,9 +114,10 @@ export component AppContent inherits Rectangle {
     }
 
     // 构建期字符集锚点：设备信息页的电池行由固件拼好再回发（数字 / % / · / V 之类），
-    // 只出现在运行时字符串里的码点不会被烘成字形位图，上屏就是一个空洞（见 ui/README.md）。
+    // 底栏速率格的 Hz / ms 也在运行时拼串。只出现在运行时字符串里的码点不会被
+    // 烘成字形位图，上屏就是一个空洞（见 ui/README.md）。
     Text {
-        text: "0123456789abcdefABCDEF%·V.- /:KMBs";
+        text: "0123456789abcdefABCDEF%·V.- /:KMBsHzm";
         visible: false;
         font-family: "Noto Sans SC";
         font-size: Theme.text-xs;
@@ -318,7 +322,8 @@ export component AppContent inherits Rectangle {
         pad-family: root.pad-family;
         pairing: root.pairing;
         player-led: root.player-led;
-        battery-percent: root.battery-percent;
+        input-hz: root.input-hz;
+        input-latency-ms: root.input-latency-ms;
         ota-phase: root.ota-phase;
         ota-percent: root.ota-percent;
         pad-ui-mode: root.pad-ui-mode;
@@ -459,6 +464,8 @@ export component App inherits Window {
     in-out property <float> breath <=> content.breath;
     in-out property <int> ota-phase <=> content.ota-phase;
     in-out property <int> ota-percent <=> content.ota-percent;
+    in-out property <int> input-hz <=> content.input-hz;
+    in-out property <int> input-latency-ms <=> content.input-latency-ms;
     in-out property <int> selected-colorway <=> content.selected-colorway;
     in-out property <string> controller-address <=> content.controller-address;
     in-out property <bool> ds-touchpad-plus-minus <=> content.ds-touchpad-plus-minus;

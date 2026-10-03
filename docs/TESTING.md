@@ -27,7 +27,7 @@ cargo test --manifest-path ui/Cargo.toml --test bottom_bar 底栏    # 只跑匹
 | [ui/host/tests/pairing_page.rs](../ui/host/tests/pairing_page.rs) | 转圈按相位轮换盲文点阵单点、状态行在有无转圈时都居中 |
 | [ui/host/tests/system_page.rs](../ui/host/tests/system_page.rs) | 电池行的中点分隔符画成小圆点（字符集锚点漏码点就会红） |
 | [ui/host/tests/pages.rs](../ui/host/tests/pages.rs) | 调试页画在末位槽号上、切页后只画当前页与左右邻页、整条带按一页步距滑行再回到静止位置、静止时两侧各露一条花瓣边、静止画面以两百像素为周期 |
-| [ui/host/tests/bottom_bar.rs](../ui/host/tests/bottom_bar.rs) | 底栏电量图标按电量逐档变满（0-6 档加满格共八个字形） |
+| [ui/host/tests/bottom_bar.rs](../ui/host/tests/bottom_bar.rs) | 速率格两行读数（到达率 / 延迟）按格心居中，停流整格让给占位符（字符集锚点漏 Hz / m 就会红） |
 | [ui/host/tests/bands.rs](../ui/host/tests/bands.rs) | 行带计划：整屏按 48 行切分与末段余数、不满宽与越界矩形的裁剪、逐行取像素的步长（真源码在 ui/render-plan，固件平台层跑同一份） |
 | [ui/host/tests/gestures.rs](../ui/host/tests/gestures.rs) | 拖动时条带到切页阈值就定住、越过阈值抬手翻到上一页并接着整页滑行、没过阈值不翻页并回弹、单步甩动即翻页、往回滑取消换页、滑行期间拖动让位 |
 | [ui/host/tests/dialogs.rs](../ui/host/tests/dialogs.rs) | 弹窗遮罩盖住整屏并压暗、弹窗期间页面控件收不到点按、页面焦点环让位给弹窗、重启与关机等待画面盖住整屏 |
@@ -89,6 +89,7 @@ pnpm exec playwright test pointer # 只跑文件名/用例名匹配的用例
 | `main/dp/dp_capture.c` | 原始输出采集入队与截断丢包处理 |
 | `main/dp/dp_ui.c` | 组合键捕获与屏幕控制按键映射 |
 | `main/dp/dp_power.c` | 省电状态判据与节拍分频计算 |
+| `main/dp/dp_stats.c` | 速率窗差分与封顶、延迟 EMA 与停发不记 |
 | `main/target/ns2/ns2_adv.c` | 广播载荷组装与唤醒窗口决策 |
 | `main/ui/ui_service.c` | UI 状态快照填充与控制面动作分发 |
 | `main/netlog/netlog_retry.c` | 网络重连退避策略与失败判定 |
