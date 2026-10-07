@@ -502,7 +502,7 @@ static void carrier_level_envelope_is_not_rumbling(void)
 static void haptic_sample_parse_follows_the_frame(void)
 {
   uint8_t sample = 0xFF;
-  /* 定位呼叫帧（pc/tests/samples/ns2-search-page.capture）。 */
+  /* 定位呼叫帧（pc/test/samples/ns2-search-page.capture）。 */
   static const uint8_t locate[] = { 0x0A, 0x91, 0x01, 0x02, 0x00, 0x04, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00 };
   REQUIRE(ns2_haptic_sample_parse(locate, sizeof(locate), &sample));
   CHECK_EQ(sample, 0x02);
@@ -516,16 +516,16 @@ static void haptic_sample_parse_follows_the_frame(void)
   CHECK(!ns2_haptic_sample_parse(other, sizeof(other), &sample));
 }
 
-/** 用 pc/tests/samples/ns2-search-page.capture 回放「查找手柄」页的 20 秒主机
+/** 用 pc/test/samples/ns2-search-page.capture 回放「查找手柄」页的 20 秒主机
  *  输出：223 条复合输出全部带静置的 LRA 参数包段（搜索页不震），采样流以
  *  约 16 Hz 重发定位呼叫 0x02、收尾用 0x00 停止——发声规则（音色表节奏）
  *  与「载波不算震动」的判据都以此样本为锚。 */
 static void search_page_capture_replays_to_samples_only(void)
 {
-  FILE *cap = fopen("pc/tests/samples/ns2-search-page.capture", "rb");
+  FILE *cap = fopen("pc/test/samples/ns2-search-page.capture", "rb");
   if (cap == NULL) {
     /* 从别的目录跑测试时按仓库相对路径回退。 */
-    cap = fopen("../pc/tests/samples/ns2-search-page.capture", "rb");
+    cap = fopen("../pc/test/samples/ns2-search-page.capture", "rb");
   }
   REQUIRE(cap != NULL);
 

@@ -1,6 +1,6 @@
 """对固件 C 源码跑 clang-tidy：编译库用 build-clang 目录的 clang 原生副本，诊断直接打到标准输出。
 
-用法：uv run python scripts/clang_tidy.py [路径片段...]（片段按子串过滤文件，不带参数检查全部 .c）。
+用法：python scripts/clang_tidy.py [路径片段...]（片段按子串过滤文件，不带参数检查全部 .c）。
 前置条件：完成一次 clang 构建目录配置，见 docs/GETTING-STARTED.md 的「代码风格与静态检查」；
 检查规则与开关在仓库根 .clang-tidy。
 """

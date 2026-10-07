@@ -103,7 +103,7 @@ BLE 栈关闭即省电档，数据面采样与上报、界面状态轮询与动�
 ```mermaid
 flowchart LR
     subgraph PC["PC（pc/ 桥接程序）"]
-        HID["手柄 HID 报告"] --> BR["ctrl.py：原始报告 + 设备标识"]
+        HID["手柄 HID 报告"] --> BR["ctrl：原始报告 + 设备标识"]
     end
 
     BR -- "桥接帧（USB-Serial/JTAG）" --> LINK
@@ -186,12 +186,12 @@ classDiagram
 - **摇杆与扳机归一化**：摇杆轴与模拟扳机归一化为 0-4095 整数（中位 2048），预置 8% 死区。
 - **能力集标识 (`caps`)**：标识当前帧包含的有效硬件特性（运动、触摸、模拟扳机、背键等）。
 
-帧类型（固件侧定义在 `firmware/main/input/input_frame.h`，PC 端在 `pc/link.py` 镜像一份）：
+帧类型（固件侧定义在 `firmware/main/input/input_frame.h`，PC 端在 `pc/src/link/frame.js` 镜像一份）：
 
 | 类型 | 方向 | 载荷 |
 | :--- | :--- | :--- |
 | `0x01` ATTACH / `0x02` DETACH | PC → 设备 | 8 字节设备标识（家族 / 连接方式 / VID:PID / Report ID / 报告长度） |
-| `0x10` REPORT | PC → 设备 | 设备标识 + 原始报告（最多 64 字节） |
+| `0x10` REPORT | PC → 设备 | 设备标识 + 原始报告（最多 78 字节） |
 | `0x11` OUT_REPORT | 设备 → PC | 要写回手柄的输出报告原始字节（首字节是 Report ID，最多 78 字节） |
 | `0x12` HOST_RAW | 设备 → PC | 主机输出原始采集：通道字节（GATT 句柄低字节）+ 标志/长度（bit7 截断、低 7 位数据长度）+ 原始字节（最多 253）；帧头 slot 是设备侧记录号，跳号即队列满丢包。默认关闭，串口 `capture on` 打开 |
 | `0x20` FEEDBACK | 设备 → PC | 左右震动使能与两带强度、玩家灯、触觉采样（原始采样 ID，仅日志展示）；16 字节版再带两带驱动频率落地值（u16 小端 ×4）；57 字节 HD 版再带固件按布局行重整出的时序子帧表（每侧有效子帧数 + 3×（低频频率 u16 LE + 低频增益 + 高频频率 u16 LE + 高频增益）+ 扬声器频率 u16 LE + 增益），PC 侧音频触觉与蓝牙私有流按它哑渲染；投递时机除主机事件外还看采样音色的段状态（幅度段 + 段音高）按 5ms tick 的变化——段由固件合成、主机只给采样 ID 与起停（查找手柄页约 15Hz），只跟主机事件投递会把段边界量化到 64ms 的栅格（震动/蜂鸣起止错位、短段丢失） |
@@ -205,8 +205,9 @@ classDiagram
 | `0x43` AMIIBO_ACK | 设备 → PC | 状态 + 错误码 + 已收字节（u32 小端）+ 槽位号（仅 DONE 有意义，0xFF 表示无） |
 | `0x7F` PING | 双向 | 协议版本号（1 字节） |
 
-解码器按线格式上限 255 字节收帧，报文帧仍按 72 字节语义校验（8 字节设备标识 + 最多 64 字节报告），
-输出报告帧按 78 字节校验（DualSense / DualShock 4 的蓝牙输出报告长度）。
+解码器按线格式上限 255 字节收帧；PC → 设备报文帧按 86 字节语义校验（8 字节设备标识
++ 最多 78 字节报告，上限取 DS5 蓝牙 0x31 报告），设备 → PC 的输出报告帧按 78 字节校验
+（DualSense / DualShock 4 的蓝牙输出报告长度）。
 OTA 帧由 `input_link`（串口）与 `netlog`（WiFi UDP）经 `ota/ota_link` 同一个适配交给 `ota/ota_session` 核心，
 ACK 跟进帧通道单路回发；amiibo 上传帧只走串口、交给 `amiibo/amiibo_session`（逐帧回 ACK，
 收齐后经 `amiibo_store` 落 storage 分区 SPIFFS 槽位），PING 由 `input_link` 直接应答，其余交给 `input_source`；
@@ -217,7 +218,7 @@ PC 手柄到 NS2 主机的完整时序（映射表把家族差异收敛在 `pad/
 ```mermaid
 sequenceDiagram
     autonumber
-    participant PC as pc/ctrl.py
+    participant PC as pc/src/ctrl.js
     participant RECV as input/input_link
     participant SRC as input/input_source
     participant DP as dp/dp_task

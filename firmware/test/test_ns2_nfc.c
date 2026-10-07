@@ -11,7 +11,8 @@
 #include "ns2_nfc.h"
 
 /** 一份带已知 UID 的 NTAG215 镜像：UID 04 8A 6D 2A B7 5D 80（样本卡），
- *  BCC0/BCC1 按 NTAG 规则自洽，其余字节按页号填花样。 */
+ *  页 0-2 按真实 dump 布局：UID6 在字节 7，字节 8 是 BCC1（= UID3^UID4^UID5^UID6），
+ *  字节 9 是内部号 0x48，其余字节按页号填花样。 */
 static uint8_t s_image[NS2_NFC_TAG_SIZE];
 
 static void fill_image(void)
@@ -20,10 +21,10 @@ static void fill_image(void)
   memset(s_image, 0, sizeof(s_image));
   memcpy(&s_image[0], uid, 3);
   s_image[3] = (uint8_t)(0x88u ^ uid[0] ^ uid[1] ^ uid[2]);
-  memcpy(&s_image[4], &uid[3], 3);
-  s_image[7] = (uint8_t)(uid[3] ^ uid[4] ^ uid[5] ^ uid[6]);
-  s_image[8] = uid[6];
-  for (size_t i = 9; i < sizeof(s_image); i++) {
+  memcpy(&s_image[4], &uid[3], 4);
+  s_image[8] = (uint8_t)(uid[3] ^ uid[4] ^ uid[5] ^ uid[6]);
+  s_image[9] = 0x48;
+  for (size_t i = 10; i < sizeof(s_image); i++) {
     s_image[i] = (uint8_t)i;
   }
 }
@@ -55,7 +56,7 @@ static void build_tag_info_body(uint8_t *out)
   out[8] = 0x07;
   memcpy(&out[9], s_image, 3);      /* UID0-2 */
   memcpy(&out[12], &s_image[4], 3); /* UID3-5 */
-  out[15] = s_image[8];             /* UID6 */
+  out[15] = s_image[7];             /* UID6 */
 }
 
 /** 主机开轮询且选了 amiibo，输入报告的 NFC 状态字节报「卡片在场 0x09」
@@ -93,7 +94,8 @@ static void test_tag_info_carries_uid(void)
   CHECK_BYTES(&resp[NS2_FRAME_HEADER_LEN], golden, NS2_NFC_TAG_INFO_BODY_LEN);
 }
 
-/** 没有预置镜像时主机取卡信息是全零体（感应区里没有卡）。 */
+/** 没有预置镜像时主机取卡信息是不带 UID 的空场态体：体首字节与报告状态
+ *  同源（场开无卡 0x01），其余补零。 */
 static void test_tag_info_empty_without_image(void)
 {
   ns2_nfc_reset();
@@ -102,8 +104,9 @@ static void test_tag_info_empty_without_image(void)
   uint8_t resp[NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN];
   const size_t len = run_cmd(0x05, NULL, 0, resp, sizeof(resp));
   CHECK_EQ(len, sizeof(resp));
-  const uint8_t zeros[NS2_NFC_TAG_INFO_BODY_LEN] = { 0 };
-  CHECK_BYTES(&resp[NS2_FRAME_HEADER_LEN], zeros, NS2_NFC_TAG_INFO_BODY_LEN);
+  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN], 0x01);
+  const uint8_t tail[NS2_NFC_TAG_INFO_BODY_LEN - 1] = { 0 };
+  CHECK_BYTES(&resp[NS2_FRAME_HEADER_LEN + 1], tail, NS2_NFC_TAG_INFO_BODY_LEN - 1);
 }
 
 /** 读缓冲区 = [60 字节读卡结果头][540 字节标签镜像] 共 600 字节，按 70 字节
@@ -141,7 +144,7 @@ static void test_read_buffer_chunks(void)
 
 /** 默认（模板模式）下头区按 Switch 1 MCU 读卡响应的结构填充：前缀、UID、
  *  厂商签名（572 字节 dump 尾部）与 3B 3C 77 78 86 尾串各就各位，标签数据
- *  从缓冲偏移 60 接续。 */
+ *  从缓冲偏移 60 接续；hdr 2 换 read1 原文对齐，hdr 0 全零。 */
 static void test_read_buffer_header_template(void)
 {
   ns2_nfc_reset();
@@ -192,6 +195,18 @@ static void test_read_buffer_header_template(void)
   CHECK_EQ(assembled[59], 0x00);
   CHECK_BYTES(&assembled[NS2_NFC_BUFFER_HEADER], s_image, NS2_NFC_TAG_SIZE);
 
+  /* read1 对齐模式（hdr 2）：尾串 `03 00` 后移到 54-58，52/53 是 03 00。 */
+  ns2_nfc_set_header_mode(2);
+  uint8_t resp2[NS2_FRAME_HEADER_LEN + 3 + NS2_NFC_READ_CHUNK_MAX];
+  const uint8_t off0[2] = { 0x00, 0x00 };
+  REQUIRE(run_cmd(0x15, off0, sizeof(off0), resp2, sizeof(resp2)) > NS2_FRAME_HEADER_LEN + 3);
+  const uint8_t *chunk2 = &resp2[NS2_FRAME_HEADER_LEN + 3];
+  CHECK_EQ(chunk2[52], 0x03);
+  CHECK_EQ(chunk2[53], 0x00);
+  CHECK_EQ(chunk2[54], 0x3B);
+  CHECK_EQ(chunk2[58], 0x86);
+  CHECK_EQ(chunk2[59], 0x00);
+
   /* 540 字节上传（不带签名）时结构头仍在、签名区全零。 */
   REQUIRE(ns2_nfc_stage(s_image, sizeof(s_image)) == ESP_OK);
   const uint8_t body[2] = { 0x00, 0x00 };
@@ -202,6 +217,15 @@ static void test_read_buffer_header_template(void)
   CHECK_EQ(chunk0[0], 0x31);
   const uint8_t sig_zeros[NS2_NFC_SIG_SIZE] = { 0 };
   CHECK_BYTES(&chunk0[20], sig_zeros, NS2_NFC_SIG_SIZE);
+
+  /* 纯标签模式（hdr 4）：无头区，缓冲从镜像页 0 开始，总长 540 即 EOF。 */
+  ns2_nfc_set_header_mode(4);
+  const size_t len4 = run_cmd(0x15, body, sizeof(body), resp, sizeof(resp));
+  REQUIRE(len4 > NS2_FRAME_HEADER_LEN + 3);
+  CHECK_BYTES(&resp[NS2_FRAME_HEADER_LEN + 3], s_image, 4);
+  const uint8_t eof540[2] = { 0x1C, 0x02 }; /* 0x021C = 540 = 纯标签总长 */
+  CHECK_EQ(run_cmd(0x15, eof540, sizeof(eof540), resp, sizeof(resp)), NS2_FRAME_HEADER_LEN + 3);
+  ns2_nfc_set_header_mode(1);
 }
 
 /** 读取偏移越过缓冲区末端（600 字节）时不回数据（长度字段为 0）。 */
@@ -385,20 +409,24 @@ static void test_read_status_progression_14_to_15(void)
   run_cmd(0x15, body, sizeof(body), chunk, sizeof(chunk));
   CHECK_EQ(ns2_nfc_report_state(), 0x15);
 
-  /* 拉到缓冲区末端（偏移 600，长度 0）即读取结束，状态报「读取结束」值，
-     * 0x05 体首字节与报告字节同源。 */
+  /* 拉到缓冲区末端（偏移 600，长度 0）即读取结束，进入「读取完成」窗口：
+     * 报告字节保持在场，0x05 按读卡完成形态应答（31 04 标记 + UID）。 */
   const uint8_t eof[2] = { 0x58, 0x02 };
   run_cmd(0x15, eof, sizeof(eof), chunk, sizeof(chunk));
-  CHECK_EQ(ns2_nfc_report_state(), 0x00);
+  CHECK_EQ(ns2_nfc_report_state(), 0x09);
   CHECK_EQ(run_cmd(0x05, NULL, 0, resp, sizeof(resp)), sizeof(resp));
-  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN], 0x00);
+  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN], 0x09);
+  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN + 1], 0x31);
+  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN + 2], 0x04);
+  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN + 11], s_image[0]);
 
-  /* 0x03 重新开轮询复位回卡片在场。 */
+  /* 窗口内 0x03 巡检射频场不退出完成窗口，0x05 保持完成形态。 */
   const uint8_t poll_args[5] = { 0x00, 0xE8, 0x03, 0x2C, 0x01 };
   run_cmd(0x03, poll_args, sizeof(poll_args), resp, sizeof(resp));
   CHECK_EQ(ns2_nfc_report_state(), 0x09);
   CHECK_EQ(run_cmd(0x05, NULL, 0, resp, sizeof(resp)), sizeof(resp));
-  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN], 0x09);
+  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN + 1], 0x31);
+  CHECK_EQ(resp[NS2_FRAME_HEADER_LEN + 2], 0x04);
 }
 
 /** 0x03 重新开轮询把读卡流程复位：状态字节回到卡片入场。 */
@@ -520,10 +548,86 @@ static void test_polling_commands_ack_and_idle(void)
   CHECK(!ns2_nfc_polling());
 }
 
+/** 抽完（EOF 探测）后进入「读取完成」窗口：报告字节保持在场，0x05 按完成
+ *  形态应答（31 04 标记 + UID），窗口内主机快速 0x04/0x03 巡检不退出窗口；
+ *  窗口期满 0x05 恢复普通在场形态。 */
+static void test_drain_gone_window_hides_tag(void)
+{
+  ns2_nfc_reset();
+  fill_image();
+  REQUIRE(ns2_nfc_stage(s_image, sizeof(s_image)) == ESP_OK);
+  ns2_nfc_set_polling(true);
+  ns2_nfc_set_gone_delay_us(10 * 1000); /* 桩时钟每次调用 +1ms，10ms 窗口经得起几次巡检。 */
+
+  uint8_t resp[NS2_FRAME_HEADER_LEN + 3 + NS2_NFC_READ_CHUNK_MAX];
+  const uint8_t eof[2] = { 0x58, 0x02 };
+  REQUIRE(run_cmd(0x06, NULL, 0, resp, sizeof(resp)) == NS2_FRAME_HEADER_LEN);
+  for (int i = 0; i < 60; i++) {
+    (void)ns2_nfc_report_state();
+  }
+  REQUIRE(run_cmd(0x15, eof, sizeof(eof), resp, sizeof(resp)) > 0);
+  CHECK_EQ(ns2_nfc_report_state(), 0x09); /* 完成窗口里标签仍在场。 */
+
+  uint8_t info[NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN];
+  CHECK_EQ(run_cmd(0x05, NULL, 0, info, sizeof(info)), sizeof(info));
+  CHECK_EQ(info[NS2_FRAME_HEADER_LEN], 0x09);
+  CHECK_EQ(info[NS2_FRAME_HEADER_LEN + 1], 0x31); /* 读卡完成标记。 */
+  CHECK_EQ(info[NS2_FRAME_HEADER_LEN + 2], 0x04);
+  CHECK_EQ(info[NS2_FRAME_HEADER_LEN + 11], s_image[0]);
+
+  /* 窗口内主机快速巡检射频场：完成形态保持。 */
+  const uint8_t poll_args[5] = { 0x00, 0xE8, 0x03, 0x2C, 0x01 };
+  CHECK_EQ(run_cmd(0x04, NULL, 0, resp, sizeof(resp)), NS2_FRAME_HEADER_LEN);
+  CHECK_EQ(run_cmd(0x03, poll_args, sizeof(poll_args), resp, sizeof(resp)), NS2_FRAME_HEADER_LEN);
+  CHECK_EQ(ns2_nfc_report_state(), 0x09);
+
+  /* 窗口期满 0x05 恢复普通在场形态，下一次扫描照常。 */
+  for (int i = 0; i < 8; i++) {
+    (void)ns2_nfc_report_state();
+  }
+  CHECK_EQ(ns2_nfc_report_state(), 0x09);
+  CHECK_EQ(run_cmd(0x05, NULL, 0, info, sizeof(info)), sizeof(info));
+  CHECK_EQ(info[NS2_FRAME_HEADER_LEN], 0x09);
+  CHECK_EQ(info[NS2_FRAME_HEADER_LEN + 1], 0x00); /* 完成标记已退场。 */
+  CHECK_EQ(info[NS2_FRAME_HEADER_LEN + 9], s_image[0]); /* UID0 取自镜像。 */
+  ns2_nfc_set_gone_delay_us(5 * 1000 * 1000LL); /* 恢复默认窗口。 */
+}
+
+/** 输入报告 0xC 的原生状态值域独立于 0x05 体首字节：自动映射在场 0x02、
+ *  读取中 0x03、就绪与完成窗口 0x04、关轮询 0x00，非 0 钉值恒定，0 回自动。 */
+static void test_native_state_mapping(void)
+{
+  ns2_nfc_reset();
+  fill_image();
+  REQUIRE(ns2_nfc_stage(s_image, sizeof(s_image)) == ESP_OK);
+  ns2_nfc_set_polling(true);
+  CHECK_EQ(ns2_nfc_native_state(), 0x02); /* 在场。 */
+
+  uint8_t resp[NS2_FRAME_HEADER_LEN + 3 + NS2_NFC_READ_CHUNK_MAX];
+  CHECK_EQ(run_cmd(0x06, NULL, 0, resp, sizeof(resp)), NS2_FRAME_HEADER_LEN);
+  CHECK_EQ(ns2_nfc_native_state(), 0x03); /* 读取中。 */
+  for (int i = 0; i < 60; i++) {
+    (void)ns2_nfc_report_state();
+  }
+  CHECK_EQ(ns2_nfc_native_state(), 0x04); /* 数据就绪。 */
+  const uint8_t eof[2] = { 0x58, 0x02 };
+  REQUIRE(run_cmd(0x15, eof, sizeof(eof), resp, sizeof(resp)) > 0);
+  CHECK_EQ(ns2_nfc_native_state(), 0x04); /* 完成窗口。 */
+
+  ns2_nfc_set_native_pin(0x06);
+  CHECK_EQ(ns2_nfc_native_state(), 0x06);
+  ns2_nfc_set_polling(false);
+  CHECK_EQ(ns2_nfc_native_state(), 0x00); /* 关场恒 Idle，钉值不遮边沿。 */
+  ns2_nfc_set_polling(true);
+  CHECK_EQ(ns2_nfc_native_state(), 0x06);
+  ns2_nfc_set_native_pin(0);
+  CHECK_EQ(ns2_nfc_native_state(), 0x04);
+}
+
 HOST_TEST_SUITE(suite_ns2_nfc, "ns2_nfc",
                 { "主机开轮询且预置镜像后 NFC 状态字节才亮起，关轮询即归零", test_nfc_state_follows_polling },
                 { "主机取卡信息拿到与样本同构的状态体，UID 取自镜像页 0-2", test_tag_info_carries_uid },
-                { "没有预置镜像时取卡信息是全零体", test_tag_info_empty_without_image },
+                { "没有预置镜像时取卡信息是不带 UID 的空场态体", test_tag_info_empty_without_image },
                 { "镜像按 70 字节分块读完，最后一块只剩 50 字节", test_read_buffer_chunks },
                 { "头区按读卡结构填充：前缀/UID/签名/尾串，标签从偏移 60 接续", test_read_buffer_header_template },
                 { "读取偏移越过镜像末端时不回数据", test_read_buffer_beyond_end },
@@ -536,4 +640,6 @@ HOST_TEST_SUITE(suite_ns2_nfc, "ns2_nfc",
                 { "0x03 重新开轮询把读卡流程复位", test_poll_start_resets_read_stage },
                 { "串口可手动钉住报告状态值做对账", test_report_stage_manual_override },
                 { "抽完后按推送模式生成完成事件，弹出一次即清", test_drain_event_push_variants },
+                { "抽完后进入读取完成窗口：0x05 带 31 04 完成标记，期满恢复在场形态", test_drain_gone_window_hides_tag },
+                { "输入报告原生状态值自动映射 0x02/0x03/0x04，钉值恒定 0 回自动", test_native_state_mapping },
                 { "开轮询、读卡与关轮询只回帧头 ACK，关场回到空闲", test_polling_commands_ack_and_idle });

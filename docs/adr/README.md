@@ -75,7 +75,7 @@
 | [0037](0037-ui-tick-rate-30hz.md) | superseded | UI 帧节奏定为 30 Hz：tickHz 写进 host profile，UI 侧以 ui/src/tick.ts 为唯一换算来源（TICK_HZ 取框架烘焙值），与帧绑定的时长写成毫秒再换算、序列图动画按累计帧推进以保持感官时间；部分取代 0017 的 60 Hz 帧预算取值，其中 30 Hz 这一取值由 0052 取代，tickHz 与 host profile 随 0054 作废 |
 | [0038](0038-user-initiated-connection-window.md) | active | 连接由用户发起：上电与断连（主机睡下）静默，连接键（配对页「连接」、PWR 长按 3 秒）开 30 秒连接窗口广播、HOME 在未连接时开 10 秒唤醒窗口，窗口到期或主机连上即收窗；部分取代 0031 的常态回连广播与 0027 的 PWR 长按入口 |
 | [0039](0039-pro-controller-only.md) | active | 设备对外只模拟一台 Pro Controller 2：身份、专用输入通道、报文体与会话回到单身份单连接，JoyCon 形态（左/右身份、0x07 / 0x08 报文体、导轨键确认与 side / rails 开关）整体移除；部分取代 0026 的透传身份约束 |
-| [0040](0040-pc-gui-customtkinter-console.md) | active | PC 侧新增图形界面入口 remapadgui.py（CustomTkinter）：与命令行共用 Session 与串口，输出改走可注入的 Reporter，界面只做队列排空、命令投递与事件映射 |
+| [0040](0040-pc-gui-customtkinter-console.md) | superseded | PC 侧新增图形界面入口 remapadgui.py（CustomTkinter）：与命令行共用 Session 与串口，输出改走可注入的 Reporter，界面只做队列排空、命令投递与事件映射；CustomTkinter 界面随 0065 迁到 mde-vue 后退役 |
 | [0041](0041-clover-carousel-and-pad-axis-navigation.md) | active | 四叶草菜单左右滑动轮播与手柄双轴交互重构：内容单屏固定不溢出不滚动，左右无限轮播，方向键左右切页、上下选控件，底部三态栏按优先级展示且中区不参与手柄焦点；取代 0029 |
 | [0042](0042-ds5-audio-haptics-onboard-synthesis.md) | active | DualSense 直插的触觉反馈走板上合成的音频通道：自写最小 UAC1 等时 OUT 客户端（48kHz/4ch PCM，后两路触觉、扬声器恒零），布局行 `out.audio_haptic` 声明能力，音频接手时 USB 路 HID 震动让位、桥接照旧 |
 | [0043](0043-ds5-bridge-pc-side-audio-haptics.md) | active | DualSense 桥接路径的音频触觉由 PC 侧合成：remapadctl 对 4ch 端点开 WASAPI 流驱动通道 3/4，参数吃 FEEDBACK 帧（载荷扩到 16 字节带频率落地值），经 `haptic audio on\|off` 告知设备把桥接 HID 震动让位；延伸 0042 的合成刻度与让位语义 |
@@ -92,7 +92,7 @@
 | [0054](0054-screen-ui-slint-rust.md) | active | 屏幕 UI 改用 Slint + Rust：.slint 在构建期编译成 Rust 静态库链进固件、运行期走软件渲染器，业务逻辑零 unsafe（只在 C ABI 边界留口并在注释里写明原因），字形按界面用到的字符自动子集，界面用例改成宿主侧 #[test]；取代 0001 |
 | [0055](0055-core-ui-split-optional-ui-build.md) | active | core 与屏幕 UI 分离：固件核心持 ui_service.h 契约（状态快照装配、动作分发、生命周期），界面组件与编译口径收进 ui/ 工作区、按 REMAPAD_UI 开关可选编入（OFF 纯 C 可编译、屏幕熄灭、设置走串口 CLI），控制面命令队列改由独立服务任务泵；延伸 0054 的构建边界 |
 | [0056](0056-ble-controller-off-power-save-cadence.md) | active | 完全静默（无连接、无广播窗口、不在配对流程）持续够久后关闭整个 BLE 栈（控制器断电，射频不再发热），连接键 / HOME / 配对新主机按起栈意图重新带起来；省电档（BLE 栈未运行）把数据面与界面节拍降到 12 fps 等效，屏幕不熄灭、不做空闲自动息屏 |
-| [0057](0057-single-uv-project-at-repo-root.md) | active | Python 依赖统一到仓库根一个 uv 工程：pc/ 的 hidapi / customtkinter / av / sounddevice 并入根 pyproject.toml，删除 pc/pyproject.toml 与 pc/uv.lock，命令一律写成 uv run python pc/<工具>.py，remapadctl 的默认镜像路径改按脚本位置解析；0040 里「依赖写进 pc/pyproject.toml」一句随本次调整作废 |
+| [0057](0057-single-uv-project-at-repo-root.md) | superseded | Python 依赖统一到仓库根一个 uv 工程：pc/ 的 hidapi / customtkinter / av / sounddevice 并入根 pyproject.toml，删除 pc/pyproject.toml 与 pc/uv.lock，命令一律写成 uv run python pc/<工具>.py，remapadctl 的默认镜像路径改按脚本位置解析；0040 里「依赖写进 pc/pyproject.toml」一句随本次调整作废；uv 工程随 0065 迁 Node 后移除 |
 | [0058](0058-clover-carousel-band-page-slide.md) | active | 上部分改成按一页步距平移的四叶草轮播带：底图烘成一个步距里的周期图平铺（仍是整幅不透明的拷贝路径），页面内容按槽位摆放，切页整条带滑行、静止时两侧各露一条邻页花瓣边；拖动跟手封顶在切页阈值、往回滑取消换页；部分取代 0050 的「切页瞬时完成」 |
 | [0059](0059-no-usb-device-output.md) | active | 输出通路只保留 BLE，不实现 USB 有线手柄输出；延伸 0039 的边界，协议文档的 USB 形态规范仅作协议记录 |
 | [0060](0060-ota-dual-channel-unified.md) | active | OTA 升级统一为串口与 WiFi（netlog UDP）双通道：同一套协议帧、PC 状态机与固件会话核心，BEGIN/END 幂等加窗口重发兜住 UDP 丢包；截图与 amiibo 上传仍只走串口（ACK 回发口径随 0061 修订） |
@@ -100,6 +100,7 @@
 | [0062](0062-wasm-ui-preview-and-playwright-e2e.md) | active | 屏幕 UI 的预览与回归统一到 WASM：存盘自动重编刷新的浏览器预览加 Playwright 端到端用例，模拟状态与结算收进 ui/preview/preview-core.slint，PC 交互预览（slint-viewer）退役 |
 | [0063](0063-mcp-cli-key-injection-engine.md) | active | MCP 按键注入服务采用固件 CLI 自持状态引擎：显式连接，自持按下状态表，tap 直发、按住键滚动续期、子集松开全松加重发；与实体手柄转发可并存 |
 | [0064](0064-mcp-key-replay.md) | active | MCP 按键回放采用 TAS 式逐帧记录与单任务打断模型：文件后台回放、进度进 status，回放期按键工具一律拒绝、打断只走 remapad_replay_stop |
+| [0065](0065-pc-tools-on-nodejs.md) | active | PC 侧工具从 Python 迁到 Node.js：pnpm workspace（pc、pc/gui），串口 koffi 直调 Win32 保持免复位、触觉用 @discordjs/opus 与 audify、HID 用 node-hid、MCP 用官方 SDK，界面改 Node 后端 + Vue 3 / mde-vue，宿主用例搬到 vitest；替代 0057，0040 的 CustomTkinter 界面随之退役 |
 
 ## 创建 ADR 脚本用法
 

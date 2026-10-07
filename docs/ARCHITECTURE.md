@@ -72,17 +72,17 @@ flowchart LR
 | UI 契约 | `firmware/main/ui/ui_service.h` | 核心侧状态快照装配、动作分发与生命周期入口 |
 | 调度 | 界面提供者任务 + 控制面服务任务 | 界面事件循环与控制面服务调度 |
 | 控制器数据面 | 数据面任务与驱动 | USB 输入接收、规范化、NS2 编码、BLE 广播与连接管理 |
-| 升级 | `pc/ctrl.py --upgrade` + `main/ota/` | 固件 OTA 镜像接收与分区写入校验 |
+| 升级 | `pc/src/ctrl.js --upgrade` + `main/ota/` | 固件 OTA 镜像接收与分区写入校验 |
 | 硬件 | BSP 驱动层 | 屏幕面板、触摸、按键、蜂鸣器与电池驱动 |
 
-## 双工作区结构
+## 工作区结构
 
 ```mermaid
 flowchart TB
     Root["remapad/"]
     Root --> RootFiles["AGENTS.md / .editorconfig / .gitignore"]
     Root --> Scripts["scripts/：create_adr.py / firmware-test.py / setup-rust-toolchain.py"]
-    Root --> PC["pc/：PC 侧工具 ctrl.py（hidapi 读手柄 → 桥接帧，另含命令行、截图与 OTA）与图形入口 gui.py"]
+    Root --> PC["pc/：PC 侧工具 ctrl.js（node-hid 读手柄 → 桥接帧，另含命令行、截图与 OTA）与连接控制台 gui-server"]
     Root --> Docs["docs/：系统架构、协议规范、硬件参考与 ADR"]
     Root --> UI["ui/：屏幕 UI 工作区（界面源码、固件界面组件与宿主用例）"]
     Root --> Firmware["firmware/：ESP-IDF 固件核心工作区"]
@@ -113,6 +113,7 @@ flowchart TB
 
 `ui/` 工作区承载界面源码、字体资源与测试用例，通过构建生成静态库交由固件链接。
 `firmware/` 工作区承载驱动、数据面与控制面，通过 `ui_service.h` 与界面交互。
+`pc/` 工作区承载 PC 侧工具（桥接、CLI、连接控制台与 MCP 服务），以桥接帧与 CLI 和固件通信，细节见 pc/README.md。
 界面各页面全部常驻，切页通过更新状态属性控制可见性。
 
 ## 构建链路
@@ -214,7 +215,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    Tool["pc/ctrl.py --upgrade<br/>校验镜像头与应用描述符<br/>串口 -p COMx / WiFi -n IP:端口"]
+    Tool["pc/src/ctrl.js --upgrade<br/>校验镜像头与应用描述符<br/>串口 -p COMx / WiFi -n IP:端口"]
     Link["input/input_link.c<br/>USJ 唯一读取者"]
     Net["netlog/netlog.c<br/>UDP 收帧（同一帧解码）"]
     Adapt["ota/ota_link.c<br/>桥接帧 ↔ 会话消息<br/>ACK 跟进帧通道回发"]

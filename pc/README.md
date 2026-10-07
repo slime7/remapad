@@ -1,66 +1,90 @@
 # Remapad PC 侧工具（ctrl）
 
-`ctrl.py` 负责将 PC 手柄输入转发给设备、提供串口 CLI、捕获截图与推送固件 OTA。
+`pc/src/ctrl.js` 负责将 PC 手柄输入转发给设备、提供串口 CLI、捕获截图与推送固件 OTA。
 
 ```mermaid
 flowchart LR
-    Pad["手柄 HID 报告（hidapi）"] --> Session["Session：桥接帧编解码 + 串口唯一写者"]
+    Pad["手柄 HID 报告（node-hid）"] --> Session["Session：桥接帧编解码 + 串口唯一写者"]
     Session -->|"REPORT 帧"| Dev["设备"]
     Dev -->|"OUT_REPORT / FEEDBACK / HOST_RAW / 图像帧"| Session
     CLI["命令行与交互命令"] --> Session
     Shot["实机截图（--shot）"] --> Session
     OTA["固件 OTA（--upgrade）"] --> Session
-    GUI["gui.py（CustomTkinter）"] --> Session
+    GUI["gui-server（Node 后端 + 浏览器前端）"] --> Session
     Session -->|"CLI 文本行"| Dev
 ```
 
-核心模块：
+核心模块（Node 22 ESM，pnpm workspace 管理）：
 
-- `link.py`：桥接帧编解码、会话管理与免复位 Win32 串口驱动。
-- `ctrl.py`：输入转发、串口 CLI、截图、OTA 与工具命令。
-- `gui.py`：图形界面（基于 CustomTkinter）。
+- `src/link/`：桥接帧编解码、免复位 Win32 串口驱动（koffi 直调）与 netlog UDP 链路。
+- `src/session/`：会话主循环、设备回读解析、截图、OTA 与 amiibo 上传。
+- `src/input/`：手柄枚举与设备树归属推导；`src/haptics/`：DS5 音频触觉（Opus + WASAPI）。
+- `src/ctrl.js`：输入转发、串口 CLI、截图、OTA 与工具命令。
+- `src/gui-server/` + `gui/`：图形控制台（Node 后端 + Vue 3 / mde-vue 前端）。
+- `src/mcp/`：按键注入 MCP 服务（stdio）。
 
 ## 依赖
 
 ```powershell
-uv sync
+pnpm install
 ```
 
-PC 工具依赖 Windows 环境与 uv 工具链。
+PC 工具依赖 Windows 环境与 Node 22、pnpm；原生依赖（koffi、node-hid、opus、audify）由 pnpm
+安装时预编译，仓库根 `package.json` 的 `pnpm.onlyBuiltDependencies` 已放行其构建脚本。
+图形界面前端另需构建一次（开发调试用 `pnpm --filter @remapad/gui dev`）：
+
+```powershell
+pnpm --filter @remapad/gui build
+```
 
 ## 用法
 
-以下命令在仓库根执行（`uv run` 用根目录 `.venv`；在 `pc/` 目录里去掉路径前缀同样能跑）：
+以下命令在仓库根执行（也可以用 `pnpm --filter @remapad/pc ctrl -- <参数>` 走包脚本）：
 
 ```powershell
-uv run python pc/ctrl.py --list                    # 列出候选的手柄接口
-uv run python pc/ctrl.py --dump --seconds 10       # 采集 10 秒原始报告（核对布局用）
-uv run python pc/ctrl.py -p COM3                   # 桥接 + 交互命令行
-uv run python pc/ctrl.py -p COM3 --no-pad          # 只当串口命令行用，不转发手柄
-uv run python pc/ctrl.py -p COM3 status            # 执行一条设备命令后退出
-uv run python pc/ctrl.py -p COM3 --all             # 拉取设备全部观测数据后退出
-uv run python pc/ctrl.py -p COM3 --shot            # 实机截图存成 PNG
-uv run python pc/ctrl.py -p COM3 --log --seconds 20
-uv run python pc/ctrl.py -p COM3 --log --reset --seconds 25
-uv run python pc/ctrl.py -p COM3 --capture host-raw.log --seconds 30
-                                             # 抓 30 秒主机原始输出（布局转换前）后退出
-uv run python pc/ctrl.py -p COM3 --upgrade --wait
-uv run python pc/ctrl.py -n 192.168.1.5 --upgrade
-                                             # 走 WiFi 的 netlog 通道推 OTA（会话开着才行；截图不能走网络）
-uv run python pc/ctrl.py -p COM3 --amiibo Alm.bin   # 上传 amiibo 镜像后退出
-uv run python pc/ctrl.py -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --no-rumble
-uv run python pc/ctrl.py -p COM3 --logs            # 桥接的同时打印设备日志
+node pc/src/ctrl.js --list                    # 列出候选的手柄接口
+node pc/src/ctrl.js --dump --seconds 10       # 采集 10 秒原始报告（核对布局用）
+node pc/src/ctrl.js -p COM3                   # 桥接 + 交互命令行
+node pc/src/ctrl.js -p COM3 --no-pad          # 只当串口命令行用，不转发手柄
+node pc/src/ctrl.js -p COM3 status            # 执行一条设备命令后退出
+node pc/src/ctrl.js -p COM3 --all             # 拉取设备全部观测数据后退出
+node pc/src/ctrl.js -p COM3 --shot            # 实机截图存成 PNG
+node pc/src/ctrl.js -p COM3 --log --seconds 20
+node pc/src/ctrl.js -p COM3 --log --reset --seconds 25
+node pc/src/ctrl.js -p COM3 --capture host-raw.log --seconds 30
+                                         # 抓 30 秒主机原始输出（布局转换前）后退出
+node pc/src/ctrl.js -p COM3 --upgrade --wait
+node pc/src/ctrl.js -n 192.168.1.5 --upgrade
+                                         # 走 WiFi 的 netlog 通道推 OTA（会话开着才行；截图不能走网络）
+node pc/src/ctrl.js -p COM3 --amiibo Alm.bin   # 上传 amiibo 镜像后退出
+node pc/src/ctrl.js -p COM3 --vid 0x054C --pid 0x0CE6 --max-rate 250 --no-rumble
+node pc/src/ctrl.js -p COM3 --logs            # 桥接的同时打印设备日志
 ```
 
 `--all` 依次拉取全部观测命令回读。
 
-## 图形界面（gui.py）
+## 图形界面（gui-server + gui）
 
-启动图形控制台：
+日常启动：
 
 ```powershell
-uv run python pc/gui.py
+node pc/gui/dev.mjs                           # 默认 http://127.0.0.1:8787/，--http-port 换端口
 ```
+
+发布包用构建产物托管前端，见下文「发布包」。别用 pnpm 间接跑 vite，Ctrl+C 会留下孤儿进程占着端口。
+
+## 发布包
+
+`pnpm build` 产出免安装的发布包到 `pc/dist/`：内含 Node 运行时、pc 源码与生产依赖、
+前端构建产物与 `remapad.cmd` 启动器，目标机器无需安装 Node：
+
+```text
+remapad.cmd gui      # 图形控制台，浏览器打开 http://127.0.0.1:8787/
+remapad.cmd ctrl -p COM3
+remapad.cmd mcp
+```
+
+包随构建机的平台与架构（当前 Windows x64）；仓库里另有 `node pc/gui/dev.mjs` 供开发热更新。
 
 功能分区：
 - **工具条**：串口/网络选择、连接控制与状态显示（同一串口不可与 CLI 同时打开）。
@@ -68,17 +92,19 @@ uv run python pc/gui.py
 - **设置**：屏幕亮度、手柄配色、DS4/DS5 按键映射与 WiFi 凭据配置。
 - **命令 / 升级 / 日志**：串口 CLI 命令交互、OTA 升级推送与实时日志监控。
 
+界面主题跟随系统，右上角按钮可在跟随系统 / 浅色 / 深色间循环并记住选择。
+
 ### 网络连接（WiFi UDP 调试通道）
 
 通过设备 UDP 调试端口（默认 9999）进行网络通信。支持手柄转发、CLI 与 OTA，不支持截图。
 
-## 按键注入 MCP 服务（mcp_server.py）
+## 按键注入 MCP 服务（src/mcp/）
 
 把「PC → 设备 → NS2 主机」的按键注入包成 stdio MCP 服务供 agent 调用：
 
 ```powershell
-uv run python pc/mcp_server.py                 # 启动后不碰设备，连接由 remapad_connect 完成
-uv run python pc/mcp_server.py -p COM3         # -p / -n 只是 remapad_connect 无参时的默认目标
+node pc/src/mcp/cli.js                 # 启动后不碰设备，连接由 remapad_connect 完成
+node pc/src/mcp/cli.js -p COM3         # -p / -n 只是 remapad_connect 无参时的默认目标
 ```
 
 调用模型是显式连接：先 `remapad_connect`（串口或 WiFi 二选一）建链，之后按键工具才可用，
@@ -86,7 +112,7 @@ uv run python pc/mcp_server.py -p COM3         # -p / -n 只是 remapad_connect 
 
 ```mermaid
 flowchart LR
-    Agent["Agent（MCP 客户端）"] -->|"stdio"| Svc["mcp_server.py"]
+    Agent["Agent（MCP 客户端）"] -->|"stdio"| Svc["src/mcp/cli.js"]
     Svc -->|"connect / disconnect"| Link["串口或 netlog UDP 链路"]
     Svc -->|"状态变更 / 续期"| Engine["按键状态引擎（自持按下表）"]
     Engine -->|"key / stick CLI 命令"| Session["ctrl.Session（串口唯一写者）"]
@@ -121,7 +147,7 @@ flowchart LR
 主机侧语义由固件布局映射（circle/cross/triangle/square→A/B/X/Y、opt→+、touchpad→-、
 home→HOME、share→capture、mute→C、l4/r4→GL/GR 背键、l1/l3/r1/r3→L/LS/R/RS）。
 模拟扳机（ZL/ZR 的模拟量）不在 CLI 注入面里，需要真手柄转发。
-注意：服务独占链路，与 ctrl.py / gui.py 不能同开一个串口。
+注意：服务独占链路，与 ctrl / gui 不能同开一个串口。
 
 ### 按键回放（remapad_replay）
 
@@ -151,6 +177,9 @@ fps = 60
 |30||.|
 |60|.|2048,2048|
 ```
+
+独立的蓝牙直气回放样例见 `pc/test/samples/pad_replay.mjs`
+（`node pc/test/samples/pad_replay.mjs <采集文件>`，私有触觉流与 HID 震动两种落点）。
 
 ## 串口命令面（完整控制手柄）
 
@@ -199,7 +228,7 @@ amiibo list      amiibo 槽位列表（名称 + UID，当前选中带 *）；ami
 :shot [路径]       抓实机截图并存成 PNG
 :log [秒|off]      透传设备日志（0 表示持续到 :log off）
 :capture [路径|off] 抓主机原始输出到文件（震动/玩家灯/指令，布局转换前；off 停止）
-:ota [镜像路径]    推固件镜像（默认 ../firmware/build/remapad_firmware.bin）
+:ota [镜像路径]    推固件镜像（默认 firmware/build/remapad_firmware.bin）
 :amiibo <bin 路径> 上传 amiibo 镜像到设备（540 纯镜像或 572 = 镜像 + 厂商签名，槽位名取文件名主干）
 :quit              退出
 ```
@@ -236,7 +265,7 @@ CRC-16/CCITT-FALSE 校验除末尾 2 字节外的整帧。常见帧类型：
 捕获主机向手柄下发的原始报文（震动、LED、指令等），文本格式记录：
 
 ```powershell
-uv run python pc/ctrl.py -p COM3 --capture host-raw.log --seconds 30 --pad
+node pc/src/ctrl.js -p COM3 --capture host-raw.log --seconds 30 --pad
 ```
 
 ```text
@@ -246,16 +275,24 @@ uv run python pc/ctrl.py -p COM3 --capture host-raw.log --seconds 30 --pad
 
 ## DS5 音频触觉（桥接路径，--no-audio-haptics 关闭）
 
-- **USB 直插 PC**：WASAPI 4ch 音频流驱动触觉与喇叭。
-- **蓝牙连接 PC**：优先 0x36（触觉 PCM + Opus 编码喇叭），缺失 libopus 时回落 0x32。
+- **USB 直插 PC**：WASAPI 4ch 音频流驱动触觉与喇叭（audify）。
+- **蓝牙连接 PC**：优先 0x36（触觉 PCM + Opus 编码喇叭），缺失原生 Opus 时回落 0x32。
 
 ## 固件 OTA（--upgrade）
 
 ```powershell
-uv run python pc/ctrl.py --dry-run                     # 只校验镜像，不接设备
-uv run python pc/ctrl.py -p COM3 --upgrade             # 升级默认镜像 firmware/build/remapad_firmware.bin
-uv run python pc/ctrl.py -p COM3 --upgrade --wait      # 等设备重启回来并打印版本
-uv run python pc/ctrl.py -p COM3 --upgrade --verbose   # 同时透传设备日志
+node pc/src/ctrl.js --dry-run                     # 只校验镜像，不接设备
+node pc/src/ctrl.js -p COM3 --upgrade             # 升级默认镜像 firmware/build/remapad_firmware.bin
+node pc/src/ctrl.js -p COM3 --upgrade --wait      # 等设备重启回来并打印版本
+node pc/src/ctrl.js -p COM3 --upgrade --verbose   # 同时透传设备日志
+```
+
+## 局域网日志收听
+
+与固件 netlog 命令配套的 UDP 终端（收日志、发 CLI，命令见 `--help`）：
+
+```powershell
+node scripts/netlog_listen.mjs --port 9999
 ```
 
 ## 主机端用例
@@ -263,7 +300,15 @@ uv run python pc/ctrl.py -p COM3 --upgrade --verbose   # 同时透传设备日�
 运行 PC 侧纯逻辑测试：
 
 ```powershell
-uv run python -m unittest discover -s pc/tests -t pc -v
+pnpm test
+```
+
+静态检查：
+
+```powershell
+pnpm lint            # eslint
+pnpm lint:fix        # eslint 自动修复
+pnpm lint:style      # stylelint
 ```
 
 ## 已知限制

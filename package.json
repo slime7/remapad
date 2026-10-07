@@ -1,0 +1,42 @@
+{
+    "name": "remapad-node",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Remapad PC 侧 Node.js 工作区（pc 工具与 gui 前端共用这份依赖管理）",
+    "type": "module",
+    "packageManager": "pnpm@10.28.0",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "dev": "node pc/gui/dev.mjs",
+        "build": "node scripts/build_release.mjs",
+        "test": "pnpm --filter @remapad/pc test",
+        "lint": "eslint pc scripts",
+        "lint:fix": "eslint pc scripts --fix",
+        "lint:style": "stylelint \"pc/gui/src/**/*.{vue,css}\""
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.39.0",
+        "@stylistic/eslint-plugin": "^5.0.0",
+        "@stylistic/stylelint-plugin": "^4.0.0",
+        "eslint": "^9.39.0",
+        "eslint-plugin-vue": "^10.0.0",
+        "globals": "^17.0.0",
+        "postcss-html": "^1.8.0",
+        "stylelint": "^16.26.0",
+        "stylelint-config-recommended-vue": "^1.6.0",
+        "stylelint-config-standard": "^40.0.0",
+        "vitest": "^3.2.4",
+        "vue-eslint-parser": "^10.0.0"
+    },
+    "pnpm": {
+        "onlyBuiltDependencies": [
+            "@discordjs/opus",
+            "audify",
+            "esbuild",
+            "koffi",
+            "node-hid"
+        ]
+    }
+}

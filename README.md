@@ -70,7 +70,7 @@ remapad/
 
 ## 开发快速上手
 
-环境要求：ESP-IDF（>=6.0,<6.2）、Python 3.10+ 与 uv、Rust。
+环境要求：ESP-IDF（>=6.0,<6.2）、Node 22+ 与 pnpm（PC 侧工具）、Python 3.10+（scripts/ 脚本）、Rust。
 
 ### 1. 屏幕 UI
 
@@ -94,10 +94,11 @@ idf.py -p COMx flash monitor
 ### 3. PC 侧辅助工具
 
 ```powershell
+pnpm install
 # 命令行桥接控制台
-uv run python pc/ctrl.py -p COMx
-# 图形化操作界面
-uv run python pc/gui.py
+node pc/src/ctrl.js -p COMx
+# 图形化操作界面（先构建前端：pnpm --filter @remapad/gui build）
+node pc/src/gui-server/cli.js
 ```
 
 ## 文档索引

@@ -116,7 +116,7 @@ pnpm exec playwright test pointer # 只跑文件名/用例名匹配的用例
 ### 运行
 
 ```powershell
-uv run python scripts/firmware-test.py
+python scripts/firmware-test.py
 ```
 
 编译器按 `CC` 环境变量、MSVC（自动探测 `vcvars64.bat`）、`clang`、`gcc` 的顺序探测，`CC=clang` 可以强制指定。
@@ -132,24 +132,23 @@ uv run python scripts/firmware-test.py
 
 ## PC 侧主机端用例
 
-基于 Python 标准库 `unittest` 测试 PC 侧工具纯逻辑：
+vitest（Node 22）测试 PC 侧工具纯逻辑，用例在 `pc/test/`，跑的是 `pc/src/` 下的真源码，
+不复制被测逻辑，也不开真串口与窗口（链路、会话与 GUI 后端经注入的替身驱动）：
 
-| 文件 | 测试内容 |
-| :--- | :--- |
-| `pc/tests/test_ports.py` | 串口端口枚举与异常提示 |
-| `pc/tests/test_image.py` | 固件镜像头结构与描述符校验 |
-| `pc/tests/test_frame_codec.py` | 桥接帧编码、解码与 CRC 校验 |
-| `pc/tests/test_pick_device.py` | 手柄接口过滤与设备匹配 |
-| `pc/tests/test_session_output.py` | 输出分流与命令行解析 |
-| `pc/tests/test_settings_reply.py` | 设备状态回读格式解析 |
-| `pc/tests/test_mcp_pad.py` | MCP 按键服务：键位表、快照报文合成、引擎帧输出与脚本时间线 |
-| `pc/tests/test_mcp_replay.py` | MCP 按键回放：记录解析与编译、回放线程推进与打断、回放期工具拒绝 |
+| 分组 | 用例 | 覆盖内容 |
+| :--- | :--- | :--- |
+| 链路 | `frame_codec` / `net_link` / `ports` / `secrets` | 桥接帧编解码与 CRC、UDP 链路与端点解析、串口枚举与打开提示、日志脱敏 |
+| 会话 | `session_output` / `settings_reply` / `device_facts` / `feedback_params` / `write_gate` | 输出分流与命令行解析、设备回读解析、事实拼行、反馈节流与写回闸门 |
+| 业务 | `image` / `ota_job` / `amiibo` / `host_capture` / `run_dump` / `pick_device` / `bt_haptics_switch` | 镜像校验、OTA 会话推进、amiibo 上传、原始采集、`--list`/`--dump`、手柄挑选、触觉切换 |
+| 触觉 | `ds5_haptics` / `ds5_bt_haptics` | 触觉合成刻度与蓝牙私有流（含真实 Opus 编解码回环） |
+| MCP | `mcp_pad` / `mcp_replay` | 键位表、注入引擎命令序列、脚本时间线、回放解析与桥接互斥、工具注册面 |
+| 回放样例 | `pad_replay_landings` / `pad_replay_ctrlc` | `pad_replay.mjs` 样例的落点行为与 Ctrl-C 收尾 |
+| GUI | `gui_server` | 连接控制台后端：命令路由与守卫、回读吸收、连接/升级守卫、事件状态机 |
 
 ```powershell
-uv run python -m unittest discover -s pc/tests -t pc     # 在仓库根执行
-uv run python -m unittest discover -s pc/tests -t pc -v  # 加 -v 看每条用例名
+pnpm test                                        # 在仓库根执行（= pnpm --filter @remapad/pc test）
+cd pc ; npx vitest run test/frame_codec.test.js  # 只跑一个文件
+cd pc ; npx vitest                               # watch 模式
 ```
 
-用例跑的是 `pc/` 下的真源码（`import ctrl` / `import link`），不复制被测逻辑，也不创建窗口：
-界面本身靠实机与隐藏窗口的手工走查，只有它的队列接收器（`gui.QueueReporter`）与输入框取值、时长格式这类纯函数进用例。
-新增用例直接放进 `pc/tests/`，文件名以 `test_` 开头。
+新增用例直接放进 `pc/test/`，文件名以 `.test.js` 结尾。

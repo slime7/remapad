@@ -107,8 +107,8 @@ static void cli_help(void)
 #endif
   cli_print("  amiibo [list|select <n>|select off|del <n>|poll on|off]");
   cli_print("                      amiibo slots and NFC tag emulation (no arg = state)");
-  cli_print("                      amiibo state <hex> pin report stage, done <hex> post-drain");
-  cli_print("                      amiibo hdr 0|1 read buffer header, push 0-4 drain event");
+  cli_print("                      amiibo state <hex> pin report stage, nat <hex> pin native nfc");
+  cli_print("                      amiibo hdr 0-4 read buffer header, push 0-4 drain event");
   cli_print("  fwver [a.b.c]       handset fw version reported to the host");
   cli_print("  fwack [hex bytes]   ack body for the host update frame (default empty)");
   cli_print("  fwpost [a.b.c]      version reported after a host update (default 9.9.9)");
@@ -658,7 +658,7 @@ static void cli_motion(const char *arg)
 
 /**
  * 实机截图：请求交给 UI 提供者在下一轮状态轮询里把当前帧缓冲回传，
- * 像素经桥接图像帧发出；PC 侧（pc/ctrl.py 的 shot）落地成 PNG。
+ * 像素经桥接图像帧发出；PC 侧（pc/src/ctrl.js 的 shot）落地成 PNG。
  * 这里只置标志，不等回传，回复 ok 表示请求已入队（无 UI 构建里由空实现回绝）。
  */
 static void cli_shot(void)
@@ -1233,7 +1233,7 @@ static void cli_fwapply(const char *arg)
 /** 槽位镜像里的 7 字节 UID（NTAG215 页 0-2 的 UID 字段）排成十六进制串。 */
 static void cli_amiibo_uid(const uint8_t *image, char *out, size_t cap)
 {
-  static const size_t offs[7] = { 0, 1, 2, 4, 5, 6, 8 };
+  static const size_t offs[7] = { 0, 1, 2, 4, 5, 6, 7 };
   size_t used = 0;
   for (size_t i = 0; i < 7 && used + 2 < cap; i++) {
     snprintf(&out[used], cap - used, "%02x", image[offs[i]]);
@@ -1243,7 +1243,7 @@ static void cli_amiibo_uid(const uint8_t *image, char *out, size_t cap)
 }
 
 /**
- * amiibo 槽位与 NFC 标签模拟：镜像由 PC 侧（ctrl.py --amiibo 或界面）经
+ * amiibo 槽位与 NFC 标签模拟：镜像由 PC 侧（ctrl.js --amiibo 或界面）经
  * 桥接帧上传落库；select 把镜像预置进 NFC 模拟层（主机开轮询后即感应到卡）。
  * poll 是串口验证开关——没有主机在场时让标签手动入场/离场。
  */
@@ -1344,14 +1344,12 @@ static void cli_amiibo(const char *arg)
     cli_print(line);
     return;
   }
-  if (strcmp(cmd, "done") == 0) {
-    if (sub[0] == '\0') {
-      cli_print("ok usage: amiibo done <hex> (post-drain state value)");
-      return;
+  if (strcmp(cmd, "nat") == 0) {
+    if (sub[0] != '\0') {
+      ns2_nfc_set_native_pin((uint8_t)strtoul(sub, NULL, 16));
     }
-    const uint32_t value = strtoul(sub, NULL, 16);
-    ns2_nfc_set_drained_state((uint8_t)value);
-    snprintf(line, sizeof(line), "ok amiibo drained state -> 0x%02x", (unsigned)value & 0xFFu);
+    snprintf(line, sizeof(line), "ok amiibo native pin 0x%02x (native 0x%02x, usage: amiibo nat <hex>, 0 = auto)",
+             (unsigned)ns2_nfc_native_pin(), (unsigned)ns2_nfc_native_state());
     cli_print(line);
     return;
   }
@@ -1366,17 +1364,19 @@ static void cli_amiibo(const char *arg)
     return;
   }
   if (strcmp(cmd, "hdr") == 0) {
-    if (strcmp(sub, "0") == 0 || strcmp(sub, "1") == 0) {
+    if (sub[0] >= '0' && sub[0] <= '4' && sub[1] == '\0') {
       ns2_nfc_set_header_mode((uint8_t)(sub[0] - '0'));
-      snprintf(line, sizeof(line), "ok amiibo header mode %s", ns2_nfc_header_mode() ? "template" : "zeros");
+      static const char *const hdr_names[] = { "zeros", "payload-tail", "read1-tail", "read1-ns2", "pure-tag" };
+      snprintf(line, sizeof(line), "ok amiibo header mode %u (%s)", (unsigned)ns2_nfc_header_mode(),
+               hdr_names[ns2_nfc_header_mode()]);
       cli_print(line);
       return;
     }
-    snprintf(line, sizeof(line), "ok amiibo header mode %u (usage: amiibo hdr 0|1)", (unsigned)ns2_nfc_header_mode());
+    snprintf(line, sizeof(line), "ok amiibo header mode %u (usage: amiibo hdr 0-4)", (unsigned)ns2_nfc_header_mode());
     cli_print(line);
     return;
   }
-  cli_print("err usage: amiibo [list|select <n>|select off|del <n>|poll on|off|state|done|hdr]");
+  cli_print("err usage: amiibo [list|select <n>|select off|del <n>|poll on|off|state|nat|hdr|push]");
 }
 
 static void cli_dispatch(char *line)

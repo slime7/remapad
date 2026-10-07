@@ -2,7 +2,8 @@
 
 Remapad 是面向搭载屏幕的微雪 ESP32-S3-Touch-LCD-1.69（ESP32-S3R8）的嵌入式控制器系统：
 USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
-工程分为 `ui/`（屏幕 UI 工作区：界面源码、固件界面组件与宿主用例）与 `firmware/`（ESP-IDF 固件核心）两个工作区；
+工程分为 `ui/`（屏幕 UI 工作区：界面源码、固件界面组件与宿主用例）、`firmware/`（ESP-IDF 固件核心）
+与 `pc/`（PC 侧工具 pnpm workspace：桥接、CLI、图形控制台与 MCP 服务）三个工作区；
 主机协议资料见 [docs/controller-switch2.md](docs/controller-switch2.md)，输入设备数据见 [docs/controller-ps.md](docs/controller-ps.md)，
 板卡规格见 [docs/hardware.md](docs/hardware.md)。
 
@@ -40,6 +41,14 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
   - `ui/host/`：宿主侧测试用例包。
   - `ui/slint_ui/`：固件界面组件与平台适配。
   - `ui/preview/`：WASM 预览与浏览器端到端测试。
+- **PC 侧工具工程 (`pc/`)**：
+  - `pc/src/link/`：桥接帧编解码、免复位 Win32 串口驱动与 netlog UDP 链路。
+  - `pc/src/input/`：手柄枚举与设备树归属；`pc/src/haptics/`：DS5 音频触觉合成与发送。
+  - `pc/src/session/`：会话主循环、设备回读解析、截图、OTA 与 amiibo 上传。
+  - `pc/src/ctrl.js`：桥接转发与 CLI 入口；`pc/src/index.js`：模块统一出口。
+  - `pc/src/gui-server/` + `pc/gui/`：连接控制台（Node 后端 + Vue 3 / mde-vue 前端）。
+  - `pc/src/mcp/`：按键注入 MCP 服务（engine / timeline / bridge / server / cli）。
+  - `pc/test/`：vitest 宿主用例；`pc/test/samples/`：pad_replay 蓝牙直气回放样例。
 - **设备固件工程 (`firmware/`)**：
   - `firmware/main/`：包含驱动、输入接收、协议转换与 BLE 通信。
   - `firmware/main/ui/ui_service.h`：固件核心与 UI 之间的状态快照装配与动作分发契约。
@@ -67,22 +76,26 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
 | **屏幕 UI WASM 预览** | `cd ui/preview ; pnpm dev` | 启动浏览器端 WASM 界面预览（存盘自动重编并刷新） |
 | **屏幕 UI 浏览器端到端用例** | `cd ui/preview ; pnpm test` | 执行浏览器端自动化端到端测试 |
 | **屏幕 UI Rust 格式化与 Lint** | `cargo fmt --manifest-path ui/Cargo.toml --all` | 执行 UI 代码格式化与 Clippy 检查 |
-| **固件主机端测试** | `uv run python scripts/firmware-test.py` | 运行固件纯逻辑主机端测试 |
-| **PC 侧主机端测试** | `uv run python -m unittest discover -s pc/tests -t pc` | 运行 PC 工具纯逻辑单元测试 |
+| **PC 侧依赖安装** | `pnpm install` | 安装 pc 与 pc/gui 的 Node 依赖（原生模块自动预编译） |
+| **PC 侧主机端测试** | `pnpm test` | 运行 PC 工具 vitest 宿主用例 |
+| **PC 侧 JS 静态检查** | `pnpm lint` ; `pnpm lint:style` | 执行 PC 工具与 GUI 的 eslint / stylelint 检查 |
+| **PC 侧 GUI 前端构建** | `pnpm --filter @remapad/gui build` | 构建连接控制台前端（开发调试 `pnpm --filter @remapad/gui dev`） |
+| **PC 发布包** | `pnpm build` | 构建带 Node 运行时的免安装发布包到 `pc/dist/` |
+| **固件主机端测试** | `python scripts/firmware-test.py` | 运行固件纯逻辑主机端测试 |
 | **固件配置** | `cd firmware ; idf.py set-target esp32s3` | 设置芯片目标并生成配置 |
 | **固件编译** | `cd firmware ; idf.py build` | 编译完整固件（-DREMAPAD_UI=OFF 为无 UI 构建） |
 | **固件烧录** | `cd firmware ; idf.py -p COMx flash monitor` | 烧录固件并进入监视器 |
 | **固件增量烧录** | `cd firmware ; idf.py -p COMx app-flash` | 仅烧录应用分区 |
 | **固件 C 格式化与静态检查** | `clang-format -i <改动的 .c/.h>` | 格式化 C 语言代码 |
-| **固件 OTA 升级** | `uv run python pc/ctrl.py -p COMx --upgrade` | 执行固件 OTA 升级（支持串口与 -n 网络模式） |
-| **PC 手柄桥接** | `uv run python pc/ctrl.py -p COMx` | 运行 PC 手柄桥接服务与 CLI 控制台 |
-| **PC 连接控制台** | `uv run python pc/gui.py` | 启动 PC 图形管理控制台 |
-| **MCP 按键服务** | `uv run python pc/mcp_server.py -p COMx` | 启动按键注入 MCP 服务供 agent 调用（`-n HOST[:PORT]` 走 WiFi） |
-| **串口 CLI** | `uv run python pc/ctrl.py -p COMx status` | 执行单条设备 CLI 命令 |
-| **局域网日志收听** | `uv run python scripts/netlog_listen.py [--port 9999]` | 监听设备 UDP 调试日志并发送命令 |
-| **主机输出原始采集** | `uv run python pc/ctrl.py -p COMx --capture host-raw.log` | 抓取主机输出原始数据包 |
-| **amiibo 镜像上传** | `uv run python pc/ctrl.py -p COMx --amiibo Alm.bin` | 上传 NTAG215 amiibo 镜像到设备 |
-| **实机截图** | `uv run python pc/ctrl.py -p COMx --shot` | 截取设备屏幕当前画面为 PNG |
+| **固件 OTA 升级** | `node pc/src/ctrl.js -p COMx --upgrade` | 执行固件 OTA 升级（支持串口与 -n 网络模式） |
+| **PC 手柄桥接** | `node pc/src/ctrl.js -p COMx` | 运行 PC 手柄桥接服务与 CLI 控制台 |
+| **PC 连接控制台** | `node pc/gui/dev.mjs` | 启动 PC 图形管理控制台，浏览器打开 http://127.0.0.1:8787/ |
+| **MCP 按键服务** | `node pc/src/mcp/cli.js -p COMx` | 启动按键注入 MCP 服务供 agent 调用（`-n HOST[:PORT]` 走 WiFi） |
+| **串口 CLI** | `node pc/src/ctrl.js -p COMx status` | 执行单条设备 CLI 命令 |
+| **局域网日志收听** | `node scripts/netlog_listen.mjs [--port 9999]` | 监听设备 UDP 调试日志并发送命令 |
+| **主机输出原始采集** | `node pc/src/ctrl.js -p COMx --capture host-raw.log` | 抓取主机输出原始数据包 |
+| **amiibo 镜像上传** | `node pc/src/ctrl.js -p COMx --amiibo Alm.bin` | 上传 NTAG215 amiibo 镜像到设备 |
+| **实机截图** | `node pc/src/ctrl.js -p COMx --shot` | 截取设备屏幕当前画面为 PNG |
 
 固件命令要在**配置本工程时用的那套 ESP-IDF 环境**里执行；配置用的解释器记录在 `firmware/build/CMakeCache.txt`
 （`rg -n '^PYTHON' firmware/build/CMakeCache.txt`）。
@@ -96,6 +109,8 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
 
 ## 项目特有约束
 
+- **说明文字只写读者缺的信息**：命令说明栏与界面提示写命令本身给不出的信息（端口、前提、副作用、限制）；
+  不写实现亮点与效果描述（如「热更新」「单进程」「改完即刷新」），不用括号塞解释，约定俗成的概念不解释。
 - **文档分层归位**：协议与设备数据进 [docs/controller-switch2.md](docs/controller-switch2.md) 与
   [docs/controller-ps.md](docs/controller-ps.md)；系统结构、链路与实现进 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 与
   [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md)；操作、命令与排错进本文件、[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)、
@@ -131,6 +146,6 @@ USB 输入 → NS2 手柄报告 → BLE 手柄，配套屏幕 UI。
 | 屏幕界面的布局、交互与字形烘焙规则变动 | [ui/README.md](ui/README.md), [docs/TESTING.md](docs/TESTING.md) |
 | OTA 升级通路、桥接帧类型或载荷布局变动 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ABSTRACTIONS.md](docs/ABSTRACTIONS.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), [pc/README.md](pc/README.md) |
 | 环境依赖、操作指令、目录结构变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
-| Python 工程结构、uv 依赖或命令入口变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), [pc/README.md](pc/README.md), 本文件 (`AGENTS.md`) |
+| Node 工程结构、pnpm 依赖或命令入口变动 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), [pc/README.md](pc/README.md), 本文件 (`AGENTS.md`) |
 | 测试入口、用例范围、回归规则或断言分层变动 | [docs/TESTING.md](docs/TESTING.md), [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md), 本文件 (`AGENTS.md`) |
 | 产生新的长期架构决策与技术选型取舍 | 使用 [scripts/create_adr.py](scripts/create_adr.py) 新建 ADR 并更新 [docs/adr/README.md](docs/adr/README.md) |

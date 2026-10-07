@@ -1,0 +1,4 @@
+# pnpm 工作区：PC 侧工具（桥接、CLI、MCP）与图形控制台前端共用根目录依赖管理。
+packages:
+    - pc
+    - pc/gui

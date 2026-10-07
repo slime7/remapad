@@ -55,24 +55,34 @@ bool ns2_nfc_uid(uint8_t out[7]);
 void ns2_nfc_set_polling(bool on);
 bool ns2_nfc_polling(void);
 
-/** 输入报告的 NFC 状态字节（与 0x05 体首字节同源）：场开无卡 0x01、卡片在场
- *  0x09、0x06 触发后 0x14（读取中）→ 30ms 后 0x15（就绪）、抽块结束报
- *  「读取结束」值（ns2_nfc_set_drained_state 可调，默认 0x00）；关轮询 0x00。 */
+/** 输入报告 0xC 之外的 NFC 状态值（0x05 体首字节的 MCU 兼容值域）：场开无卡
+ *  0x01、卡片在场 0x09、0x06 触发后 0x14（读取中）→ 30ms 后 0x15（就绪）；
+ *  抽块结束进入「读取完成」窗口仍报在场，0x05 改按完成形态应答；关轮询 0x00。 */
 uint8_t ns2_nfc_report_state(void);
+
+/** 输入报告 0xC 的 NFC 状态字节（原生值域 0x00-0x07，0x00 = Idle，真实手柄
+ *  观测范围）：自动映射 场开无卡 0x01 / 在场 0x02 / 读取中 0x03 / 就绪与完成
+ *  窗口 0x04，`amiibo nat <hex>` 可整段钉住扫描。 */
+uint8_t ns2_nfc_native_state(void);
+
+/** 钉住输入报告的原生状态值：0 回自动映射，非 0 原样钉住（0x00-0x07 扫描用）。 */
+void ns2_nfc_set_native_pin(uint8_t value);
+uint8_t ns2_nfc_native_pin(void);
 
 /** 手动钉住报告状态值（串口 `amiibo state <n>` 对账用）：0 回自动，
  *  非 0 原样钉住（如 0x14/0x15）。 */
 void ns2_nfc_set_report_stage(uint8_t stage);
 
-/** 设置「读取结束」（EOF 探测后）的报告状态值，扫正确的完成信号用，
- *  默认 0x00 = Idle。 */
-void ns2_nfc_set_drained_state(uint8_t state);
+/** 设置「读取完成」窗口时长（微秒），默认 5 秒，窗口内 0x05 按读卡完成形态
+ *  应答，期满卡片回到普通在场状态；主机端用例缩短窗口做断言。 */
+void ns2_nfc_set_gone_delay_us(int64_t delay_us);
 
-/** 读缓冲 60 字节头区的填充模式：1 = 按读卡结构填充（默认）、0 = 全零头；
- *  串口 `amiibo hdr 0|1` 实时可切。 */
+/** 读缓冲 60 字节头区的填充模式：1 = 按读卡结构填充（尾串对齐 0x06 载荷，
+ *  默认）、2 = 尾串对齐 Switch1 read1 原文、3 = read1 对齐且协议字节 01 03、
+ *  4 = 纯标签无头区（缓冲总长 540）、0 = 全零头；串口 `amiibo hdr 0-4` 实时可切。 */
 void ns2_nfc_set_header_mode(uint8_t mode);
 
-/** 当前头区填充模式（0/1）。 */
+/** 当前头区填充模式（0-2）。 */
 uint8_t ns2_nfc_header_mode(void);
 
 /** 抽块结束后主动推送的完成事件形态（串口 `amiibo push <n>` 实时可切，扫正确形态用）：

@@ -1,0 +1,7 @@
+/* 顶层级联层顺序：Tailwind 主题与 reset 先行，mde 组件样式随后恢复原生元素，
+   tailwind utilities 可覆盖组件，mde-final 只维持少量安全不变量。 */
+@layer tailwind-theme, tailwind-reset, mde, tailwind-utilities, mde-final;
+
+@import 'tailwindcss/theme.css' layer(tailwind-theme);
+@import 'tailwindcss/preflight.css' layer(tailwind-reset);
+@import 'tailwindcss/utilities.css' layer(tailwind-utilities);

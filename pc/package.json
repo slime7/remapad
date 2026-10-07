@@ -1,0 +1,30 @@
+{
+    "name": "@remapad/pc",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Remapad PC 侧工具：桥接转发 + 串口命令行 + 实机截图 + 固件 OTA + 按键注入 MCP 服务",
+    "type": "module",
+    "exports": {
+        ".": "./src/index.js",
+        "./gui-constants": "./src/gui-server/constants.js",
+        "./gui-shared": "./src/gui-shared.js"
+    },
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "ctrl": "node src/ctrl.js",
+        "mcp": "node src/mcp/cli.js",
+        "gui": "node src/gui-server/cli.js",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@discordjs/opus": "^0.10.0",
+        "@modelcontextprotocol/sdk": "^1.13.0",
+        "audify": "^1.9.0",
+        "commander": "^14.0.0",
+        "koffi": "^2.12.0",
+        "node-hid": "^3.1.2",
+        "ws": "^8.18.0"
+    }
+}

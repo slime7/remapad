@@ -1,0 +1,43 @@
+/* 应用样式入口：先定级联层顺序，再进 mde-vue 基础样式与 tailwind 语义映射，
+   最后是应用自身规则。入口只 import 本文件。 */
+@import './layers.css';
+@import 'mde-vue/styles.css';
+@import 'mde-vue/tailwind.css';
+
+/* 页面基础尺寸与滚动复位：mde-vue 的 AppRoot 不修改 html/body，这里自己清掉默认边距。 */
+html,
+body,
+#app {
+  min-block-size: 100%;
+}
+
+/* 宽屏时顶栏内容与 1280 主体对齐：栏保持全宽，内容用动态内边距收进主体宽度。 */
+.mat-app-bar__main {
+  padding-inline: max(12px, calc((100% - 1280px) / 2));
+}
+
+/* mde-vue 只负责渲染图标字形，字体由应用自备：自托管 Material Symbols 可变字体，
+   局域网工具离线也能出图标（连字经 font-feature-settings: 'liga' 渲染）。 */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url('../assets/material-symbols-outlined.woff2') format('woff2');
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}

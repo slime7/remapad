@@ -53,8 +53,8 @@ pnpm test                               # 起服务 + 跑 Playwright 用例
 构建界面需要 Xtensa Rust 工具链（`esp`）与 `rust-src` 组件。
 
 ```powershell
-uv run python scripts/setup-rust-toolchain.py          # 自动安装或补全缺失组件
-uv run python scripts/setup-rust-toolchain.py --check  # 仅检查
+python scripts/setup-rust-toolchain.py          # 自动安装或补全缺失组件
+python scripts/setup-rust-toolchain.py --check  # 仅检查
 ```
 
 手动安装步骤：

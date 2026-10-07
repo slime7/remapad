@@ -34,9 +34,11 @@ static struct {
      *  0x15 = 数据就绪（读卡耗时过后）——主机在 0x06 后检查 0x05 体首字节，
      *  并等报告状态字节到 0x15 才来拉数据。 */
   uint8_t read_stage;
-  /** 主机抽完块（EOF 探测）后的「读取结束」：状态报 s_drained_state（串口
-     *  可调，默认 0x00 Idle），下一次 0x03/0x04/0x06 复位。 */
+  /** 主机抽完块（EOF 探测）后的「读取完成」窗口：0x05 按读卡完成形态应答
+     *  （`09 31 04` + 卡信息，Switch1 MCU read3 的同构收尾），窗口期满卡片
+     *  回到普通在场状态。主机要凭这帧把读到的数据交给游戏。 */
   bool drained;
+  int64_t drained_at_us;
   int64_t read_started_us;
   /** 写卡缓冲：主机经 0x14 分块装载，0x01/0x08 一次性提交进镜像。
      *  首块带 `d0 07` 操作描述符时进入流式模式（描述符 17 字节剥掉，标签
@@ -53,13 +55,23 @@ static struct {
  *  同构（其后直接接标签页 4）。 */
 #define NS2_NFC_WRITE_DESC_LEN 17u
 
-/** 读取结束后的报告状态值（串口 `amiibo done <n>` 可调，扫「读取结束」的
- *  正确值用），默认 0x00 = Idle。 */
-static uint8_t s_drained_state;
+/** 抽块结束后的「读取完成」窗口时长：窗口内 0x05 报读卡完成形态（标签仍在
+ *  感应区），期满卡片回到普通在场状态，下一次扫描照常工作。 */
+#define NS2_NFC_GONE_DELAY_US (5 * 1000 * 1000LL)
 
-/** 读缓冲头区填充模式：1 = 结构模板（默认），0 = 全零（对账基线）；
- *  独立于 s_nfc，reset 不清。 */
+/** 「读取完成」窗口时长（主机端用例可缩短）；0 = 永不期满。 */
+static int64_t gone_delay_us = NS2_NFC_GONE_DELAY_US;
+
+/** 读缓冲头区填充模式：1 = 尾串对齐 0x06 载荷（默认），2 = 尾串对齐 read1
+ *  原文，3 = read1 对齐且接口字节按 NS2 0x06 载荷取 01 03，4 = 纯标签无头区
+ *  （缓冲总长 540），0 = 全零（对账基线）；独立于 s_nfc，reset 不清。 */
 static uint8_t s_header_mode = 1;
+
+/** 读缓冲里标签数据的起始偏移：模式 4 无头区，标签数据从 0 开始。 */
+static size_t header_len_for_mode(uint8_t mode)
+{
+  return mode == 4u ? 0u : NS2_NFC_BUFFER_HEADER;
+}
 
 /** 抽块结束后的主动推送模式（ns2_nfc_set_push_mode）。 */
 static uint8_t s_push_mode;
@@ -134,14 +146,16 @@ bool ns2_nfc_uid(uint8_t out[7])
   if (s_nfc.image == NULL || s_nfc.image_len < 9) {
     return false;
   }
-  /* NTAG215 页 0-2：UID0-2 + BCC0 | UID3-5 + BCC1 | UID6 + 内部锁位。 */
+  /* NTAG215 页 0-2：UID0-2 + BCC0 | UID3-6 | BCC1 + INT + 锁位——UID6 在字节 7，
+   * 字节 8 是 BCC1（= UID3^UID4^UID5^UID6），取错会让 0x05 上报的 UID 与缓冲区
+   * 里原始镜像的 UID 块不一致，主机校验失败后静默重试。 */
   out[0] = s_nfc.image[0];
   out[1] = s_nfc.image[1];
   out[2] = s_nfc.image[2];
   out[3] = s_nfc.image[4];
   out[4] = s_nfc.image[5];
   out[5] = s_nfc.image[6];
-  out[6] = s_nfc.image[8];
+  out[6] = s_nfc.image[7];
   return true;
 }
 
@@ -168,17 +182,28 @@ static uint8_t effective_stage(void)
   return s_nfc.read_stage;
 }
 
+/** 「读取完成」窗口是否已期满；期满就地结束窗口，卡片回到普通在场状态。 */
+static bool gone_expired(void)
+{
+  if (!s_nfc.drained) {
+    return false;
+  }
+  if (esp_timer_get_time() - s_nfc.drained_at_us < gone_delay_us) {
+    return false;
+  }
+  s_nfc.drained = false;
+  return true;
+}
+
 uint8_t ns2_nfc_report_state(void)
 {
-  /* 状态机（报告字节与 0x05 体首字节同源）：场开无卡 0x01；卡片在场 0x09；
-     * 0x06 读卡触发后 0x14（读取中）→ 0x15（数据就绪）；主机抽完块（EOF 探测）
-     * 报「读取结束」值（串口可调，默认 0x00 Idle）。 */
+  /* 状态机（0x05 体首字节的 MCU 兼容值域）：场开无卡 0x01；卡片在场 0x09；
+     * 0x06 读卡触发后 0x14（读取中）→ 0x15（数据就绪）；抽完块进入「读取完成」
+     * 窗口仍报在场（完成形态里标签仍在感应区）。 */
   if (!s_nfc.polling) {
     return 0x00u;
   }
-  if (s_nfc.drained) {
-    return s_drained_state;
-  }
+  gone_expired();
   const uint8_t stage = effective_stage();
   if (stage != 0x00u) {
     return stage;
@@ -186,15 +211,51 @@ uint8_t ns2_nfc_report_state(void)
   return s_nfc.image != NULL ? 0x09u : 0x01u;
 }
 
-void ns2_nfc_set_drained_state(uint8_t state)
+/** 输入报告 0xC 的原生值域钉值：0 = 按自动映射（下），非 0 原样钉住
+ *  （`amiibo nat <hex>` 扫描用）。真实手柄取值 0x00-0x07，0x00 = Idle。 */
+static uint8_t s_native_pin;
+
+uint8_t ns2_nfc_native_state(void)
 {
-  s_drained_state = state;
-  ESP_LOGI(TAG, "drained state -> 0x%02x", s_drained_state);
+  /* 关轮询恒 0x00（Idle）：主机靠 0x00 → 非零的边沿识别「卡片入场」，钉值
+     * 也要给边沿留出来，否则字段恒非零、主机永远等不到读卡触发。 */
+  if (!s_nfc.polling) {
+    return 0x00u;
+  }
+  if (s_native_pin != 0u) {
+    return s_native_pin;
+  }
+  /* 自动映射（猜测值，主机端用例与实机对账用）：轮询无卡 0x01；卡片在场
+     * 0x02；读取中 0x03；数据就绪/读取完成窗口 0x04。 */
+  const uint8_t stage = effective_stage();
+  if (stage == 0x14u) {
+    return 0x03u;
+  }
+  if (stage == 0x15u || s_nfc.drained) {
+    return 0x04u;
+  }
+  return s_nfc.image != NULL ? 0x02u : 0x01u;
+}
+
+void ns2_nfc_set_native_pin(uint8_t value)
+{
+  s_native_pin = value;
+  ESP_LOGI(TAG, "native state pin -> 0x%02x", s_native_pin);
+}
+
+uint8_t ns2_nfc_native_pin(void)
+{
+  return s_native_pin;
+}
+
+void ns2_nfc_set_gone_delay_us(int64_t delay_us)
+{
+  gone_delay_us = delay_us;
 }
 
 void ns2_nfc_set_header_mode(uint8_t mode)
 {
-  s_header_mode = mode ? 1u : 0u;
+  s_header_mode = mode > 4u ? 1u : mode;
   ESP_LOGI(TAG, "read buffer header mode -> %u", s_header_mode);
 }
 
@@ -280,9 +341,11 @@ void ns2_nfc_set_write_sink(ns2_nfc_write_sink_fn fn, void *user)
   s_nfc.sink_user = user;
 }
 
-/** 0x05 取卡信息：63 字节体（前缀 + UID + 补零），感应区无卡时全零。
- *  体首字节 = 报告状态字节的同一状态源（在场 0x09，读卡流程中 0x14/0x15，
- *  读取结束 0x00）——两个通道的值必须一致，主机在读卡流程里交替观察它们。 */
+/** 0x05 取卡信息：63 字节体（前缀 + UID + 补零）。抽完块的「读取完成」窗口里
+ *  按读卡完成形态应答：`09 31 04 ...` 开头（Switch1 MCU read3 的同构收尾，
+ *  标签仍报告在场）——主机凭这帧把读到的数据交给游戏，之后才等用户拿开卡；
+ *  其余时刻体首字节与报告状态字节同源（在场 0x09 / 无卡 0x01 / 读卡流程
+ *  0x14、0x15），首字节 0x00 是关射频场语义，主机见到会重启射频场。 */
 static size_t build_tag_info(uint8_t *resp, size_t cap)
 {
   if (cap < NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN) {
@@ -291,22 +354,35 @@ static size_t build_tag_info(uint8_t *resp, size_t cap)
   uint8_t *body = &resp[NS2_FRAME_HEADER_LEN];
   memset(body, 0, NS2_NFC_TAG_INFO_BODY_LEN);
   uint8_t uid[7];
-  if (ns2_nfc_uid(uid)) {
-    uint8_t prefix[sizeof(s_tag_info_prefix)];
-    memcpy(prefix, s_tag_info_prefix, sizeof(prefix));
-    prefix[0] = ns2_nfc_report_state();
-    memcpy(body, prefix, sizeof(prefix));
-    memcpy(&body[9], uid, sizeof(uid));
+  if (!ns2_nfc_uid(uid)) {
+    body[0] = ns2_nfc_report_state();
+    return NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN;
   }
+  if (s_nfc.drained) {
+    body[0] = ns2_nfc_report_state();
+    body[1] = 0x31;
+    body[2] = 0x04;
+    body[6] = 0x01;
+    body[7] = 0x01;
+    body[8] = 0x02;
+    body[10] = 0x07;
+    memcpy(&body[11], uid, sizeof(uid));
+    return NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN;
+  }
+  body[0] = ns2_nfc_report_state();
+  memcpy(&body[1], &s_tag_info_prefix[1], sizeof(s_tag_info_prefix) - 1);
+  memcpy(&body[9], uid, sizeof(uid));
   return NS2_FRAME_HEADER_LEN + NS2_NFC_TAG_INFO_BODY_LEN;
 }
 
 /** 读缓冲 60 字节头区：结构来自 Switch 1 MCU 时代的读卡响应（Poohl/joycontrol
- *  mcu.md read1 的标签数据前缀）；厂商签名取 572 字节 dump 尾部。 */
+ *  mcu.md read1 的标签数据前缀）；厂商签名取 572 字节 dump 尾部。模式 1-3 只差
+ *  接口/协议字节与尾串 `3B 3C 77 78 86` 的对位（read1 原文、NS2 0x06 读触发
+ *  载荷两种对齐），实机对账用；模式 4 不填头区。 */
 static void build_read_header(uint8_t *out)
 {
   memset(out, 0, NS2_NFC_BUFFER_HEADER);
-  if (!s_header_mode) {
+  if (s_header_mode == 0u || s_header_mode == 4u) {
     return;
   }
   uint8_t uid[7];
@@ -316,43 +392,56 @@ static void build_read_header(uint8_t *out)
   out[0] = 0x31;
   out[1] = 0x02;
   out[5] = 0x01;
-  out[6] = 0x02;
+  out[6] = s_header_mode == 3u ? 0x03u : 0x02u; /* NS2 0x06 载荷是 01 03，Switch1 read1 是 01 02。 */
   out[7] = 0x00;
   out[8] = 0x07;
   memcpy(&out[9], uid, sizeof(uid));
   memcpy(&out[20], s_nfc.sig, NS2_NFC_SIG_SIZE);
-  out[53] = 0x3B;
-  out[54] = 0x3C;
-  out[55] = 0x77;
-  out[56] = 0x78;
-  out[57] = 0x86;
+  static const uint8_t tail[5] = { 0x3B, 0x3C, 0x77, 0x78, 0x86 };
+  if (s_header_mode == 1u) {
+    /* 0x06 读触发载荷对齐：尾串紧跟签名区落在 53-57。 */
+    memcpy(&out[53], tail, sizeof(tail));
+  } else {
+    /* read1 对齐：签名后是 `03 00` + 尾串，标签数据从偏移 60 接续。 */
+    out[52] = 0x03;
+    memcpy(&out[54], tail, sizeof(tail));
+  }
+}
+
+/** 当前读缓冲总长：模式 4 = 纯标签 540 字节，其余 = 60 字节头 + 540 字节标签。 */
+static size_t buffer_total(void)
+{
+  return s_header_mode == 4u ? NS2_NFC_TAG_SIZE : NS2_NFC_BUFFER_TOTAL;
 }
 
 /** 0x15 取读缓冲：`00`（状态）+ 数据长度（u16 LE）+ 最多 70 字节缓冲数据。
- *  缓冲区 = [60 字节读卡结果头][540 字节标签镜像]（NS2_NFC_BUFFER_HEADER/TOTAL）。 */
+ *  缓冲区 = [60 字节读卡结果头][540 字节标签镜像]（NS2_NFC_BUFFER_HEADER/TOTAL，
+ *  模式 4 为纯标签 540 字节）。 */
 static size_t build_buffer_read(const uint8_t *req, size_t len, uint8_t *resp, size_t cap)
 {
   if (len < NS2_FRAME_HEADER_LEN + 2 || cap < NS2_FRAME_HEADER_LEN + 3 + NS2_NFC_READ_CHUNK_MAX) {
     return NS2_FRAME_HEADER_LEN;
   }
   const uint16_t offset = (uint16_t)(req[8] | ((uint16_t)req[9] << 8));
+  const size_t header_len = header_len_for_mode(s_header_mode);
+  const size_t total = buffer_total();
   uint8_t *body = &resp[NS2_FRAME_HEADER_LEN];
   memset(&body[3], 0, NS2_NFC_READ_CHUNK_MAX);
   body[0] = 0x00;
   size_t n = 0;
-  if (offset < NS2_NFC_BUFFER_TOTAL) {
-    n = NS2_NFC_READ_CHUNK_MAX < NS2_NFC_BUFFER_TOTAL - offset ? NS2_NFC_READ_CHUNK_MAX : NS2_NFC_BUFFER_TOTAL - offset;
-    if (offset < NS2_NFC_BUFFER_HEADER) {
+  if (offset < total) {
+    n = NS2_NFC_READ_CHUNK_MAX < total - offset ? NS2_NFC_READ_CHUNK_MAX : total - offset;
+    if (offset < header_len) {
       uint8_t header[NS2_NFC_BUFFER_HEADER];
       build_read_header(header);
-      const size_t in_head = NS2_NFC_BUFFER_HEADER - offset < n ? NS2_NFC_BUFFER_HEADER - offset : n;
+      const size_t in_head = header_len - offset < n ? header_len - offset : n;
       const size_t from_tag = n - in_head;
       memcpy(&body[3], &header[offset], in_head);
       if (from_tag > 0) {
         (void)ns2_nfc_read(0, &body[3 + in_head], from_tag);
       }
     } else {
-      (void)ns2_nfc_read(offset - NS2_NFC_BUFFER_HEADER, &body[3], n);
+      (void)ns2_nfc_read((uint32_t)(offset - header_len), &body[3], n);
     }
   }
   body[1] = (uint8_t)(n & 0xFFu);
@@ -457,22 +546,31 @@ size_t ns2_nfc_on_command(const uint8_t *req, size_t len, uint8_t subcmd, uint8_
   switch (subcmd) {
   case 0x03:
     /* 开射频场轮询：5 字节参数（如 00 E8 03 2C 01）语义未公开，不参与决策；
-         * 重新开轮询同时复位读卡流程（状态字节回到卡片在场 0x09）。 */
+         * 重新开轮询复位读卡流程（状态字节回到卡片在场 0x09）；「读取完成」窗口
+         * 内不复位——窗口里主机快速 0x04/0x03 巡检，完成形态要保持满一个窗口。 */
     s_nfc.polling = true;
-    s_nfc.read_stage = 0;
-    s_nfc.drained = false;
+    if (!s_nfc.drained || gone_expired()) {
+      s_nfc.read_stage = 0;
+      s_nfc.drained = false;
+    }
     ESP_LOGI(TAG, "host started polling (nfc state 0x%02x)", ns2_nfc_report_state());
     return NS2_FRAME_HEADER_LEN;
   case 0x04:
     s_nfc.polling = false;
-    s_nfc.read_stage = 0;
-    s_nfc.drained = false;
+    if (!s_nfc.drained || gone_expired()) {
+      s_nfc.read_stage = 0;
+      s_nfc.drained = false;
+    }
     ESP_LOGI(TAG, "host stopped polling");
     return NS2_FRAME_HEADER_LEN;
   case 0x05: {
     const size_t built = build_tag_info(resp, cap);
     uint8_t uid[7];
-    if (ns2_nfc_uid(uid)) {
+    if (s_nfc.drained) {
+      (void)ns2_nfc_uid(uid);
+      ESP_LOGI(TAG, "tag info -> read done marker (uid %02x%02x%02x%02x%02x%02x%02x)", uid[0], uid[1], uid[2], uid[3],
+               uid[4], uid[5], uid[6]);
+    } else if (ns2_nfc_uid(uid)) {
       ESP_LOGI(TAG, "tag info -> uid %02x%02x%02x%02x%02x%02x%02x", uid[0], uid[1], uid[2], uid[3], uid[4], uid[5],
                uid[6]);
     } else {
@@ -504,15 +602,16 @@ size_t ns2_nfc_on_command(const uint8_t *req, size_t len, uint8_t subcmd, uint8_
   case 0x15: {
     /* 主机抽块期间状态保持在 0x15（数据就绪）不变：每拉一块就翻回 0x14
          * 会让主机看到「就绪状态消失」而中途放弃抽块，保持 0x15 才能连续抽完。
-         * 主机拉到缓冲区末端（应答长度 0）即整份读完毕，状态报「读取结束」
-         * 值（串口可调）交给上层。 */
+         * 主机拉到缓冲区末端（应答长度 0）即整份读完毕，进入「读取完成」窗口：
+         * 0x05 按读卡完成形态应答，主机凭它把数据交给游戏。 */
     const uint16_t offset = (uint16_t)(req[8] | ((uint16_t)req[9] << 8));
     const size_t built = build_buffer_read(req, len, resp, cap);
-    if (offset >= NS2_NFC_BUFFER_TOTAL) {
+    if (offset >= buffer_total()) {
       s_nfc.read_stage = 0;
       s_nfc.drained = true;
+      s_nfc.drained_at_us = esp_timer_get_time();
       stage_drain_event();
-      ESP_LOGI(TAG, "read drained (nfc state -> 0x%02x, push=%u)", s_drained_state, s_push_mode);
+      ESP_LOGI(TAG, "read drained (nfc state 0x%02x, push=%u)", ns2_nfc_report_state(), s_push_mode);
     }
     return built;
   }

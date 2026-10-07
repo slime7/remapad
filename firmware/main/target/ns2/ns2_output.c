@@ -172,8 +172,9 @@ bool ns2_output_send_raw(const pad_state_t *pad)
 
 uint8_t ns2_output_nfc_state(void)
 {
-  /* NFC 状态字节由 ns2_nfc 的标签模拟状态机决定（开轮询且预置镜像 0x01）。 */
-  return ns2_nfc_report_state();
+  /* 输入报告 0xC 的 NFC 状态字节走原生值域（0x00-0x07，见 hid_reports.md 的
+     * 观测范围），与 0x05 体首字节的 MCU 兼容值域分属两套。 */
+  return ns2_nfc_native_state();
 }
 
 void ns2_output_emit_rumble(const ns2_rumble_event_t *event)
