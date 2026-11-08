@@ -26,12 +26,35 @@ static pad_report_t ns2_09_report(uint16_t pid)
   return report;
 }
 
+/** Switch 2 的 0x05 报文体：运动块为时间戳、温度、加速、陀螺，整体偏移 0x2A。 */
+static pad_report_t ns2_05_report(uint16_t pid)
+{
+  pad_report_t report;
+  memset(&report, 0, sizeof(report));
+  report.family = PAD_FAMILY_UNKNOWN;
+  report.conn = PAD_CONN_USB;
+  report.vid = 0x057E;
+  report.pid = pid;
+  report.report_id = 0x05;
+  report.len = 64;
+  report.data[0] = 0x05;
+  return report;
+}
+
 /** 把 X / Y 打包成 12 位紧凑三字节（与 ns2_pack_stick 同一套规则）。 */
 static void pack_u12(uint16_t x, uint16_t y, uint8_t *out)
 {
   out[0] = (uint8_t)(x & 0xFF);
   out[1] = (uint8_t)(((x >> 8) & 0x0F) | ((y & 0x0F) << 4));
   out[2] = (uint8_t)((y >> 4) & 0xFF);
+}
+
+/** 按小端写入一个有符号 16 位值。 */
+static void put_i16(uint8_t *out, int16_t value)
+{
+  const uint16_t raw = (uint16_t)value;
+  out[0] = (uint8_t)(raw & 0xFF);
+  out[1] = (uint8_t)(raw >> 8);
 }
 
 /** Switch 一代的 0x30 报文体（Pro Controller）：摇杆是 12 位紧凑打包的居中值。 */
@@ -113,6 +136,32 @@ static void ns2_09_body_parses_buttons_sticks_and_battery(void)
   /* 电量等级 9 → 100%，充电位来自 bit1。 */
   CHECK_EQ(state.battery_percent, 100);
   CHECK(state.charging);
+}
+
+static void ns2_05_motion_skips_timestamp_and_temperature(void)
+{
+  pad_report_t report = ns2_05_report(0x2069);
+  /* 时间戳与温度位于运动块前 6 字节，不能被当作陀螺样本。 */
+  put_i16(&report.data[1 + 0x2A], 0x1234);
+  put_i16(&report.data[1 + 0x2A + 2], 0x5678);
+  put_i16(&report.data[1 + 0x2E], 0x0BB8);
+  /* 加速度从 0x30 起，陀螺从 0x36 起；两段各 3 个 int16。 */
+  put_i16(&report.data[1 + 0x30], 256);
+  put_i16(&report.data[1 + 0x32], -256);
+  put_i16(&report.data[1 + 0x34], 4096);
+  put_i16(&report.data[1 + 0x36], 1638);
+  put_i16(&report.data[1 + 0x38], -1638);
+  put_i16(&report.data[1 + 0x3A], 819);
+
+  pad_state_t state;
+  pad_state_from_report(&report, &state);
+  CHECK(state.motion.present);
+  CHECK_EQ(state.motion.accel[0], 256);
+  CHECK_EQ(state.motion.accel[1], -256);
+  CHECK_EQ(state.motion.accel[2], 4096);
+  CHECK_EQ(state.motion.gyro[0], 1424);
+  CHECK_EQ(state.motion.gyro[1], -1424);
+  CHECK_EQ(state.motion.gyro[2], 712);
 }
 
 static void ns2_report_is_kept_verbatim_for_relay(void)
@@ -228,6 +277,7 @@ static void unknown_ns_pid_falls_back(void)
 
 HOST_TEST_SUITE(suite_pad_ns, "pad_ns", { "NS2 报文体按 PID 命中布局行并带上透传语言", ns2_pad_rows_resolve_by_pid },
                 { "NS2 的 0x09 报文体解析按键、打包摇杆与电量", ns2_09_body_parses_buttons_sticks_and_battery },
+                { "NS2 的 0x05 运动块跳过时间戳与温度", ns2_05_motion_skips_timestamp_and_temperature },
                 { "NS2 报文体原样留作透传载荷", ns2_report_is_kept_verbatim_for_relay },
                 { "NS1 的 0x30 报文体解析按键、12 位摇杆、电量与三份运动样本取最新",
                   ns1_pro_report_maps_buttons_sticks_and_motion },

@@ -247,8 +247,8 @@ static const pad_layout_t s_rows[] = {
     },
     {
         /* Switch 2 Pro Controller（0x09 报文体）：按键 3 字节、摇杆 12 位
-         * 打包、电量在 0x01。运动块在 0x0F（40 字节），公开资料里仍是未解析
-         * 的打包格式，因此不登记——手柄的运动数据靠透传原样送达主机。 */
+         * 打包、电量在 0x01。运动块在 0x0F，长度 0x1E/0x28 两种原生载体；
+         * 本设备将运动块原样透传给主机。 */
         .family = PAD_FAMILY_NS,
         .conn = PAD_CONN_USB,
         .report_id = 0x09,
@@ -333,7 +333,8 @@ static const pad_layout_t s_rows[] = {
         .native_identity = PAD_IDENTITY_JOYCON_R,
     },
     {
-        /* Switch 2 Pro Controller 的 0x05 报文体（主机切到通用报告时）。 */
+        /* Switch 2 Pro Controller 的 0x05 报文体（主机切到通用报告时）：0x2A 起是
+         * 时间戳与温度，12 字节运动样本实际从 0x30 开始，加速在前、陀螺在后。 */
         .family = PAD_FAMILY_NS,
         .conn = PAD_CONN_USB,
         .report_id = 0x05,
@@ -346,13 +347,14 @@ static const pad_layout_t s_rows[] = {
         .trigger_btn_bit = {7, 7},
         .stick_off = {11, 11, 14, 14},
         .touch_off = PAD_OFF_NONE,
-        .motion_off = 43,
+        .motion_off = 49,
         .battery_off = PAD_OFF_NONE,
         .stick_style = PAD_STICK_U12,
         .caps = PAD_CAP_MOTION | PAD_CAP_RUMBLE,
         .invert_y = true,
         .btn_map = s_ns2_05_btn_map,
-        .motion = {.samples = 1, .stride = 12},
+        .motion = {.samples = 1, .stride = 12, .accel_first = true, .accel_per_g = 4096,
+                   .gyro_per_dps_x1000 = 16384},
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
@@ -374,13 +376,14 @@ static const pad_layout_t s_rows[] = {
         .trigger_btn_bit = {7, 7},
         .stick_off = {11, 11, 14, 14},
         .touch_off = PAD_OFF_NONE,
-        .motion_off = 43,
+        .motion_off = 49,
         .battery_off = PAD_OFF_NONE,
         .stick_style = PAD_STICK_U12,
         .caps = PAD_CAP_MOTION | PAD_CAP_RUMBLE,
         .invert_y = true,
         .btn_map = s_ns2_05_btn_map,
-        .motion = {.samples = 1, .stride = 12},
+        .motion = {.samples = 1, .stride = 12, .accel_first = true, .accel_per_g = 4096,
+                   .gyro_per_dps_x1000 = 16384},
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,
@@ -402,13 +405,14 @@ static const pad_layout_t s_rows[] = {
         .trigger_btn_bit = {7, 7},
         .stick_off = {11, 11, 14, 14},
         .touch_off = PAD_OFF_NONE,
-        .motion_off = 43,
+        .motion_off = 49,
         .battery_off = PAD_OFF_NONE,
         .stick_style = PAD_STICK_U12,
         .caps = PAD_CAP_MOTION | PAD_CAP_RUMBLE,
         .invert_y = true,
         .btn_map = s_ns2_05_btn_map,
-        .motion = {.samples = 1, .stride = 12},
+        .motion = {.samples = 1, .stride = 12, .accel_first = true, .accel_per_g = 4096,
+                   .gyro_per_dps_x1000 = 16384},
         .out = {
             .report_id = 0,
             .led_style = PAD_LED_NONE,

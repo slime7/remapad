@@ -307,7 +307,8 @@ static void motion_capture_mode_is_monotonic(void)
   CHECK_EQ(first[0x0E], NS2_INPUT_09_MOTION_LEN);
   CHECK_EQ(second[0x0E], NS2_INPUT_09_MOTION_LEN);
 
-  /* 块内偏移 0x05 与 0x23 各是一个 3 字节小端微秒时间戳，间隔 2.5ms。 */
+  /* 占位样本的两处合成时间戳（块内偏移 0x05 与 0x23）按 2.5ms 间隔推进；
+   * 真实 0x28 块使用多采样打包布局。 */
   const uint32_t a0 = (uint32_t)first[0x14] | ((uint32_t)first[0x15] << 8) | ((uint32_t)first[0x16] << 16);
   const uint32_t b0 = (uint32_t)first[0x32] | ((uint32_t)first[0x33] << 8) | ((uint32_t)first[0x34] << 16);
   const uint32_t a1 = (uint32_t)second[0x14] | ((uint32_t)second[0x15] << 8) | ((uint32_t)second[0x16] << 16);

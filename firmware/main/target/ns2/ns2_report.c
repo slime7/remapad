@@ -4,15 +4,17 @@
 
 /** 一块运动数据样本（来自 ndeadly/switch2_controller_research 的
  *  btle_procon2_motion_0x000E）：40 字节运动块 + 紧随其后的 8 字节尾段。
- *  占位用样本原值比全零更接近真实形态；块内两处 3 字节小端微秒
- *  时间戳（运动块偏移 0x05 与 0x23）在发送时按上报节奏推进，其余字节保持原值。 */
+ *  占位用样本原值比全零更接近真实形态；真实 0x28 块是带 4 字节前缀的
+ *  多采样打包载体，下面两处 3 字节字段是占位用的合成时间戳。 */
 static const uint8_t s_motion_capture[40 + 8] = {
   0x06, 0x70, 0x95, 0x5B, 0x34, 0xB6, 0x94, 0x78, 0x00, 0x0D, 0x43, 0xB7, 0xFB, 0x37, 0x42, 0x01,
   0x2C, 0x83, 0xFF, 0x41, 0x34, 0x04, 0x9E, 0x15, 0x0E, 0x88, 0x35, 0x92, 0xCB, 0xCD, 0x53, 0xC3,
   0xA2, 0xBA, 0x49, 0xC3, 0x9F, 0x78, 0x07, 0x51, 0x6C, 0xBE, 0x81, 0x4B, 0x20, 0x54, 0xDF, 0x58,
 };
 
-/** 块内两个时间戳字段的偏移（相对运动块起点）：第二个比第一个晚 2.5ms。 */
+/** 占位样本中两处合成时间戳的偏移（相对运动块起点）：第二个比第一个晚 2.5ms。
+ *  真实 0x28 块的前 4 字节是 timing/elapsed/status 前缀，其余为打包载荷；
+ *  见 docs/controller-switch2.md。 */
 #define NS2_MOTION_STAMP_OFFS_A 0x05
 #define NS2_MOTION_STAMP_OFFS_B 0x23
 #define NS2_REPORT_INTERVAL_US 5000u
@@ -99,6 +101,7 @@ static void motion_block(uint8_t *len_out, uint8_t *data_out, size_t cap, const 
   if (state->motion_mode == NS2_MOTION_CAPTURE) {
     const size_t n = cap >= sizeof(s_motion_capture) ? sizeof(s_motion_capture) : NS2_INPUT_09_MOTION_LEN;
     memcpy(data_out, s_motion_capture, n);
+    /* 这里只更新占位样本的合成时间戳；真实 0x28 块的布局见 docs/controller-switch2.md。 */
     const uint32_t base = (uint32_t)counter * NS2_REPORT_INTERVAL_US;
     const uint16_t offs[2] = { NS2_MOTION_STAMP_OFFS_A, NS2_MOTION_STAMP_OFFS_B };
     for (uint8_t i = 0; i < 2; i++) {
@@ -111,7 +114,7 @@ static void motion_block(uint8_t *len_out, uint8_t *data_out, size_t cap, const 
     return;
   }
   /* 实验模式：把输入设备的真实样本按 NS1 的 12 字节样本风格填进块首，
-     * 余下字节保持 0。块结构未公开，这一档只为对照（见 ns2_state.h）。 */
+     * 余下字节保持 0。真实 0x28 块是多采样打包载体，0x1E 是四元数载体。 */
   if (state->motion_mode == NS2_MOTION_SENSOR && state->motion_valid) {
     for (uint8_t s = 0; s < NS2_09_MOTION_SAMPLES; s++) {
       uint8_t *sample = &data_out[s * NS2_09_MOTION_SAMPLE_LEN];
